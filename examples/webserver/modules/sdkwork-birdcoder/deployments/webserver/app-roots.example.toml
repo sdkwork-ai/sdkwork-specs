@@ -1,0 +1,20 @@
+[app_roots]
+tablet_surface = "pc"
+
+[app_roots.pc_static_by_environment]
+development = "apps/sdkwork-birdcoder-pc/dist/dev"
+test = "apps/sdkwork-birdcoder-pc/dist/test"
+staging = "apps/sdkwork-birdcoder-pc/dist/staging"
+production = "apps/sdkwork-birdcoder-pc/dist/prod"
+
+[app_roots.h5_static_by_environment]
+development = "apps/sdkwork-birdcoder-h5/dist/dev"
+test = "apps/sdkwork-birdcoder-h5/dist/test"
+staging = "apps/sdkwork-birdcoder-h5/dist/staging"
+production = "apps/sdkwork-birdcoder-h5/dist/prod"
+
+[app_roots.static_fallback_by_environment]
+development = "deployments/webserver/static"
+test = "deployments/webserver/static"
+staging = "deployments/webserver/static"
+production = "deployments/webserver/static"

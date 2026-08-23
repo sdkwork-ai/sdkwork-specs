@@ -509,8 +509,8 @@ For nginx publication, use `NGINX_SPEC.md`. The canonical site path is
 `/etc/nginx/sites-enabled/sdkwork/<domain>.conf`, where `<domain>` is the full
 public hostname such as `api.sdkwork.com` or `www.sdkwork.com`. The default
 Cloud Router upstream is `http://127.0.0.1:3900`, and certificate material uses
-`/opt/certs/letsencrypt/live/<cert-name>/fullchain.pem` plus
-`/opt/certs/letsencrypt/live/<cert-name>/privkey.pem`.
+`/etc/sdkwork/certs/letsencrypt/<cert-name>/fullchain.pem` plus
+`/etc/sdkwork/certs/letsencrypt/<cert-name>/privkey.pem`.
 
 ## 6. Acceptance Checklist
 

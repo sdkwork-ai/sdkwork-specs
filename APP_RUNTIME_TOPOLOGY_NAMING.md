@@ -311,10 +311,10 @@ Rules:
   (`ENVIRONMENT_SPEC.md` section 5.1). A profile id stays
   `cloud.development`; its public host is `im-dev.sdkwork.com`.
 - `sdkwork.com` is the primary base domain for SDKWork-managed cloud
-  deployments. A product `MAY` bind additional base domains (brand or partner
-  domains such as `birdcoder.com` or `dtupay.com`) through the Base Domain
-  Registry (section 9.3); every registered base domain follows the same
-  formula and environment suffixes.
+  deployments. SDKWork-managed cloud products `MUST` bind every base domain
+  in the Base Domain Registry (section 9.3) unless a dated governance
+  exception documents a narrower set in release metadata and
+  `cloudPublicHosts`.
 - Customer-managed deployments may substitute their own base domain set with
   the same formula and `MUST` record the substitution in release metadata.
 - Hosts `MUST` be registered per environment in `cloudPublicHosts.environments`
@@ -333,7 +333,7 @@ Rules:
 
 | Application | `application.public-ingress` hosts (production / dev / test / staging) | Platform gateway (production / dev / test / staging) |
 | --- | --- | --- |
-| `sdkwork-im` | `im.sdkwork.com` / `im-dev.sdkwork.com` / `im-test.sdkwork.com` / `im-staging.sdkwork.com` | `api.sdkwork.com` / `api-dev.sdkwork.com` / `api-test.sdkwork.com` / `api-staging.sdkwork.com` |
+| `sdkwork-im` | `im.<base-domain>` on every registered base domain (for example `im.sdkwork.com`, `im.birdcoder.com`, `im.dtupay.com`, `im.sdkwork.cn`, `im.birdcoder.cn`, `im.dtupay.cn`) / `im-<suffix>.<base-domain>` per environment | `api.<base-domain>` / `api-<suffix>.<base-domain>` per environment |
 | LLM / Agent dialogue apps | `chat.sdkwork.com` / `chat-dev.sdkwork.com` / `chat-test.sdkwork.com` / `chat-staging.sdkwork.com` | `api.sdkwork.com` / `api-dev.sdkwork.com` / `api-test.sdkwork.com` / `api-staging.sdkwork.com` |
 | `sdkwork-drive` | `drive.sdkwork.com` / `drive-dev.sdkwork.com` / `drive-test.sdkwork.com` / `drive-staging.sdkwork.com` | `api.sdkwork.com` / `api-dev.sdkwork.com` / `api-test.sdkwork.com` / `api-staging.sdkwork.com` |
 | `sdkwork-cloudrouter` | `router.sdkwork.com` + `router.birdcoder.com` + `router.dtupay.com` / `router-dev.<base-domain>` / `router-test.<base-domain>` / `router-staging.<base-domain>` (every registered base domain) | `api.sdkwork.com` / `api-dev.sdkwork.com` / `api-test.sdkwork.com` / `api-staging.sdkwork.com` |
@@ -388,15 +388,18 @@ Rules:
 
 | Base domain | Kind | Owned by | Notes |
 | --- | --- | --- | --- |
-| `sdkwork.com` | primary | SDKWork | Default for every SDKWork-managed product; wildcard `*.sdkwork.com` covers environment hosts |
-| `birdcoder.com` | partner | SDKWork | Registered additional base domain for selected products (for example `sdkwork-cloudrouter`) |
-| `dtupay.com` | partner | SDKWork | Registered additional base domain for selected products (for example `sdkwork-cloudrouter`) |
+| `sdkwork.com` | primary | SDKWork | Default global TLD; wildcard `*.sdkwork.com` covers environment hosts |
+| `birdcoder.com` | partner | SDKWork | Partner `.com` brand domain |
+| `dtupay.com` | partner | SDKWork | Partner `.com` brand domain |
+| `sdkwork.cn` | primary | SDKWork | Default China TLD; wildcard `*.sdkwork.cn` covers environment hosts |
+| `birdcoder.cn` | partner | SDKWork | Partner `.cn` brand domain |
+| `dtupay.cn` | partner | SDKWork | Partner `.cn` brand domain |
 
 Rules:
 
-- New base domains `MUST` be registered here before any product host uses them;
-  a product `MUST` register its base domain set in release metadata and in
-  `cloudPublicHosts`.
+- SDKWork-managed cloud products `MUST` register hosts on every base domain
+  in this table in `cloudPublicHosts` unless a dated governance exception
+  documents a narrower set.
 - Every registered base domain follows the same environment suffix formula:
   `router-dev.birdcoder.com`, `router-test.dtupay.com`, `router.sdkwork.com`,
   and so on.
@@ -445,6 +448,7 @@ Retired crate naming:
 
 | Version | Change |
 | --- | --- |
+| 5.8 | Registered `.cn` base domains (`sdkwork.cn`, `birdcoder.cn`, `dtupay.cn`); SDKWork-managed products MUST bind every registered base domain by default |
 | 5.7 | Restored `sdkwork-webserver` role host to `server.sdkwork.com` (`server-<suffix>.sdkwork.com`); auxiliary `server-app` / `server-admin`; retired `web.*` and `testserver` nicknames |
 | 5.6 | Temporarily registered `server.sdkwork.com` role host (superseded by 5.7); auxiliary `web-app` / `web-admin` |
 | 5.5 | Registered `sdkwork-manager` host row (`admin.sdkwork.com` role host with `applicationCode = manager`) and the bare-admin role-host precedence note |

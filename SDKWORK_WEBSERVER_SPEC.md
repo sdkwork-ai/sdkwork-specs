@@ -1,16 +1,17 @@
 # SDKWork Web Server Deploy Configuration Standard
 
-- Version: 2.0
-- Scope: per-module `deployments/webserver/` split configuration (`server.common.toml`, `server.standalone.toml`, `server.cloud.toml`) with inheritance and override; nginx-parallel declarative web server configuration covering reverse proxy, virtual hosts, directory resource mounting, certificate/TLS, and full nginx conf compatibility
+- Version: 3.0
+- Scope: per-module `deployments/webserver/` layout v3 — shared baseline, **one file per lifecycle environment**, one file per deployment profile; nginx-parallel declarative web server configuration
 - Related: `NGINX_SPEC.md`, `SDKWORK_DEPLOY_SPEC.md`, `DEPLOYMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `APP_RUNTIME_TOPOLOGY_SPEC.md`, `APP_RUNTIME_TOPOLOGY_NAMING.md`, `SECURITY_SPEC.md`, `OBSERVABILITY_SPEC.md`, `CONFIG_SPEC.md`, `TEST_SPEC.md`
 
 Every independent SDKWork module root `MUST` contain a `deployments/webserver/`
-directory with **three** TOML files: a shared baseline
-(`server.common.toml`) plus one override file per deployment profile
-(`server.standalone.toml`, `server.cloud.toml`). The profile files inherit the
-common baseline and override only what differs. This keeps the standalone and
-cloud configurations minimal and reusable: common serving behavior lives in
-one place, and each deployment profile carries only its deltas.
+directory with **layout v3** — seven TOML files:
+
+1. `server.common.toml` — module identity, nginx/main/http globals, upstream skeleton (no virtual hosts).
+2. `server.development.toml`, `server.test.toml`, `server.staging.toml`, `server.production.toml` — lifecycle environment overlays (hosts, TLS, locations).
+3. `server.standalone.toml`, `server.cloud.toml` — deployment profile overlays (upstream targets only).
+
+Process startup selects **one deployment profile** and **one lifecycle environment**, then loads and merges the matching files.
 
 The files are **nginx-parallel**: every section maps to an nginx context,
 every typed key maps to an nginx directive, and each profile's merged
@@ -25,7 +26,7 @@ Three artifacts describe web serving, with three different roles:
 | Artifact | Role | Authority |
 | --- | --- | --- |
 | `deployments/webserver/*.toml` | Deploy-time declarative source: what the module serves, where it proxies, which certificates it uses, per deployment profile | This standard |
-| `deployments/webserver/nginx.<profile>.conf` | Rendered nginx configuration for one profile; optional compatibility sidecar that `MUST` stay equivalent to that profile's merged configuration | `NGINX_SPEC.md` |
+| `deployments/webserver/nginx.<profile>.<environment>.conf` | Rendered nginx for one profile×environment effective merge | `NGINX_SPEC.md` |
 | `sdkwork.webserver.config.json` | Executable runtime configuration of the SDKWork Web Server process | `sdkwork-webserver` module `specs/sdkwork.webserver.config.schema.json` |
 
 Rules:
@@ -36,11 +37,13 @@ Rules:
   `MUST NOT` edit either derived artifact without re-deriving it.
 - `deployments/deploy.yaml` (`SDKWORK_DEPLOY_SPEC.md`) declares which public
   hosts an application owns (`expose`); the TOML files declare how those hosts
-  are served. Every `expose` domain `SHOULD` appear in a merged
-  `[[http.server]]` `serverName` of the matching profile.
-- The configuration is profile-scoped, not environment-scoped: it holds no
-  per-environment conditionals. Environment binding comes from host names,
-  certificate paths, and deploy-time rendering.
+  are served. Every `expose` domain `SHOULD` appear in
+  `effective(<profile>.<environment>)` `serverName` for the matching
+  `deployments/deploy.yaml` profile id.
+- Profile selects upstream topology (`server.standalone.toml` /
+  `server.cloud.toml`); environment selects which `server.<environment>.toml`
+  is merged. Each lifecycle tier is an **independent file** — not combined in
+  `server.common.toml`.
 - The webserver runtime config schema remains the executable authority for the
   `sdkwork-webserver` process; section 13 defines the materialization mapping.
 
@@ -53,33 +56,35 @@ Every independent module root `MUST` contain:
 ```text
 <module-root>/deployments/
   webserver/
-    server.common.toml        # shared baseline, inherited by both profiles
-    server.standalone.toml    # standalone overrides, inherits common
-    server.cloud.toml         # cloud overrides, inherits common
+    server.common.toml           # identity + globals; MUST NOT declare [[http.server]]
+    server.development.toml      # environment = "development"
+    server.test.toml             # environment = "test"
+    server.staging.toml          # environment = "staging"
+    server.production.toml       # environment = "production"
+    server.standalone.toml       # profile = "standalone"
+    server.cloud.toml            # profile = "cloud"
 ```
 
 Optional:
 
 ```text
-    nginx.standalone.conf     # rendered equivalent of the standalone merge
-    nginx.cloud.conf          # rendered equivalent of the cloud merge
-    snippets/*.conf           # nginx include fragments referenced by include = [...]
-    certs/                    # development-only self-signed material; never production keys
-    README.md                 # module-specific operator notes
+    nginx.standalone.production.conf   # rendered effective(standalone.production)
+    nginx.cloud.development.conf       # rendered effective(cloud.development)
+    snippets/*.conf
+    certs/
+    README.md
+    app-roots.example.toml
 ```
 
 Rules:
 
-- The file names are exactly `server.common.toml`, `server.standalone.toml`,
-  and `server.cloud.toml`; the directory name is exactly `webserver`.
-- The legacy single-file layout (`server.toml`) is **retired**: it `MUST NOT`
-  exist in a module using this standard (W19).
-- The workspace root `MUST NOT` contain a workspace-wide
-  `deployments/webserver/` (same boundary as `SDKWORK_DEPLOY_SPEC.md`
-  section 2).
-- A module with no public web surface still `MUST` provide all three files;
-  `server.common.toml` carries `enabled = false` and the profile files carry
-  only their `profile` declaration.
+- Environment file names are exactly `server.development.toml`, `server.test.toml`,
+  `server.staging.toml`, and `server.production.toml`.
+- Profile file names remain `server.standalone.toml` and `server.cloud.toml`.
+- Layout v2 (all hosts in `server.common.toml` only) is **retired** (W19/W20).
+- A module with no public web surface still `MUST` ship all seven files;
+  `server.common.toml` carries `enabled = false`; environment files declare
+  only `environment = "<name>"`.
 - `deployments/webserver/` is deploy-time source configuration. Runtime
   directories, secrets, and installed artifacts follow
   `RUNTIME_DIRECTORY_SPEC.md` and `SOURCE_CONFIG_SPEC.md`; never commit
@@ -90,23 +95,34 @@ Rules:
 
 ### 2.2 Effective Configuration And Inheritance
 
-Each deployment profile has one **effective configuration**:
+Each runtime activation has one **effective configuration**:
 
 ```text
-effective(standalone) = merge(server.common.toml, server.standalone.toml)
-effective(cloud)      = merge(server.common.toml, server.cloud.toml)
+effective(<profile>.<environment>) =
+  merge(merge(server.common.toml, server.<environment>.toml), server.<profile>.toml)
 ```
 
-The effective configuration of each profile `MUST` satisfy every validation
-rule of this standard (W21). Common content is authored once and reused by
-both profiles; each profile file declares only its deltas, which keeps the
-standalone and cloud files small and focused (high cohesion, low coupling).
+Examples:
+
+```text
+effective(standalone.development) = merge(common, server.development.toml, server.standalone.toml)
+effective(cloud.production)       = merge(common, server.production.toml, server.cloud.toml)
+```
+
+The loader `MUST` strip file-role keys (`profile`, `environment`) before merge.
+Every effective configuration `MUST` pass validation (W21).
 
 | File | Role | Required root keys |
 | --- | --- | --- |
-| `server.common.toml` | Shared baseline | `specVersion`, `kind`, `id`; no `profile` key |
-| `server.standalone.toml` | Standalone deltas | `profile = "standalone"`; `specVersion`/`kind`/`id` `MUST NOT` be declared |
-| `server.cloud.toml` | Cloud deltas | `profile = "cloud"`; `specVersion`/`kind`/`id` `MUST NOT` be declared |
+| `server.common.toml` | Shared baseline | `specVersion`, `kind`, `id`; no `profile` / `environment`; no `[[http.server]]` when enabled |
+| `server.<environment>.toml` | Lifecycle overlay | `environment = "<name>"`; hosts/certs/locations for that tier only |
+| `server.<profile>.toml` | Deployment overlay | `profile = "standalone"` or `"cloud"`; upstream targets only |
+
+Materialize from topology:
+
+```bash
+node <sdkwork-specs>/tools/align-webserver-workspace.mjs --root .
+```
 
 ### 2.3 Merge Rules
 
@@ -153,7 +169,32 @@ Rules:
   always come from the common baseline.
 - Merge is deterministic and profile-local; it never crosses profiles.
 
-### 2.4 Merge Example
+### 2.4 Environment Files (Independent Per Tier)
+
+Each lifecycle environment is a **separate file**. Do not combine development,
+test, staging, and production virtual hosts in `server.common.toml`.
+
+| File | `environment` key | Typical hosts | Listeners |
+| --- | --- | --- | --- |
+| `server.development.toml` | `development` | `im-dev.sdkwork.com` | `80` |
+| `server.test.toml` | `test` | `im-test.sdkwork.com` | `80` |
+| `server.staging.toml` | `staging` | `im-staging.sdkwork.com` | `80` |
+| `server.production.toml` | `production` | `im.sdkwork.com` | `443 ssl`, `80` + TLS |
+
+Rules:
+
+- Host formula: `APP_RUNTIME_TOPOLOGY_NAMING.md` §9.2.
+- Environment files declare `[[http.server]]`, `[http.certificates]`, and
+  locations for **that tier only**.
+- Profile files declare upstream targets only; they `MUST NOT` declare
+  `environment` or virtual hosts.
+- Runtime selects profile + environment (`SDKWORK_<CODE>_DEPLOYMENT_PROFILE`,
+  `SDKWORK_<CODE>_ENVIRONMENT`, `config.toml` `[profile]`) and merges the
+  three layers (§2.2).
+- Adaptive Web static roots remain in process `[app_roots.*_by_environment]`
+  (§13.6), not in edge TOML.
+
+### 2.5 Merge Example
 
 `server.common.toml`:
 
@@ -167,8 +208,8 @@ sendfile = true
 clientMaxBodySize = "1100m"
 
 [http.certificates.im]
-certFile = "/opt/certs/letsencrypt/live/im.sdkwork.com/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/im.sdkwork.com/privkey.pem"
+certFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/fullchain.pem"
+certKeyFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/privkey.pem"
 
 [[http.upstream]]
 name = "gateway"
@@ -386,9 +427,9 @@ least one `[[http.server]]` or one `[[stream.server]]` when `enabled = true`.
 
 ```toml
 [http.certificates.im]
-certFile = "/opt/certs/letsencrypt/live/im.sdkwork.com/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/im.sdkwork.com/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/im.sdkwork.com/chain.pem"
+certFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/fullchain.pem"
+certKeyFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/privkey.pem"
+chainFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/chain.pem"
 ocspStapling = true
 ```
 
@@ -407,7 +448,7 @@ Rules:
   (`[http.certificates."sdkwork.com"]`); references (`cert = "sdkwork.com"`)
   are plain strings.
 - Certificate paths `MUST` be absolute and `MUST` follow the `NGINX_SPEC.md`
-  section 3 contract (`/opt/certs/letsencrypt/live/<cert-name>/...`) unless
+  section 3 contract (`/etc/sdkwork/certs/letsencrypt/<cert-name>/...`) unless
   an operator-managed root is documented in the module `deployments/webserver/README.md`.
 
 ### 7.1 Certificate Inventory (`/etc/sdkwork/certs/<domain>/`)
@@ -773,7 +814,7 @@ public stream listeners require documented approval.
 Each profile's effective configuration is a declarative source for the site
 files and upstreams defined by `NGINX_SPEC.md`: canonical site path
 `/etc/nginx/sites-enabled/sdkwork/<domain>.conf`, certificate root
-`/opt/certs/letsencrypt/live/<cert-name>/`, upstream normalization, and
+`/etc/sdkwork/certs/letsencrypt/<cert-name>/`, upstream normalization, and
 `nginx -t` before reload. Generated config comments `MUST` include the source
 file names (`server.common.toml`, `server.<profile>.toml`) so operators can
 trace the declarative origin.
@@ -858,7 +899,7 @@ The validator `tools/check-webserver-toml-standard.mjs` enforces:
 
 | Id | Rule |
 | --- | --- |
-| W1 | Layout v2 files exist: `server.common.toml`, `server.standalone.toml`, `server.cloud.toml`; the retired single-file `server.toml` `MUST NOT` exist |
+| W1 | Layout v3 files exist: `server.common.toml`, four `server.<environment>.toml`, two `server.<profile>.toml`; retired `server.toml` `MUST NOT` exist |
 | W2 | Every file parses as the TOML subset of section 3.2 (no multi-line strings, datetimes, or duplicates) |
 | W3 | Effective configurations carry `specVersion = 1`, `kind = "sdkwork.webserver.server"`, `id` from the common baseline |
 | W4 | `enabled = false` declares `description` and no servers; `enabled = true` (default) has at least one `[[http.server]]` or `[[stream.server]]` per effective configuration |
@@ -877,8 +918,8 @@ The validator `tools/check-webserver-toml-standard.mjs` enforces:
 | W17 | `enabled = false` effective configurations have no `[[http.server]]`/`[[stream.server]]` |
 | W18 | `deploy.yaml` `expose` domains are covered by `serverName` across the effective configurations (warning when `deploy.yaml` is present) |
 | W19 | Layout v2 only: `server.toml` is retired and fails validation when present; v2 files exist (see W1) |
-| W20 | `server.common.toml` has no `profile` key; `server.standalone.toml` declares `profile = "standalone"`; `server.cloud.toml` declares `profile = "cloud"`; profile files `MUST NOT` declare `specVersion`/`kind`/`id` |
-| W21 | Each profile's effective configuration passes rules W2-W18 (excluding W19-W20) after merge |
+| W20 | `server.common.toml` has no `profile`/`environment` and no `[[http.server]]` when enabled; each `server.<environment>.toml` declares matching `environment`; profile files declare `profile` only |
+| W21 | Each `effective(<profile>.<environment>)` passes rules W2–W18 after three-layer merge |
 | W22 | Identity keys are unique in each effective configuration: one location `match` per server, one upstream `name`, one `serverName` across servers |
 
 Workspace mode (`--workspace <root>`) scans every sibling module with a
@@ -895,6 +936,39 @@ See `examples/webserver/` for a complete multi-virtual-host example split
 into `server.common.toml`, `server.standalone.toml`, and `server.cloud.toml`
 with reverse proxy, static mounting, upstreams, certificates, raw directives,
 and a profile delta. See `examples/deploy/` for `deploy.yaml` counterparts.
+
+## 17. Docker Space Module Integration
+
+Standalone Docker clusters on one Ubuntu/WSL host share one sdkwork-space checkout
+and import sibling modules into the gateway runtime config.
+
+| Item | Standard |
+| --- | --- |
+| Host checkout | `SDKWORK_SPACE_HOST_PATH` (default `/opt/deploy`) cloned to `…/sdkwork-space` |
+| Container mount | `${SDKWORK_SPACE_HOST_PATH}:/opt/deploy` (same path inside the container) |
+| Clone URL | `https://github.com/Sdkwork-Cloud/sdkwork-space.git` (`SDKWORK_SPACE_CLONE_URL`) |
+| Module discovery | `SDKWORK_SPACE_AUTO_DISCOVER=true`: every enabled `sdkwork-*/deployments/webserver/` except `sdkwork-webserver` and `enabled = false` placeholders; otherwise import only `SDKWORK_SPACE_MODULES` when set |
+| Runtime imports | `[[webserver.imports]]` entries in `/etc/sdkwork/webserver/config.toml` (`id`, `path`, `required`, `probe_upstreams`) |
+| Materialized copies | Copied TOML at `/etc/sdkwork/webserver/modules/<module-id>/` (standalone upstream patched to the container gateway port) |
+| App-roots catalog | Generated `/etc/sdkwork/webserver/module-app-roots/<module-id>.toml` with discovered PC/H5 dist paths |
+| Docker defaults | `required = false`, `probe_upstreams = false` (sibling upstreams are not co-located in the webserver container) |
+| Multi-cluster | One host runs development/test/production containers on distinct **host** ports (`13800` / `18888` / `18080`); each container listens on gateway port **3800** internally so module `server.standalone.toml` upstreams stay uniform |
+| Adaptive Web static | Process `[app_roots]` maps `apps/*-{pc,h5}/dist/{dev,test,staging,prod}` from the checkout; bundled image roots remain the fallback |
+| Multi-base-domain | Module environment TOML lists every registered host per `APP_RUNTIME_TOPOLOGY_NAMING.md` §9.1–§9.3 (`sdkwork.com`, `birdcoder.com`, `dtupay.com`, `sdkwork.cn`, `birdcoder.cn`, `dtupay.cn`, …) |
+| Module templates | Copy from `examples/webserver/modules/` in this standards repository |
+
+Operator scripts: `deployments/docker/scripts/setup-host-space-clone.sh`, `entrypoint-standalone.sh`.
+
+### 17.1 Module Template Checklist
+
+Each imported module `MUST` ship layout v2 under `deployments/webserver/`:
+
+1. `server.common.toml` — all lifecycle hosts (`serverName`) for every registered base domain.
+2. `server.standalone.toml` — `profile = "standalone"` and live `gateway` upstream target.
+3. `server.cloud.toml` — `profile = "cloud"` and platform gateway upstream target.
+4. `app-roots.example.toml` — optional Adaptive Web dist catalog (`apps/*-{pc,h5}/dist/<envAlias>`).
+
+Minimal copy-paste templates: `examples/webserver/modules/README.md`.
 
 ## 16. Acceptance Checklist
 

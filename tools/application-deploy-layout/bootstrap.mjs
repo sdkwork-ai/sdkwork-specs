@@ -1,4 +1,5 @@
 import { envPrefixFromCode } from './discover.mjs';
+import { expandSurfaceMultiBase, PLATFORM_GATEWAY_ROLE } from '../webserver/host-registry.mjs';
 
 const PROFILE_IDS = [
   'standalone.development',
@@ -93,22 +94,8 @@ export function renderMinimalTopology(appId, runtimeCode) {
       },
     },
     cloudPublicHosts: {
-      'application.public-ingress': {
-        httpHost: `${roleHost}.sdkwork.com`,
-        environments: {
-          development: { httpHost: `${roleHost}-dev.sdkwork.com` },
-          test: { httpHost: `${roleHost}-test.sdkwork.com` },
-          staging: { httpHost: `${roleHost}-staging.sdkwork.com` },
-        },
-      },
-      'platform.api-gateway': {
-        httpHost: 'api.sdkwork.com',
-        environments: {
-          development: { httpHost: 'api-dev.sdkwork.com' },
-          test: { httpHost: 'api-test.sdkwork.com' },
-          staging: { httpHost: 'api-staging.sdkwork.com' },
-        },
-      },
+      'application.public-ingress': expandSurfaceMultiBase({}, roleHost),
+      'platform.api-gateway': expandSurfaceMultiBase({}, PLATFORM_GATEWAY_ROLE),
     },
   };
 }

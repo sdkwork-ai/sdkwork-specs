@@ -21,6 +21,10 @@ export const REQUIRED_ARTIFACTS = [
 
 export const WEBSERVER_FILES = [
   'deployments/webserver/server.common.toml',
+  'deployments/webserver/server.development.toml',
+  'deployments/webserver/server.test.toml',
+  'deployments/webserver/server.staging.toml',
+  'deployments/webserver/server.production.toml',
   'deployments/webserver/server.standalone.toml',
   'deployments/webserver/server.cloud.toml',
 ];

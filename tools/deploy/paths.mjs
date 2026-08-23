@@ -13,7 +13,7 @@ export function nginxStagingFile(domain) {
 }
 
 export function certPaths(certName, overrides = {}) {
-  const certRoot = overrides?.tls?.certRoot ?? overrides?.nginx?.certRoot ?? '/opt/certs/letsencrypt/live';
+  const certRoot = overrides?.tls?.certRoot ?? overrides?.nginx?.certRoot ?? '/etc/sdkwork/certs/letsencrypt';
   const base = `${certRoot}/${certName}`;
   return {
     fullchain: `${base}/fullchain.pem`,

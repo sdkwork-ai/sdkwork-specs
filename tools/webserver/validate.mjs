@@ -1,13 +1,23 @@
 // Validation for deployments/webserver/server.toml per SDKWORK_WEBSERVER_SPEC.md.
-// Enforces the W1-W18 rules plus the canonical nginx conf render (W16 sidecar).
+// Enforces the W1-W25 rules plus the canonical nginx conf render (W16 sidecar).
 
 import fs from 'node:fs';
 import path from 'node:path';
 
 import { parseTomlSubset, TomlSubsetError } from './toml.mjs';
 import { mergeConfigs } from './merge.mjs';
+import {
+  DEPLOYMENT_PROFILES,
+  ENVIRONMENT_FILE_NAMES,
+  LIFECYCLE_ENVIRONMENTS,
+  LAYOUT_V3_FILES,
+  mergeEffective,
+  sidecarFileName,
+} from './layout-v3.mjs';
 import { applyAdaptiveWebFolding } from './adaptive-web.mjs';
 import { retiredNginxDiagnostics, retiredNginxKeys } from './retired-nginx.mjs';
+import { isPublicHostCompliant, normalizeHost, PLATFORM_GATEWAY_ROLE } from './host-registry.mjs';
+import { isRetiredCertPath, isSdkworkLetsencryptCertPath } from './cert-paths.mjs';
 
 export { TomlSubsetError };
 
@@ -19,7 +29,7 @@ try {
 }
 
 const ROOT_KEYS = new Set([
-  'specVersion', 'kind', 'id', 'enabled', 'description', 'nginx', 'main', 'http', 'stream',
+  'specVersion', 'kind', 'id', 'enabled', 'description', 'profile', 'environment', 'nginx', 'main', 'http', 'stream',
 ]);
 const NGINX_KEYS = new Set(['enabled', 'profile', 'unknownDirectivePolicy', 'exceptionRef', 'strict', 'confFile']);
 const MAIN_KEYS = new Set(['user', 'workerProcesses', 'workerRlimitNofile', 'pid', 'errorLog', 'include', 'raw', 'events']);
@@ -137,6 +147,17 @@ function validateCertificate(cert, pathText, errors, warnings, ctx) {
     if (value === undefined) continue;
     if (typeof value !== 'string' || (!value.startsWith('/') && !value.startsWith('secret://'))) {
       push(errors, `${pathText}.${fileKey}`, 'must be an absolute path or secret:// reference');
+      continue;
+    }
+    if (isRetiredCertPath(value)) {
+      push(errors, `${pathText}.${fileKey}`, `retired certificate path; use /etc/sdkwork/certs/letsencrypt/<cert-name>/ (W25)`);
+    } else if (
+      !hasAcme
+      && !value.startsWith('secret://')
+      && value.includes('/letsencrypt/')
+      && !isSdkworkLetsencryptCertPath(value)
+    ) {
+      push(errors, `${pathText}.${fileKey}`, `certificate path must use /etc/sdkwork/certs/letsencrypt/<cert-name>/ (W25)`);
     }
   }
 }
@@ -709,9 +730,8 @@ function normalizeConfLines(confText) {
 }
 
 /**
- * Validate a module's deployments/webserver directory (layout v2: W1, W2,
- * W16, W18-W23). Each profile's effective configuration is validated
- * independently after merge (W21).
+ * Validate a module's deployments/webserver directory (layout v3: W1, W2,
+ * W16, W18-W25). Each effective(profile, environment) is validated after merge (W21).
  * @param {string} moduleRoot module repository root
  * @param {{isWorkspaceRoot?: boolean}} [options]
  * @returns {{missing: boolean, ok: boolean, errors: string[], warnings: string[], profiles: object}}
@@ -721,7 +741,7 @@ export function validateWebserverDir(moduleRoot, options = {}) {
   const errors = [];
   const warnings = [];
   const dir = path.join(moduleRoot, 'deployments', 'webserver');
-  const layoutFiles = ['server.common.toml', 'server.standalone.toml', 'server.cloud.toml'];
+  const layoutFiles = LAYOUT_V3_FILES;
   const retiredPath = path.join(dir, 'server.toml');
 
   if (isWorkspaceRoot && fs.existsSync(path.join(dir, 'server.common.toml'))) {
@@ -732,9 +752,9 @@ export function validateWebserverDir(moduleRoot, options = {}) {
   const missing = layoutFiles.filter((name) => !fs.existsSync(path.join(dir, name)));
   if (missing.length > 0) {
     const retired = fs.existsSync(retiredPath);
-    for (const name of missing) errors.push(`${path.join(dir, name)}: missing layout v2 file (W1)`);
+    for (const name of missing) errors.push(`${path.join(dir, name)}: missing layout v3 file (W1)`);
     if (retired) {
-      errors.push(`${retiredPath}: server.toml is retired; use server.common.toml + server.<profile>.toml (W19)`);
+      errors.push(`${retiredPath}: server.toml is retired; use layout v3 files (W19)`);
       try {
         const doc = parseTomlSubset(fs.readFileSync(retiredPath, 'utf8'), 'server.toml');
         for (const e of validateWebserverToml(doc).errors) errors.push(`server.toml: ${e}`);
@@ -764,10 +784,42 @@ export function validateWebserverDir(moduleRoot, options = {}) {
   const common = docs['server.common.toml'];
   const standalone = docs['server.standalone.toml'];
   const cloud = docs['server.cloud.toml'];
+  const environmentDocs = Object.fromEntries(
+    LIFECYCLE_ENVIRONMENTS.map((environment) => [
+      environment,
+      docs[ENVIRONMENT_FILE_NAMES[environment]],
+    ]),
+  );
 
-  // W20: profile keys and inherited identity.
+  // W20: role keys and inherited identity.
   if (common.profile !== undefined) {
     errors.push('server.common.toml: MUST NOT declare profile (W20)');
+  }
+  if (common.environment !== undefined) {
+    errors.push('server.common.toml: MUST NOT declare environment (W20)');
+  }
+  if (common.enabled !== false) {
+    for (const server of common.http?.server ?? []) {
+      errors.push(
+        'server.common.toml: MUST NOT declare [[http.server]]; use server.<environment>.toml (W20)',
+      );
+      break;
+    }
+  }
+  for (const environment of LIFECYCLE_ENVIRONMENTS) {
+    const fileName = ENVIRONMENT_FILE_NAMES[environment];
+    const doc = environmentDocs[environment];
+    if (doc.profile !== undefined) {
+      errors.push(`${fileName}: MUST NOT declare profile (W20)`);
+    }
+    if (doc.environment !== environment) {
+      errors.push(`${fileName}: environment MUST be "${environment}" (W20)`);
+    }
+    for (const forbidden of ['specVersion', 'kind', 'id']) {
+      if (doc[forbidden] !== undefined) {
+        errors.push(`${fileName}: MUST NOT declare ${forbidden}; inherited from server.common.toml (W20)`);
+      }
+    }
   }
   for (const [name, doc, expected] of [
     ['server.standalone.toml', standalone, 'standalone'],
@@ -776,84 +828,131 @@ export function validateWebserverDir(moduleRoot, options = {}) {
     if (doc.profile !== expected) {
       errors.push(`${name}: profile MUST be "${expected}" (W20)`);
     }
+    if (doc.environment !== undefined) {
+      errors.push(`${name}: MUST NOT declare environment (W20)`);
+    }
     for (const forbidden of ['specVersion', 'kind', 'id']) {
       if (doc[forbidden] !== undefined) {
-        errors.push(`${name}: MUST NOT declare ${forbidden}; it is inherited from server.common.toml (W20)`);
+        errors.push(`${name}: MUST NOT declare ${forbidden}; inherited from server.common.toml (W20)`);
       }
     }
   }
 
-  // W21: merge and validate each effective configuration. The profile key is
-  // file-role metadata and is stripped before merge.
-  delete standalone.profile;
-  delete cloud.profile;
-  const profiles = {
-    standalone: mergeConfigs(common, standalone),
-    cloud: mergeConfigs(common, cloud),
-  };
-  for (const [profileName, effective] of Object.entries(profiles)) {
-    const result = validateWebserverToml(effective);
-    for (const e of result.errors) errors.push(`effective(${profileName}): ${e}`);
-    for (const w of result.warnings) warnings.push(`effective(${profileName}): ${w}`);
+  // W21: merge and validate each effective(profile, environment).
+  const profiles = {};
+  for (const profileName of DEPLOYMENT_PROFILES) {
+    profiles[profileName] = {};
+    const profileDoc = profileName === 'standalone' ? standalone : cloud;
+    for (const environment of LIFECYCLE_ENVIRONMENTS) {
+      const effective = mergeEffective(common, environmentDocs[environment], profileDoc);
+      profiles[profileName][environment] = effective;
+      const result = validateWebserverToml(effective);
+      for (const e of result.errors) errors.push(`effective(${profileName}.${environment}): ${e}`);
+      for (const w of result.warnings) warnings.push(`effective(${profileName}.${environment}): ${w}`);
+    }
   }
 
-  // W16: per-profile sidecars must match the effective renders when
-  // nginx.enabled is true. Sidecar naming inserts the profile before the
-  // extension: nginx.standalone.conf.
+  // W24: public hostnames must follow APP_RUNTIME_TOPOLOGY_NAMING.md §9.
+  const moduleName = path.basename(path.resolve(moduleRoot));
+  for (const environment of LIFECYCLE_ENVIRONMENTS) {
+    const envDoc = environmentDocs[environment];
+    for (const server of envDoc?.http?.server ?? []) {
+      for (const host of server.serverName ?? []) {
+        if (!isPublicHostCompliant(host)) {
+          errors.push(
+            `server.${environment}.toml serverName "${host}": not a registered public host per APP_RUNTIME_TOPOLOGY_NAMING.md §9 (W24)`,
+          );
+        }
+        if (
+          moduleName !== 'sdkwork-api-cloud-gateway'
+          && normalizeHost(host).split('.')[0] === PLATFORM_GATEWAY_ROLE
+        ) {
+          errors.push(
+            `server.${environment}.toml serverName "${host}": platform gateway host belongs on sdkwork-api-cloud-gateway only (W24)`,
+          );
+        }
+      }
+    }
+  }
+
+  // W16: per-profile×environment sidecars when nginx.enabled is true.
   const nginx = common.nginx ?? {};
   const nginxEnabled = nginx.enabled !== false;
   const strict = nginx.strict !== false;
   const confBase = nginx.confFile ?? 'nginx.conf';
-  const sidecarName = (profileName) => `${confBase.replace(/\.conf$/u, '')}.${profileName}.conf`;
-  for (const [profileName, effective] of Object.entries(profiles)) {
-    const sidecarPath = path.join(dir, sidecarName(profileName));
-    if (!fs.existsSync(sidecarPath)) continue;
-    if (!nginxEnabled) {
-      warnings.push(
-        `deployments/webserver/${sidecarName(profileName)}: present but ignored because nginx.enabled = false (W16)`,
+  for (const profileName of DEPLOYMENT_PROFILES) {
+    for (const environment of LIFECYCLE_ENVIRONMENTS) {
+      const effective = profiles[profileName][environment];
+      const sidecarPath = path.join(dir, sidecarFileName(confBase, profileName, environment));
+      const legacySidecarPath = path.join(
+        dir,
+        `${confBase.replace(/\.conf$/u, '')}.${profileName}.conf`,
       );
-      continue;
-    }
-    const { doc: folded } = applyAdaptiveWebFolding(effective, { moduleRoot });
-    const rendered = normalizeConfLines(renderNginxConf(folded));
-    const sidecar = normalizeConfLines(fs.readFileSync(sidecarPath, 'utf8'));
-    const sidecarSet = new Set(sidecar);
-    const missingLines = rendered.filter((line) => !sidecarSet.has(line));
-    if (missingLines.length > 0) {
-      const message = `${confBase}.${profileName} diverges from the effective render; missing: ${missingLines.slice(0, 3).join(' | ')}${missingLines.length > 3 ? ' ...' : ''}`;
-      if (strict) errors.push(`deployments/webserver/${confBase}.${profileName}: ${message} (W16)`);
-      else warnings.push(`deployments/webserver/${confBase}.${profileName}: ${message} (W16 relaxed)`);
+      const chosenSidecar = fs.existsSync(sidecarPath)
+        ? sidecarPath
+        : environment === 'production' && fs.existsSync(legacySidecarPath)
+          ? legacySidecarPath
+          : null;
+      if (!chosenSidecar) continue;
+      if (!nginxEnabled) {
+        warnings.push(
+          `${path.basename(chosenSidecar)}: present but ignored because nginx.enabled = false (W16)`,
+        );
+        continue;
+      }
+      if (chosenSidecar === legacySidecarPath) {
+        warnings.push(
+          `${path.basename(legacySidecarPath)}: legacy sidecar; prefer ${sidecarFileName(confBase, profileName, environment)} (W16)`,
+        );
+      }
+      const { doc: folded } = applyAdaptiveWebFolding(effective, { moduleRoot });
+      const rendered = normalizeConfLines(renderNginxConf(folded));
+      const sidecar = normalizeConfLines(fs.readFileSync(chosenSidecar, 'utf8'));
+      const sidecarSet = new Set(sidecar);
+      const missingLines = rendered.filter((line) => !sidecarSet.has(line));
+      if (missingLines.length > 0) {
+        const message = `${path.basename(chosenSidecar)} diverges from effective(${profileName}.${environment}); missing: ${missingLines.slice(0, 3).join(' | ')}${missingLines.length > 3 ? ' ...' : ''}`;
+        if (strict) errors.push(`${path.basename(chosenSidecar)}: ${message} (W16)`);
+        else warnings.push(`${path.basename(chosenSidecar)}: ${message} (W16 relaxed)`);
+      }
     }
   }
 
-  // W18: deploy.yaml expose domains should be covered by the union of the
-  // effective serverName sets.
+  // W18: deploy.yaml expose domains must match effective(profile.environment).
   const deployYaml = path.join(moduleRoot, 'deployments', 'deploy.yaml');
   if (yaml && fs.existsSync(deployYaml)) {
-    const domains = new Set();
-    for (const block of collectExposeBlocks(yaml, fs.readFileSync(deployYaml, 'utf8'))) {
-      for (const item of block.expose ?? []) {
-        if (typeof item?.domain === 'string') domains.add(item.domain);
-      }
-    }
-    if (domains.size > 0) {
-      const served = new Set();
-      for (const effective of Object.values(profiles)) {
-        for (const server of effective.http?.server ?? []) {
-          for (const name of server.serverName ?? []) served.add(name);
+    try {
+      const parsed = yaml.load(fs.readFileSync(deployYaml, 'utf8'));
+      const profileBlocks = parsed?.profiles && typeof parsed.profiles === 'object'
+        ? Object.entries(parsed.profiles)
+        : parsed?.expose
+          ? [['default', parsed]]
+          : [];
+      for (const [profileId, block] of profileBlocks) {
+        if (!block || !Array.isArray(block.expose)) continue;
+        const environment = profileId.includes('.') ? profileId.split('.').pop() : 'production';
+        const deploymentProfile = profileId.includes('.') ? profileId.split('.')[0] : 'standalone';
+        if (!DEPLOYMENT_PROFILES.includes(deploymentProfile)) continue;
+        if (!LIFECYCLE_ENVIRONMENTS.includes(environment)) continue;
+        const effective = profiles[deploymentProfile]?.[environment];
+        if (!effective) continue;
+        const serverNames = new Set(
+          (effective.http?.server ?? []).flatMap((server) => server.serverName ?? []),
+        );
+        for (const item of block.expose) {
+          const domain = typeof item === 'string' ? item : item?.domain;
+          if (!domain || serverNames.has(domain)) continue;
+          warnings.push(
+            `deployments/deploy.yaml profile "${profileId}": expose domain "${domain}" is not covered by effective(${deploymentProfile}.${environment}) serverName (W18)`,
+          );
         }
       }
-      for (const domain of domains) {
-        if (!served.has(domain)) {
-          warnings.push(`deployments/deploy.yaml: expose domain "${domain}" is not covered by any [[http.server]] serverName (W18)`);
-        }
-      }
+    } catch {
+      // unparseable deploy.yaml is reported by check-deploy-standard
     }
   }
 
   // W23: sdkwork-webserver product edge is reverse-proxy only (expose.mode: api).
-  // Adaptive Web PC/H5/static roots are owned by AdaptiveAppShellConfig, not stock nginx.
-  const moduleName = path.basename(path.resolve(moduleRoot));
   if (moduleName === 'sdkwork-webserver') {
     const forbiddenMarkers = [
       'adaptive-web.maps.conf',
@@ -867,38 +966,41 @@ export function validateWebserverDir(moduleRoot, options = {}) {
       '/usr/share/sdkwork/webserver/web/pc',
       '/usr/share/sdkwork/webserver/web/h5',
     ];
-    for (const [profileName, effective] of Object.entries(profiles)) {
-      const blob = JSON.stringify(effective);
-      for (const marker of forbiddenMarkers) {
-        if (blob.includes(marker)) {
-          errors.push(
-            `effective(${profileName}): sdkwork-webserver edge nginx must not include Adaptive Web / SPA root marker "${marker}" (W23; expose.mode: api)`,
-          );
+    for (const profileName of DEPLOYMENT_PROFILES) {
+      for (const environment of LIFECYCLE_ENVIRONMENTS) {
+        const effective = profiles[profileName][environment];
+        const blob = JSON.stringify(effective);
+        for (const marker of forbiddenMarkers) {
+          if (blob.includes(marker)) {
+            errors.push(
+              `effective(${profileName}.${environment}): sdkwork-webserver edge nginx must not include Adaptive Web / SPA root marker "${marker}" (W23; expose.mode: api)`,
+            );
+          }
         }
-      }
-      for (const server of effective.http?.server ?? []) {
-        const names = server.serverName ?? [];
-        const isPublicIngress = names.some((name) => (
-          name === 'server.sdkwork.com'
-          || /^web-(dev|test|staging)\.sdkwork\.com$/u.test(name)
-        ));
-        if (!isPublicIngress) continue;
-        const root = (server.location ?? []).find((location) => location.match === '/');
-        if (!root) {
-          errors.push(
-            `effective(${profileName}): public ingress ${names.join(',')} missing location / (W23)`,
-          );
-          continue;
-        }
-        if (typeof root.proxyPass !== 'string' || !root.proxyPass.trim()) {
-          errors.push(
-            `effective(${profileName}): public ingress ${names.join(',')} location / MUST proxy_pass to the gateway (W23)`,
-          );
-        }
-        if (root.root !== undefined || root.include !== undefined) {
-          errors.push(
-            `effective(${profileName}): public ingress ${names.join(',')} location / MUST NOT declare root/include Adaptive Web (W23)`,
-          );
+        for (const server of effective.http?.server ?? []) {
+          const names = server.serverName ?? [];
+          const isPublicIngress = names.some((name) => (
+            name === 'server.sdkwork.com'
+            || /^server(-dev|-test|-staging)?\.sdkwork\.com$/u.test(name)
+          ));
+          if (!isPublicIngress) continue;
+          const root = (server.location ?? []).find((location) => location.match === '/');
+          if (!root) {
+            errors.push(
+              `effective(${profileName}.${environment}): public ingress ${names.join(',')} missing location / (W23)`,
+            );
+            continue;
+          }
+          if (typeof root.proxyPass !== 'string' || !root.proxyPass.trim()) {
+            errors.push(
+              `effective(${profileName}.${environment}): public ingress ${names.join(',')} location / MUST proxy_pass to the gateway (W23)`,
+            );
+          }
+          if (root.root !== undefined || root.include !== undefined) {
+            errors.push(
+              `effective(${profileName}.${environment}): public ingress ${names.join(',')} location / MUST NOT declare root/include Adaptive Web (W23)`,
+            );
+          }
         }
       }
     }

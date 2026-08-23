@@ -38,7 +38,7 @@ const root = path.resolve(args.root ?? process.cwd());
 const result = validateWebserverDir(root);
 if (result.missing) {
   console.error(
-    `check-webserver-toml-standard: missing ${path.join('deployments', 'webserver', 'server.common.toml')} (layout v2: server.common.toml + server.standalone.toml + server.cloud.toml) in ${root}`,
+    `check-webserver-toml-standard: missing layout v3 files in ${root} (server.common.toml + server.{development,test,staging,production}.toml + server.{standalone,cloud}.toml)`,
   );
   process.exit(1);
 }

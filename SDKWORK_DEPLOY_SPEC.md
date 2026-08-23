@@ -242,8 +242,8 @@ target/nginx/sites-enabled/sdkwork/im.sdkwork.com.conf
 TLS default:
 
 ```text
-/opt/certs/letsencrypt/live/{certName}/fullchain.pem
-/opt/certs/letsencrypt/live/{certName}/privkey.pem
+/etc/sdkwork/certs/letsencrypt/{certName}/fullchain.pem
+/etc/sdkwork/certs/letsencrypt/{certName}/privkey.pem
 ```
 
 ### 7.2 Fields

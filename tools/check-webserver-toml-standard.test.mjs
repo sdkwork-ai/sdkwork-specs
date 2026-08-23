@@ -38,9 +38,9 @@ clientMaxBodySize = "1100m"
 serverTokens = "off"
 
 [http.certificates.im]
-certFile = "/opt/certs/letsencrypt/live/im.sdkwork.com/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/im.sdkwork.com/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/im.sdkwork.com/chain.pem"
+certFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/fullchain.pem"
+certKeyFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/privkey.pem"
+chainFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/chain.pem"
 
 [[http.upstream]]
 name = "api_backend"
@@ -97,7 +97,7 @@ test('toml subset parser: full valid document', () => {
   assert.equal(doc.kind, 'sdkwork.webserver.server');
   assert.equal(doc.id, 'im');
   assert.equal(doc.main.events.workerConnections, 1024);
-  assert.equal(doc.http.certificates.im.certFile, '/opt/certs/letsencrypt/live/im.sdkwork.com/fullchain.pem');
+  assert.equal(doc.http.certificates.im.certFile, '/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/fullchain.pem');
   assert.equal(doc.http.upstream.length, 1);
   assert.equal(doc.http.upstream[0].name, 'api_backend');
   assert.equal(doc.http.upstream[0].target.length, 2);
@@ -160,8 +160,8 @@ kind = "sdkwork.webserver.server"
 id = "webserver"
 
 [http.certificates."sdkwork.com"]
-certFile = "/opt/certs/letsencrypt/live/sdkwork.com/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/sdkwork.com/privkey.pem"
+certFile = "/etc/sdkwork/certs/letsencrypt/sdkwork.com/fullchain.pem"
+certKeyFile = "/etc/sdkwork/certs/letsencrypt/sdkwork.com/privkey.pem"
 
 [[http.server]]
 listen = ["443 ssl"]
@@ -169,7 +169,7 @@ serverName = ["server.sdkwork.com"]
 [http.server.tls]
 cert = "sdkwork.com"
 `);
-  assert.equal(doc.http.certificates['sdkwork.com'].certFile, '/opt/certs/letsencrypt/live/sdkwork.com/fullchain.pem');
+  assert.equal(doc.http.certificates['sdkwork.com'].certFile, '/etc/sdkwork/certs/letsencrypt/sdkwork.com/fullchain.pem');
   assert.deepEqual(errorsOf(doc), []);
 });
 
@@ -399,8 +399,8 @@ clientMaxBodySize = "1100m"
 gzipTypes = ["text/css", "application/javascript"]
 
 [http.certificates.im]
-certFile = "/opt/certs/letsencrypt/live/im.sdkwork.com/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/im.sdkwork.com/privkey.pem"
+certFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/fullchain.pem"
+certKeyFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/privkey.pem"
 
 [[http.upstream]]
 name = "gateway"
@@ -473,7 +473,7 @@ cert = "im"
   assert.equal(loc.proxyReadTimeout, '120s');
   assert.equal(merged.http.server[1].serverName[0], 'api.sdkwork.com');
   // Identity fields of the common baseline survive untouched.
-  assert.equal(merged.http.certificates.im.certFile, '/opt/certs/letsencrypt/live/im.sdkwork.com/fullchain.pem');
+  assert.equal(merged.http.certificates.im.certFile, '/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/fullchain.pem');
 });
 
 test('merge: stream servers and plain-table recursion', () => {

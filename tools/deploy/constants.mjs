@@ -51,5 +51,5 @@ export const NGINX_DEFAULTS = {
   clientMaxBodySize: '1100m',
   proxyReadTimeout: '3600s',
   proxySendTimeout: '3600s',
-  certRoot: '/opt/certs/letsencrypt/live',
+  certRoot: '/etc/sdkwork/certs/letsencrypt',
 };

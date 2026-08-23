@@ -1,0 +1,24 @@
+# Adaptive Web roots for sdkwork-cloudrouter (copy into runtime config when in-process).
+# Docker entrypoint generates /etc/sdkwork/webserver/module-app-roots/sdkwork-cloudrouter.toml
+# from discovered dist/ paths under /opt/deploy/sdkwork-space/sdkwork-cloudrouter/apps/.
+
+[app_roots]
+tablet_surface = "pc"
+
+[app_roots.pc_static_by_environment]
+development = "apps/sdkwork-cloudrouter-pc/dist/dev"
+test = "apps/sdkwork-cloudrouter-pc/dist/test"
+staging = "apps/sdkwork-cloudrouter-pc/dist/staging"
+production = "apps/sdkwork-cloudrouter-pc/dist/prod"
+
+[app_roots.h5_static_by_environment]
+development = "apps/sdkwork-cloudrouter-h5/dist/dev"
+test = "apps/sdkwork-cloudrouter-h5/dist/test"
+staging = "apps/sdkwork-cloudrouter-h5/dist/staging"
+production = "apps/sdkwork-cloudrouter-h5/dist/prod"
+
+[app_roots.static_fallback_by_environment]
+development = "deployments/webserver/static"
+test = "deployments/webserver/static"
+staging = "deployments/webserver/static"
+production = "deployments/webserver/static"

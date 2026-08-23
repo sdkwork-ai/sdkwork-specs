@@ -46,9 +46,9 @@ gzipMinLength = 1024
 map = ["$http_upgrade $connection_upgrade default upgrade"]
 
 [http.certificates.im]
-certFile = "/opt/certs/letsencrypt/live/im.sdkwork.com/fullchain.pem"
-certKeyFile = "/opt/certs/letsencrypt/live/im.sdkwork.com/privkey.pem"
-chainFile = "/opt/certs/letsencrypt/live/im.sdkwork.com/chain.pem"
+certFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/fullchain.pem"
+certKeyFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/privkey.pem"
+chainFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/chain.pem"
 ocspStapling = true
 
 # Reverse proxy target group definition; the target set is profile-specific

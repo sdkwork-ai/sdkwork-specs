@@ -93,15 +93,17 @@ Rules:
 Certificates use a stable root and a certificate name directory:
 
 ```text
-/opt/certs/letsencrypt/live/<cert-name>/fullchain.pem
-/opt/certs/letsencrypt/live/<cert-name>/privkey.pem
+/etc/sdkwork/certs/letsencrypt/<cert-name>/fullchain.pem
+/etc/sdkwork/certs/letsencrypt/<cert-name>/privkey.pem
+/etc/sdkwork/certs/letsencrypt/<cert-name>/chain.pem
 ```
 
 For `api.sdkwork.com` and `www.sdkwork.com`, the default certificate name is `sdkwork.com`:
 
 ```text
-/opt/certs/letsencrypt/live/sdkwork.com/fullchain.pem
-/opt/certs/letsencrypt/live/sdkwork.com/privkey.pem
+/etc/sdkwork/certs/letsencrypt/sdkwork.com/fullchain.pem
+/etc/sdkwork/certs/letsencrypt/sdkwork.com/privkey.pem
+/etc/sdkwork/certs/letsencrypt/sdkwork.com/chain.pem
 ```
 
 Non-production environment hosts (`api-dev.sdkwork.com`, `im-test.sdkwork.com`,
@@ -315,7 +317,7 @@ domain, plan validation `MUST` fail.
 - [ ] The deployed file path is `/etc/nginx/sites-enabled/sdkwork/<domain>.conf`.
 - [ ] The file name is the complete public domain plus `.conf`.
 - [ ] The upstream is `http://127.0.0.1:3900`.
-- [ ] TLS certificate paths use `/opt/certs/letsencrypt/live/<cert-name>`.
+- [ ] TLS certificate paths use `/etc/sdkwork/certs/letsencrypt/<cert-name>/`.
 - [ ] Configs preserve forwarded headers and streaming behavior.
 - [ ] `nginx -t` passes before reload.
 - [ ] `/healthz` and `/readyz` pass through the public domain after reload.

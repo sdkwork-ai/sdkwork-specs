@@ -34,8 +34,12 @@ Every independently deployable repository **MUST** contain:
 **MAY** contain when the module has a public web surface:
 
 ```text
-    deployments/webserver/          # SDKWORK_WEBSERVER_SPEC.md layout v2
+    deployments/webserver/          # SDKWORK_WEBSERVER_SPEC.md layout v3
       server.common.toml
+      server.development.toml
+      server.test.toml
+      server.staging.toml
+      server.production.toml
       server.standalone.toml
       server.cloud.toml
 ```
@@ -156,6 +160,7 @@ Additional checks:
 node <sdkwork-specs>/tools/check-source-config-standard.mjs --root .
 node <sdkwork-specs>/tools/check-deploy-standard.mjs
 node <sdkwork-specs>/tools/check-webserver-toml-standard.mjs --root deployments/webserver
+node <sdkwork-specs>/tools/align-webserver-workspace.mjs --root .
 ```
 
 ## 8. Document Map
