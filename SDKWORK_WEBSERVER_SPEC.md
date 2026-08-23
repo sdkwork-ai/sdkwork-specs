@@ -409,6 +409,41 @@ Rules:
 - Certificate paths `MUST` be absolute and `MUST` follow the `NGINX_SPEC.md`
   section 3 contract (`/opt/certs/letsencrypt/live/<cert-name>/...`) unless
   an operator-managed root is documented in the module `deployments/webserver/README.md`.
+
+### 7.1 Certificate Inventory (`/etc/sdkwork/certs/<domain>/`)
+
+System-scope and container deployments `SHOULD` use the canonical
+certificate inventory root `/etc/sdkwork/certs/` (overridable with
+`SDKWORK_CERTS_DIR` for containers and tests). One directory per domain:
+
+| Path | Purpose |
+| --- | --- |
+| `/etc/sdkwork/certs/<domain>/cert.pem` | Leaf certificate (PEM) |
+| `/etc/sdkwork/certs/<domain>/key.pem` | Private key (PEM, `0600`) |
+| `/etc/sdkwork/certs/<domain>/chain.pem` | Optional issuer chain (PEM) |
+
+References use the `certs://<domain>/<file>` URI form anywhere a certificate
+path is accepted (`certFile`, `certKeyFile`, `chainFile`, nginx-conf
+`ssl_certificate`, `ssl_certificate_key`):
+
+```toml
+[http.certificates."sdkwork.com"]
+certFile = "certs://sdkwork.com/cert.pem"
+certKeyFile = "certs://sdkwork.com/key.pem"
+chainFile = "certs://sdkwork.com/chain.pem"
+```
+
+Rules:
+
+- `certs://<domain>/…` resolves against the inventory root; the domain
+  directory is the operator/ACME-managed certificate home. Missing
+  inventory files fail closed with a precise diagnostic.
+- The ACME certificate worker writes issued and renewed material into
+  `/etc/sdkwork/certs/<domain>/` (`cert.pem`, `key.pem`, `chain.pem`), so
+  the inventory is the single certificate home for both ACME-managed and
+  operator-uploaded certificates.
+- Domain directories `MUST` be readable by the runtime service user and
+  private keys `MUST` be `0600` (group `sdkwork` on Linux).
 - Certificate and key material `MUST NOT` be embedded inline; `secret://`
   references are the only allowed indirection (`SDKWORK_DEPLOY_SPEC.md` section 11).
 - Development-only self-signed material may live under
