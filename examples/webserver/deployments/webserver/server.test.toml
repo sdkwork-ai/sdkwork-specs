@@ -1,0 +1,9 @@
+environment = "test"
+
+[http]
+
+[[http.server]]
+listen = ["80"]
+serverName = ["im-test.sdkwork.com", "im-test.birdcoder.com", "im-test.dtupay.com", "im-test.sdkwork.cn", "im-test.birdcoder.cn", "im-test.dtupay.cn", "im-test.skubc.com", "im-test.skubc.cn", "im-test.zowalk.com", "im-test.zowalk.cn", "im-test.offer86.com", "im-test.offer86.cn", "im-test.86offer.com", "im-test.86offer.cn"]
+include = ["snippets/gateway-locations.nonproduction.conf"]
+
