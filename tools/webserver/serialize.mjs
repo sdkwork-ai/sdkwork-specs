@@ -1,4 +1,4 @@
-// Serialize layout v2 webserver TOML documents (SDKWORK_WEBSERVER_SPEC.md §3.2 subset).
+// Serialize layout v3 webserver TOML documents (SDKWORK_WEBSERVER_SPEC.md §3.2 subset).
 
 function tomlKey(name) {
   return /^[a-zA-Z0-9_-]+$/u.test(name) ? name : JSON.stringify(name);

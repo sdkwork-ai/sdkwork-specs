@@ -36,6 +36,21 @@ export function detectBrowserSurfaces(moduleRoot, appId) {
   return { pcExists, h5Exists, packageAppId };
 }
 
+/** Infer PC/H5 from app-roots.example.toml when apps/ is absent (example trees). */
+export function detectBrowserSurfacesForWebserver(moduleRoot, webserverDir = null) {
+  const dir = webserverDir ?? path.join(moduleRoot, 'deployments', 'webserver');
+  const detected = detectBrowserSurfaces(moduleRoot);
+  if (detected.pcExists || detected.h5Exists) return detected;
+  const appRootsPath = path.join(dir, 'app-roots.example.toml');
+  if (!fs.existsSync(appRootsPath)) return detected;
+  const text = fs.readFileSync(appRootsPath, 'utf8');
+  return {
+    ...detected,
+    pcExists: detected.pcExists || text.includes('[app_roots.pc_static_by_environment]'),
+    h5Exists: detected.h5Exists || text.includes('[app_roots.h5_static_by_environment]'),
+  };
+}
+
 /**
  * Fold Adaptive Web locations on the effective TOML document for stock nginx.
  *
@@ -57,7 +72,7 @@ export function applyAdaptiveWebFolding(effectiveDoc, options = {}) {
   const doc = cloneJson(effectiveDoc);
   const runtimeCode = options.runtimeCode ?? 'webserver';
   const detected = options.moduleRoot
-    ? detectBrowserSurfaces(options.moduleRoot)
+    ? detectBrowserSurfacesForWebserver(options.moduleRoot, options.webserverDir)
     : { pcExists: options.pcExists, h5Exists: options.h5Exists };
   const pcExists = options.pcExists ?? detected.pcExists ?? false;
   const h5Exists = options.h5Exists ?? detected.h5Exists ?? false;

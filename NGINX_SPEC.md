@@ -83,6 +83,13 @@ http://127.0.0.1:3900
 Rules:
 
 - The old sample upstream `http://127.0.0.1:8080` is obsolete.
+- Declarative webserver TOML uses the reserved upstream name `gateway` for the
+  primary API/application reverse-proxy target (`SDKWORK_WEBSERVER_SPEC.md`
+  §8.1, W30). Generated site files emit `upstream gateway { … }` once per nginx
+  process; every virtual host in that process references the same name. Module
+  checkouts reuse the name `gateway`; isolation comes from separate nginx
+  processes (or composer deduplication when multiple modules share one
+  container runtime).
 - The edge server owns the portal, vendor compatibility open-api gateway surfaces (for example OpenAI `/v1/*` declared per `API_SPEC.md` section 4.5.2), business open-api, backend/admin API, app API, OpenAPI documents, `/healthz`, and `/readyz`.
 - The proxy must preserve `Host`, real client IP, `X-Forwarded-*`, and websocket upgrade headers.
 - Streaming and generation routes must not be broken by proxy buffering; generated configs set `proxy_buffering off` and use long read/send timeouts.
@@ -105,6 +112,10 @@ For `api.sdkwork.com` and `www.sdkwork.com`, the default certificate name is `sd
 /etc/sdkwork/certs/letsencrypt/sdkwork.com/privkey.pem
 /etc/sdkwork/certs/letsencrypt/sdkwork.com/chain.pem
 ```
+
+The retired bootstrap path `/opt/certs/letsencrypt/live/` `MUST NOT` appear in
+new nginx configs, webserver TOML, deployment scripts, or documentation
+examples. Use `/etc/sdkwork/certs/letsencrypt/` exclusively.
 
 Non-production environment hosts (`api-dev.sdkwork.com`, `im-test.sdkwork.com`,
 `im-staging.sdkwork.com`, and the application-role hosts from

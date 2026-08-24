@@ -96,6 +96,7 @@ for (const name of fs.readdirSync(workspace).filter((n) => n.startsWith('sdkwork
   let prodBases = 0;
   let prodHosts = 0;
   let topoBases = 0;
+  let envParity = 'ok';
 
   if (docs.enabled) {
     const prodServers = docs.environments.production?.http?.server ?? [];
@@ -104,6 +105,15 @@ for (const name of fs.readdirSync(workspace).filter((n) => n.startsWith('sdkwork
     prodBases = new Set(names.map((h) => h.split('.').slice(-2).join('.'))).size;
     if (topology?.surfaces?.['application.public-ingress'] && prodBases < expectedBases) {
       issues.push(`webserver production base domains: ${prodBases}/${expectedBases}`);
+    }
+    for (const environment of ['development', 'test', 'staging']) {
+      const envNames = (docs.environments[environment]?.http?.server ?? [])
+        .flatMap((s) => s.serverName ?? []);
+      const envBases = new Set(envNames.map((h) => h.split('.').slice(-2).join('.'))).size;
+      if (prodBases > 0 && envBases !== prodBases) {
+        envParity = `${environment}:${envBases}/${prodBases}`;
+        issues.push(`environment parity ${environment}: ${envBases}/${prodBases} base domains`);
+      }
     }
   }
 
@@ -132,16 +142,17 @@ for (const name of fs.readdirSync(workspace).filter((n) => n.startsWith('sdkwork
     surfaces,
     prodBases: docs.enabled ? prodBases : '-',
     prodHosts: docs.enabled ? prodHosts : '-',
+    envParity: docs.enabled ? envParity : '-',
     issues,
   });
 }
 
 console.log(`audit-modules: ${rows.length} modules, ${okCount} ok, ${issueCount} with issues`);
 console.log(`expected base domains per HTTP surface: ${expectedBases}\n`);
-console.log('MODULE                          STATUS  WEBSERVER  TOPO   SURF  BASES  HOSTS');
+console.log('MODULE                          STATUS  WEBSERVER  TOPO   SURF  BASES  HOSTS  ENVS');
 for (const row of rows) {
   const label = row.name.padEnd(30);
-  const line = `${label}  ${row.status.padEnd(5)}  ${row.webserver.padEnd(9)}  ${String(row.topology).padEnd(5)}  ${String(row.surfaces).padEnd(4)}  ${String(row.prodBases).padEnd(5)}  ${String(row.prodHosts).padEnd(5)}`;
+  const line = `${label}  ${row.status.padEnd(5)}  ${row.webserver.padEnd(9)}  ${String(row.topology).padEnd(5)}  ${String(row.surfaces).padEnd(4)}  ${String(row.prodBases).padEnd(5)}  ${String(row.prodHosts).padEnd(5)}  ${String(row.envParity).padEnd(5)}`;
   console.log(line);
   if (row.issues.length > 0) {
     for (const issue of row.issues) console.log(`${' '.repeat(32)}- ${issue}`);

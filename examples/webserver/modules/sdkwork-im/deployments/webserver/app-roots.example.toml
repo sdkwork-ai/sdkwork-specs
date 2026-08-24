@@ -1,6 +1,5 @@
 # Adaptive Web roots for sdkwork-im (copy into runtime config when in-process).
 # Docker entrypoint generates /etc/sdkwork/webserver/module-app-roots/sdkwork-im.toml
-# from discovered dist/ paths under /opt/deploy/sdkwork-space/sdkwork-im/apps/.
 
 [app_roots]
 tablet_surface = "pc"

@@ -101,7 +101,8 @@ apps/sdkwork-<code>-h5/dist/{dev,test,staging,prod}/
 
 - `build.outDir` = `dist/<envAlias>` (`development`→`dev` … `production`→`prod`).
 - PC and H5 `MUST NOT` share an `outDir`; bare `dist/` is forbidden.
-- Check: `node tools/check-browser-dist-layout.mjs --root <module>`.
+- Repository roots `MUST` expose `build:pc:<env>` / `build:h5:<env>`; app surfaces `MUST` expose `build:<env>` per `PNPM_SCRIPT_SPEC.md` §4.2.
+- Check: `node tools/check-browser-dist-layout.mjs --root <module>` and `node tools/check-browser-build-scripts.mjs --root <module>`.
 
 ## 8. Verification
 

@@ -2,29 +2,8 @@ environment = "staging"
 
 [http]
 
-[http.certificates]
-
-[http.certificates."sdkwork.com"]
-certFile = "/etc/sdkwork/certs/letsencrypt/sdkwork.com/fullchain.pem"
-certKeyFile = "/etc/sdkwork/certs/letsencrypt/sdkwork.com/privkey.pem"
-chainFile = "/etc/sdkwork/certs/letsencrypt/sdkwork.com/chain.pem"
-ocspStapling = true
-
 [[http.server]]
 listen = ["80"]
-serverName = ["code-staging.sdkwork.com"]
-
-[[http.server.location]]
-match = "/api/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-
-[[http.server.location]]
-match = "/"
-proxyPass = "http://gateway"
-proxyHttpVersion = "1.1"
-proxySetHeader = ["Host $host", "X-Forwarded-For $proxy_add_x_forwarded_for", "X-Forwarded-Proto $scheme"]
-proxyBuffering = false
-proxyReadTimeout = "300s"
+serverName = ["code-staging.sdkwork.com", "code-staging.birdcoder.com", "code-staging.dtupay.com", "code-staging.sdkwork.cn", "code-staging.birdcoder.cn", "code-staging.dtupay.cn", "code-staging.skubc.com", "code-staging.skubc.cn", "code-staging.zowalk.com", "code-staging.zowalk.cn", "code-staging.offer86.com", "code-staging.offer86.cn", "code-staging.86offer.com", "code-staging.86offer.cn"]
+include = ["snippets/gateway-locations.nonproduction.conf"]
 

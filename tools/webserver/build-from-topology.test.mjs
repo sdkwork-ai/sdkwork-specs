@@ -24,6 +24,14 @@ test('hostsForRoleAcrossBases covers every registered base domain', () => {
     'im.sdkwork.cn',
     'im.birdcoder.cn',
     'im.dtupay.cn',
+    'im.skubc.com',
+    'im.skubc.cn',
+    'im.zowalk.com',
+    'im.zowalk.cn',
+    'im.offer86.com',
+    'im.offer86.cn',
+    'im.86offer.com',
+    'im.86offer.cn',
   ]);
   assert.deepEqual(hostsForRoleAcrossBases('im', 'test'), [
     'im-test.sdkwork.com',
@@ -32,15 +40,23 @@ test('hostsForRoleAcrossBases covers every registered base domain', () => {
     'im-test.sdkwork.cn',
     'im-test.birdcoder.cn',
     'im-test.dtupay.cn',
+    'im-test.skubc.com',
+    'im-test.skubc.cn',
+    'im-test.zowalk.com',
+    'im-test.zowalk.cn',
+    'im-test.offer86.com',
+    'im-test.offer86.cn',
+    'im-test.86offer.com',
+    'im-test.86offer.cn',
   ]);
 });
 
 test('expandSurfaceMultiBase materializes environments for all base domains', () => {
   const surface = expandSurfaceMultiBase({}, 'drive');
   assert.equal(surface.httpHost, 'drive.sdkwork.com');
-  assert.equal(surface.httpHosts.length, 6);
-  assert.equal(surface.environments.test.httpHosts.length, 6);
-  assert.ok(isPublicHostCompliant('drive.birdcoder.cn'));
+  assert.equal(surface.httpHosts.length, DEFAULT_PRODUCT_BASE_DOMAINS.length);
+  assert.equal(surface.environments.test.httpHosts.length, DEFAULT_PRODUCT_BASE_DOMAINS.length);
+  assert.ok(isPublicHostCompliant('drive.zowalk.cn'));
 });
 
 test('deriveEnvHosts applies lifecycle suffixes', () => {

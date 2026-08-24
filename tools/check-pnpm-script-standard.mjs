@@ -120,6 +120,8 @@ const QUALITY_TIERS = new Set([
   'required',
   'docker',
 ]);
+const BROWSER_CLIENT_ARCHITECTURES = new Set(['pc', 'h5']);
+const BROWSER_BUILD_ENV_ALIASES = new Set(['dev', 'test', 'staging', 'prod']);
 const DEV_AXIS_VALUES = new Set([
   ...RUNTIME_TARGETS,
   ...DATABASE_ALIASES,
@@ -406,6 +408,53 @@ function pushLifecycleProfileOrderIssues(scriptName, issues, prefix = '') {
   }
 }
 
+function pushBrowserBuildIssues(scriptName, issues, prefix = '') {
+  const parts = scriptName.split(':');
+  if (parts[0] !== 'build' || parts.length < 3) {
+    return;
+  }
+  const architecture = parts[1];
+  if (!BROWSER_CLIENT_ARCHITECTURES.has(architecture)) {
+    return;
+  }
+  const environmentAlias = parts[2];
+  if (!BROWSER_BUILD_ENV_ALIASES.has(environmentAlias)) {
+    issues.push(
+      `${prefix}${scriptName}: browser build environment must be one of ${[...BROWSER_BUILD_ENV_ALIASES].join(', ')}`,
+    );
+  }
+  if (parts.length > 3 && !DEPLOYMENT_PROFILES.has(parts[3])) {
+    issues.push(
+      `${prefix}${scriptName}: optional browser build deployment profile must be standalone or cloud`,
+    );
+  }
+  if (parts.length > 4) {
+    issues.push(
+      `${prefix}${scriptName}: browser build grammar is build:<pc|h5>:<dev|test|staging|prod>[:standalone|cloud]`,
+    );
+  }
+}
+
+function pushAppSurfaceBrowserBuildIssues(scriptName, issues, prefix = '') {
+  const parts = scriptName.split(':');
+  if (parts[0] !== 'build' || parts.length < 2 || BROWSER_CLIENT_ARCHITECTURES.has(parts[1])) {
+    return;
+  }
+  const environmentAlias = parts[1];
+  if (!BROWSER_BUILD_ENV_ALIASES.has(environmentAlias)) {
+    return;
+  }
+  if (parts.length > 2 && !DEPLOYMENT_PROFILES.has(parts[2])) {
+    issues.push(
+      `${prefix}${scriptName}: optional browser build deployment profile must be standalone or cloud`,
+    );
+  }
+  if (parts.length > 3) {
+    issues.push(
+      `${prefix}${scriptName}: app-surface browser build grammar is build:<dev|test|staging|prod>[:standalone|cloud]`,
+    );
+  }
+}
 function pushActionFirstRuntimeTargetIssues(scriptName, issues, prefix = '') {
   if (isDesktopHostFamilyCommand(scriptName)) return;
   const parts = scriptName.split(':');
@@ -725,6 +774,8 @@ function pushCommandNameIssues(
   }
   pushGatewayNameIssues(scriptName, issues, prefix);
   pushLifecycleProfileOrderIssues(scriptName, issues, prefix);
+  pushBrowserBuildIssues(scriptName, issues, prefix);
+  pushAppSurfaceBrowserBuildIssues(scriptName, issues, prefix);
 }
 
 function validateRootScripts(root, productPrefixes) {

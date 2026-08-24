@@ -1375,7 +1375,7 @@ Rules:
 - Web server config tests run
   `node --test tools/check-webserver-toml-standard.test.mjs tools/retired-nginx.test.mjs` and prove the
   `deployments/webserver/` TOML subset parser, the W1-W22 validation rules
-  (`SDKWORK_WEBSERVER_SPEC.md` section 14), the layout v2 inheritance merge
+  (`SDKWORK_WEBSERVER_SPEC.md` section 14), the layout v3 inheritance merge
   (`server.common.toml` baseline with `server.standalone.toml` /
   `server.cloud.toml` overrides: scalar override, leaf-array replacement,
   identity-key upsert, wholesale target replacement), canonical nginx conf

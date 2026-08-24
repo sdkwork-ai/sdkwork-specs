@@ -1,6 +1,7 @@
 // Layout v3 merge: common → environment → profile (SDKWORK_WEBSERVER_SPEC.md §2).
 
 import { mergeConfigs } from './merge.mjs';
+import { expandHttpDefaults } from './expand-defaults.mjs';
 
 export const LIFECYCLE_ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
 export const DEPLOYMENT_PROFILES = ['standalone', 'cloud'];
@@ -32,7 +33,11 @@ export function stripRoleKeys(doc) {
  * effective(profile, environment) = merge(common, server.<environment>.toml, server.<profile>.toml)
  */
 export function mergeEffective(common, environmentDoc, profileDoc) {
-  return mergeConfigs(mergeConfigs(common, stripRoleKeys(environmentDoc)), stripRoleKeys(profileDoc));
+  const merged = mergeConfigs(
+    mergeConfigs(common, stripRoleKeys(environmentDoc)),
+    stripRoleKeys(profileDoc),
+  );
+  return expandHttpDefaults(merged);
 }
 
 export function sidecarFileName(confBase, profile, environment) {

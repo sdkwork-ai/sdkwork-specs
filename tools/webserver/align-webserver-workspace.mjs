@@ -13,6 +13,8 @@ import {
 } from './build-from-topology.mjs';
 import { isPublicHostCompliant, normalizeHost } from './host-registry.mjs';
 import { scanWebserverCompliance } from './validate.mjs';
+import { renderModuleNginxSidecars } from './render-nginx-sidecars.mjs';
+import { auditCommercialReadiness } from './audit-commercial-readiness.mjs';
 
 let yaml = null;
 try {
@@ -157,6 +159,8 @@ function syncDeployExposeFromTopology(moduleRoot, topology, appId) {
 let topologyUpdates = 0;
 let deployUpdates = 0;
 let webserverUpdates = 0;
+let sidecarUpdates = 0;
+let sidecarSkipped = 0;
 
 for (const name of fs.readdirSync(workspace)) {
   if (!name.startsWith('sdkwork-')) continue;
@@ -183,8 +187,12 @@ for (const name of fs.readdirSync(workspace)) {
   if (syncDeployExposeFromTopology(moduleRoot, topology, name)) deployUpdates += 1;
 
   const docs = buildWebserverDocs({ appId: name, topology, moduleRoot });
-  writeWebserverLayout(moduleRoot, docs, { writeAppRoots: name !== 'sdkwork-webserver' });
+  writeWebserverLayout(moduleRoot, docs, { writeAppRoots: name !== 'sdkwork-webserver', appId: name, topology });
   webserverUpdates += 1;
+
+  const sidecarResult = renderModuleNginxSidecars(moduleRoot, { quiet: true });
+  if (sidecarResult.skipped) sidecarSkipped += 1;
+  else sidecarUpdates += 1;
 }
 
 const { modules, errorCount } = scanWebserverCompliance(workspace);
@@ -196,9 +204,22 @@ for (const module of modules) {
   }
 }
 
-console.log(`align-webserver-workspace: topology=${topologyUpdates}, deploy=${deployUpdates}, webserver=${webserverUpdates}`);
+console.log(
+  `align-webserver-workspace: topology=${topologyUpdates}, deploy=${deployUpdates}, webserver=${webserverUpdates}, sidecars=${sidecarUpdates}, sidecarsSkipped=${sidecarSkipped}`,
+);
 console.log(`validation: ${modules.length} modules, ${errorCount} error(s), ${hostViolations.length} W24 host issue(s)`);
 if (hostViolations.length > 0) {
   for (const line of hostViolations.slice(0, 20)) console.log(`  ${line}`);
 }
-process.exit(errorCount > 0 ? 1 : 0);
+
+const commercial = auditCommercialReadiness(workspace);
+console.log(
+  `commercial-readiness: ${commercial.critical.length} critical, ${commercial.warnings.length} warnings, ${commercial.optimizations.length} optimizations`,
+);
+if (commercial.critical.length > 0) {
+  for (const { module, message } of commercial.critical.slice(0, 10)) {
+    console.log(`  ${module}: ${message}`);
+  }
+}
+
+process.exit(errorCount > 0 || commercial.critical.length > 0 ? 1 : 0);

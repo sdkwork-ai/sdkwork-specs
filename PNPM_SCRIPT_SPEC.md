@@ -330,6 +330,143 @@ Rules:
 - `desktop:*` is a native-host family. It is not a web/browser alias; use
   `dev:browser` for browser development.
 
+### 4.2 Browser Client Build Family (PC And H5)
+
+Adaptive Web browser clients (`apps/sdkwork-<code>-pc`, `apps/sdkwork-<code>-h5`)
+expose a standard environment-scoped build command family at the **repository
+root** and at each **browser app surface root**.
+
+Grammar:
+
+```text
+build:<clientArchitecture>:<environment>[:<deploymentProfile>]
+```
+
+Repository root examples:
+
+```text
+pnpm build:pc:dev
+pnpm build:pc:test
+pnpm build:pc:staging
+pnpm build:pc:prod
+pnpm build:h5:dev
+pnpm build:h5:test
+pnpm build:h5:staging
+pnpm build:h5:prod
+pnpm build:pc:prod:cloud
+pnpm build:h5:dev:standalone
+```
+
+App surface root examples (same lifecycle environments, no architecture axis):
+
+```text
+pnpm build:dev
+pnpm build:test
+pnpm build:staging
+pnpm build:prod
+pnpm build:prod:cloud
+```
+
+Rules:
+
+- `<clientArchitecture>` `MUST` be `pc` or `h5`. These identify Adaptive Web
+  surface roots, not generic runtime targets.
+- `<environment>` `MUST` use lifecycle aliases from `ENVIRONMENT_SPEC.md`:
+  `dev`, `test`, `staging`, or `prod`. They normalize to
+  `development`, `test`, `staging`, and `production` before Vite mode and
+  runtime config selection.
+- `<deploymentProfile>` `MAY` be omitted; omitted means `standalone`.
+  Explicit values are `standalone` or `cloud`.
+- Vite `build.outDir` `MUST` resolve to `dist/<environmentAlias>/` where
+  `<environmentAlias>` is `dev`, `test`, `staging`, or `prod`. Bare `dist/`
+  is forbidden (`FRONTEND_CODE_SPEC.md` §7,
+  `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §2.1).
+- Repository roots that own a PC or H5 browser app surface `MUST` expose the
+  matching `build:pc:*` and/or `build:h5:*` commands for every lifecycle
+  environment the product ships.
+- App surface roots `MUST` expose `build:dev`, `build:test`, `build:staging`,
+  and `build:prod` when the surface is a Vite browser client.
+- Root and app-surface build commands `MUST` delegate to the shared canonical
+  runner `node <sdkwork-specs>/tools/build-browser-client.mjs` or a thin
+  repository wrapper that forwards equivalent flags. They `MUST NOT` invent
+  local Vite mode or output-directory conventions.
+- `build:pc:*` and `build:h5:*` are build-only commands. They `MUST NOT`
+  start dev servers, databases, or gateways.
+- Container and Docker workflows `MAY` invoke the same runner against a cloned
+  module checkout under `SDKWORK_SPACE_ROOT` so each sibling application can
+  be built independently without rebuilding the whole workspace.
+- Legacy profile-only browser build names such as bare `build:standalone` remain
+  migration input at app surfaces until replaced; new automation `MUST` use the
+  environment-scoped family above.
+
+Validation:
+
+- `node tools/check-browser-dist-layout.mjs --root <repo>`
+- `node tools/check-browser-build-scripts.mjs --root <repo>`
+- `node tools/check-pnpm-script-standard.mjs --root <repo>`
+
+### 4.3 Container Module Browser Build Family
+
+Standalone gateway containers mount one shared `sdkwork-space` checkout and
+build sibling module browser clients without rebuilding the whole workspace.
+Host-side module repositories use the same canonical runner as section 4.2.
+
+Grammar:
+
+```text
+build:container:module:browser
+build:container:standalone
+```
+
+Repository root examples (`sdkwork-webserver` operator surface):
+
+```text
+pnpm build:container:module -- --module sdkwork-im --architecture all --environment dev --reload
+pnpm build:container:module -- --module sdkwork-im --architecture pc --environment prod --deployment-environment production --in-container
+pnpm build:container:module:browser -- --module sdkwork-im --architecture pc --environment dev
+pnpm build:container:standalone
+```
+
+`build:container:module` is the preferred operator entrypoint. It rebuilds every
+owned PC/H5 surface by default (`--architecture all`), selects the lifecycle
+mode through `--environment` / `--deployment-environment`, supports host or
+in-container toolchains, and may `--reload` the matching webserver service after
+the dist output is written.
+
+Container entrypoint examples (same runner, resolved under
+`$SDKWORK_SPACE_ROOT/sdkwork-space/<module>`):
+
+```text
+build-browser --module sdkwork-im --architecture all --environment dev --reload-static
+docker compose run --rm webserver build-browser --module sdkwork-im --architecture pc --environment dev
+```
+
+Rules:
+
+- Host module builds `MUST` use `pnpm build:pc:<env>` / `pnpm build:h5:<env>`
+  at the module repository root, or delegate to
+  `node <sdkwork-specs>/tools/build-browser-client.mjs` with equivalent
+  flags. They `MUST NOT` invent local Vite modes or bare `dist/` outputs.
+- Container module builds `MUST` delegate to
+  `scripts/docker/build-module-browser.mjs`, which forwards to
+  `build-browser-client.mjs` against the mounted checkout.
+- `<module>` `MUST` be a sibling repository directory name such as
+  `sdkwork-im`, not an application-code alias.
+- `<environment>` accepts lifecycle aliases (`dev`, `test`, `staging`, `prod`)
+  and normalizes to runtime config before Vite mode selection.
+- Built artifacts `MUST` land in
+  `apps/sdkwork-<code>-{pc,h5}/dist/<envAlias>/` so Docker entrypoints and
+  Adaptive Web static delivery can resolve `dist/dev`, `dist/prod`, and the
+  other lifecycle aliases without profile-specific path forks.
+- Legacy `docker:build:*` / `docker:up:*` script names remain migration
+  aliases in operator repositories only. New automation `MUST` use
+  `build:container:*`, `up:container:*`, and `down:container:*`.
+
+Workspace verification:
+
+- `node tools/sweep-browser-build-workspace.mjs --workspace <sdkwork-space-root>`
+- `node tools/align-browser-build-scripts.mjs --workspace <sdkwork-space-root>`
+
 ## 5. Axis Values
 
 Script suffixes use canonical values from `APP_RUNTIME_TOPOLOGY_NAMING.md`, `CONFIG_SPEC.md`, and `ENVIRONMENT_SPEC.md`.
@@ -384,6 +521,22 @@ local
 check
 required
 docker
+```
+
+Browser client architecture axes (build family only; section 4.2):
+
+```text
+pc
+h5
+```
+
+Environment profile aliases accepted on browser build commands (section 4.2):
+
+```text
+dev
+test
+staging
+prod
 ```
 
 Rules:
@@ -709,6 +862,7 @@ Rules:
 - [ ] Capability-specific root commands exist for release, deploy, API, SDK, database, gateway, topology, and supply-chain workflows when those capabilities exist.
 - [ ] No repository root public script starts with a application-code prefix such as `drive`, `im`, or `cloudrouter`.
 - [ ] Runtime-target commands are action-first, for example `dev:browser`, `dev:desktop`, `build:desktop`, `build:container`, `build:android-native`, `build:ios-native`, and `build:mini-program`; the `desktop:*` host family uses only section 4.1 actions/axes; no public script uses platform/tool-first aliases such as `browser:*`, `tauri:*`, `electron:*`, `docker:*`, `android:*`, `ios:*`, `harmony:*`, `flutter:*`, `mini-program:*`, or `*:tauri`.
+- [ ] Browser Adaptive Web repositories expose `build:pc:*` and/or `build:h5:*` for owned surfaces; app surfaces expose `build:dev|test|staging|prod`; outputs land in `dist/{dev,test,staging,prod}` via `build-browser-client.mjs`.
 - [ ] Root `dev:browser` and `dev:desktop` default to
       `postgres:standalone` with `environment = development`; cloud variants
       are explicit suffixed commands, and `dev:desktop:sqlite` is client-local

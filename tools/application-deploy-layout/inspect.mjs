@@ -70,7 +70,7 @@ export function inspectRepo(repoRoot) {
 
   const legacyWebserverToml = path.join(repoRoot, 'deployments/webserver/server.toml');
   if (fs.existsSync(legacyWebserverToml)) {
-    missing.push('retired deployments/webserver/server.toml must be removed (layout v2 only)');
+    missing.push('retired deployments/webserver/server.toml must be removed (use layout v3 files)');
   }
 
   return {

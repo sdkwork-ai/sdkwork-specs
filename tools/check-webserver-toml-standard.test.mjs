@@ -8,6 +8,11 @@ import { fileURLToPath } from 'node:url';
 import { parseTomlSubset, TomlSubsetError } from './webserver/toml.mjs';
 import { mergeConfigs } from './webserver/merge.mjs';
 import {
+  DEPLOYMENT_PROFILES,
+  LIFECYCLE_ENVIRONMENTS,
+  sidecarFileName,
+} from './webserver/layout-v3.mjs';
+import {
   renderNginxConf,
   TYPED_KEYS,
   validateWebserverDir,
@@ -43,7 +48,7 @@ certKeyFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/privkey.pem"
 chainFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/chain.pem"
 
 [[http.upstream]]
-name = "api_backend"
+name = "gateway"
 loadBalancing = "least-connections"
 keepalive = 32
 [[http.upstream.target]]
@@ -64,7 +69,7 @@ protocols = ["TLSv1.2", "TLSv1.3"]
 
 [[http.server.location]]
 match = "/api/"
-proxyPass = "http://api_backend"
+proxyPass = "http://gateway"
 proxySetHeader = ["Host $host", "X-Forwarded-Proto $scheme"]
 proxyHttpVersion = "1.1"
 proxyWebsocketUpgrade = true
@@ -83,6 +88,114 @@ returnStatus = 200
 returnBody = "{\\"status\\":\\"ok\\"}"
 `;
 
+const COMMON_ONLY_DOC = `
+specVersion = 1
+kind = "sdkwork.webserver.server"
+id = "im"
+description = "IM module web server"
+
+[nginx]
+profile = "http-core-v1"
+
+[main]
+user = "sdkwork"
+workerProcesses = "auto"
+errorLog = "/var/log/sdkwork/im/webserver/error.log warn"
+
+[main.events]
+workerConnections = 1024
+
+[http]
+sendfile = true
+keepaliveTimeout = 75
+clientMaxBodySize = "1100m"
+serverTokens = "off"
+
+[[http.upstream]]
+name = "gateway"
+loadBalancing = "least-connections"
+keepalive = 32
+[[http.upstream.target]]
+address = "127.0.0.1:3900"
+weight = 1
+[[http.upstream.target]]
+address = "127.0.0.1:3901"
+backup = true
+`;
+
+const PRODUCTION_ENV_DOC = `environment = "production"
+
+[http]
+
+[http.certificates.im]
+certFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/fullchain.pem"
+certKeyFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/privkey.pem"
+chainFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/chain.pem"
+
+[[http.server]]
+listen = ["443 ssl", "80"]
+serverName = ["im.sdkwork.com", "www.im.sdkwork.com"]
+http2 = true
+
+[http.server.tls]
+cert = "im"
+protocols = ["TLSv1.2", "TLSv1.3"]
+
+[[http.server.location]]
+match = "/api/"
+proxyPass = "http://gateway"
+proxySetHeader = ["Host $host", "X-Forwarded-Proto $scheme"]
+proxyHttpVersion = "1.1"
+proxyWebsocketUpgrade = true
+proxyBuffering = false
+proxyReadTimeout = "120s"
+
+[[http.server.location]]
+match = "/"
+root = "/usr/share/sdkwork/im/web/pc"
+index = ["index.html"]
+tryFiles = ["$uri", "$uri/", "/index.html"]
+
+[[http.server.location]]
+match = "= /healthz"
+returnStatus = 200
+returnBody = "{\\"status\\":\\"ok\\"}"
+`;
+
+function writeLayoutV3Stubs(dir, { production = PRODUCTION_ENV_DOC } = {}) {
+  const prodMatch = production.match(/serverName = (\[[^\]]+\])/);
+  const prodNames = prodMatch ? JSON.parse(prodMatch[1].replace(/'/g, '"')) : ['im.sdkwork.com'];
+  for (const environment of ['development', 'test', 'staging']) {
+    const suffix = environment === 'development' ? '-dev' : environment === 'test' ? '-test' : '-staging';
+    const serverName = JSON.stringify(
+      prodNames.map((host) => {
+        const parts = host.split('.');
+        parts[0] = `${parts[0]}${suffix}`;
+        return parts.join('.');
+      }),
+    );
+    fs.writeFileSync(
+      path.join(dir, `server.${environment}.toml`),
+      `environment = "${environment}"\n\n[[http.server]]\nlisten = ["80"]\nserverName = ${serverName}\n\n[[http.server.location]]\nmatch = "/"\nproxyPass = "http://gateway"\n`,
+    );
+  }
+  fs.writeFileSync(path.join(dir, 'server.production.toml'), production);
+  fs.writeFileSync(path.join(dir, 'server.standalone.toml'), 'profile = "standalone"\n');
+  fs.writeFileSync(path.join(dir, 'server.cloud.toml'), 'profile = "cloud"\n');
+}
+
+function writeAllSidecars(dir, profiles) {
+  for (const profile of DEPLOYMENT_PROFILES) {
+    for (const environment of LIFECYCLE_ENVIRONMENTS) {
+      const doc = profiles[profile][environment];
+      fs.writeFileSync(
+        path.join(dir, sidecarFileName('nginx.conf', profile, environment)),
+        `${renderNginxConf(doc, { profile, environment }).trimEnd()}\n`,
+      );
+    }
+  }
+}
+
 function parse(text) {
   return parseTomlSubset(text);
 }
@@ -99,7 +212,7 @@ test('toml subset parser: full valid document', () => {
   assert.equal(doc.main.events.workerConnections, 1024);
   assert.equal(doc.http.certificates.im.certFile, '/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/fullchain.pem');
   assert.equal(doc.http.upstream.length, 1);
-  assert.equal(doc.http.upstream[0].name, 'api_backend');
+  assert.equal(doc.http.upstream[0].name, 'gateway');
   assert.equal(doc.http.upstream[0].target.length, 2);
   assert.equal(doc.http.upstream[0].target[1].backup, true);
   assert.equal(doc.http.server.length, 1);
@@ -378,13 +491,13 @@ test('renderer: canonical conf matches typed keys (W16 basis)', () => {
   assert.match(conf, /worker_processes auto;/u);
   assert.match(conf, /worker_connections 1024;/u);
   assert.match(conf, /client_max_body_size 1100m;/u);
-  assert.match(conf, /    upstream api_backend \{\n        least_conn;/u);
+  assert.match(conf, /    upstream gateway \{\n        least_conn;/u);
   assert.match(conf, /server 127\.0\.0\.1:3901 backup;/u);
   assert.match(conf, /server_name im\.sdkwork\.com www\.im\.sdkwork\.com;/u);
-  assert.match(conf, /ssl_certificate \/opt\/certs\/letsencrypt\/live\/im\.sdkwork\.com\/fullchain\.pem;/u);
+  assert.match(conf, /ssl_certificate \/etc\/sdkwork\/certs\/letsencrypt\/im\.sdkwork\.com\/fullchain\.pem;/u);
   assert.match(conf, /ssl_protocols TLSv1\.2 TLSv1\.3;/u);
   assert.match(conf, /location \/api\/ \{/u);
-  assert.match(conf, /proxy_pass http:\/\/api_backend;/u);
+  assert.match(conf, /proxy_pass http:\/\/gateway;/u);
   assert.match(conf, /proxy_set_header Connection "upgrade";/u);
   assert.match(conf, /location = \/healthz \{/u);
   assert.match(conf, /return 200 \{"status":"ok"\};/u);
@@ -511,7 +624,7 @@ test('alignment: every typed key is rendered, schematized, and spec-declared (an
   };
   walk(schema);
   const spec = fs.readFileSync(path.join(specsRoot, 'SDKWORK_WEBSERVER_SPEC.md'), 'utf8');
-  const nonRendered = new Set(['raw', 'certificates', 'upstream', 'server', 'location', 'tls', 'target', 'events', 'match', 'name', 'listen', 'address', 'include']);
+  const nonRendered = new Set(['raw', 'certificates', 'defaults', 'upstream', 'server', 'location', 'tls', 'target', 'events', 'match', 'name', 'listen', 'address', 'include']);
   for (const key of TYPED_KEYS) {
     assert.ok(schemaKeys.has(key), `schema must declare typed key "${key}"`);
     const declared = spec.includes(`\`${key}\``) || spec.includes(`[[http.${key}]]`) || spec.includes(`[[stream.${key}]]`) || spec.includes(`[[http.server.${key}]]`) || spec.includes(`]].${key}\``);
@@ -526,33 +639,30 @@ test('alignment: every typed key is rendered, schematized, and spec-declared (an
   assert.match(conf, /server\.standalone\.toml/u);
 });
 
-test('file validation: layout v2 passes and per-profile sidecars (W1, W16)', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-webserver-v2-'));
+test('file validation: layout v3 passes and per-profile sidecars (W1, W16)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-webserver-v3-'));
   const dir = path.join(tmp, 'deployments', 'webserver');
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'server.common.toml'), VALID_DOC);
-  fs.writeFileSync(path.join(dir, 'server.standalone.toml'), 'profile = "standalone"\n');
+  fs.writeFileSync(path.join(dir, 'server.common.toml'), COMMON_ONLY_DOC);
+  writeLayoutV3Stubs(dir);
   fs.writeFileSync(path.join(dir, 'server.cloud.toml'), `profile = "cloud"
 
 [[http.upstream]]
-name = "api_backend"
+name = "gateway"
 [[http.upstream.target]]
 address = "10.0.4.12:3900"
 weight = 3
 `);
 
   let result = validateWebserverDir(tmp);
-  assert.equal(result.ok, true, JSON.stringify(result.errors));
-  assert.equal(result.profiles.standalone.http.upstream[0].target[0].address, '127.0.0.1:3900');
-  assert.equal(result.profiles.cloud.http.upstream[0].target[0].address, '10.0.4.12:3900');
-
-  // Per-profile sidecars: correct renders pass, divergent ones fail.
-  fs.writeFileSync(path.join(dir, 'nginx.standalone.conf'), renderNginxConf(result.profiles.standalone));
-  fs.writeFileSync(path.join(dir, 'nginx.cloud.conf'), renderNginxConf(result.profiles.cloud));
+  writeAllSidecars(dir, result.profiles);
   result = validateWebserverDir(tmp);
   assert.equal(result.ok, true, JSON.stringify(result.errors));
+  assert.equal(result.profiles.standalone.production.http.upstream[0].target[0].address, '127.0.0.1:3900');
+  assert.equal(result.profiles.cloud.production.http.upstream[0].target[0].address, '10.0.4.12:3900');
 
-  fs.writeFileSync(path.join(dir, 'nginx.cloud.conf'), 'http {\n    sendfile off;\n}\n');
+  // Per-profile sidecars: divergent renders fail.
+  fs.writeFileSync(path.join(dir, 'nginx.cloud.production.conf'), 'http {\n    sendfile off;\n}\n');
   result = validateWebserverDir(tmp);
   assert.equal(result.ok, false);
   assert.ok(result.errors.some((e) => e.includes('diverges')));
@@ -561,10 +671,12 @@ weight = 3
 });
 
 test('file validation: profile key rules (W20)', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-webserver-v2-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-webserver-v3-'));
   const dir = path.join(tmp, 'deployments', 'webserver');
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'server.common.toml'), VALID_DOC);
+  fs.writeFileSync(path.join(dir, 'server.common.toml'), COMMON_ONLY_DOC);
+  writeLayoutV3Stubs(dir);
+  writeAllSidecars(dir, validateWebserverDir(tmp).profiles);
 
   // Profile file with a wrong profile value.
   fs.writeFileSync(path.join(dir, 'server.standalone.toml'), 'profile = "cloud"\n');
@@ -584,7 +696,7 @@ test('file validation: profile key rules (W20)', () => {
 
   // Common file declaring profile (root-level key, before any table header).
   fs.writeFileSync(path.join(dir, 'server.standalone.toml'), 'profile = "standalone"\n');
-  fs.writeFileSync(path.join(dir, 'server.common.toml'), `profile = "standalone"\n${VALID_DOC}`);
+  fs.writeFileSync(path.join(dir, 'server.common.toml'), `profile = "standalone"\n${COMMON_ONLY_DOC}`);
   result = validateWebserverDir(tmp);
   assert.equal(result.ok, false);
   assert.ok(result.errors.some((e) => e.includes('MUST NOT declare profile')));
@@ -593,7 +705,7 @@ test('file validation: profile key rules (W20)', () => {
 });
 
 test('file validation: retired single file and workspace root (W1, W15, W19)', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-webserver-v2-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-webserver-v3-'));
   const dir = path.join(tmp, 'deployments', 'webserver');
   fs.mkdirSync(dir, { recursive: true });
 
@@ -602,12 +714,12 @@ test('file validation: retired single file and workspace root (W1, W15, W19)', (
   let result = validateWebserverDir(tmp);
   assert.equal(result.ok, false);
   assert.ok(result.errors.some((e) => e.includes('retired')));
-  assert.ok(result.errors.some((e) => e.includes('missing layout v2 file')));
+  assert.ok(result.errors.some((e) => e.includes('missing layout v3 file')));
 
-  // Layout v2 present: workspace root rule applies to the v2 files.
-  fs.writeFileSync(path.join(dir, 'server.common.toml'), VALID_DOC);
-  fs.writeFileSync(path.join(dir, 'server.standalone.toml'), 'profile = "standalone"\n');
-  fs.writeFileSync(path.join(dir, 'server.cloud.toml'), 'profile = "cloud"\n');
+  // Layout v3 present: workspace root rule applies to the v3 files.
+  fs.writeFileSync(path.join(dir, 'server.common.toml'), COMMON_ONLY_DOC);
+  writeLayoutV3Stubs(dir);
+  writeAllSidecars(dir, validateWebserverDir(tmp).profiles);
   result = validateWebserverDir(tmp, { isWorkspaceRoot: true });
   assert.equal(result.ok, false);
   assert.ok(result.errors.some((e) => e.includes('workspace root MUST NOT')));
@@ -619,15 +731,14 @@ test('nginx.enabled=false skips sidecar equivalence (W16)', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-webserver-compat-'));
   const dir = path.join(tmp, 'deployments', 'webserver');
   fs.mkdirSync(dir, { recursive: true });
-  const common = VALID_DOC.replace(
+  const common = COMMON_ONLY_DOC.replace(
     '[nginx]\nprofile = "http-core-v1"',
     '[nginx]\nenabled = false\nprofile = "http-core-v1"',
   );
   fs.writeFileSync(path.join(dir, 'server.common.toml'), common);
-  fs.writeFileSync(path.join(dir, 'server.standalone.toml'), 'profile = "standalone"\n');
-  fs.writeFileSync(path.join(dir, 'server.cloud.toml'), 'profile = "cloud"\n');
-  fs.writeFileSync(path.join(dir, 'nginx.standalone.conf'), 'this is not a valid render\n');
-  fs.writeFileSync(path.join(dir, 'nginx.cloud.conf'), 'this is not a valid render\n');
+  writeLayoutV3Stubs(dir);
+  fs.writeFileSync(path.join(dir, 'nginx.standalone.production.conf'), 'this is not a valid render\n');
+  fs.writeFileSync(path.join(dir, 'nginx.cloud.production.conf'), 'this is not a valid render\n');
   const result = validateWebserverDir(tmp);
   assert.equal(result.ok, true, result.errors.join('\n'));
   assert.ok(result.warnings.some((w) => w.includes('nginx.enabled = false')));
@@ -651,4 +762,51 @@ test('retired nginx.nginxProfile fails with migration diagnostic', () => {
   assert.equal(result.ok ?? result.errors.length === 0, false);
   assert.ok(result.errors.some((e) => e.includes('nginx.nginxProfile') && e.includes('nginx.profile')));
   assert.equal(result.errors.filter((e) => e.includes('unknown key "nginxProfile"')).length, 0);
+});
+
+test('validator: retired certificate paths fail (W25)', () => {
+  const doc = parse(VALID_DOC.replace(
+    '/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/fullchain.pem',
+    '/opt/certs/letsencrypt/live/im.sdkwork.com/fullchain.pem',
+  ));
+  const errors = errorsOf(doc);
+  assert.ok(errors.some((e) => e.includes('retired certificate path') && e.includes('W25')));
+});
+
+test('file validation: environment tier parity (W26)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-webserver-w26-'));
+  const dir = path.join(tmp, 'deployments', 'webserver');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'server.common.toml'), COMMON_ONLY_DOC);
+  writeLayoutV3Stubs(dir);
+  fs.writeFileSync(
+    path.join(dir, 'server.production.toml'),
+    `environment = "production"
+
+[[http.server]]
+listen = ["443 ssl", "80"]
+serverName = ["im.sdkwork.com"]
+[http.server.tls]
+cert = "sdkwork.com"
+protocols = ["TLSv1.2", "TLSv1.3"]
+
+[[http.server]]
+listen = ["443 ssl", "80"]
+serverName = ["im.birdcoder.com"]
+[http.server.tls]
+cert = "birdcoder.com"
+protocols = ["TLSv1.2", "TLSv1.3"]
+`,
+  );
+  fs.writeFileSync(
+    path.join(dir, 'server.development.toml'),
+    'environment = "development"\n\n[[http.server]]\nlisten = ["80"]\nserverName = ["im-dev.sdkwork.com"]\n',
+  );
+  fs.writeFileSync(path.join(dir, 'server.test.toml'), 'environment = "test"\n');
+  fs.writeFileSync(path.join(dir, 'server.staging.toml'), 'environment = "staging"\n');
+  writeAllSidecars(dir, validateWebserverDir(tmp).profiles);
+  const result = validateWebserverDir(tmp);
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((e) => e.includes('W26')));
+  fs.rmSync(tmp, { recursive: true, force: true });
 });

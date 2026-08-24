@@ -1,6 +1,6 @@
 # SDKWork Web Server Deploy Configuration Standard
 
-- Version: 3.0
+- Version: 3.1
 - Scope: per-module `deployments/webserver/` layout v3 — shared baseline, **one file per lifecycle environment**, one file per deployment profile; nginx-parallel declarative web server configuration
 - Related: `NGINX_SPEC.md`, `SDKWORK_DEPLOY_SPEC.md`, `DEPLOYMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `APP_RUNTIME_TOPOLOGY_SPEC.md`, `APP_RUNTIME_TOPOLOGY_NAMING.md`, `SECURITY_SPEC.md`, `OBSERVABILITY_SPEC.md`, `CONFIG_SPEC.md`, `TEST_SPEC.md`
 
@@ -12,6 +12,24 @@ directory with **layout v3** — seven TOML files:
 3. `server.standalone.toml`, `server.cloud.toml` — deployment profile overlays (upstream targets only).
 
 Process startup selects **one deployment profile** and **one lifecycle environment**, then loads and merges the matching files.
+
+## 0. Quick Reference
+
+| Question | Answer |
+| --- | --- |
+| How many files? | **7** TOML files per module (1 common + 4 environments + 2 profiles) |
+| How is config merged? | `effective(<profile>.<environment>) = merge(common, server.<environment>.toml, server.<profile>.toml)` |
+| What goes in common? | Identity, `[nginx]`, `[main]`, `[http]` globals, platform `[http.certificates]`, `[http.defaults.tls]`, upstream skeleton — **no** `[[http.server]]` |
+| What goes in environment files? | `environment = "…"`, virtual hosts (`listen`, `serverName`, `tls.cert`, `include`) for **that tier only** |
+| What goes in profile files? | `profile = "standalone"` or `"cloud"`, upstream **targets** only |
+| How many hosts per tier? | Every registered base domain (`APP_RUNTIME_TOPOLOGY_NAMING.md` §9.3) in **each** environment file |
+| Development / test / staging | Suffix hosts (`im-dev.sdkwork.com`, …), listener `80`, longer proxy timeouts |
+| Production | Bare hosts (`im.sdkwork.com`, …), listeners `443 ssl` + `80`, TLS + health locations |
+| Align from topology | `node sdkwork-specs/tools/webserver/align-webserver-workspace.mjs <workspace-root>` |
+| Render nginx sidecars | `node sdkwork-specs/tools/webserver/render-nginx-sidecars.mjs <workspace-root>` (also runs during align) |
+| Validate | `node sdkwork-specs/tools/webserver/audit-workspace.mjs <workspace-root>` |
+| Dual config | TOML (source of truth) + `nginx.<profile>.<environment>.conf` (human-readable render + nginx compat entry) |
+| Default process startup | `sdkwork-api-webserver-standalone-gateway` with no subcommand serves the nginx sidecar for `SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE` × `SDKWORK_WEBSERVER_ENVIRONMENT` |
 
 The files are **nginx-parallel**: every section maps to an nginx context,
 every typed key maps to an nginx directive, and each profile's merged
@@ -171,59 +189,75 @@ Rules:
 
 ### 2.4 Environment Files (Independent Per Tier)
 
-Each lifecycle environment is a **separate file**. Do not combine development,
-test, staging, and production virtual hosts in `server.common.toml`.
+Each lifecycle environment is a **separate file**. Never combine tiers in
+`server.common.toml`.
 
-| File | `environment` key | Typical hosts | Listeners |
-| --- | --- | --- | --- |
-| `server.development.toml` | `development` | `im-dev.sdkwork.com` | `80` |
-| `server.test.toml` | `test` | `im-test.sdkwork.com` | `80` |
-| `server.staging.toml` | `staging` | `im-staging.sdkwork.com` | `80` |
-| `server.production.toml` | `production` | `im.sdkwork.com` | `443 ssl`, `80` + TLS |
+| File | `environment` | Host pattern | Listeners | TLS | Locations |
+| --- | --- | --- | --- | --- | --- |
+| `server.development.toml` | `development` | `<role>-dev.<base-domain>` × all bases | `80` | no | `/api/`, `/`, gateway proxy |
+| `server.test.toml` | `test` | `<role>-test.<base-domain>` × all bases | `80` | no | same |
+| `server.staging.toml` | `staging` | `<role>-staging.<base-domain>` × all bases | `80` | no | same |
+| `server.production.toml` | `production` | `<role>.<base-domain>` × all bases | `443 ssl`, `80` | yes (per base cert) | `/healthz`, `/readyz`, `/api/`, `/` |
+
+Capability by tier:
+
+| Capability | development | test | staging | production |
+| --- | --- | --- | --- | --- |
+| Multi-base-domain hosts | required (W26) | required | required | required |
+| `[http.certificates]` | **common only (W27)** | **common only** | **common only** | **common only** |
+| `[[http.server]]` | one block, all env hosts in `serverName` | same | same | one block **per base domain** (TLS split) |
+| Location behavior | `include snippets/gateway-locations.nonproduction.conf` | same | same | `include snippets/gateway-locations.production.conf` |
+| Health probes (`/healthz`, `/readyz`) | via production snippet | via production snippet | via production snippet | **required** (snippet) |
+| TLS protocols / session cache | `[http.defaults.tls]` in common | same | same | same; server declares `tls.cert` only |
+| `proxyReadTimeout` on `/` | `300s` (snippet) | `300s` | `300s` | `120s` |
+| Upstream target | from profile file | from profile file | from profile file | from profile file |
 
 Rules:
 
-- Host formula: `APP_RUNTIME_TOPOLOGY_NAMING.md` §9.2.
-- Environment files declare `[[http.server]]`, `[http.certificates]`, and
-  locations for **that tier only**.
-- Profile files declare upstream targets only; they `MUST NOT` declare
-  `environment` or virtual hosts.
+- Host formula: `APP_RUNTIME_TOPOLOGY_NAMING.md` §9.2; base domains §9.3.
+- **W26:** when production declares hosts, development/test/staging `MUST` declare
+  the same base-domain count.
+- Profile files declare upstream targets only — no `environment`, no virtual hosts.
 - Runtime selects profile + environment (`SDKWORK_<CODE>_DEPLOYMENT_PROFILE`,
-  `SDKWORK_<CODE>_ENVIRONMENT`, `config.toml` `[profile]`) and merges the
-  three layers (§2.2).
-- Adaptive Web static roots remain in process `[app_roots.*_by_environment]`
-  (§13.6), not in edge TOML.
+  `SDKWORK_<CODE>_ENVIRONMENT`) and merges the three layers (§2.2).
+- Adaptive Web static roots live in process `[app_roots.*_by_environment]` (§13.6).
 
-### 2.5 Merge Example
+### 2.5 Merge Example (layout v3)
 
-`server.common.toml`:
+`server.common.toml` (no virtual hosts):
 
 ```toml
 specVersion = 1
 kind = "sdkwork.webserver.server"
 id = "im"
 
+[nginx]
+profile = "http-core-v1"
+
 [http]
 sendfile = true
 clientMaxBodySize = "1100m"
-
-[http.certificates.im]
-certFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/fullchain.pem"
-certKeyFile = "/etc/sdkwork/certs/letsencrypt/im.sdkwork.com/privkey.pem"
 
 [[http.upstream]]
 name = "gateway"
 loadBalancing = "least-connections"
 keepalive = 32
-[[http.upstream.target]]
-address = "127.0.0.1:3900"
-weight = 1
+```
+
+`server.production.toml`:
+
+```toml
+environment = "production"
+
+[http.certificates."sdkwork.com"]
+certFile = "/etc/sdkwork/certs/letsencrypt/sdkwork.com/fullchain.pem"
+certKeyFile = "/etc/sdkwork/certs/letsencrypt/sdkwork.com/privkey.pem"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
 serverName = ["im.sdkwork.com"]
 [http.server.tls]
-cert = "im"
+cert = "sdkwork.com"
 protocols = ["TLSv1.2", "TLSv1.3"]
 
 [[http.server.location]]
@@ -231,22 +265,35 @@ match = "/"
 proxyPass = "http://gateway"
 ```
 
-`server.cloud.toml` (only the deltas):
+`server.development.toml`:
 
 ```toml
-profile = "cloud"
+environment = "development"
+
+[[http.server]]
+listen = ["80"]
+serverName = ["im-dev.sdkwork.com", "im-dev.birdcoder.com"]
+
+[[http.server.location]]
+match = "/"
+proxyPass = "http://gateway"
+```
+
+`server.standalone.toml` (upstream delta only):
+
+```toml
+profile = "standalone"
 
 [[http.upstream]]
 name = "gateway"
 [[http.upstream.target]]
-address = "10.0.4.12:3900"
-weight = 3
+address = "127.0.0.1:3900"
+weight = 1
 ```
 
-The cloud effective configuration inherits the server, TLS, and location from
-common and replaces only the upstream target set
-(`10.0.4.12:3900` with `weight = 3`). The standalone effective configuration
-is the common baseline unchanged.
+`effective(standalone.production)` inherits production hosts/TLS from
+`server.production.toml` and the standalone upstream target from
+`server.standalone.toml`.
 
 ## 3. Document Structure
 
@@ -257,6 +304,7 @@ is the common baseline unchanged.
 | `specVersion` | — | Integer, `1` for this version of the document schema |
 | `kind` | — | String, `"sdkwork.webserver.server"`; common file only |
 | `id` | — | Module `runtimeCode` (`SDKWORK_DEPLOY_SPEC.md` section 3); common file only |
+| `environment` | — | `"development"`, `"test"`, `"staging"`, or `"production"`; environment files only |
 | `profile` | — | `"standalone"` or `"cloud"`; profile files only, never the common file |
 | `enabled` | — | Boolean, default `true`; `false` only when the module exposes no public web surface |
 | `description` | — | Free text; required when `enabled = false` |
@@ -298,7 +346,7 @@ Forbidden TOML features (`MUST NOT` be used; the validator rejects them):
 | `unknownDirectivePolicy` | `"error"` | Behavior when a TOML key is not in the typed set: `error` (validation failure), `warn` (warning only), or `allow` (requires `exceptionRef`) |
 | `exceptionRef` | — | Governance exception record (`GOVERNANCE_SPEC.md`) required for `unknownDirectivePolicy = "allow"` |
 | `strict` | `true` | When `true`, raw entries are syntax-checked and a present per-profile sidecar must be the equivalent render; `false` relaxes sidecar equivalence to a warning |
-| `confFile` | `"nginx.conf"` | Base name of the compatibility sidecar; profile sidecars are `<confFile>.<profile>` |
+| `confFile` | `"nginx.conf"` | Base name of compatibility sidecars: `nginx.<profile>.<environment>.conf` |
 
 Rules:
 
@@ -317,9 +365,10 @@ Rules:
 - `unknownDirectivePolicy = "allow"` without `exceptionRef` is a validation
   error. `warn` is for controlled migration windows only.
 - `strict = false` also requires `exceptionRef` and is never the default.
-- The sidecar file names follow the profile: `nginx.standalone.conf` and
-  `nginx.cloud.conf` (from `confFile = "nginx.conf"`), compared against each
-  profile's effective render.
+- Sidecar file names follow profile × environment:
+  `nginx.<profile>.<environment>.conf` (from `confFile = "nginx.conf"`), compared
+  against each `effective(<profile>.<environment>)` render. Legacy
+  `nginx.<profile>.conf` (production-only) is accepted with a migration warning.
 
 ### 4.2 Raw Directive Passthrough
 
@@ -343,10 +392,11 @@ Rules:
 
 ### 4.3 Per-Profile `nginx.conf` Compatibility Sidecar
 
-When `nginx.standalone.conf` or `nginx.cloud.conf` exists:
+When `nginx.<profile>.<environment>.conf` exists (or legacy
+`nginx.<profile>.conf` for production):
 
 - It `MUST` be the rendered equivalent of that profile's **effective**
-  configuration: tools generate it with the fixed rendering order, and
+  configuration for the matching environment: tools generate it with the fixed rendering order, and
   validation renders the effective configuration and compares the directive
   statements.
 - It `MUST NOT` contain directives that contradict the effective
@@ -443,6 +493,9 @@ ocspStapling = true
 
 Rules:
 
+- Platform base-domain certificate blocks `MUST` be authored once in
+  `server.common.toml` (W27). Environment files `MUST NOT` repeat
+  `[http.certificates]`.
 - Certificate names are TOML table keys; names containing dots (such as
   base-domain names like `sdkwork.com`) `MUST` be written as quoted keys
   (`[http.certificates."sdkwork.com"]`); references (`cert = "sdkwork.com"`)
@@ -450,6 +503,8 @@ Rules:
 - Certificate paths `MUST` be absolute and `MUST` follow the `NGINX_SPEC.md`
   section 3 contract (`/etc/sdkwork/certs/letsencrypt/<cert-name>/...`) unless
   an operator-managed root is documented in the module `deployments/webserver/README.md`.
+- The retired bootstrap path `/opt/certs/letsencrypt/live/` `MUST NOT` appear in
+  any new configuration (W25).
 
 ### 7.1 Certificate Inventory (`/etc/sdkwork/certs/<domain>/`)
 
@@ -492,6 +547,19 @@ Rules:
   `PACKAGING_SPEC.md`, and `MUST NOT` be referenced by a production host.
 - Certificates shared by both profiles belong in `server.common.toml`; a
   profile-specific certificate belongs in that profile's file.
+
+### 7.2 TLS And Location Defaults (DRY)
+
+Shared TLS parameters and gateway location behavior `MUST NOT` be duplicated
+across environment virtual hosts:
+
+| Artifact | Role |
+| --- | --- |
+| `defaults` | Typed key under `[http]` for shared overlays (see `[http.defaults.tls]`) |
+| `[http.defaults.tls]` | Shared `protocols`, `preferServerCiphers`, `sessionCache` merged into each `[[http.server]].tls` at effective-config time |
+| `snippets/gateway-locations.production.conf` | Health probes, `/api/`, `/` proxy behavior for production |
+| `snippets/gateway-locations.nonproduction.conf` | `/api/`, `/` proxy behavior for development/test/staging |
+| `[[http.server]].include` | References the snippet for that tier; environment files declare hosts, listen, and `tls.cert` only (W28) |
 
 ## 8. Upstreams (`[[http.upstream]]`)
 
@@ -547,6 +615,35 @@ Rules:
 - Profile differences in targets belong in the profile file: declare the
   upstream with the same `name` and a `target` array; the overlay replaces the
   whole target set (merge rule 5).
+
+### 8.1 Reserved Upstream Name `gateway` (W30)
+
+SDKWork standardizes on one **canonical upstream name** per effective nginx
+configuration: `gateway`. This is intentional; modules `MUST NOT` rename it to
+`<module>-gateway`, `<applicationCode>_gateway`, or other module-specific
+identifiers.
+
+| Scope | Rule |
+| --- | --- |
+| **Within one nginx process** | Upstream names `MUST` be unique (W7, W22). Every enabled module declares exactly one `[[http.upstream]]` with `name = "gateway"` for its API/application reverse-proxy target. |
+| **Across modules** | Each module ships an **isolated** layout v3 tree and renders **one** `nginx.<profile>.<environment>.conf` sidecar per process startup. The name `gateway` is reused in every module checkout, but each running nginx loads only **one** effective configuration — there is no cross-module upstream collision at runtime. |
+| **Multiple `[[http.server]]` blocks** | All virtual hosts in the same effective configuration share the single `upstream gateway { … }` block. Many `server { }` blocks referencing `proxy_pass http://gateway;` is normal and required. |
+| **Shared snippets** | `snippets/gateway-locations.*.conf` and `snippets/gateway-api-locations.production.conf` hardcode `proxy_pass http://gateway;`. Renaming the upstream in TOML without updating these snippets breaks rendering (W28). |
+| **Additional upstreams** | Modules that need non-gateway backends (for example a dedicated websocket or object-store proxy) `MAY` declare extra `[[http.upstream]]` entries with **distinct** names (`object_store`, `realtime`, …). Only the application/platform API target uses `gateway`. |
+| **Multi-module import (§17)** | When `sdkwork-webserver` composes sibling module configs into one container runtime, the composer `MUST` **deduplicate** upstream blocks by `name`. Identical `upstream gateway` definitions collapse to one block; conflicting targets for the same name are a composition error. Module source trees keep `name = "gateway"`; the composer normalizes — modules do not prefix upstream names locally. |
+
+Profile target semantics (unchanged):
+
+| Profile | `gateway` target |
+| --- | --- |
+| `standalone` | Local `sdkwork-api-<application-code>-standalone-gateway` bind (for example `127.0.0.1:3900`) |
+| `cloud` | Platform API gateway service (for example `sdkwork-api-cloud-gateway:8080`) |
+
+Forbidden:
+
+- Renaming the primary API upstream away from `gateway` in module TOML or snippets.
+- Declaring more than one upstream named `gateway` in the same effective configuration.
+- Assuming upstream names are globally unique across the workspace; uniqueness is **per nginx process / per effective configuration** only.
 
 ## 9. Virtual Hosts (`[[http.server]]`)
 
@@ -736,8 +833,9 @@ returnBody = "{\"status\":\"ok\"}"
   `/usr/share/sdkwork/<runtimeCode>/web/static` or the module location
   `root`) with ordinary file `try_files` (typically `=404`), not an empty
   adaptive map and not a fabricated SPA shell. Plan folding
-  (`sdkwork-specs/tools/webserver/adaptive-web.mjs`, invoked from module
-  `scripts/render-webserver-nginx-sidecars.mjs` or equivalent) `MUST` rewrite
+  (`sdkwork-specs/tools/webserver/adaptive-web.mjs`, invoked from
+  `sdkwork-specs/tools/webserver/render-nginx-sidecars.mjs` or module
+  `scripts/render-webserver-nginx-sidecars.mjs`) `MUST` rewrite
   Adaptive-Web-wired public `/` locations before rendering
   `nginx.<profile>.conf` sidecars. Authority cross-links: `NGINX_SPEC.md` §7,
   `SDKWORK_DEPLOY_SPEC.md` §8.1.
@@ -840,13 +938,13 @@ absent from the effective configuration.
 ### 13.4 Runtime Alignment Matrix
 
 The `sdkwork-webserver` runtime (`crates/sdkwork-webserver-core/src/config/server_toml.rs`)
-loads a layout v2 directory through `load_server_toml_app(dir, profile, app_key)`
+loads a layout v3 directory through `load_server_toml_app(dir, profile, environment, app_key)`
 with the same merge semantics as the validator. Its materialization alignment:
 
 | server.toml capability | Runtime alignment |
 | --- | --- |
 | `listen`/`serverName`/`http2` | Mapped: shared listeners per bind/port; `http2` on TLS listeners; explicit plaintext listens are declared intent (`allowPlaintextHttp`) |
-| `[http.server.tls]` + `[http.certificates]` | Mapped: named certificates bind their `serverName`s; `TLSv1.2`/`TLSv1.3` policies; SNI-per-port differences fail closed |
+| `[http.server.tls]` + `[http.certificates]` | Mapped: named certificates bind their `serverName`s; `TLSv1.2`/`TLSv1.3` policies; per-base-domain TLS split on one listener port is served by multi-cert SNI (the listener policy collects every certificate for the port); version/ALPN (HTTP/2 intent) or client-auth differences between servers sharing a port fail closed |
 | `root`/`index`/`tryFiles` | Mapped: static resource; runtime roots are chroot-relative, absolute paths lose the leading `/`; SPA fallback from the last `tryFiles` entry; location prefix is stripped before join (mount semantics) |
 | `alias`/`index`/`tryFiles` | Mapped: same static resource model as `root` (prefix strip = nginx `alias`); directory aliases `MUST` end with `/`; regex locations with `alias` fail closed |
 | `returnStatus`/`returnBody` | Mapped: respond resource |
@@ -914,17 +1012,25 @@ The validator `tools/check-webserver-toml-standard.mjs` enforces:
 | W13 | Raw entries are single `name args...;` statements without braces |
 | W14 | Certificate and key paths are absolute or `secret://`; no `-----BEGIN` key material inline anywhere |
 | W15 | Workspace root has no `deployments/webserver/` |
-| W16 | When `nginx.enabled = true` (default), present per-profile sidecars match the effective render under `strict`; when `nginx.enabled = false`, sidecars are ignored with a warning |
+| W16 | When `nginx.enabled = true` (default) and the module is enabled, every `nginx.<profile>.<environment>.conf` sidecar must exist and match the effective render under `strict`; when `nginx.enabled = false`, sidecars are ignored with a warning |
 | W17 | `enabled = false` effective configurations have no `[[http.server]]`/`[[stream.server]]` |
 | W18 | `deploy.yaml` `expose` domains are covered by `serverName` across the effective configurations (warning when `deploy.yaml` is present) |
 | W19 | Layout v2 only: `server.toml` is retired and fails validation when present; v2 files exist (see W1) |
 | W20 | `server.common.toml` has no `profile`/`environment` and no `[[http.server]]` when enabled; each `server.<environment>.toml` declares matching `environment`; profile files declare `profile` only |
-| W21 | Each `effective(<profile>.<environment>)` passes rules W2–W18 after three-layer merge |
+| W21 | Each `effective(<profile>.<environment>)` passes rules W2–W26 after three-layer merge |
 | W22 | Identity keys are unique in each effective configuration: one location `match` per server, one upstream `name`, one `serverName` across servers |
+| W23 | Public ingress servers expose `location /` as gateway `proxy_pass` only; forbidden snippet paths on product trees |
+| W24 | `serverName` hosts are registered public hosts per `APP_RUNTIME_TOPOLOGY_NAMING.md` §9; platform gateway hosts belong on `sdkwork-api-cloud-gateway` only |
+| W25 | Certificate paths use `/etc/sdkwork/certs/letsencrypt/<cert-name>/`; `/opt/certs/letsencrypt/live/` is retired and fails validation |
+| W26 | When production declares hosts, development/test/staging `MUST` declare `[[http.server]]` with the same base-domain count |
+| W27 | `[http.certificates]` `MUST` live in `server.common.toml` only; environment files `MUST NOT` repeat certificate blocks |
+| W28 | `server.include` snippet paths `MUST` exist under `deployments/webserver/` |
+| W29 | Modules with `expose.mode` `web` / `web+api` (except edge proxy-only products) `MUST` declare Adaptive Web maps in common, production `location /` dispatch, and gateway `/api/` proxy snippets |
+| W30 | Enabled modules `MUST` declare exactly one primary API upstream named `gateway`; shared gateway snippets `MUST` reference `http://gateway`; upstream names are unique per effective configuration / nginx process, not globally across modules; multi-module composers `MUST` deduplicate upstream blocks by name (§8.1) |
 
 Workspace mode (`--workspace <root>`) scans every sibling module with a
-`deployments/` directory and reports missing layout v2 files as compliance
-gaps. `tools/webserver/scaffold-workspace.mjs` generates the initial v2 files
+`deployments/` directory and reports missing layout v3 files as compliance
+gaps. `tools/webserver/scaffold-workspace.mjs` generates the initial v3 files
 for every workspace module from its own `specs/topology.spec.json` facts
 (hosts, gateway bind); modules without a declared web surface are generated
 with `enabled = false` and must be enabled by their maintainer when a surface
@@ -932,10 +1038,11 @@ appears.
 
 ## 15. Examples
 
-See `examples/webserver/` for a complete multi-virtual-host example split
-into `server.common.toml`, `server.standalone.toml`, and `server.cloud.toml`
-with reverse proxy, static mounting, upstreams, certificates, raw directives,
-and a profile delta. See `examples/deploy/` for `deploy.yaml` counterparts.
+See `examples/webserver/` for complete layout v3 examples: `deployments/webserver/`
+(`server.common.toml` + `server.<environment>.toml` + `server.<profile>.toml`) with
+reverse proxy, multi-base-domain hosts, certificates, and profile deltas. Module
+templates live under `examples/webserver/modules/`. See `examples/deploy/` for
+`deploy.yaml` counterparts. Refresh with `tools/webserver/sync-webserver-examples.mjs`.
 
 ## 17. Docker Space Module Integration
 
@@ -954,43 +1061,74 @@ and import sibling modules into the gateway runtime config.
 | Docker defaults | `required = false`, `probe_upstreams = false` (sibling upstreams are not co-located in the webserver container) |
 | Multi-cluster | One host runs development/test/production containers on distinct **host** ports (`13800` / `18888` / `18080`); each container listens on gateway port **3800** internally so module `server.standalone.toml` upstreams stay uniform |
 | Adaptive Web static | Process `[app_roots]` maps `apps/*-{pc,h5}/dist/{dev,test,staging,prod}` from the checkout; bundled image roots remain the fallback |
-| Multi-base-domain | Module environment TOML lists every registered host per `APP_RUNTIME_TOPOLOGY_NAMING.md` §9.1–§9.3 (`sdkwork.com`, `birdcoder.com`, `dtupay.com`, `sdkwork.cn`, `birdcoder.cn`, `dtupay.cn`, …) |
+| Multi-base-domain | Module environment TOML lists every registered host per `APP_RUNTIME_TOPOLOGY_NAMING.md` §9.1–§9.3 (`sdkwork.com`, `birdcoder.com`, `dtupay.com`, `sdkwork.cn`, `birdcoder.cn`, `dtupay.cn`, `skubc.com`, `skubc.cn`, `zowalk.com`, `zowalk.cn`, `offer86.com`, `offer86.cn`, `86offer.com`, `86offer.cn`, …) |
 | Module templates | Copy from `examples/webserver/modules/` in this standards repository |
 
 Operator scripts: `deployments/docker/scripts/setup-host-space-clone.sh`, `entrypoint-standalone.sh`.
 
-### 17.1 Module Template Checklist
+### 17.1 Module Browser Build Commands
 
-Each imported module `MUST` ship layout v2 under `deployments/webserver/`:
+Each sibling module with Adaptive Web PC/H5 surfaces `MUST` expose the
+section 4.2 command family at its repository root. Docker operators build one
+module at a time against the mounted checkout:
 
-1. `server.common.toml` — all lifecycle hosts (`serverName`) for every registered base domain.
-2. `server.standalone.toml` — `profile = "standalone"` and live `gateway` upstream target.
-3. `server.cloud.toml` — `profile = "cloud"` and platform gateway upstream target.
-4. `app-roots.example.toml` — optional Adaptive Web dist catalog (`apps/*-{pc,h5}/dist/<envAlias>`).
+| Surface | Host command | Output |
+| --- | --- | --- |
+| PC dev | `pnpm --dir sdkwork-space/sdkwork-im build:pc:dev` | `apps/sdkwork-im-pc/dist/dev/` |
+| PC prod | `pnpm --dir sdkwork-space/sdkwork-im build:pc:prod` | `apps/sdkwork-im-pc/dist/prod/` |
+| H5 dev | `pnpm --dir sdkwork-space/sdkwork-im build:h5:dev` | `apps/sdkwork-im-h5/dist/dev/` |
+| H5 prod | `pnpm --dir sdkwork-space/sdkwork-im build:h5:prod` | `apps/sdkwork-im-h5/dist/prod/` |
+
+From `sdkwork-webserver` (host or container toolchain):
+
+```bash
+# Rebuild every owned PC/H5 surface for development and reload static roots
+pnpm build:container:module -- --module sdkwork-im --architecture all --environment dev --reload
+
+# Rebuild only PC for production mode inside the container toolchain
+pnpm build:container:module -- --module sdkwork-im --architecture pc --environment prod --deployment-environment production --in-container
+
+# Low-level single-surface host build
+pnpm build:container:module:browser -- --module sdkwork-im --architecture h5 --environment dev
+```
+
+Inside a running standalone container:
+
+```bash
+build-browser --module sdkwork-im --architecture all --environment dev --reload-static
+reload-module-static
+```
+
+The entrypoint resolves static roots from `apps/*-{pc,h5}/dist/<envAlias>/`
+for the active lifecycle environment (`development`→`dev`, `production`→`prod`).
+
+Workspace compliance sweep:
+
+```bash
+node sdkwork-specs/tools/sweep-browser-build-workspace.mjs --workspace /path/to/sdkwork-space
+```
+
+### 17.2 Module Template Checklist
+
+Each imported module `MUST` ship layout v3 under `deployments/webserver/`:
+
+1. `server.common.toml` — identity, nginx/main/http globals, upstream skeleton.
+2. `server.development.toml`, `server.test.toml`, `server.staging.toml`, `server.production.toml` — one file per lifecycle tier.
+3. `server.standalone.toml` / `server.cloud.toml` — upstream targets per deployment profile.
+4. `README.md` — generated environment summary (refreshed by align).
+5. `app-roots.example.toml` — optional Adaptive Web dist catalog.
 
 Minimal copy-paste templates: `examples/webserver/modules/README.md`.
 
 ## 16. Acceptance Checklist
 
-- [ ] `deployments/webserver/server.common.toml`, `server.standalone.toml`,
-      and `server.cloud.toml` exist and the module passes
-      `node tools/check-webserver-toml-standard.mjs --root .`.
-- [ ] Common serving behavior (hosts, certificates, static roots, shared
-      upstreams) lives in `server.common.toml`; profile deltas (targets,
-      profile-only surfaces) live in the profile files.
-- [ ] Every public host the module serves appears in a merged
-      `[[http.server]]` `serverName`.
-- [ ] Reverse proxy locations resolve declared upstreams per profile;
-      streaming routes disable buffering; WebSocket paths enable upgrade
-      headers.
-- [ ] Static web roots use install-layout paths; adaptive Web uses stock-nginx
-      named-location dispatch (`SDKWORK_DEPLOY_SPEC.md` §8.1), not variable
-      `include` and not variable-root SPA fallback; neither PC nor H5 uses
-      `static-fallback`. For `expose.mode: api` (webserver product), edge TOML
-      stays proxy-only and process `[app_roots]` (§13.6) binds PC/H5/static.
-- [ ] TLS listeners reference named certificates with `TLSv1.2`/`TLSv1.3`
-      only; certificate paths follow `NGINX_SPEC.md`; no inline key material.
-- [ ] Raw directives are single statements; per-profile `nginx.*.conf`
-      sidecars (when present) are the equivalent renders.
-- [ ] `deploy.yaml` `expose` domains and the effective `serverName` sets are
-      consistent.
+- [ ] All **seven** layout v3 files exist under `deployments/webserver/`.
+- [ ] `server.common.toml` has identity and globals only — **no** `[[http.server]]`.
+- [ ] Each `server.<environment>.toml` declares `environment` and hosts for that tier only.
+- [ ] `server.standalone.toml` / `server.cloud.toml` declare `profile` and upstream targets only.
+- [ ] Every registered base domain appears in **each** environment file (W26).
+- [ ] Production uses TLS (`443 ssl`) with `/healthz` and `/readyz` locations.
+- [ ] `node sdkwork-specs/tools/webserver/audit-workspace.mjs` passes for the module.
+- [ ] `deploy.yaml` `expose` domains match `effective(<profile>.<environment>)` `serverName` (W18).
+- [ ] Certificate paths use `/etc/sdkwork/certs/letsencrypt/<cert-name>/` (W25).
+- [ ] Sidecars `nginx.<profile>.<environment>.conf` exist and match effective renders (W16).

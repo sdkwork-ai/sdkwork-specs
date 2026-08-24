@@ -33,14 +33,15 @@ Optional:
 ```text
 deployments/templates/
 deployments/nginx/
-deployments/webserver/       # layout v2 per SDKWORK_WEBSERVER_SPEC.md
+deployments/webserver/       # layout v3 per SDKWORK_WEBSERVER_SPEC.md
 ```
 
 `deployments/webserver/` holds the module's declarative web server
-configuration (`SDKWORK_WEBSERVER_SPEC.md` layout v2:
-`server.common.toml` + `server.standalone.toml` + `server.cloud.toml`):
+configuration (`SDKWORK_WEBSERVER_SPEC.md` layout v3:
+`server.common.toml` + `server.<environment>.toml` + `server.<profile>.toml`):
 it owns reverse proxy locations, virtual hosts, static resource mounting,
-and certificates. The retired single-file `server.toml` MUST NOT exist.
+and certificates. The retired single-file `server.toml` and layout v2
+(all hosts in `server.common.toml` only) MUST NOT exist.
 `expose` domains in `deploy.yaml` `SHOULD` be covered by `[[http.server]]`
 `serverName` entries there; the check is enforced by
 `tools/check-webserver-toml-standard.mjs`.

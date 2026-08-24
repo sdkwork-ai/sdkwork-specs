@@ -333,7 +333,7 @@ Rules:
 
 | Application | `application.public-ingress` hosts (production / dev / test / staging) | Platform gateway (production / dev / test / staging) |
 | --- | --- | --- |
-| `sdkwork-im` | `im.<base-domain>` on every registered base domain (for example `im.sdkwork.com`, `im.birdcoder.com`, `im.dtupay.com`, `im.sdkwork.cn`, `im.birdcoder.cn`, `im.dtupay.cn`) / `im-<suffix>.<base-domain>` per environment | `api.<base-domain>` / `api-<suffix>.<base-domain>` per environment |
+| `sdkwork-im` | `im.<base-domain>` on every registered base domain (for example `im.sdkwork.com`, `im.birdcoder.com`, `im.dtupay.com`, `im.sdkwork.cn`, `im.birdcoder.cn`, `im.dtupay.cn`, `im.skubc.com`, `im.zowalk.cn`, `im.offer86.com`, `im.86offer.cn`, …) / `im-<suffix>.<base-domain>` per environment | `api.<base-domain>` / `api-<suffix>.<base-domain>` per environment |
 | LLM / Agent dialogue apps | `chat.sdkwork.com` / `chat-dev.sdkwork.com` / `chat-test.sdkwork.com` / `chat-staging.sdkwork.com` | `api.sdkwork.com` / `api-dev.sdkwork.com` / `api-test.sdkwork.com` / `api-staging.sdkwork.com` |
 | `sdkwork-drive` | `drive.sdkwork.com` / `drive-dev.sdkwork.com` / `drive-test.sdkwork.com` / `drive-staging.sdkwork.com` | `api.sdkwork.com` / `api-dev.sdkwork.com` / `api-test.sdkwork.com` / `api-staging.sdkwork.com` |
 | `sdkwork-cloudrouter` | `router.sdkwork.com` + `router.birdcoder.com` + `router.dtupay.com` / `router-dev.<base-domain>` / `router-test.<base-domain>` / `router-staging.<base-domain>` (every registered base domain) | `api.sdkwork.com` / `api-dev.sdkwork.com` / `api-test.sdkwork.com` / `api-staging.sdkwork.com` |
@@ -394,6 +394,14 @@ Rules:
 | `sdkwork.cn` | primary | SDKWork | Default China TLD; wildcard `*.sdkwork.cn` covers environment hosts |
 | `birdcoder.cn` | partner | SDKWork | Partner `.cn` brand domain |
 | `dtupay.cn` | partner | SDKWork | Partner `.cn` brand domain |
+| `skubc.com` | partner | SDKWork | Partner `.com` brand domain |
+| `skubc.cn` | partner | SDKWork | Partner `.cn` brand domain |
+| `zowalk.com` | partner | SDKWork | Partner `.com` brand domain |
+| `zowalk.cn` | partner | SDKWork | Partner `.cn` brand domain |
+| `offer86.com` | partner | SDKWork | Partner `.com` brand domain |
+| `offer86.cn` | partner | SDKWork | Partner `.cn` brand domain |
+| `86offer.com` | partner | SDKWork | Partner `.com` brand domain |
+| `86offer.cn` | partner | SDKWork | Partner `.cn` brand domain |
 
 Rules:
 
@@ -448,6 +456,7 @@ Retired crate naming:
 
 | Version | Change |
 | --- | --- |
+| 5.9 | Registered partner base domains (`skubc.com`, `skubc.cn`, `zowalk.com`, `zowalk.cn`, `offer86.com`, `offer86.cn`, `86offer.com`, `86offer.cn`); SDKWork-managed products MUST bind every registered base domain by default |
 | 5.8 | Registered `.cn` base domains (`sdkwork.cn`, `birdcoder.cn`, `dtupay.cn`); SDKWork-managed products MUST bind every registered base domain by default |
 | 5.7 | Restored `sdkwork-webserver` role host to `server.sdkwork.com` (`server-<suffix>.sdkwork.com`); auxiliary `server-app` / `server-admin`; retired `web.*` and `testserver` nicknames |
 | 5.6 | Temporarily registered `server.sdkwork.com` role host (superseded by 5.7); auxiliary `web-app` / `web-admin` |

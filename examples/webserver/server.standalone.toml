@@ -1,15 +1,11 @@
-# Example standalone deltas per SDKWORK_WEBSERVER_SPEC.md: inherits
-# server.common.toml; only the upstream target set differs here.
 profile = "standalone"
 
+[http]
+
 [[http.upstream]]
-name = "api_backend"
+name = "gateway"
+
 [[http.upstream.target]]
-address = "127.0.0.1:3900"
+address = "127.0.0.1:18079"
 weight = 1
-maxFails = 3
-failTimeout = "10s"
-[[http.upstream.target]]
-address = "127.0.0.1:3901"
-weight = 1
-backup = true
+

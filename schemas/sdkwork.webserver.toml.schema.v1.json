@@ -23,7 +23,7 @@
       "pattern": "^[a-z][a-z0-9_-]*$"
     },
     "profile": {
-      "description": "Deployment profile of a layout v2 override file (server.standalone.toml / server.cloud.toml); MUST NOT appear in server.common.toml",
+      "description": "Deployment profile of a layout v3 override file (server.standalone.toml / server.cloud.toml); MUST NOT appear in server.common.toml or server.<environment>.toml",
       "type": "string",
       "enum": [
         "standalone",
@@ -325,6 +325,15 @@
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/certificate"
+          }
+        },
+        "defaults": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tls": {
+              "$ref": "#/$defs/tls"
+            }
           }
         },
         "upstream": {

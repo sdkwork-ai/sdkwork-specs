@@ -42,14 +42,24 @@ function listBrowserAppRoots(root) {
     }));
 }
 
+const VITE_CONFIG_NAMES = [
+  'vite.config.ts',
+  'vite.config.mts',
+  'vite.config.js',
+  'vite.config.mjs',
+  'vite.config.web.ts',
+  'vite.config.web.mjs',
+  'vite.config.browser.ts',
+  'vite.config.browser.mjs',
+];
+
 function findViteConfig(appRoot) {
-  for (const name of ['vite.config.ts', 'vite.config.mts', 'vite.config.js', 'vite.config.mjs']) {
+  for (const name of VITE_CONFIG_NAMES) {
     const candidate = path.join(appRoot, name);
     if (fs.existsSync(candidate)) {
       return candidate;
     }
   }
-  // Nested web package (birdcoder-style).
   const packagesDir = path.join(appRoot, 'packages');
   if (!fs.existsSync(packagesDir)) {
     return null;
@@ -58,9 +68,13 @@ function findViteConfig(appRoot) {
     if (!entry.isDirectory()) {
       continue;
     }
-    for (const name of ['vite.config.ts', 'vite.config.mts', 'vite.config.js', 'vite.config.mjs']) {
+    for (const name of VITE_CONFIG_NAMES) {
       const candidate = path.join(packagesDir, entry.name, name);
       if (fs.existsSync(candidate)) {
+        const source = fs.readFileSync(candidate, 'utf8');
+        if (/\blib\s*:\s*\{/u.test(source)) {
+          continue;
+        }
         return candidate;
       }
     }

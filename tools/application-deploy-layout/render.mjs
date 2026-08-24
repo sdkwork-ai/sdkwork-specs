@@ -20,7 +20,7 @@ Authority: \`APPLICATION_DEPLOY_LAYOUT_SPEC.md\` (\`../sdkwork-specs/\`).
 | Secrets | \`${configRoot}secrets/\` |
 | Override | \`SDKWORK_${prefix}_CONFIG_FILE\` |
 
-Source profiles live under \`etc/\` (\`sdkwork.deployment.config.json\` index). Deploy manifest: \`deployments/deploy.yaml\`. Web data-plane source: \`deployments/webserver/\` (\`SDKWORK_WEBSERVER_SPEC.md\` layout v2).
+Source profiles live under \`etc/\` (\`sdkwork.deployment.config.json\` index). Deploy manifest: \`deployments/deploy.yaml\`. Web data-plane source: \`deployments/webserver/\` (\`SDKWORK_WEBSERVER_SPEC.md\` layout v3).
 
 \`\`\`bash
 node ../sdkwork-specs/tools/check-source-config-standard.mjs --root .

@@ -12,6 +12,14 @@ export const DEFAULT_PRODUCT_BASE_DOMAINS = [
   'sdkwork.cn',
   'birdcoder.cn',
   'dtupay.cn',
+  'skubc.com',
+  'skubc.cn',
+  'zowalk.com',
+  'zowalk.cn',
+  'offer86.com',
+  'offer86.cn',
+  '86offer.com',
+  '86offer.cn',
 ];
 
 export const REGISTERED_BASE_DOMAINS = new Set(DEFAULT_PRODUCT_BASE_DOMAINS);

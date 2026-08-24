@@ -36,7 +36,8 @@ Multi-base-domain modules list every registered base domain in **each** environm
 ## Align and validate
 
 ```bash
-node tools/align-webserver-workspace.mjs --root <module-root>
+node tools/webserver/align-webserver-workspace.mjs <workspace-root>
+node tools/webserver/sync-webserver-examples.mjs <workspace-root>
 node tools/check-webserver-toml-standard.mjs --root deployments/webserver
 ```
 

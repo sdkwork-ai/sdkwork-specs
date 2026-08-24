@@ -1,5 +1,5 @@
 // Validation for deployments/webserver/server.toml per SDKWORK_WEBSERVER_SPEC.md.
-// Enforces the W1-W25 rules plus the canonical nginx conf render (W16 sidecar).
+// Enforces the W1-W26 rules plus the canonical nginx conf render (W16 sidecar).
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,8 +15,11 @@ import {
   sidecarFileName,
 } from './layout-v3.mjs';
 import { applyAdaptiveWebFolding } from './adaptive-web.mjs';
+import { GATEWAY_SNIPPET_PATHS } from './gateway-snippets.mjs';
+import { ADAPTIVE_SNIPPET_PATHS } from './adaptive-web-snippets.mjs';
+import { moduleUsesAdaptiveWebEdge, isEdgeProxyOnlyModule } from './expose-mode.mjs';
 import { retiredNginxDiagnostics, retiredNginxKeys } from './retired-nginx.mjs';
-import { isPublicHostCompliant, normalizeHost, PLATFORM_GATEWAY_ROLE } from './host-registry.mjs';
+import { isPublicHostCompliant, normalizeHost, PLATFORM_GATEWAY_ROLE, baseDomainFromHost } from './host-registry.mjs';
 import { isRetiredCertPath, isSdkworkLetsencryptCertPath } from './cert-paths.mjs';
 
 export { TomlSubsetError };
@@ -40,8 +43,9 @@ const HTTP_KEYS = new Set([
   'clientHeaderBufferSize', 'largeClientHeaderBuffers', 'resetTimedoutConnection', 'sendTimeout',
   'serverNamesHashMaxSize', 'serverTokens', 'defaultType',
   'logFormat', 'accessLog', 'gzip', 'gzipTypes', 'gzipMinLength', 'map', 'limitReqZone', 'include', 'raw',
-  'certificates', 'upstream', 'server',
+  'defaults', 'certificates', 'upstream', 'server',
 ]);
+const DEFAULTS_KEYS = new Set(['tls']);
 const CERT_KEYS = new Set(['certFile', 'certKeyFile', 'chainFile', 'ocspStapling', 'acme']);
 const UPSTREAM_KEYS = new Set(['name', 'loadBalancing', 'hashKey', 'keepalive', 'keepaliveTimeout', 'raw', 'target']);
 const TARGET_KEYS = new Set(['address', 'weight', 'maxFails', 'failTimeout', 'backup', 'down', 'resolve', 'raw']);
@@ -312,6 +316,19 @@ function validateServers(http, errors, warnings, upstreamNames, ctx) {
     if (server.tls !== undefined) {
       validateTls(server.tls, http, `${pathText}.tls`, errors, warnings, ctx);
     }
+    if (server.include !== undefined) {
+      if (!Array.isArray(server.include) || server.include.length === 0) {
+        push(errors, `${pathText}.include`, 'must be a non-empty string array');
+      } else {
+        for (const [includeIndex, entry] of server.include.entries()) {
+          if (typeof entry !== 'string' || !entry.trim()) {
+            push(errors, `${pathText}.include[${includeIndex}]`, 'must be a non-empty string');
+          } else if (/\$|\*/u.test(entry)) {
+            push(errors, `${pathText}.include[${includeIndex}]`, 'variable include paths are forbidden');
+          }
+        }
+      }
+    }
     for (const [locationIndex, location] of (server.location ?? []).entries()) {
       validateLocation(location, index, locationIndex, errors, warnings, ctx);
       if (location.proxyPass !== undefined && typeof location.proxyPass === 'string') {
@@ -492,6 +509,16 @@ export function validateWebserverToml(doc) {
       push(errors, 'http', 'must be a table');
     } else {
       checkUnknownKeys(HTTP_KEYS, doc.http, 'http', errors, warnings, ctx);
+      if (doc.http.defaults !== undefined) {
+        if (!isPlainObject(doc.http.defaults)) {
+          push(errors, 'http.defaults', 'must be a table');
+        } else {
+          checkUnknownKeys(DEFAULTS_KEYS, doc.http.defaults, 'http.defaults', errors, warnings, ctx);
+          if (doc.http.defaults.tls !== undefined) {
+            validateTls(doc.http.defaults.tls, doc.http, 'http.defaults.tls', errors, warnings, ctx);
+          }
+        }
+      }
       for (const [name, cert] of Object.entries(doc.http.certificates ?? {})) {
         validateCertificate(cert, `http.certificates.${name}`, errors, warnings, ctx);
       }
@@ -852,6 +879,30 @@ export function validateWebserverDir(moduleRoot, options = {}) {
     }
   }
 
+  // W30: canonical primary API upstream is named "gateway" (§8.1).
+  if (common.enabled !== false) {
+    for (const profileName of DEPLOYMENT_PROFILES) {
+      for (const environment of LIFECYCLE_ENVIRONMENTS) {
+        const effective = profiles[profileName][environment];
+        if (effective.enabled === false) continue;
+        const hasHttpSurface = (effective.http?.server ?? []).length > 0;
+        if (!hasHttpSurface) continue;
+        const gatewayUpstreams = (effective.http?.upstream ?? []).filter(
+          (upstream) => upstream?.name === 'gateway',
+        );
+        if (gatewayUpstreams.length === 0) {
+          errors.push(
+            `effective(${profileName}.${environment}): MUST declare [[http.upstream]] name = "gateway" for the primary API target (W30)`,
+          );
+        } else if (gatewayUpstreams.length > 1) {
+          errors.push(
+            `effective(${profileName}.${environment}): MUST declare exactly one upstream named "gateway" (W30)`,
+          );
+        }
+      }
+    }
+  }
+
   // W24: public hostnames must follow APP_RUNTIME_TOPOLOGY_NAMING.md §9.
   const moduleName = path.basename(path.resolve(moduleRoot));
   for (const environment of LIFECYCLE_ENVIRONMENTS) {
@@ -875,6 +926,88 @@ export function validateWebserverDir(moduleRoot, options = {}) {
     }
   }
 
+  // W26: every lifecycle tier declares the same base-domain coverage as production.
+  if (common.enabled !== false) {
+    const productionHosts = (environmentDocs.production?.http?.server ?? [])
+      .flatMap((server) => server.serverName ?? [])
+      .map(normalizeHost)
+      .filter(Boolean);
+    const productionBases = new Set(
+      productionHosts.map((host) => baseDomainFromHost(host)).filter(Boolean),
+    );
+    if (productionBases.size > 0) {
+      for (const environment of ['development', 'test', 'staging']) {
+        const fileName = ENVIRONMENT_FILE_NAMES[environment];
+        const envHosts = (environmentDocs[environment]?.http?.server ?? [])
+          .flatMap((server) => server.serverName ?? [])
+          .map(normalizeHost)
+          .filter(Boolean);
+        if (envHosts.length === 0) {
+          errors.push(`${fileName}: MUST declare [[http.server]] when production hosts exist (W26)`);
+          continue;
+        }
+        const envBases = new Set(envHosts.map((host) => baseDomainFromHost(host)).filter(Boolean));
+        if (envBases.size !== productionBases.size) {
+          errors.push(
+            `${fileName}: base domain count ${envBases.size} != production ${productionBases.size} (W26)`,
+          );
+        }
+      }
+    }
+  }
+
+  // W27: platform certificates and TLS defaults live in server.common.toml only.
+  if (common.enabled !== false && isPlainObject(common.http?.certificates) && Object.keys(common.http.certificates).length > 0) {
+    for (const environment of LIFECYCLE_ENVIRONMENTS) {
+      const fileName = ENVIRONMENT_FILE_NAMES[environment];
+      const envCerts = environmentDocs[environment]?.http?.certificates;
+      if (isPlainObject(envCerts) && Object.keys(envCerts).length > 0) {
+        errors.push(`${fileName}: MUST NOT declare [http.certificates]; use server.common.toml (W27)`);
+      }
+    }
+  }
+
+  // W28: server.include snippet paths must exist under deployments/webserver/.
+  for (const environment of LIFECYCLE_ENVIRONMENTS) {
+    const fileName = ENVIRONMENT_FILE_NAMES[environment];
+    for (const [index, server] of (environmentDocs[environment]?.http?.server ?? []).entries()) {
+      for (const entry of server.include ?? []) {
+        if (typeof entry !== 'string' || !entry.trim()) continue;
+        const snippetPath = path.join(dir, entry);
+        if (!fs.existsSync(snippetPath)) {
+          errors.push(`${fileName} http.server[${index}].include: missing snippet ${entry} (W28)`);
+        }
+      }
+    }
+  }
+
+  // W29: Adaptive Web edge modules (expose.mode web / web+api) wire production hosts correctly.
+  const adaptiveEdge = moduleUsesAdaptiveWebEdge(moduleRoot, moduleName);
+  if (adaptiveEdge && common.enabled !== false) {
+    if (!(common.http?.include ?? []).some((entry) => String(entry).includes('adaptive-web.maps.conf'))) {
+      errors.push('server.common.toml: MUST declare http.include snippets/adaptive-web.maps.conf for Adaptive Web edge (W29)');
+    }
+    for (const snippet of [
+      ADAPTIVE_SNIPPET_PATHS.maps,
+      ADAPTIVE_SNIPPET_PATHS.dispatch,
+      ADAPTIVE_SNIPPET_PATHS.namedLocations,
+      GATEWAY_SNIPPET_PATHS.apiProduction,
+    ]) {
+      if (!fs.existsSync(path.join(dir, snippet))) {
+        errors.push(`${snippet}: missing Adaptive Web edge snippet (W29)`);
+      }
+    }
+    const productionEffective = profiles.standalone?.production ?? profiles.cloud?.production;
+    for (const server of productionEffective?.http?.server ?? []) {
+      if (!serverHasAdaptiveRootDispatch(server)) {
+        const names = (server.serverName ?? []).join(',') || '(unknown)';
+        errors.push(
+          `server.production.toml: production host ${names} MUST declare location / → adaptive-web.dispatch.conf (W29)`,
+        );
+      }
+    }
+  }
+
   // W16: per-profile×environment sidecars when nginx.enabled is true.
   const nginx = common.nginx ?? {};
   const nginxEnabled = nginx.enabled !== false;
@@ -893,7 +1026,14 @@ export function validateWebserverDir(moduleRoot, options = {}) {
         : environment === 'production' && fs.existsSync(legacySidecarPath)
           ? legacySidecarPath
           : null;
-      if (!chosenSidecar) continue;
+      if (!chosenSidecar) {
+        if (nginxEnabled && strict && common.enabled !== false) {
+          errors.push(
+            `${sidecarFileName(confBase, profileName, environment)}: missing nginx sidecar (W16); run align-webserver-workspace or render-nginx-sidecars`,
+          );
+        }
+        continue;
+      }
       if (!nginxEnabled) {
         warnings.push(
           `${path.basename(chosenSidecar)}: present but ignored because nginx.enabled = false (W16)`,
@@ -905,7 +1045,11 @@ export function validateWebserverDir(moduleRoot, options = {}) {
           `${path.basename(legacySidecarPath)}: legacy sidecar; prefer ${sidecarFileName(confBase, profileName, environment)} (W16)`,
         );
       }
-      const { doc: folded } = applyAdaptiveWebFolding(effective, { moduleRoot });
+      const { doc: folded } = applyAdaptiveWebFolding(effective, {
+        moduleRoot,
+        webserverDir: dir,
+        runtimeCode: common.id,
+      });
       const rendered = normalizeConfLines(renderNginxConf(folded));
       const sidecar = normalizeConfLines(fs.readFileSync(chosenSidecar, 'utf8'));
       const sidecarSet = new Set(sidecar);
@@ -952,8 +1096,8 @@ export function validateWebserverDir(moduleRoot, options = {}) {
     }
   }
 
-  // W23: sdkwork-webserver product edge is reverse-proxy only (expose.mode: api).
-  if (moduleName === 'sdkwork-webserver') {
+  // W23: edge proxy-only modules (sdkwork-webserver, sdkwork-api-cloud-gateway) must not ship Adaptive Web.
+  if (isEdgeProxyOnlyModule(moduleName)) {
     const forbiddenMarkers = [
       'adaptive-web.maps.conf',
       'adaptive-web.dispatch.conf',
@@ -963,8 +1107,6 @@ export function validateWebserverDir(moduleRoot, options = {}) {
       'web.static.conf',
       '@pc',
       '@h5',
-      '/usr/share/sdkwork/webserver/web/pc',
-      '/usr/share/sdkwork/webserver/web/h5',
     ];
     for (const profileName of DEPLOYMENT_PROFILES) {
       for (const environment of LIFECYCLE_ENVIRONMENTS) {
@@ -973,10 +1115,11 @@ export function validateWebserverDir(moduleRoot, options = {}) {
         for (const marker of forbiddenMarkers) {
           if (blob.includes(marker)) {
             errors.push(
-              `effective(${profileName}.${environment}): sdkwork-webserver edge nginx must not include Adaptive Web / SPA root marker "${marker}" (W23; expose.mode: api)`,
+              `effective(${profileName}.${environment}): ${moduleName} edge nginx must not include Adaptive Web marker "${marker}" (W23)`,
             );
           }
         }
+        if (moduleName !== 'sdkwork-webserver') continue;
         for (const server of effective.http?.server ?? []) {
           const names = server.serverName ?? [];
           const isPublicIngress = names.some((name) => (
@@ -985,21 +1128,23 @@ export function validateWebserverDir(moduleRoot, options = {}) {
           ));
           if (!isPublicIngress) continue;
           const root = (server.location ?? []).find((location) => location.match === '/');
-          if (!root) {
+          if (!root && !gatewayRootLocationViaSnippet(server, dir)) {
             errors.push(
               `effective(${profileName}.${environment}): public ingress ${names.join(',')} missing location / (W23)`,
             );
             continue;
           }
-          if (typeof root.proxyPass !== 'string' || !root.proxyPass.trim()) {
-            errors.push(
-              `effective(${profileName}.${environment}): public ingress ${names.join(',')} location / MUST proxy_pass to the gateway (W23)`,
-            );
-          }
-          if (root.root !== undefined || root.include !== undefined) {
-            errors.push(
-              `effective(${profileName}.${environment}): public ingress ${names.join(',')} location / MUST NOT declare root/include Adaptive Web (W23)`,
-            );
+          if (root) {
+            if (typeof root.proxyPass !== 'string' || !root.proxyPass.trim()) {
+              errors.push(
+                `effective(${profileName}.${environment}): public ingress ${names.join(',')} location / MUST proxy_pass to the gateway (W23)`,
+              );
+            }
+            if (root.root !== undefined || root.include !== undefined) {
+              errors.push(
+                `effective(${profileName}.${environment}): public ingress ${names.join(',')} location / MUST NOT declare root/include Adaptive Web (W23)`,
+              );
+            }
           }
         }
       }
@@ -1009,7 +1154,7 @@ export function validateWebserverDir(moduleRoot, options = {}) {
       for (const entry of fs.readdirSync(snippetsDir)) {
         if (/adaptive-web|web\.(pc|h5|static)\.conf/u.test(entry)) {
           errors.push(
-            `deployments/webserver/snippets/${entry}: forbidden on sdkwork-webserver product tree (W23); use sdkwork-specs/examples/webserver/adaptive-snippets/`,
+            `deployments/webserver/snippets/${entry}: forbidden on ${moduleName} proxy-only edge (W23)`,
           );
         }
       }
@@ -1017,6 +1162,28 @@ export function validateWebserverDir(moduleRoot, options = {}) {
   }
 
   return { missing: false, ok: errors.length === 0, errors, warnings, profiles };
+}
+
+function serverHasAdaptiveRootDispatch(server) {
+  return (server.location ?? []).some(
+    (location) => location.match === '/'
+      && (location.include ?? []).some((entry) => String(entry).includes('adaptive-web.dispatch.conf')),
+  );
+}
+
+function gatewayRootLocationViaSnippet(server, webserverDir) {
+  for (const entry of server.include ?? []) {
+    if (entry !== GATEWAY_SNIPPET_PATHS.production && entry !== GATEWAY_SNIPPET_PATHS.nonproduction) {
+      continue;
+    }
+    const snippetPath = path.join(webserverDir, entry);
+    if (!fs.existsSync(snippetPath)) continue;
+    const content = fs.readFileSync(snippetPath, 'utf8');
+    if (/location\s+\/\s*\{/u.test(content) && /proxy_pass\s+http:\/\/gateway/u.test(content)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function collectExposeBlocks(yaml, text) {

@@ -7,29 +7,46 @@ import path from 'node:path';
 import { LIFECYCLE_ENVIRONMENTS } from './layout-v3.mjs';
 import { serializeToml } from './serialize.mjs';
 import { filterCompliantHosts, isPublicHostCompliant, normalizeHost } from './host-registry.mjs';
-import { letsencryptCertificateBlock } from './cert-paths.mjs';
+import { platformCertificateRegistry } from './platform-certificates.mjs';
+import {
+  gatewaySnippetInclude,
+  GATEWAY_SNIPPET_PATHS,
+  TLS_DEFAULTS,
+  writeGatewaySnippets,
+} from './gateway-snippets.mjs';
+import { ADAPTIVE_SNIPPET_PATHS, writeAdaptiveWebSnippets } from './adaptive-web-snippets.mjs';
+import { moduleUsesAdaptiveWebEdge } from './expose-mode.mjs';
 
 export { LIFECYCLE_ENVIRONMENTS };
 export const CLOUD_GATEWAY_TARGET = 'sdkwork-api-cloud-gateway:8080';
 export const DEFAULT_STANDALONE_BIND = '127.0.0.1:3900';
 
-const PROXY_HEADERS = [
-  'Host $host',
-  'X-Real-IP $remote_addr',
-  'X-Forwarded-For $proxy_add_x_forwarded_for',
-  'X-Forwarded-Proto $scheme',
-];
-
-const PROXY_HEADERS_LITE = [
-  'Host $host',
-  'X-Forwarded-For $proxy_add_x_forwarded_for',
-  'X-Forwarded-Proto $scheme',
-];
-
 export function certNameFromHost(host) {
   const parts = host.split('.');
   if (parts.length < 2) return host;
   return parts.slice(-2).join('.');
+}
+
+function pruneAdaptiveWebSnippets(webserverDir) {
+  for (const rel of Object.values(ADAPTIVE_SNIPPET_PATHS)) {
+    const target = path.join(webserverDir, rel);
+    if (fs.existsSync(target)) fs.rmSync(target);
+  }
+}
+
+function ensureStaticFallbackDir(webserverDir) {
+  const staticDir = path.join(webserverDir, 'static');
+  fs.mkdirSync(staticDir, { recursive: true });
+  const gitkeep = path.join(staticDir, '.gitkeep');
+  if (!fs.existsSync(gitkeep)) fs.writeFileSync(gitkeep, '');
+  const indexPath = path.join(staticDir, 'index.html');
+  if (!fs.existsSync(indexPath)) {
+    fs.writeFileSync(
+      indexPath,
+      '<!DOCTYPE html><html><head><meta charset="utf-8"><title>SDKWork</title></head>'
+        + '<body><p>Static fallback placeholder — replace with packaged PC/H5 assets.</p></body></html>\n',
+    );
+  }
 }
 
 export function deriveEnvHosts(productionHosts, environment) {
@@ -97,31 +114,6 @@ export function webserverSurfaces(appId, topology) {
   return surfaces;
 }
 
-function buildCertificates(hosts) {
-  const certificates = {};
-  for (const host of hosts) {
-    const name = certNameFromHost(host);
-    if (certificates[name]) continue;
-    certificates[name] = letsencryptCertificateBlock(name);
-  }
-  return certificates;
-}
-
-function proxyLocation(match, { production = true, health = false } = {}) {
-  const loc = {
-    match,
-    proxyPass: 'http://gateway',
-    proxyHttpVersion: '1.1',
-    proxySetHeader: health ? ['Host $host'] : production ? PROXY_HEADERS : PROXY_HEADERS_LITE,
-  };
-  if (!health) {
-    loc.proxyBuffering = false;
-    loc.proxyReadTimeout = production ? '120s' : '300s';
-    if (production) loc.proxySendTimeout = '120s';
-  }
-  return loc;
-}
-
 function groupHostsByCert(hosts) {
   const groups = new Map();
   for (const host of hosts) {
@@ -132,38 +124,32 @@ function groupHostsByCert(hosts) {
   return groups;
 }
 
-function buildServerBlock(serverName, environment, { includeApiPrefix = false, tlsCert = null } = {}) {
+function buildServerBlock(serverName, environment, { tlsCert = null, adaptiveWeb = false } = {}) {
   const production = environment === 'production';
-  const listen = production ? ['443 ssl', '80'] : ['80'];
-  const server = { listen, serverName: [...serverName] };
+  const server = {
+    listen: production ? ['443 ssl', '80'] : ['80'],
+    serverName: [...serverName],
+  };
+
+  if (adaptiveWeb && production) {
+    server.include = [
+      ADAPTIVE_SNIPPET_PATHS.namedLocations,
+      GATEWAY_SNIPPET_PATHS.apiProduction,
+    ];
+    server.location = [
+      { match: '/', include: [ADAPTIVE_SNIPPET_PATHS.dispatch] },
+    ];
+  } else {
+    server.include = [gatewaySnippetInclude(environment)];
+  }
+
   if (production) {
-    const cert = tlsCert ?? certNameFromHost(serverName[0]);
-    server.tls = {
-      cert,
-      protocols: ['TLSv1.2', 'TLSv1.3'],
-      preferServerCiphers: true,
-      sessionCache: 'shared:SSL:10m',
-    };
+    server.tls = { cert: tlsCert ?? certNameFromHost(serverName[0]) };
   }
-  const locations = [];
-  if (production) {
-    locations.push(proxyLocation('= /healthz', { health: true }));
-    locations.push(proxyLocation('= /readyz', { health: true }));
-  }
-  if (includeApiPrefix) {
-    locations.push({
-      match: '/api/',
-      proxyPass: 'http://gateway',
-      proxyHttpVersion: '1.1',
-      proxySetHeader: PROXY_HEADERS_LITE,
-    });
-  }
-  locations.push(proxyLocation('/', { production }));
-  server.location = locations;
   return server;
 }
 
-function buildEnvironmentDoc(topology, surfaces, environment) {
+function buildEnvironmentDoc(topology, surfaces, environment, { adaptiveWeb = false } = {}) {
   const hostSet = new Set();
   for (const surfaceId of surfaces) {
     for (const host of hostsForSurface(topology.cloudPublicHosts[surfaceId], environment)) {
@@ -178,25 +164,15 @@ function buildEnvironmentDoc(topology, surfaces, environment) {
   const servers = [];
   if (environment === 'production') {
     for (const [cert, groupHosts] of groupHostsByCert(hosts)) {
-      servers.push(
-        buildServerBlock(groupHosts, environment, {
-          includeApiPrefix: true,
-          tlsCert: cert,
-        }),
-      );
+      servers.push(buildServerBlock(groupHosts, environment, { tlsCert: cert, adaptiveWeb }));
     }
   } else {
-    servers.push(
-      buildServerBlock(hosts, environment, {
-        includeApiPrefix: true,
-      }),
-    );
+    servers.push(buildServerBlock(hosts, environment, { adaptiveWeb: false }));
   }
 
   return {
     environment,
     http: {
-      certificates: buildCertificates(hosts),
       server: servers,
     },
   };
@@ -211,10 +187,16 @@ export function buildWebserverDocs({ appId, topology, moduleRoot = null }) {
     (surfaceId) => productionHostsForSurface(topology.cloudPublicHosts[surfaceId]).length > 0,
   );
 
+  const adaptiveWeb = moduleRoot
+    ? moduleUsesAdaptiveWebEdge(moduleRoot, appId)
+    : false;
+
   const environments = Object.fromEntries(
     LIFECYCLE_ENVIRONMENTS.map((environment) => [
       environment,
-      hasHosts ? buildEnvironmentDoc(topology, surfaces, environment) : { environment },
+      hasHosts
+        ? buildEnvironmentDoc(topology, surfaces, environment, { adaptiveWeb })
+        : { environment },
     ]),
   );
 
@@ -260,9 +242,15 @@ export function buildWebserverDocs({ appId, topology, moduleRoot = null }) {
       clientMaxBodySize: '1100m',
       serverTokens: 'off',
       gzip: true,
+      certificates: platformCertificateRegistry(),
+      defaults: { tls: TLS_DEFAULTS },
       upstream: [{ name: 'gateway', loadBalancing: 'least-connections', keepalive: 32 }],
     },
   };
+
+  if (adaptiveWeb) {
+    common.http.include = [ADAPTIVE_SNIPPET_PATHS.maps];
+  }
 
   const standalone = {
     profile: 'standalone',
@@ -278,7 +266,7 @@ export function buildWebserverDocs({ appId, topology, moduleRoot = null }) {
     },
   };
 
-  return { enabled: true, common, environments, standalone, cloud, moduleRoot };
+  return { enabled: true, common, environments, standalone, cloud, moduleRoot, adaptiveWeb };
 }
 
 export function buildAppRootsExample({ appId, moduleRoot }) {
@@ -321,7 +309,73 @@ export function buildAppRootsExample({ appId, moduleRoot }) {
   return lines.join('\n');
 }
 
-export function writeWebserverLayout(moduleRoot, docs, { writeAppRoots = true } = {}) {
+export function buildWebserverReadme({ appId, docs, topology }) {
+  const runtimeCode = docs.common?.id ?? appId.replace(/^sdkwork-/u, '');
+  const enabled = docs.enabled !== false && docs.common?.enabled !== false;
+  const surfaces = topology?.cloudPublicHosts ? webserverSurfaces(appId, topology) : [];
+
+  const envRows = [];
+  for (const environment of LIFECYCLE_ENVIRONMENTS) {
+    const envDoc = docs.environments?.[environment] ?? {};
+    const hosts = (envDoc.http?.server ?? []).flatMap((s) => s.serverName ?? []);
+    const sample = hosts[0] ?? '(none)';
+    const tls = environment === 'production' ? '443 ssl + 80' : '80';
+    envRows.push(`| ${environment} | \`server.${environment}.toml\` | ${hosts.length} | \`${sample}\` | ${tls} |`);
+  }
+
+  return `# Web Server Configuration (layout v3)
+
+Module \`${appId}\` · runtime code \`${runtimeCode}\` · ${enabled ? 'enabled' : 'disabled'}
+
+Authority: \`SDKWORK_WEBSERVER_SPEC.md\` · hosts: \`APP_RUNTIME_TOPOLOGY_NAMING.md\` §9.
+
+## Layout
+
+\`\`\`text
+deployments/webserver/
+  server.common.toml           # identity, nginx/main/http globals, platform certs, TLS defaults, upstream skeleton
+  server.development.toml      # environment = "development" — hosts + include only
+  server.test.toml             # environment = "test"
+  server.staging.toml          # environment = "staging"
+  server.production.toml       # environment = "production"
+  server.standalone.toml       # profile = "standalone" (upstream targets)
+  server.cloud.toml            # profile = "cloud" (platform gateway upstream)
+  snippets/gateway-locations.production.conf   # full gateway proxy (api-only edge products)
+  snippets/gateway-api-locations.production.conf  # /api/ + health only (Adaptive Web modules)
+  snippets/gateway-locations.nonproduction.conf   # dev/test/staging full proxy to gateway
+  snippets/adaptive-web.maps.conf            # PC/H5 UA maps (web / web+api modules only)
+  snippets/adaptive-web.dispatch.conf      # location / dispatch
+  snippets/adaptive-web.named-locations.conf  # @pc / @h5 static roots
+  app-roots.example.toml                     # process Adaptive Web dist catalog (PC/H5)
+\`\`\`
+
+Merge at runtime:
+
+\`\`\`text
+effective(<profile>.<environment>) =
+  merge(server.common.toml, server.<environment>.toml, server.<profile>.toml)
+\`\`\`
+
+## Lifecycle environments
+
+| Environment | File | Hosts | Example | Listeners |
+| --- | --- | ---: | --- | --- |
+${envRows.join('\n')}
+
+Surfaces: ${surfaces.length > 0 ? surfaces.join(', ') : 'none (placeholder)'}.
+
+## Refresh and validate
+
+\`\`\`bash
+node sdkwork-specs/tools/webserver/align-webserver-workspace.mjs <sdkwork-space-root>
+node sdkwork-specs/tools/webserver/audit-modules.mjs <sdkwork-space-root>
+\`\`\`
+
+Sidecars (required when \`nginx.enabled = true\`): \`nginx.<profile>.<environment>.conf\` must match \`effective(<profile>.<environment>)\` when \`nginx.strict = true\`. Regenerate with \`align-webserver-workspace.mjs\` or \`render-nginx-sidecars.mjs\`.
+`;
+}
+
+export function writeWebserverLayout(moduleRoot, docs, { writeAppRoots = true, appId = null, topology = null } = {}) {
   const dir = path.join(moduleRoot, 'deployments', 'webserver');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'server.common.toml'), serializeToml(docs.common));
@@ -331,6 +385,16 @@ export function writeWebserverLayout(moduleRoot, docs, { writeAppRoots = true } 
   }
   fs.writeFileSync(path.join(dir, 'server.standalone.toml'), serializeToml(docs.standalone));
   fs.writeFileSync(path.join(dir, 'server.cloud.toml'), serializeToml(docs.cloud));
+  if (docs.enabled !== false && docs.common?.enabled !== false) {
+    const adaptiveWeb = docs.adaptiveWeb === true;
+    writeGatewaySnippets(dir, { adaptiveWeb });
+    if (adaptiveWeb) {
+      writeAdaptiveWebSnippets(dir, docs.common?.id ?? path.basename(moduleRoot).replace(/^sdkwork-/u, ''));
+      ensureStaticFallbackDir(dir);
+    } else {
+      pruneAdaptiveWebSnippets(dir);
+    }
+  }
   const legacy = path.join(dir, 'server.toml');
   if (fs.existsSync(legacy)) fs.rmSync(legacy);
   if (writeAppRoots && docs.enabled) {
@@ -339,6 +403,12 @@ export function writeWebserverLayout(moduleRoot, docs, { writeAppRoots = true } 
       fs.writeFileSync(path.join(dir, 'app-roots.example.toml'), appRoots);
     }
   }
+  const readme = buildWebserverReadme({
+    appId: appId ?? path.basename(moduleRoot),
+    docs,
+    topology,
+  });
+  fs.writeFileSync(path.join(dir, 'README.md'), readme);
 }
 
 /** Infer lifecycle environment from serverName suffixes (migration helper). */
@@ -366,19 +436,15 @@ export function splitLegacyCommonIntoEnvironments(commonDoc) {
     const hosts = envServers.flatMap((server) => server.serverName ?? []);
     environments[environment] = {
       environment,
-      http: envServers.length > 0
-        ? {
-            certificates: buildCertificates(hosts),
-            server: envServers,
-          }
-        : {},
+      http: envServers.length > 0 ? { server: envServers } : {},
     };
   }
 
   const nextCommon = structuredClone(commonDoc);
   if (nextCommon.http) {
     delete nextCommon.http.server;
-    delete nextCommon.http.certificates;
+    nextCommon.http.certificates = platformCertificateRegistry();
+    nextCommon.http.defaults = { tls: TLS_DEFAULTS };
     if (Object.keys(nextCommon.http).length === 0) delete nextCommon.http;
   }
   return { common: nextCommon, environments };
