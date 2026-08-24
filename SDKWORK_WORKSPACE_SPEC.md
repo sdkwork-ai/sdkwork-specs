@@ -765,6 +765,7 @@ Rules:
 - Repository-local skills and plugins may reference private repository paths, but they `MUST NOT` embed private credentials or machine-specific absolute paths unless the path is a documented SDKWork canonical path.
 - Any script under `.sdkwork/` that contacts external services `MUST` document the service, credential source, dry-run behavior when available, and verification command.
 - Security reviews may scan `.sdkwork/` as source. Sensitive local state must never be placed there in committed form.
+- Vendored upstream content under `external/` in any repository `MUST` be referenced as git submodules (gitlink, mode `160000`), never committed as regular files. Every path registered in `.gitmodules` `MUST` be a gitlink in the current index. Allowed tracked content under `external/` is limited to the `external/README.md` marker and documented exceptions. Repositories with `external/` submodules `MUST` keep them shallow (`git submodule update --depth 1`) and `MUST` configure `fetch.recurseSubmodules=false` and `push.recurseSubmodules=false` so full upstream history is never pulled into `.git/modules`. Enforcement: `node sdkwork-specs/tools/check-external-submodule-rule.mjs --workspace <workspace-root>`.
 
 ## 7. Discovery And Precedence
 
