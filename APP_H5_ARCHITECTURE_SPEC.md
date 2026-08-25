@@ -162,6 +162,15 @@ Standard config ownership:
 | --- | --- | --- | --- |
 | Vite/browser build env | `.env.<deployment-profile>.<environment>` | public `VITE_*` profile identity, SDK base URLs, public flags | secrets, tokens, database/Redis config, Capacitor packaging metadata |
 | Browser public runtime | `config/browser/runtime-env.<deployment-profile>.<environment>.example.json`, `/runtime-env.js` | public SDK base URLs, public feature flags, public app metadata, H5 host capability flags | secrets, database URLs, Redis URLs, tokens, refresh tokens, private service endpoints |
+
+The browser runtime source matrix is one file per supported
+`<deployment-profile>.<environment>` combination (all eight when both
+`standalone` and `cloud` ship all four lifecycle environments) using the
+canonical `runtime-env.<deployment-profile>.<environment>.json` name — never
+environment-only or profile-only names. Value rules per profile follow
+`ENVIRONMENT_SPEC.md` §5.1.0.1: `standalone` sources use the same-origin root
+`/` for every SDK base URL; `cloud` sources use the unified `cloudApiBaseUrl`
+origin for the environment (`api-dev.<domain>` … `api.<domain>`).
 | Host platform runtime | `config/host/capacitor.<environment>.example.json`, `capacitor.config.ts`, platform config references | bundle id/package id references, schemes, app links, associated domains, permissions, plugin flags, store metadata references | signing private keys, API keys, auth tokens, business API paths, SDK ownership |
 | Server runtime | `config/server/<application-code>.<deployment-profile>.<environment>.toml.example`, `/etc/sdkwork/<application-code>/<process>.toml` | bind address, API gateway, PostgreSQL, Redis, reverse proxy trust, service paths when the app owns server runtime | browser-only `VITE_*`, Capacitor packaging metadata |
 | Container runtime | `config/container/<application-code>.<deployment-profile>.<environment>.toml.example`, mounted `/etc/sdkwork/...` | container service config, mounted secrets, external service endpoints, volumes | image-baked secrets or mutable database state |

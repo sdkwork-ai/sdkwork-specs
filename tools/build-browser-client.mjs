@@ -184,7 +184,7 @@ export function buildBrowserClient(options) {
 
   const app = resolveBrowserAppRoot({ repositoryRoot, architecture });
   const viteMode = `${deploymentProfile}.${environment}`;
-  const outDir = resolveBrowserDistOutDir(environment);
+  const outDir = resolveBrowserDistOutDir(environment, deploymentProfile);
   const buildEnv = {
     ...process.env,
     SDKWORK_DEPLOYMENT_PROFILE: deploymentProfile,
@@ -234,7 +234,7 @@ export function buildBrowserClient(options) {
   }
 
   console.log(
-    `[build-browser-client] ${app.relative} ${architecture} ${environment} -> ${outDir}/`,
+    `[build-browser-client] ${app.relative} ${architecture} ${deploymentProfile}.${environment} -> ${outDir}/`,
   );
   return plan;
 }

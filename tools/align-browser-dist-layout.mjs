@@ -57,6 +57,13 @@ function alignViteConfig(appRoot, dryRun) {
       ? processEnv.SDKWORK_ENVIRONMENT
       : 'production');
 }
+
+function resolveViteDeploymentProfile(mode, processEnv = process.env) {
+  const profileMatch = /^(standalone|cloud)\\./u.exec(mode ?? '');
+  return profileMatch?.[1]
+    ?? processEnv.SDKWORK_DEPLOYMENT_PROFILE
+    ?? 'standalone';
+}
 `;
 
   let changed = false;
@@ -68,26 +75,26 @@ function alignViteConfig(appRoot, dryRun) {
   if (/outDir\s*:\s*['"`]dist['"`]/u.test(source)) {
     source = source.replace(
       /outDir\s*:\s*['"`]dist['"`]/u,
-      'outDir: resolveBrowserDistOutDir(resolveViteEnvironment(mode, process.env))',
+      'outDir: resolveBrowserDistOutDir(resolveViteEnvironment(mode, process.env), resolveViteDeploymentProfile(mode, process.env))',
     );
     changed = true;
   } else if (!/\boutDir\b/u.test(source)) {
     if (/build\s*:\s*\{/u.test(source)) {
       source = source.replace(
         /build\s*:\s*\{/u,
-        'build: {\n      outDir: resolveBrowserDistOutDir(resolveViteEnvironment(mode, process.env)),',
+        'build: {\n      outDir: resolveBrowserDistOutDir(resolveViteEnvironment(mode, process.env), resolveViteDeploymentProfile(mode, process.env)),',
       );
       changed = true;
     } else if (/return\s*\{/u.test(source)) {
       source = source.replace(
         /return\s*\{/u,
-        'return {\n    build: {\n      outDir: resolveBrowserDistOutDir(resolveViteEnvironment(mode, process.env)),\n      emptyOutDir: true,\n    },',
+        'return {\n    build: {\n      outDir: resolveBrowserDistOutDir(resolveViteEnvironment(mode, process.env), resolveViteDeploymentProfile(mode, process.env)),\n      emptyOutDir: true,\n    },',
       );
       changed = true;
     } else if (/export default defineConfig\(\{/u.test(source)) {
       source = source.replace(
         /export default defineConfig\(\{/u,
-        'export default defineConfig({\n  build: {\n    outDir: resolveBrowserDistOutDir(resolveViteEnvironment(undefined, process.env)),\n    emptyOutDir: true,\n  },',
+        'export default defineConfig({\n  build: {\n    outDir: resolveBrowserDistOutDir(resolveViteEnvironment(undefined, process.env), resolveViteDeploymentProfile(undefined, process.env)),\n    emptyOutDir: true,\n  },',
       );
       changed = true;
     }

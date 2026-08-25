@@ -49,6 +49,7 @@ const ALLOWED_FIRST_SEGMENTS = new Set([
   'workflow',
   'sbom',
   'nginx',
+  'import',
   'docs',
   'perf',
   'migrate',

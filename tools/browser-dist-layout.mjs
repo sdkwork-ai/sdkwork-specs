@@ -21,6 +21,19 @@ export const BROWSER_DIST_ENV_ALIASES = Object.freeze({
   production: 'prod',
 });
 
+/** Deployment profiles that select a browser dist layout variant. */
+export const BROWSER_DEPLOYMENT_PROFILES = Object.freeze(['standalone', 'cloud']);
+
+export function normalizeBrowserDeploymentProfile(deploymentProfile) {
+  const profile = String(deploymentProfile ?? 'standalone').trim();
+  if (!BROWSER_DEPLOYMENT_PROFILES.includes(profile)) {
+    throw new Error(
+      `browser deployment profile must be one of ${BROWSER_DEPLOYMENT_PROFILES.join(', ')}`,
+    );
+  }
+  return profile;
+}
+
 export function browserDistEnvAlias(environment) {
   const alias = BROWSER_DIST_ENV_ALIASES[String(environment ?? '').trim()];
   if (!alias) {
@@ -33,17 +46,27 @@ export function browserDistEnvAlias(environment) {
 
 /**
  * Relative Vite `build.outDir` for one browser application root.
- * Example: `dist/prod` for production; never a bare `dist/`.
+ * Every deployment profile owns its own environment subtree so `standalone`
+ * and `cloud` builds coexist without overwriting each other:
+ * `dist/<deploymentProfile>/<envAlias>` — for example `dist/standalone/dev`,
+ * `dist/standalone/prod`, `dist/cloud/dev`, `dist/cloud/prod`.
+ * Never a bare `dist/`.
  */
-export function resolveBrowserDistOutDir(environment) {
-  return `dist/${browserDistEnvAlias(environment)}`;
+export function resolveBrowserDistOutDir(environment, deploymentProfile = 'standalone') {
+  const alias = browserDistEnvAlias(environment);
+  const profile = normalizeBrowserDeploymentProfile(deploymentProfile);
+  return `dist/${profile}/${alias}`;
 }
 
 /**
  * Absolute build output directory under an application root.
  */
-export function resolveBrowserDistAbsoluteRoot(applicationRoot, environment) {
-  return `${String(applicationRoot).replace(/[\\/]+$/u, '')}/${resolveBrowserDistOutDir(environment)}`;
+export function resolveBrowserDistAbsoluteRoot(
+  applicationRoot,
+  environment,
+  deploymentProfile = 'standalone',
+) {
+  return `${String(applicationRoot).replace(/[\\/]+$/u, '')}/${resolveBrowserDistOutDir(environment, deploymentProfile)}`;
 }
 
 /**

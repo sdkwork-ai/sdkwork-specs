@@ -276,6 +276,49 @@ Rules:
   `api-*` platform host or vice versa unless the application declares
   `applicationAndApiOriginsAreDistinct: false` with a dated governance
   exception.
+- Browser runtime sources follow the profile×environment file matrix
+  `runtime-env.<deploymentProfile>.<environment>.json` (one source file per
+  supported profile id under the app `etc/browser/` directory; sibling PC/H5
+  applications share the same naming). The materialized deploy-time document
+  (`/runtime-env.json`) is derived from exactly one selected source and must
+  re-declare `deploymentProfile`, `environment`, `profileId`,
+  `runtimeTarget`, and `browserOriginMode`.
+
+### 5.1.0.1 Cloud API Edge (Unified `api-*` Domain Standard)
+
+Browser clients in `cloud` profiles `MUST` target one unified cloud API edge
+origin per environment instead of per-service hostnames:
+
+| Environment | Cloud API edge origin | Example |
+| --- | --- | --- |
+| `development` | `https://api-dev.<base-domain>` | `https://api-dev.sdkwork.com` |
+| `test` | `https://api-test.<base-domain>` | `https://api-test.sdkwork.com` |
+| `staging` | `https://api-staging.<base-domain>` | `https://api-staging.sdkwork.com` |
+| `production` | `https://api.<base-domain>` | `https://api.sdkwork.com` |
+
+Rules:
+
+- `<base-domain>` is the product's concrete main domain (for example
+  `sdkwork.com`, `birdcoder.cn`). The per-environment origin is declared once
+  as the environment-level `cloudApiBaseUrl` key in
+  `etc/sdkwork.deployment.config.json` and is the single authoritative value
+  for every browser SDK API base URL.
+- Every public SDK API base URL field in a cloud browser runtime source
+  (`appApiBaseUrl`, `backendApiBaseUrl`, dependency SDK base URLs such as
+  `driveAppApiBaseUrl`/`appbaseAppApiBaseUrl`, and deployment SDK base URLs)
+  `MUST` equal that environment's `cloudApiBaseUrl` origin. The API edge
+  routes the canonical prefixes (`/app/v3/api`, `/backend/v3/api`, dependency
+  prefixes) to the owning services. Per-service browser-facing hostnames
+  (`server-app-dev.*`, `server-admin-*`) `MUST NOT` be used as browser SDK
+  base URLs in cloud profiles.
+- Navigation-only URLs (messaging, portal, docs) that are not SDK API bases
+  may remain explicit per-service hostnames and are validated as absolute
+  HTTP(S) URLs only.
+- `standalone` browser runtime sources `MUST` declare
+  `browserOriginMode = same-origin` and use the canonical root-relative path
+  `/` for every SDK API base URL; the browser resolves `/app/v3/api` against
+  its own origin. `standalone` is the default deployment profile when no
+  profile is selected.
 - File names select a candidate profile, but content remains authoritative only
   after it declares matching `environment`, `deploymentProfile`, `profileId`,
   and `runtimeTarget` values. A mismatch fails before SDK construction or host

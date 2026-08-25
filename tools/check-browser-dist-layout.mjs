@@ -17,7 +17,7 @@ import {
 } from './browser-dist-layout.mjs';
 
 const OUTDIR_HELPER = /resolveBrowserDistOutDir\s*\(/u;
-const OUTDIR_LITERAL = /outDir\s*:\s*['"`]dist\/(dev|test|staging|prod)['"`]/u;
+const OUTDIR_LITERAL = /outDir\s*:\s*['"`]dist\/(standalone|cloud)\/(dev|test|staging|prod)['"`]/u;
 const BARE_DIST = /outDir\s*:\s*['"`]dist['"`]/u;
 const BARE_DIST_JOIN = /outDir\s*:\s*path\.join\([^)]*['"`]dist['"`]\s*\)/u;
 
@@ -129,9 +129,13 @@ export function checkBrowserDistLayout(root) {
   }
   // Sanity: helper aliases stay stable.
   for (const [environment, alias] of Object.entries(BROWSER_DIST_ENV_ALIASES)) {
-    const expected = `dist/${alias}`;
-    if (resolveBrowserDistOutDir(environment) !== expected) {
-      issues.push(`browser-dist-layout helper mismatch for ${environment}`);
+    for (const [deploymentProfile, expected] of [
+      ['standalone', `dist/standalone/${alias}`],
+      ['cloud', `dist/cloud/${alias}`],
+    ]) {
+      if (resolveBrowserDistOutDir(environment, deploymentProfile) !== expected) {
+        issues.push(`browser-dist-layout helper mismatch for ${deploymentProfile}.${environment}`);
+      }
     }
   }
   return issues;

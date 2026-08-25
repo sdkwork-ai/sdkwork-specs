@@ -63,13 +63,18 @@ class (`SDKWORK_DEPLOY_SPEC.md` §8, `APP_RUNTIME_TOPOLOGY_SPEC.md` §8.2).
 
 | Surface | Source root | Build outDir | Installed root |
 | --- | --- | --- | --- |
-| PC | `apps/sdkwork-<code>-pc` | `dist/<envAlias>/` | `<share>/web/pc/` |
-| H5 | `apps/sdkwork-<code>-h5` | `dist/<envAlias>/` | `<share>/web/h5/` |
+| PC | `apps/sdkwork-<code>-pc` | `dist/<profile>/<envAlias>/` | `<share>/web/pc/` |
+| H5 | `apps/sdkwork-<code>-h5` | `dist/<profile>/<envAlias>/` | `<share>/web/h5/` |
 | Static fallback | `deployments/webserver/static/` (optional) | — | `<share>/web/static/` |
 
 `<envAlias>`: `development`→`dev`, `test`→`test`, `staging`→`staging`,
-`production`→`prod`. Bare `dist/` is forbidden. Packaging copies one
-`dist/<envAlias>/` into `<share>/web/{pc|h5}/` (no env segment left).
+`production`→`prod`. `<profile>`: `standalone` (default) or `cloud` — for
+example `dist/standalone/prod/`, `dist/cloud/dev/`. Bare `dist/` and
+environment-only `dist/<envAlias>/` layouts are forbidden. Packaging copies
+one selected `dist/<profile>/<envAlias>/` into `<share>/web/{pc|h5}/` (no
+dist or profile segment left). The profile subtrees keep standalone
+(same-origin) and cloud (unified `api-*` edge) builds for the same
+environment coexisting.
 `<share>` OS paths: `RUNTIME_DIRECTORY_SPEC.md` §4.1.1.
 Helper / check: `tools/browser-dist-layout.mjs`, `tools/check-browser-dist-layout.mjs`.
 
@@ -89,7 +94,10 @@ Detection: overrides → `Sec-CH-UA-Mobile: ?1` → iPad/tablet (before mobile U
 
 1. One public origin; no separate PC/H5 browser ports.
 2. H5 requests use the H5 root; PC requests use the PC root (collapse only when the preferred SPA is absent).
-3. Active environment's runtime config points at that env's artifacts (`dist/<envAlias>/` in checkout; `<share>/web/{pc,h5}/` when installed).
+3. Active environment's runtime config points at that env's artifacts
+   (`dist/<profile>/<envAlias>/` in checkout; `<share>/web/{pc,h5}/` when
+   installed). The active deployment profile selects the profile subtree;
+   `standalone` is the default.
 
 Native / mini-program roots are additive and do not replace the PC/H5 pair.
 

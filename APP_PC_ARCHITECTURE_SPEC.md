@@ -201,6 +201,15 @@ Standard config ownership:
 | --- | --- | --- | --- |
 | Vite/browser build env | `.env.<deployment-profile>.<environment>` | public `VITE_*` profile identity, SDK base URLs, public flags | secrets, tokens, database/Redis config, host packaging metadata |
 | Browser deploy-time runtime | `config/browser/runtime-env.<deployment-profile>.<environment>.example.json`, `/runtime-env.js` | promotable public SDK base URLs, public feature flags, public app metadata | secrets, database URLs, Redis URLs, tokens, private service endpoints |
+
+The browser runtime source matrix is one file per supported
+`<deployment-profile>.<environment>` combination (all eight when both
+`standalone` and `cloud` ship all four lifecycle environments) using the
+canonical `runtime-env.<deployment-profile>.<environment>.json` name — never
+environment-only or profile-only names. Value rules per profile follow
+`ENVIRONMENT_SPEC.md` §5.1.0.1: `standalone` sources use the same-origin root
+`/` for every SDK base URL; `cloud` sources use the unified `cloudApiBaseUrl`
+origin for the environment (`api-dev.<domain>` … `api.<domain>`).
 | Desktop user runtime | `config/desktop/<application-code>.<deployment-profile>.<environment>.toml.example`, user `~/.sdkwork/<application-code>/config/<application-code>.toml` | installed desktop mode, local service toggle, declared client-local user-private SQLite path, secure storage provider | server PostgreSQL defaults for dev services, API route constants, signing secrets |
 | Server runtime | `config/server/<application-code>.<deployment-profile>.<environment>.toml.example`, `/etc/sdkwork/<application-code>/<process>.toml` | bind address, PostgreSQL, Redis, reverse proxy trust, service paths | browser-only `VITE_*`, Tauri packaging metadata |
 | Container runtime | `config/container/<application-code>.<deployment-profile>.<environment>.toml.example`, mounted `/etc/sdkwork/...` | container service config, mounted secrets, external services, volumes | image-baked secrets or mutable database state |

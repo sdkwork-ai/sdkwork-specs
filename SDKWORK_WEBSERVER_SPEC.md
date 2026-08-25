@@ -985,7 +985,10 @@ runtime TOML owns Adaptive Web:
 | `*_by_environment` | Maps keyed by lifecycle environment |
 | `tablet_surface` | `pc` (default) or `h5` |
 
-Checkout: `apps/sdkwork-webserver-{pc,h5}/dist/<envAlias>/`.
+Checkout: `apps/sdkwork-webserver-{pc,h5}/dist/<profile>/<envAlias>/`
+(`<profile>` is `standalone` or `cloud`; `standalone` is the default profile
+and the default serving mode — same-origin `/` SDK base URLs. Cloud profile
+SPA roots are CDN-publishable artifacts, not gateway-served roots).
 Installed: `<share>/web/{pc,h5,static}/` (`RUNTIME_DIRECTORY_SPEC.md` §4.1.1).
 Env: `SDKWORK_WEBSERVER_{PC,H5,STATIC_FALLBACK}_STATIC_ROOT`,
 `SDKWORK_WEBSERVER_TABLET_SURFACE`.
@@ -1069,15 +1072,24 @@ Operator scripts: `deployments/docker/scripts/setup-host-space-clone.sh`, `entry
 ### 17.1 Module Browser Build Commands
 
 Each sibling module with Adaptive Web PC/H5 surfaces `MUST` expose the
-section 4.2 command family at its repository root. Docker operators build one
-module at a time against the mounted checkout:
+section 4.2 command family at its repository root — for both `standalone`
+(default, same-origin) and `cloud` (unified `api-*` edge) profiles. Docker
+operators build one module at a time against the mounted checkout:
 
 | Surface | Host command | Output |
 | --- | --- | --- |
-| PC dev | `pnpm --dir sdkwork-space/sdkwork-im build:pc:dev` | `apps/sdkwork-im-pc/dist/dev/` |
-| PC prod | `pnpm --dir sdkwork-space/sdkwork-im build:pc:prod` | `apps/sdkwork-im-pc/dist/prod/` |
-| H5 dev | `pnpm --dir sdkwork-space/sdkwork-im build:h5:dev` | `apps/sdkwork-im-h5/dist/dev/` |
-| H5 prod | `pnpm --dir sdkwork-space/sdkwork-im build:h5:prod` | `apps/sdkwork-im-h5/dist/prod/` |
+| PC dev standalone | `pnpm --dir sdkwork-space/sdkwork-im build:pc:dev` | `apps/sdkwork-im-pc/dist/standalone/dev/` |
+| PC prod standalone | `pnpm --dir sdkwork-space/sdkwork-im build:pc:prod` | `apps/sdkwork-im-pc/dist/standalone/prod/` |
+| PC dev cloud | `pnpm --dir sdkwork-space/sdkwork-im build:pc:dev:cloud` | `apps/sdkwork-im-pc/dist/cloud/dev/` |
+| PC prod cloud | `pnpm --dir sdkwork-space/sdkwork-im build:pc:prod:cloud` | `apps/sdkwork-im-pc/dist/cloud/prod/` |
+| H5 dev standalone | `pnpm --dir sdkwork-space/sdkwork-im build:h5:dev` | `apps/sdkwork-im-h5/dist/standalone/dev/` |
+| H5 prod standalone | `pnpm --dir sdkwork-space/sdkwork-im build:h5:prod` | `apps/sdkwork-im-h5/dist/standalone/prod/` |
+| H5 prod cloud | `pnpm --dir sdkwork-space/sdkwork-im build:h5:prod:cloud` | `apps/sdkwork-im-h5/dist/cloud/prod/` |
+
+The two profile subtrees coexist: the gateway serves the active
+`standalone` subtree in the default same-origin mode, while the `cloud`
+bundles are the CDN-publishable artifacts that target the unified
+`api-dev.<domain>`/`api.<domain>` edge (`ENVIRONMENT_SPEC.md` §5.1.0.1).
 
 From `sdkwork-webserver` (host or container toolchain):
 
@@ -1099,8 +1111,10 @@ build-browser --module sdkwork-im --architecture all --environment dev --reload-
 reload-module-static
 ```
 
-The entrypoint resolves static roots from `apps/*-{pc,h5}/dist/<envAlias>/`
-for the active lifecycle environment (`development`→`dev`, `production`→`prod`).
+The entrypoint resolves static roots from
+`apps/*-{pc,h5}/dist/<profile>/<envAlias>/` for the active lifecycle
+environment and deployment profile (`development`→`dev`, `production`→`prod`;
+`standalone` is the default profile).
 
 Workspace compliance sweep:
 
@@ -1119,6 +1133,44 @@ Each imported module `MUST` ship layout v3 under `deployments/webserver/`:
 5. `app-roots.example.toml` — optional Adaptive Web dist catalog.
 
 Minimal copy-paste templates: `examples/webserver/modules/README.md`.
+
+### 17.3 Import Set Selection (`imports.d` Dual Configuration)
+
+The webserver startup import plane
+(`/etc/sdkwork/webserver/imports.d/`, loaded through
+`[webserver] include = ["imports.d/import.conf"]`) ships **two** import
+configuration sets so the startup mode can switch freely without touching
+the module checkouts:
+
+| File | Role |
+| --- | --- |
+| `import.conf.standalone` | Aggregator including each sibling module's `nginx.standalone.<environment>.conf` sidecar |
+| `import.conf.cloud` | Aggregator including each sibling module's `nginx.cloud.<environment>.conf` sidecar |
+| `import.conf` | **Active** aggregator — byte-for-byte copy of the selected set |
+| `layout-imports.standalone.toml` / `layout-imports.cloud.toml` | Per-profile layout-v3 TOML import lists (modules without nginx sidecars) |
+| `layout-imports.toml` | Active layout TOML — copy of the selected set |
+
+Rules:
+
+- Both sets are materialized on every entrypoint run; they are never
+  partially regenerated. Only the active `import.conf` / `layout-imports.toml`
+  copies are replaced on switch.
+- The **default active set is `cloud`** (`SDKWORK_WEBSERVER_IMPORT_PROFILE`
+  defaults to `cloud`). This is independent of the application build default
+  (`standalone`): the build/packaging default governs how the webserver's own
+  PC/H5 SPAs are produced and served, while the import default governs which
+  sibling-module edge set the gateway data plane starts with.
+- Operators switch the active set with
+  `node scripts/webserver-import-profile.mjs <standalone|cloud>` (or the
+  `pnpm import:switch:<profile>` alias), which atomically re-copies the two
+  active files and reloads the gateway data plane.
+- The active set `MUST` be consistent: both `import.conf` and
+  `layout-imports.toml` must come from the same profile; mixing sets is a
+  startup error.
+- Standalone and cloud sidecars always coexist under every module's
+  `deployments/webserver/` (`nginx.standalone.<env>.conf` +
+  `nginx.cloud.<env>.conf`), so switching never requires rebuilding module
+  configs.
 
 ## 16. Acceptance Checklist
 

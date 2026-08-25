@@ -342,10 +342,11 @@ Grammar:
 build:<clientArchitecture>:<environment>[:<deploymentProfile>]
 ```
 
-Repository root examples:
+Repository root examples (every environment exists for both profiles; the
+profile segment is omitted for the default `standalone` profile):
 
 ```text
-pnpm build:pc:dev
+pnpm build:pc:dev            # standalone.development (default profile)
 pnpm build:pc:test
 pnpm build:pc:staging
 pnpm build:pc:prod
@@ -353,8 +354,14 @@ pnpm build:h5:dev
 pnpm build:h5:test
 pnpm build:h5:staging
 pnpm build:h5:prod
+pnpm build:pc:dev:cloud      # cloud.development (unified api-dev.<domain> edge)
+pnpm build:pc:test:cloud
+pnpm build:pc:staging:cloud
 pnpm build:pc:prod:cloud
-pnpm build:h5:dev:standalone
+pnpm build:h5:dev:cloud
+pnpm build:h5:test:cloud
+pnpm build:h5:staging:cloud
+pnpm build:h5:prod:cloud
 ```
 
 App surface root examples (same lifecycle environments, no architecture axis):
@@ -364,6 +371,9 @@ pnpm build:dev
 pnpm build:test
 pnpm build:staging
 pnpm build:prod
+pnpm build:dev:cloud
+pnpm build:test:cloud
+pnpm build:staging:cloud
 pnpm build:prod:cloud
 ```
 
@@ -375,29 +385,47 @@ Rules:
   `dev`, `test`, `staging`, or `prod`. They normalize to
   `development`, `test`, `staging`, and `production` before Vite mode and
   runtime config selection.
-- `<deploymentProfile>` `MAY` be omitted; omitted means `standalone`.
-  Explicit values are `standalone` or `cloud`.
-- Vite `build.outDir` `MUST` resolve to `dist/<environmentAlias>/` where
-  `<environmentAlias>` is `dev`, `test`, `staging`, or `prod`. Bare `dist/`
-  is forbidden (`FRONTEND_CODE_SPEC.md` §7,
+- `<deploymentProfile>` `MAY` be omitted; omitted means `standalone`
+  (the default profile). Explicit values are `standalone` or `cloud`.
+- Vite mode `MUST` be `<deploymentProfile>.<environment>` (for example
+  `standalone.production` or `cloud.production`).
+- Vite `build.outDir` `MUST` resolve to `dist/<deploymentProfile>/<environmentAlias>/`
+  where `<environmentAlias>` is `dev`, `test`, `staging`, or `prod` and
+  `<deploymentProfile>` is `standalone` or `cloud` — for example
+  `dist/standalone/dev/`, `dist/cloud/prod/`. The profile subtree keeps
+  `standalone` and `cloud` builds for the same environment coexisting without
+  overwriting each other. Bare `dist/` and environment-only `dist/<env>/`
+  layouts are forbidden (`FRONTEND_CODE_SPEC.md` §7,
   `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §2.1).
 - Repository roots that own a PC or H5 browser app surface `MUST` expose the
   matching `build:pc:*` and/or `build:h5:*` commands for every lifecycle
-  environment the product ships.
+  environment **and** for both `standalone` (omitted) and `cloud` (explicit
+  `:cloud` suffix) profiles.
 - App surface roots `MUST` expose `build:dev`, `build:test`, `build:staging`,
-  and `build:prod` when the surface is a Vite browser client.
+  `build:prod` (standalone) and `build:<env>:cloud` for every lifecycle
+  environment when the surface is a Vite browser client.
 - Root and app-surface build commands `MUST` delegate to the shared canonical
   runner `node <sdkwork-specs>/tools/build-browser-client.mjs` or a thin
   repository wrapper that forwards equivalent flags. They `MUST NOT` invent
   local Vite mode or output-directory conventions.
 - `build:pc:*` and `build:h5:*` are build-only commands. They `MUST NOT`
   start dev servers, databases, or gateways.
+- Runtime environment sources follow `runtime-env.<deploymentProfile>.<environment>.json`
+  under the app `etc/browser/`; each build materializes exactly one selected
+  source into the public deploy-time document before Vite runs
+  (`ENVIRONMENT_SPEC.md` §5.1.0.1 for the standalone same-origin and unified
+  `api-*` cloud edge value rules).
+- Packaging: the `standalone` server package bundles its own PC/H5 production
+  builds; `cloud` server packages do not carry browser assets — the cloud
+  PC/H5 bundles (`dist/cloud/prod`) are the CDN-publishable artifacts produced
+  by the same command family.
 - Container and Docker workflows `MAY` invoke the same runner against a cloned
   module checkout under `SDKWORK_SPACE_ROOT` so each sibling application can
   be built independently without rebuilding the whole workspace.
-- Legacy profile-only browser build names such as bare `build:standalone` remain
-  migration input at app surfaces until replaced; new automation `MUST` use the
-  environment-scoped family above.
+- Legacy profile-only browser build names such as bare `build:standalone`
+  remain migration aliases at app surfaces; when present they `MUST` delegate
+  to the canonical runner for `--environment prod --deployment-profile
+  <profile>`. New automation `MUST` use the environment-scoped family above.
 
 Validation:
 

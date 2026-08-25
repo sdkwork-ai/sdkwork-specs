@@ -59,7 +59,23 @@ test('buildBrowserClient dry-run resolves dist alias', () => {
     environment: 'dev',
     repositoryRoot: root,
   });
-  assert.equal(plan.outDir, 'dist/dev');
+  assert.equal(plan.outDir, 'dist/standalone/dev');
+  assert.equal(plan.deploymentProfile, 'standalone');
+  assert.equal(plan.viteMode, 'standalone.development');
+});
+
+test('buildBrowserClient cloud dry-run resolves profile dist alias', () => {
+  const root = fixtureRoot();
+  const plan = buildBrowserClient({
+    architecture: 'pc',
+    deploymentProfile: 'cloud',
+    dryRun: true,
+    environment: 'prod',
+    repositoryRoot: root,
+  });
+  assert.equal(plan.outDir, 'dist/cloud/prod');
+  assert.equal(plan.deploymentProfile, 'cloud');
+  assert.equal(plan.viteMode, 'cloud.production');
 });
 
 test('checkBrowserBuildScripts reports missing root scripts', () => {

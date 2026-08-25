@@ -95,13 +95,20 @@ Rules:
 Authority: `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §2.1.
 
 ```text
-apps/sdkwork-<code>-pc/dist/{dev,test,staging,prod}/
-apps/sdkwork-<code>-h5/dist/{dev,test,staging,prod}/
+apps/sdkwork-<code>-pc/dist/{standalone,cloud}/{dev,test,staging,prod}/
+apps/sdkwork-<code>-h5/dist/{standalone,cloud}/{dev,test,staging,prod}/
 ```
 
-- `build.outDir` = `dist/<envAlias>` (`development`→`dev` … `production`→`prod`).
-- PC and H5 `MUST NOT` share an `outDir`; bare `dist/` is forbidden.
-- Repository roots `MUST` expose `build:pc:<env>` / `build:h5:<env>`; app surfaces `MUST` expose `build:<env>` per `PNPM_SCRIPT_SPEC.md` §4.2.
+- `build.outDir` = `dist/<deploymentProfile>/<envAlias>` — for example
+  `dist/standalone/prod`, `dist/cloud/dev`
+  (`development`→`dev` … `production`→`prod`; `standalone` is the default
+  profile). The profile subtree keeps standalone (same-origin) and cloud
+  (unified `api-*` edge) builds coexisting without overwriting each other.
+- PC and H5 `MUST NOT` share an `outDir`; bare `dist/` and environment-only
+  `dist/<envAlias>/` layouts are forbidden.
+- Repository roots `MUST` expose `build:pc:<env>` / `build:h5:<env>` plus the
+  `:cloud` variants; app surfaces `MUST` expose `build:<env>` and
+  `build:<env>:cloud` per `PNPM_SCRIPT_SPEC.md` §4.2.
 - Check: `node tools/check-browser-dist-layout.mjs --root <module>` and `node tools/check-browser-build-scripts.mjs --root <module>`.
 
 ## 8. Verification

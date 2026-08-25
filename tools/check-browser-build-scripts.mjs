@@ -20,6 +20,7 @@ import {
 } from './build-browser-client.mjs';
 
 const BUILD_RUNNER = 'build-browser-client.mjs';
+const DEPLOYMENT_PROFILES = Object.freeze(['standalone', 'cloud']);
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -47,17 +48,21 @@ export function checkBrowserBuildScripts(root) {
 
   for (const architecture of architectures) {
     for (const environmentAlias of STANDARD_ENVIRONMENT_ALIASES) {
-      const scriptName = standardRootBuildScript(architecture, environmentAlias);
-      const expected = canonicalRootBuildCommand(root, architecture, environmentAlias);
-      if (!scripts[scriptName]) {
-        issues.push(`missing required root script "${scriptName}"`);
-        continue;
-      }
-      const commandText = String(scripts[scriptName]);
-      if (!usesCanonicalRunner(commandText)) {
-        issues.push(`${scriptName}: must delegate to ${BUILD_RUNNER}`);
-      } else if (!commandText.includes(`--architecture ${architecture}`) || !commandText.includes(`--environment ${environmentAlias}`)) {
-        issues.push(`${scriptName}: canonical runner flags must include --architecture ${architecture} --environment ${environmentAlias}`);
+      for (const deploymentProfile of DEPLOYMENT_PROFILES) {
+        const scriptName = standardRootBuildScript(architecture, environmentAlias, deploymentProfile);
+        const expected = canonicalRootBuildCommand(root, architecture, environmentAlias, deploymentProfile);
+        if (!scripts[scriptName]) {
+          issues.push(`missing required root script "${scriptName}" (${deploymentProfile} profile)`);
+          continue;
+        }
+        const commandText = String(scripts[scriptName]);
+        if (!usesCanonicalRunner(commandText)) {
+          issues.push(`${scriptName}: must delegate to ${BUILD_RUNNER}`);
+        } else if (!commandText.includes(`--architecture ${architecture}`) || !commandText.includes(`--environment ${environmentAlias}`)) {
+          issues.push(`${scriptName}: canonical runner flags must include --architecture ${architecture} --environment ${environmentAlias}`);
+        } else if (deploymentProfile !== 'standalone' && !commandText.includes(`--deployment-profile ${deploymentProfile}`)) {
+          issues.push(`${scriptName}: canonical runner flags must include --deployment-profile ${deploymentProfile}`);
+        }
       }
     }
   }
@@ -67,17 +72,23 @@ export function checkBrowserBuildScripts(root) {
     const appManifest = readJson(appPackagePath);
     const appScripts = appManifest.scripts ?? {};
     for (const environmentAlias of STANDARD_ENVIRONMENT_ALIASES) {
-      const scriptName = `build:${environmentAlias}`;
-      const expected = canonicalAppSurfaceBuildCommand(app.root, environmentAlias);
-      if (!appScripts[scriptName]) {
-        issues.push(`${app.relative}: missing required app-surface script "${scriptName}"`);
-        continue;
-      }
-      const commandText = String(appScripts[scriptName]);
-      if (!usesCanonicalRunner(commandText)) {
-        issues.push(`${app.relative}#${scriptName}: must delegate to ${BUILD_RUNNER}`);
-      } else if (!commandText.includes(`--environment ${environmentAlias}`)) {
-        issues.push(`${app.relative}#${scriptName}: canonical runner must include --environment ${environmentAlias}`);
+      for (const deploymentProfile of DEPLOYMENT_PROFILES) {
+        const scriptName = deploymentProfile === 'standalone'
+          ? `build:${environmentAlias}`
+          : `build:${environmentAlias}:${deploymentProfile}`;
+        const expected = canonicalAppSurfaceBuildCommand(app.root, environmentAlias, deploymentProfile);
+        if (!appScripts[scriptName]) {
+          issues.push(`${app.relative}: missing required app-surface script "${scriptName}" (${deploymentProfile} profile)`);
+          continue;
+        }
+        const commandText = String(appScripts[scriptName]);
+        if (!usesCanonicalRunner(commandText)) {
+          issues.push(`${app.relative}#${scriptName}: must delegate to ${BUILD_RUNNER}`);
+        } else if (!commandText.includes(`--environment ${environmentAlias}`)) {
+          issues.push(`${app.relative}#${scriptName}: canonical runner must include --environment ${environmentAlias}`);
+        } else if (deploymentProfile !== 'standalone' && !commandText.includes(`--deployment-profile ${deploymentProfile}`)) {
+          issues.push(`${app.relative}#${scriptName}: canonical runner must include --deployment-profile ${deploymentProfile}`);
+        }
       }
     }
   }

@@ -28,6 +28,13 @@ const VITE_OUTDIR_HELPER = `function resolveViteEnvironment(mode, processEnv = p
       : 'production');
   return environment;
 }
+
+function resolveViteDeploymentProfile(mode, processEnv = process.env) {
+  const profileMatch = /^(standalone|cloud)\\./u.exec(mode ?? '');
+  return profileMatch?.[1]
+    ?? processEnv.SDKWORK_DEPLOYMENT_PROFILE
+    ?? 'standalone';
+}
 `;
 
 function readJson(filePath) {
@@ -69,7 +76,7 @@ function alignViteOutDir(appRoot, dryRun) {
     }
     source = source.replace(
       /outDir\s*:\s*['"`]dist['"`]/u,
-      'outDir: resolveBrowserDistOutDir(resolveViteEnvironment(mode, env))',
+      'outDir: resolveBrowserDistOutDir(resolveViteEnvironment(mode, env), resolveViteDeploymentProfile(mode, env))',
     );
     if (!dryRun) {
       fs.writeFileSync(viteConfig, source, 'utf8');
@@ -115,12 +122,14 @@ export function alignBrowserBuildScripts(root, options = {}) {
   const architectures = [...new Set(apps.map((app) => app.architecture))];
   for (const architecture of architectures) {
     for (const environmentAlias of STANDARD_ENVIRONMENT_ALIASES) {
-      const scriptName = standardRootBuildScript(architecture, environmentAlias);
-      const command = canonicalRootBuildCommand(root, architecture, environmentAlias);
-      if (manifest.scripts[scriptName] !== command) {
-        manifest.scripts[scriptName] = command;
-        rootChanged = true;
-        changes.push(`${scriptName}`);
+      for (const deploymentProfile of ['standalone', 'cloud']) {
+        const scriptName = standardRootBuildScript(architecture, environmentAlias, deploymentProfile);
+        const command = canonicalRootBuildCommand(root, architecture, environmentAlias, deploymentProfile);
+        if (manifest.scripts[scriptName] !== command) {
+          manifest.scripts[scriptName] = command;
+          rootChanged = true;
+          changes.push(`${scriptName}`);
+        }
       }
     }
   }
@@ -140,12 +149,16 @@ export function alignBrowserBuildScripts(root, options = {}) {
     appManifest.scripts ??= {};
     let appChanged = false;
     for (const environmentAlias of STANDARD_ENVIRONMENT_ALIASES) {
-      const scriptName = `build:${environmentAlias}`;
-      const command = canonicalAppSurfaceBuildCommand(app.root, environmentAlias);
-      if (appManifest.scripts[scriptName] !== command) {
-        appManifest.scripts[scriptName] = command;
-        appChanged = true;
-        changes.push(`${app.relative}#${scriptName}`);
+      for (const deploymentProfile of ['standalone', 'cloud']) {
+        const scriptName = deploymentProfile === 'standalone'
+          ? `build:${environmentAlias}`
+          : `build:${environmentAlias}:${deploymentProfile}`;
+        const command = canonicalAppSurfaceBuildCommand(app.root, environmentAlias, deploymentProfile);
+        if (appManifest.scripts[scriptName] !== command) {
+          appManifest.scripts[scriptName] = command;
+          appChanged = true;
+          changes.push(`${app.relative}#${scriptName}`);
+        }
       }
     }
     if (alignViteOutDir(app.root, dryRun)) {

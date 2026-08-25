@@ -21,11 +21,11 @@ test('passes when outDir uses resolveBrowserDistOutDir', () => {
   const root = fixtureRoot();
   fs.writeFileSync(
     path.join(root, 'apps', 'sdkwork-demo-pc', 'vite.config.ts'),
-    'export default { build: { outDir: resolveBrowserDistOutDir(environment) } };\n',
+    'export default { build: { outDir: resolveBrowserDistOutDir(environment, deploymentProfile) } };\n',
   );
   fs.writeFileSync(
     path.join(root, 'apps', 'sdkwork-demo-h5', 'vite.config.ts'),
-    "export default { build: { outDir: 'dist/prod' } };\n",
+    "export default { build: { outDir: 'dist/cloud/prod' } };\n",
   );
   assert.deepEqual(checkBrowserDistLayout(root), []);
 });
@@ -38,4 +38,14 @@ test('fails on bare dist outDir', () => {
   );
   const issues = checkBrowserDistLayout(root);
   assert.ok(issues.some((issue) => /bare dist\//u.test(issue)));
+});
+
+test('fails on environment-only dist outDir literal', () => {
+  const root = fixtureRoot();
+  fs.writeFileSync(
+    path.join(root, 'apps', 'sdkwork-demo-pc', 'vite.config.ts'),
+    "export default { build: { outDir: 'dist/prod' } };\n",
+  );
+  const issues = checkBrowserDistLayout(root);
+  assert.ok(issues.some((issue) => /outDir/u.test(issue)));
 });
