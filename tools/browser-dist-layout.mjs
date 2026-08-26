@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 
 /**
  * Canonical browser PC/H5 Vite build output layout helpers.

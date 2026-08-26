@@ -1153,19 +1153,45 @@ Minimal copy-paste templates: `examples/webserver/modules/README.md`.
 
 ### 17.3 Import Set Selection (`imports.d` Dual Configuration)
 
-The webserver startup import plane
-(`/etc/sdkwork/webserver/imports.d/`, loaded through
-`[webserver] include = ["imports.d/import.conf"]`) ships **two** import
-configuration sets so the startup mode can switch freely without touching
-the module checkouts:
+The webserver startup import plane is the `imports.d` directory structure
+(`/etc/sdkwork/webserver/imports.d/`), loaded through
+`[webserver] include = ["imports.d/import.conf"]`. One aggregator file
+(`import.conf`) imports **every** enabled sibling module through nginx
+`include` directives that point **directly at each module's own checkout
+sidecar** — `/opt/deploy/sdkwork-space/<module>/deployments/webserver/
+nginx.<profile>.<environment>.conf`. High cohesion: the module's
+`deployments/webserver/` tree (sidecar + snippets) is the single source of
+truth; the webserver never copies module configs under `/etc`. The plane ships
+**two** import configuration sets so the startup mode can switch freely:
+
+```text
+/etc/sdkwork/webserver/imports.d/
+  import.conf                 # Active aggregator — byte-for-byte copy of the selected set
+  import.conf.standalone      # Aggregator including each module's checkout nginx.standalone.<env>.conf
+  import.conf.cloud           # Aggregator including each module's checkout nginx.cloud.<env>.conf
+  layout-imports.toml         # Active layout TOML — copy of the selected set
+  layout-imports.standalone.toml / layout-imports.cloud.toml
+
+/opt/deploy/sdkwork-space/<module>/deployments/webserver/   # module-owned config (source of truth)
+  nginx.standalone.<environment>.conf
+  nginx.cloud.<environment>.conf
+  snippets/...                # referenced by the sidecar through relative include
+```
 
 | File | Role |
 | --- | --- |
-| `import.conf.standalone` | Aggregator including each sibling module's `nginx.standalone.<environment>.conf` sidecar |
-| `import.conf.cloud` | Aggregator including each sibling module's `nginx.cloud.<environment>.conf` sidecar |
-| `import.conf` | **Active** aggregator — byte-for-byte copy of the selected set |
+| `import.conf.standalone` | Aggregator including each sibling module's checkout `nginx.standalone.<environment>.conf` sidecar |
+| `import.conf.cloud` | Aggregator including each sibling module's checkout `nginx.cloud.<environment>.conf` sidecar |
+| `import.conf` | **Active** aggregator — byte-for-byte copy of the selected set; one file imports all modules |
 | `layout-imports.standalone.toml` / `layout-imports.cloud.toml` | Per-profile layout-v3 TOML import lists (modules without nginx sidecars) |
 | `layout-imports.toml` | Active layout TOML — copy of the selected set |
+
+The container mounts the space checkout at `/opt/deploy/sdkwork-space`
+(`SDKWORK_SPACE_HOST_PATH`), so included sidecars and their relative
+`snippets/` includes resolve without any copy or rewrite step. Module sidecars
+declare container-resolvable upstreams (`sdkwork-api-cloud-gateway:8080`) and
+non-production hosts proxy through `gateway`; the webserver performs no
+sed-based configuration rewriting of module configs.
 
 Rules:
 
@@ -1180,7 +1206,10 @@ Rules:
 - Operators switch the active set with
   `node scripts/webserver-import-profile.mjs <standalone|cloud>` (or the
   `pnpm import:switch:<profile>` alias), which atomically re-copies the two
-  active files and reloads the gateway data plane.
+  active files and prints the restart instruction; the gateway data plane
+  (`serve-imports`) must be restarted afterwards to load the new import set.
+  The entrypoint reads `SDKWORK_WEBSERVER_IMPORT_PROFILE` (default `cloud`)
+  for the initial activation at container start.
 - The active set `MUST` be consistent: both `import.conf` and
   `layout-imports.toml` must come from the same profile; mixing sets is a
   startup error.
