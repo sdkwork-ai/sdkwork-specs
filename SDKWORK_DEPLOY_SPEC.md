@@ -224,21 +224,21 @@ driver. Schema and executable validation enforce these combinations.
 
 ## 7. expose
 
-Each item declares one public domain and one Nginx site file.
+Each item declares one public domain and one nginx-compatible site artifact
+that `sdkwork-webserver` loads (not a live stock-nginx install path).
 
-### 7.1 Nginx site file
+### 7.1 Site artifact path
 
-For `domain: im.sdkwork.com`:
-
-```text
-/etc/nginx/sites-enabled/sdkwork/im.sdkwork.com.conf
-```
-
-Staging default:
+For `domain: im.sdkwork.com`, staging / plan output:
 
 ```text
 target/nginx/sites-enabled/sdkwork/im.sdkwork.com.conf
 ```
+
+Live authority is module `deployments/webserver/` plus the webserver import
+plane (`SDKWORK_WEBSERVER_SPEC.md` §0.1, `NGINX_SPEC.md` §0). The retired live
+path `/etc/nginx/sites-enabled/sdkwork/{domain}.conf` `MUST NOT` be written as
+the public edge.
 
 TLS default:
 
@@ -246,7 +246,6 @@ TLS default:
 /etc/sdkwork/certs/letsencrypt/{certName}/fullchain.pem
 /etc/sdkwork/certs/letsencrypt/{certName}/privkey.pem
 ```
-
 ### 7.2 Fields
 
 ```yaml
@@ -313,7 +312,7 @@ There is NO `routes` section.
 
 Modules with public `web` / `web+api` domains `MUST` ship PC+H5 roots and
 install them under `<share>/web/{pc,h5}/` with source builds in
-`dist/{dev,test,staging,prod}/` (`APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §2.1,
+`dist/<deploymentProfile>/{dev,test,staging,prod}/` (`APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §2.1,
 `RUNTIME_DIRECTORY_SPEC.md` §4.1.1).
 
 **Exception — `sdkwork-webserver`:** `expose.mode: api` → edge nginx proxy-only;
@@ -386,9 +385,10 @@ Plan-time folding (`collapse-pc` / `collapse-h5` / `static-fallback`) applies
 when packaging or install inventory is incomplete. Request-time selection
 still prefers H5 on mobile and PC on desktop whenever both surfaces exist.
 
-### 8.1 Stock nginx adaptive emission (required)
+### 8.1 Adaptive sidecar emission (required)
 
-Adaptive Web on stock nginx `MUST` be emitted as:
+Adaptive Web on nginx-compatible sidecars (and the webserver Adaptive Web
+plane that executes them) `MUST` be emitted as:
 
 1. `http`-level `map` blocks that set `$sdkwork_<appId>_surface_final` to
    `pc` or `h5` (Client-Hint / UA detection order above).
@@ -399,12 +399,12 @@ Adaptive Web on stock nginx `MUST` be emitted as:
    own a fixed `root` under `/usr/share/sdkwork/<runtimeCode>/web/{pc,h5,static}/`
    plus SPA or static `try_files`.
 
-Forbidden on stock nginx:
+Forbidden:
 
 - Variable `include` paths such as
   `include …/web.$sdkwork_<appId>_surface_final.conf;`
   (nginx resolves `include` at configuration load time and does not expand
-  variables in include paths).
+  variables in include paths; the Rust plane likewise rejects this pattern).
 - A single `location /` with variable `root` plus SPA `try_files` that invents
   a missing PC/H5 shell.
 
@@ -415,11 +415,12 @@ module `deployments/webserver/` static location) instead of `@pc` / `@h5`.
 
 Deployctl / `tools/deploy/nginx-render.mjs` and module
 `deployments/webserver/` renders `MUST` follow this emission contract so
-generated site files and `nginx.<profile>.conf` sidecars load on stock nginx.
+generated staging site files and `nginx.<profile>.conf` sidecars load on
+**`sdkwork-webserver`**. Stock OpenResty/nginx is not the public edge
+(`NGINX_SPEC.md` §0).
 
 Surfaces referenced by `expose.web` are built and deployed automatically and
 `MUST NOT` appear in `packages`.
-
 ## 9. API and WebSocket Inference
 
 API location prefixes are inferred in this order:
@@ -517,7 +518,7 @@ overrides:
     cdn:
       enabled: false
   nginx:
-    siteFile: /etc/nginx/sites-enabled/sdkwork/im.sdkwork.com.conf
+    siteFile: target/nginx/sites-enabled/sdkwork/im.sdkwork.com.conf
     clientMaxBodySize: 1100m
     snippets: []
   packages:
@@ -588,7 +589,8 @@ value because it must name a concrete stored target.
 
 ### 12.1 Deploy Server orchestration
 
-Deploy API Server publishes nginx through site `runtimeConfig.sdkworkDeploy` bindings:
+Deploy API Server publishes through site `runtimeConfig.sdkworkDeploy` bindings
+consumed by `sdkwork-webserver` (staging path; not a live stock-nginx install):
 
 ```json
 {
@@ -596,7 +598,7 @@ Deploy API Server publishes nginx through site `runtimeConfig.sdkworkDeploy` bin
     "appRoot": "/usr/share/sdkwork-space/sdkwork-im",
     "domain": "im.sdkwork.com",
     "profileId": "cloud.production",
-    "siteFile": "/etc/nginx/sites-enabled/sdkwork/im.sdkwork.com.conf"
+    "siteFile": "target/nginx/sites-enabled/sdkwork/im.sdkwork.com.conf"
   }
 }
 ```
@@ -629,19 +631,19 @@ plan → render → nginx -t → deploy → reload → health-check → rollback
 | V6 | `install.layout` is `source-tree` or `binary-package` |
 | V7 | binary-package web roots MUST NOT use `/usr/share/sdkwork-space/` |
 | V8 | source-tree web roots MUST NOT use `/usr/share/sdkwork/{runtimeCode}/web/` |
-| V9 | site file equals `/etc/nginx/sites-enabled/sdkwork/{domain}.conf` |
+| V9 | site staging file equals `target/nginx/sites-enabled/sdkwork/{domain}.conf` (live edge is `sdkwork-webserver`, not `/etc/nginx`) |
 | V10 | packages MUST NOT list `pc` or `h5` |
 | V11 | production tls MUST NOT be `off` without `overrides.allowInsecureTls` |
 | V12 | no plaintext secrets |
 | V13 | apiSurfaces/OpenAPI prefix conflict fails validation |
 | V14 | per-domain API locations MUST match `cloudPublicHosts` surface filter |
-| V15 | nginx render MUST resolve upstreams from profile env or topology defaults; no placeholder ports |
+| V15 | nginx-compatible render MUST resolve upstreams from profile env or topology defaults; no placeholder ports |
 | V16 | deploy manifest MUST validate against its declared v1/v2 schema; new manifests use v2 |
 | V17 | profile ids use exactly `<standalone|cloud>.<test|staging|production>` and match structured deployment fields |
 | V18 | v2 profiles declare typed delivery, driver, management, tenancy, isolation, exposure, rollout, and availability dimensions |
 | V19 | production source-tree installation fails without an approved dated governance exception |
 | V20 | side-effecting operations require explicit profile/environment/artifact digest/evidence/rollback selection and never consume `defaultProfile` |
-| V22 | adaptive nginx emission MUST use named-location dispatch (§8.1); variable `include` paths and variable-root SPA fallback are forbidden |
+| V22 | adaptive sidecar emission MUST use named-location dispatch (§8.1); variable `include` paths and variable-root SPA fallback are forbidden |
 
 ## 14. Examples
 
@@ -651,10 +653,10 @@ See `examples/deploy/`.
 
 - [x] `deployments/deploy.yaml` exists for deployable applications.
 - [x] `deploy:validate` passes in `pnpm check`.
-- [x] `deployctl plan` prints appId, runtimeCode, layout, nginx site file, web roots, upstreams.
-- [x] generated nginx uses `/etc/nginx/sites-enabled/sdkwork/{domain}.conf`.
-- [x] adaptive web uses stock-nginx named-location dispatch (§8.1), not
-      variable `include` and not variable-root SPA fallback.
+- [x] `deployctl plan` prints appId, runtimeCode, layout, site staging path, web roots, upstreams.
+- [x] generated staging nginx artifacts use `target/nginx/sites-enabled/sdkwork/{domain}.conf`; live edge is `sdkwork-webserver` (`NGINX_SPEC.md` §0).
+- [x] adaptive web uses named-location dispatch (§8.1), not variable `include`
+      and not variable-root SPA fallback.
 - [x] source-tree and binary-package roots match this spec.
 - [x] multi-domain API filtering follows `cloudPublicHosts`.
 - [x] nginx validate/reload hooks are security-gated for production operations.

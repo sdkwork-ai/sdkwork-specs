@@ -505,11 +505,13 @@ The Linux service package creates `/etc/sdkwork/router/cloudrouter.toml`,
 enables `cloudrouter.service` on systemd hosts. Operators configure PostgreSQL
 in the TOML or protected secret file before starting the service.
 
-For nginx publication, use `NGINX_SPEC.md`. The canonical site path is
-`/etc/nginx/sites-enabled/sdkwork/<domain>.conf`, where `<domain>` is the full
-public hostname such as `api.sdkwork.com` or `www.sdkwork.com`. The default
-Cloud Router upstream is `http://127.0.0.1:3900`, and certificate material uses
-`/etc/sdkwork/certs/letsencrypt/<cert-name>/fullchain.pem` plus
+For public-domain publication, use **`sdkwork-webserver`**
+(`SDKWORK_WEBSERVER_SPEC.md` §0.1, `NGINX_SPEC.md` §0). Stock OpenResty/nginx
+and `/etc/nginx/sites-enabled/...` are **not** the live public edge.
+Module configs live under `deployments/webserver/`; the webserver import plane
+reverse-proxies platform API hosts to the gateway (default sibling /
+host-mapped probe `http://127.0.0.1:3910` for development). Certificate
+material uses `/etc/sdkwork/certs/letsencrypt/<cert-name>/fullchain.pem` plus
 `/etc/sdkwork/certs/letsencrypt/<cert-name>/privkey.pem`.
 
 ## 6. Acceptance Checklist

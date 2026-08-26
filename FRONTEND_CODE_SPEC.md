@@ -131,4 +131,4 @@ Rules:
 - [ ] `check-application-layering.mjs` passes when package services, UI, or SDK injection code is touched.
 - [ ] Text, errors, and permissions are surfaced intentionally.
 - [ ] Package family naming and SDK surface checks pass.
-- [ ] PC/H5 `outDir` uses `dist/{dev,test,staging,prod}` (`check-browser-dist-layout.mjs`).
+- [ ] PC/H5 `outDir` uses `dist/{standalone,cloud}/{dev,test,staging,prod}` (`check-browser-dist-layout.mjs`).

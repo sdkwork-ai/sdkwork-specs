@@ -223,10 +223,12 @@ Resolution rules:
   effective host set for the profile environment; every additional registered
   host `SHOULD` be bound as `expose.aliases` so the site serves the full set
   (`SDKWORK_DEPLOY_SPEC.md` section 7.2).
-- Each host in the effective set maps to one nginx site file
-  (`/etc/nginx/sites-enabled/sdkwork/<host>.conf`) when it appears as an
-  `expose` item; hosts bound only as `aliases` share the primary site file and
-  appear as extra `server_name` values.
+- Each host in the effective set maps to one nginx-compatible site artifact
+  (staging `target/nginx/sites-enabled/sdkwork/<host>.conf` or module
+  `deployments/webserver/` loaded by `sdkwork-webserver`) when it appears as an
+  `expose` item; hosts bound only as `aliases` share the primary site artifact
+  and appear as extra `server_name` values. Stock `/etc/nginx` is not the live
+  edge (`NGINX_SPEC.md` §0).
 - Standalone profiles `MUST NOT` resolve or require `cloudPublicHosts`.
 - Per-environment hosts are never inherited across environments; a
   `cloud.development` profile does not fall back to the production host or to a

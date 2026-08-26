@@ -83,7 +83,9 @@ export function renderNginxSite(plan, domain, options = {}) {
     exposeItem.tls === 'off' || exposeItem.tls === 'managed' ? 'sdkwork.com' : exposeItem.tls;
   const certs = certPaths(certName, plan.overrides);
   const mapBase = nginxMapVariable(plan.appId);
-  const snippetDir = options.snippetDir ?? '/etc/nginx/snippets/sdkwork';
+  // Snippet paths are dialect references for rendered sidecars / webserver
+  // import overlays. Stock /etc/nginx is not the live edge (NGINX_SPEC.md §0).
+  const snippetDir = options.snippetDir ?? 'deployments/webserver/snippets';
   const serverNames = [exposeItem.domain, ...(exposeItem.aliases ?? [])].join(' ');
 
   const baseDomainOf = (host) => String(host).split('.').slice(-2).join('.');

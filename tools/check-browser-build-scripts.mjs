@@ -30,6 +30,26 @@ function usesCanonicalRunner(commandText) {
   return String(commandText).includes(BUILD_RUNNER);
 }
 
+/**
+ * Deployment profiles the repository declares for itself
+ * (sdkwork.app.config.json runtime.supportedDeploymentProfiles). A repository
+ * that declares only `standalone` is exempt from the cloud build command
+ * family (for example sdkwork-webserver, which is standalone-only).
+ */
+export function declaredDeploymentProfiles(root) {
+  const manifestPath = path.join(root, 'sdkwork.app.config.json');
+  if (!fs.existsSync(manifestPath)) {
+    return DEPLOYMENT_PROFILES;
+  }
+  const profiles = readJson(manifestPath).runtime?.supportedDeploymentProfiles;
+  if (!Array.isArray(profiles) || profiles.length === 0) {
+    return DEPLOYMENT_PROFILES;
+  }
+  const normalized = [...new Set(profiles.map((profile) => String(profile).trim()))]
+    .filter((profile) => DEPLOYMENT_PROFILES.includes(profile));
+  return normalized.length > 0 ? normalized : DEPLOYMENT_PROFILES;
+}
+
 export function checkBrowserBuildScripts(root) {
   const issues = [];
   const packagePath = path.join(root, 'package.json');
@@ -42,13 +62,14 @@ export function checkBrowserBuildScripts(root) {
     return [];
   }
 
+  const declaredProfiles = declaredDeploymentProfiles(root);
   const manifest = readJson(packagePath);
   const scripts = manifest.scripts ?? {};
   const architectures = [...new Set(apps.map((app) => app.architecture))];
 
   for (const architecture of architectures) {
     for (const environmentAlias of STANDARD_ENVIRONMENT_ALIASES) {
-      for (const deploymentProfile of DEPLOYMENT_PROFILES) {
+      for (const deploymentProfile of declaredProfiles) {
         const scriptName = standardRootBuildScript(architecture, environmentAlias, deploymentProfile);
         const expected = canonicalRootBuildCommand(root, architecture, environmentAlias, deploymentProfile);
         if (!scripts[scriptName]) {
@@ -72,7 +93,7 @@ export function checkBrowserBuildScripts(root) {
     const appManifest = readJson(appPackagePath);
     const appScripts = appManifest.scripts ?? {};
     for (const environmentAlias of STANDARD_ENVIRONMENT_ALIASES) {
-      for (const deploymentProfile of DEPLOYMENT_PROFILES) {
+      for (const deploymentProfile of declaredProfiles) {
         const scriptName = deploymentProfile === 'standalone'
           ? `build:${environmentAlias}`
           : `build:${environmentAlias}:${deploymentProfile}`;

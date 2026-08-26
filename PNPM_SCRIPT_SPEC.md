@@ -426,6 +426,12 @@ Rules:
   remain migration aliases at app surfaces; when present they `MUST` delegate
   to the canonical runner for `--environment prod --deployment-profile
   <profile>`. New automation `MUST` use the environment-scoped family above.
+- A repository that declares `runtime.supportedDeploymentProfiles =
+  ["standalone"]` in its `sdkwork.app.config.json` is exempt from the cloud
+  command family (for example `sdkwork-webserver`, `SDKWORK_WEBSERVER_SPEC.md`
+  §17.4). `tools/check-browser-build-scripts.mjs` reads that declaration and
+  only requires the commands for the declared profiles. Every other repository
+  `MUST` expose the full standalone + cloud family.
 
 Validation:
 
@@ -483,7 +489,7 @@ Rules:
 - `<environment>` accepts lifecycle aliases (`dev`, `test`, `staging`, `prod`)
   and normalizes to runtime config before Vite mode selection.
 - Built artifacts `MUST` land in
-  `apps/sdkwork-<code>-{pc,h5}/dist/<envAlias>/` so Docker entrypoints and
+  `apps/sdkwork-<code>-{pc,h5}/dist/<profile>/<envAlias>/` so Docker entrypoints and
   Adaptive Web static delivery can resolve `dist/dev`, `dist/prod`, and the
   other lifecycle aliases without profile-specific path forks.
 - Legacy `docker:build:*` / `docker:up:*` script names remain migration
@@ -890,7 +896,7 @@ Rules:
 - [ ] Capability-specific root commands exist for release, deploy, API, SDK, database, gateway, topology, and supply-chain workflows when those capabilities exist.
 - [ ] No repository root public script starts with a application-code prefix such as `drive`, `im`, or `cloudrouter`.
 - [ ] Runtime-target commands are action-first, for example `dev:browser`, `dev:desktop`, `build:desktop`, `build:container`, `build:android-native`, `build:ios-native`, and `build:mini-program`; the `desktop:*` host family uses only section 4.1 actions/axes; no public script uses platform/tool-first aliases such as `browser:*`, `tauri:*`, `electron:*`, `docker:*`, `android:*`, `ios:*`, `harmony:*`, `flutter:*`, `mini-program:*`, or `*:tauri`.
-- [ ] Browser Adaptive Web repositories expose `build:pc:*` and/or `build:h5:*` for owned surfaces; app surfaces expose `build:dev|test|staging|prod`; outputs land in `dist/{dev,test,staging,prod}` via `build-browser-client.mjs`.
+- [ ] Browser Adaptive Web repositories expose `build:pc:*` and/or `build:h5:*` for owned surfaces; app surfaces expose `build:dev|test|staging|prod`; outputs land in `dist/{standalone,cloud}/{dev,test,staging,prod}` via `build-browser-client.mjs`.
 - [ ] Root `dev:browser` and `dev:desktop` default to
       `postgres:standalone` with `environment = development`; cloud variants
       are explicit suffixed commands, and `dev:desktop:sqlite` is client-local

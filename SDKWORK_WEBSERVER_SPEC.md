@@ -1,8 +1,26 @@
 # SDKWork Web Server Deploy Configuration Standard
 
-- Version: 3.1
-- Scope: per-module `deployments/webserver/` layout v3 — shared baseline, **one file per lifecycle environment**, one file per deployment profile; nginx-parallel declarative web server configuration
+- Version: 3.2
+- Scope: per-module `deployments/webserver/` layout v3 — shared baseline, **one file per lifecycle environment**, one file per deployment profile; nginx-compatible declarative web server configuration; **public reverse-proxy edge ownership**
 - Related: `NGINX_SPEC.md`, `SDKWORK_DEPLOY_SPEC.md`, `DEPLOYMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `APP_RUNTIME_TOPOLOGY_SPEC.md`, `APP_RUNTIME_TOPOLOGY_NAMING.md`, `SECURITY_SPEC.md`, `OBSERVABILITY_SPEC.md`, `CONFIG_SPEC.md`, `TEST_SPEC.md`
+
+## 0.1 Public Edge Ownership (Normative)
+
+`sdkwork-webserver` is the **only** supported public reverse-proxy / Adaptive
+Web / module-import edge for SDKWork domains. It is **nginx-configuration
+compatible** (TOML + rendered `nginx.<profile>.<environment>.conf` sidecars)
+and executes that dialect on the Rust data plane.
+
+Rules:
+
+- Stock OpenResty/nginx, `/etc/nginx`, and host `sites-enabled` `MUST NOT` be
+  the live public edge. See `NGINX_SPEC.md` §0 (authority transfer).
+- Module import plane (`imports.d`, §17.3) and platform API hosts
+  (`api*.brand`, …) are served by `sdkwork-webserver` (`serve-imports`), which
+  reverse-proxies to `sdkwork-api-cloud-gateway` or module upstreams.
+- Local Docker development publishes host `:80`/`:443` from the webserver
+  container; operators `MUST NOT` portproxy those ports to a host nginx
+  listener.
 
 Every independent SDKWork module root `MUST` contain a `deployments/webserver/`
 directory with **layout v3** — seven TOML files:
@@ -822,14 +840,14 @@ returnBody = "{\"status\":\"ok\"}"
 - Every `[[http.server]]` with traffic `MUST` route unmatched requests
   explicitly: at minimum a `match = "/"` location or a server-level
   `returnStatus`.
-- Public browser hosts that serve module UI from stock nginx (`expose.mode`
-  `web` / `web+api`) `MUST` follow adaptive PC/H5 selection per
+- Public browser hosts that serve module UI through `sdkwork-webserver`
+  (`expose.mode` `web` / `web+api`) `MUST` follow adaptive PC/H5 selection per
   `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §2.1 and
   `SDKWORK_DEPLOY_SPEC.md` §8: mobile → H5 (fallback PC / `collapse-pc`),
-  desktop → PC (fallback H5 / `collapse-h5`). Stock nginx emission `MUST`
-  use named-location dispatch (`SDKWORK_DEPLOY_SPEC.md` §8.1), not variable
-  `include`. When neither surface is installed, `match = "/"` `MUST` serve
-  the configured static resource `root` (`static-fallback`, typically
+  desktop → PC (fallback H5 / `collapse-h5`). Nginx-compatible sidecar emission
+  `MUST` use named-location dispatch (`SDKWORK_DEPLOY_SPEC.md` §8.1), not
+  variable `include`. When neither surface is installed, `match = "/"` `MUST`
+  serve the configured static resource `root` (`static-fallback`, typically
   `/usr/share/sdkwork/<runtimeCode>/web/static` or the module location
   `root`) with ordinary file `try_files` (typically `=404`), not an empty
   adaptive map and not a fabricated SPA shell. Plan folding
@@ -837,8 +855,8 @@ returnBody = "{\"status\":\"ok\"}"
   `sdkwork-specs/tools/webserver/render-nginx-sidecars.mjs` or module
   `scripts/render-webserver-nginx-sidecars.mjs`) `MUST` rewrite
   Adaptive-Web-wired public `/` locations before rendering
-  `nginx.<profile>.conf` sidecars. Authority cross-links: `NGINX_SPEC.md` §7,
-  `SDKWORK_DEPLOY_SPEC.md` §8.1.
+  `nginx.<profile>.conf` sidecars for the webserver import plane. Authority:
+  `NGINX_SPEC.md` §0/§7, `SDKWORK_DEPLOY_SPEC.md` §8.1.
 - The `sdkwork-webserver` module's own public-ingress hosts (`expose.mode:
   api`) `MUST` reverse-proxy all public paths (including `/`) to the gateway
   upstream. Edge nginx `MUST NOT` declare Adaptive Web maps, `@pc` / `@h5`
@@ -953,7 +971,7 @@ with the same merge semantics as the validator. Its materialization alignment:
 | `loadBalancing` | `round-robin`, `least-connections`, `ip-hash`, `random`, and `hash` (`hashKey` with `$request_uri`/`$uri`/`$remote_addr`/`$host` and optional `consistent`) mapped; unsupported hash keys fail closed |
 | `proxySetHeader` | Mapped: `"Name value"` entries with `$host`/`$scheme`/`$remote_addr`/`$proxy_add_x_forwarded_for`/`$http_upgrade` (or literals) execute on the Rust proxy path; unsupported `$vars` fail closed at materialize |
 | Proxy timeouts / buffering / websocket upgrade flags | Accepted as declarations; runtime uses its bounded streaming/timeout defaults — nginx buffering knobs are not executed |
-| `alias`, `authBasic`, `clientCertificate` | `alias` mapped (see above). `authBasic` / `authBasicUserFile` mapped: htpasswd `$apr1$` / `{SHA}` / bcrypt loaded at materialize; Basic challenge on the Rust data plane. `clientCertificate` fails closed until implemented (tracked in `sdkwork-webserver/specs/nginx-gap.catalog.json`); stock edge nginx is reverse-proxy/interop only and `MUST NOT` be treated as a substitute execution plane for those gaps |
+| `alias`, `authBasic`, `clientCertificate` | `alias` mapped (see above). `authBasic` / `authBasicUserFile` mapped: htpasswd `$apr1$` / `{SHA}` / bcrypt loaded at materialize; Basic challenge on the Rust data plane. `clientCertificate` fails closed until implemented (tracked in `sdkwork-webserver/specs/nginx-gap.catalog.json`). Stock OpenResty/nginx `MUST NOT` be used as a substitute execution plane for those gaps or for any public edge |
 | regex `match` (`~`/`~*`), `^~` prefix-exclusive, `rewrite` (`last`/`break`/`redirect`/`permanent`) | Mapped: location selection follows nginx exact → longest prefix / `^~` → regex order → prefix; rewrite applies a bounded internal-redirect state machine (`MAX_REWRITE_INTERNAL_REDIRECTS`) |
 | `limitReqZone` / location `limitReq` / `allow` / `deny` | Mapped: `$binary_remote_addr`/`$remote_addr` zones with burst/nodelay admission (delay queue not scheduled); location `allow` then `deny` ordered ACL (empty = inactive) |
 | `stream` TCP (`[[stream.server]]`) | Mapped: plaintext TCP, TLS terminate (`listen … ssl` + `certificate`), or `sslPreread` passthrough to literal/`upstream`; health-aware upstream pick shared with HTTP; idle `proxyTimeout`; optional outbound PROXY v1; share connection admission. UDP / `stream.raw` fail closed |
@@ -961,10 +979,9 @@ with the same merge semantics as the validator. Its materialization alignment:
 
 Fail-closed is deliberate: a declared directive that the Rust data plane cannot
 honor must never silently diverge from the operator's intent. Capability gaps are
-tracked in `sdkwork-webserver/specs/nginx-gap.catalog.json`. Edge nginx sidecars
-(`NGINX_SPEC.md` rendering under `nginx.enabled`) are a reverse-proxy and
-interop surface, not a substitute execution plane for unimplemented Rust
-capabilities.
+tracked in `sdkwork-webserver/specs/nginx-gap.catalog.json`. Rendered
+nginx-shaped sidecars (`NGINX_SPEC.md`) are **inputs** to `sdkwork-webserver`;
+they are not authority to run stock nginx as the public edge.
 
 ### 13.5 Secrets
 
@@ -1063,7 +1080,7 @@ and import sibling modules into the gateway runtime config.
 | App-roots catalog | Generated `/etc/sdkwork/webserver/module-app-roots/<module-id>.toml` with discovered PC/H5 dist paths |
 | Docker defaults | `required = false`, `probe_upstreams = false` (sibling upstreams are not co-located in the webserver container) |
 | Multi-cluster | One host runs development/test/production containers on distinct **host** ports (`13800` / `18888` / `18080`); each container listens on gateway port **3800** internally so module `server.standalone.toml` upstreams stay uniform |
-| Adaptive Web static | Process `[app_roots]` maps `apps/*-{pc,h5}/dist/{dev,test,staging,prod}` from the checkout; bundled image roots remain the fallback |
+| Adaptive Web static | Process `[app_roots]` maps `apps/*-{pc,h5}/dist/{standalone,cloud}/{dev,test,staging,prod}` from the checkout (default profile standalone); bundled image roots remain the fallback |
 | Multi-base-domain | Module environment TOML lists every registered host per `APP_RUNTIME_TOPOLOGY_NAMING.md` §9.1–§9.3 (`sdkwork.com`, `birdcoder.com`, `dtupay.com`, `sdkwork.cn`, `birdcoder.cn`, `dtupay.cn`, `skubc.com`, `skubc.cn`, `zowalk.com`, `zowalk.cn`, `offer86.com`, `offer86.cn`, `86offer.com`, `86offer.cn`, …) |
 | Module templates | Copy from `examples/webserver/modules/` in this standards repository |
 
@@ -1172,6 +1189,27 @@ Rules:
   `nginx.cloud.<env>.conf`), so switching never requires rebuilding module
   configs.
 
+### 17.4 `sdkwork-webserver` Is Standalone-Only
+
+`sdkwork-webserver` is the **only** module in the workspace that is
+standalone-only. Its own application build, packaging, and runtime surface
+never use the `cloud` deployment profile:
+
+| Surface | Standard |
+| --- | --- |
+| Manifest | `sdkwork.app.config.json` declares `runtime.supportedDeploymentProfiles = ["standalone"]` |
+| Browser apps | `apps/sdkwork-webserver-{pc,h5}` expose `build:pc|h5:<env>` (canonical runner) only; no `:cloud` variants are required or shipped |
+| Runtime env | Only `runtime-env.standalone.<environment>.json` sources exist; every SDK API base URL is the same-origin root `/` with `browserOriginMode = same-origin` |
+| Release | `scripts/webserver-release.mjs` and deb/rpm packaging accept `--deployment-profile standalone` only; no cloud server artifact exists |
+| Import plane | Unaffected — the `imports.d` dual configuration (§17.3) imports sibling modules and keeps both `standalone`/`cloud` sets (default `cloud`) |
+
+Rationale: the webserver is the same-origin host application; its SPAs and API
+are served from one origin. Cloud-mode browser bundles of *other* modules are
+the CDN artifacts that talk to the unified `api-*` edge (§17.1,
+`ENVIRONMENT_SPEC.md` §5.1.0.1). The standalone-only exemption is declared in
+the manifest, and `check-browser-build-scripts.mjs` reads that declaration to
+skip cloud command requirements for this repository.
+
 ## 16. Acceptance Checklist
 
 - [ ] All **seven** layout v3 files exist under `deployments/webserver/`.
@@ -1184,3 +1222,5 @@ Rules:
 - [ ] `deploy.yaml` `expose` domains match `effective(<profile>.<environment>)` `serverName` (W18).
 - [ ] Certificate paths use `/etc/sdkwork/certs/letsencrypt/<cert-name>/` (W25).
 - [ ] Sidecars `nginx.<profile>.<environment>.conf` exist and match effective renders (W16).
+- [ ] Public edge is `sdkwork-webserver` only — no stock nginx / `/etc/nginx` live sites
+      (`NGINX_SPEC.md` §0).

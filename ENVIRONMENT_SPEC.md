@@ -257,9 +257,13 @@ Rules:
   `production`. New env file names, profile ids, persisted config, artifacts,
   and evidence `MUST NOT` use `.dev`, `.prod`, `local`, `private`, `saas`, or
   `self-hosted` as substitutes for a canonical profile id.
-- Browser PC/H5 build dirs use path segments `dev|test|staging|prod` under
-  each app root (`APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §2.1). These are
-  not profile-id substitutes.
+- Browser PC/H5 build dirs use the profile×environment layout
+  `dist/<deploymentProfile>/<envAlias>/` under each app root — for example
+  `dist/standalone/prod/`, `dist/cloud/dev/` — so standalone (same-origin) and
+  cloud (unified `api-*` edge) builds coexist without overwriting each other
+  (`APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §2.1,
+  `FRONTEND_CODE_SPEC.md` §7). The `dev|test|staging|prod` segments are
+  environment aliases, not profile-id substitutes.
 - Public hostnames follow the environment host formula in
   `APP_RUNTIME_TOPOLOGY_NAMING.md` section 9: non-production hosts use
   `<role>-<environment-suffix>.<base-domain>` (`im-dev.sdkwork.com`,

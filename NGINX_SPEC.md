@@ -1,83 +1,117 @@
-# NGINX Reverse Proxy Standard
+# NGINX Compatibility And Public Edge Standard
 
-- Version: 1.0
-- Scope: SDKWork public reverse proxy deployment, generated nginx site files, TLS certificate paths, and release host handoff
+- Version: 2.0
+- Scope: nginx-compatible configuration dialect, Adaptive Web emission rules, TLS certificate paths, and migration handoff into `sdkwork-webserver`
 - Related: `SDKWORK_WEBSERVER_SPEC.md`, `SDKWORK_DEPLOY_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `DEPLOYMENT_SPEC.md`, `ENVIRONMENT_SPEC.md`, `SECURITY_SPEC.md`, `OBSERVABILITY_SPEC.md`
 
-SDKWork nginx deployment must keep public-domain routing reproducible across Linux servers and local operator workstations. Generated files are deployable artifacts, not handwritten one-off snippets.
+## 0. Authority Transfer (Normative)
 
-The declarative source for the serving behavior behind these sites is the
-per-module `deployments/webserver/server.toml` defined by
-`SDKWORK_WEBSERVER_SPEC.md`: reverse proxy locations, virtual hosts, static
-resource mounting, and certificate references are typed there and rendered
-into the site files and upstreams below. Handwritten site files remain
-allowed only as a one-time migration path into that declarative standard.
+SDKWork **public reverse proxy** is owned exclusively by **`sdkwork-webserver`**
+(`SDKWORK_WEBSERVER_SPEC.md`). That process is **nginx-configuration
+compatible**: module `deployments/webserver/` TOML and rendered
+`nginx.<profile>.<environment>.conf` sidecars are the dialect; the Rust data
+plane (`serve-imports` / Adaptive Web) is the execution plane.
 
-## 1. Site File Path Contract
+Rules:
 
-The canonical Linux deployment path is:
+- Operators `MUST NOT` install, enable, or run stock OpenResty/nginx,
+  `/etc/nginx`, or host `sites-enabled` as the public edge for SDKWork
+  domains (`api*.brand`, `im-*.brand`, `server-*.brand`, module hosts, …).
+- Operators `MUST NOT` use Windows `netsh interface portproxy` (or equivalent)
+  to forward public `:80`/`:443` to a host nginx listener (for example
+  `:8088`). Development publishes Docker host `:80`/`:443` from
+  `sdkwork-webserver`; test/production publish the documented import ports.
+- `pnpm nginx:deploy`, `sudo nginx -t`, and `systemctl reload nginx` are
+  **retired** as live public-edge procedures. New operator handoff `MUST`
+  start, reload, and verify `sdkwork-webserver` (container or package) only.
+- This file remains the dialect/Adaptive Web emission contract for rendered
+  nginx-shaped sidecars and for one-time migration of legacy site files into
+  `deployments/webserver/`. It is **not** authority to run stock nginx.
 
-```text
-/etc/nginx/sites-enabled/sdkwork/<domain>.conf
+Local WSL retirement entrypoints (repository `sdkwork-webserver`):
+
+```sh
+sudo bash deployments/docker/scripts/uninstall-wsl-nginx.sh
+# install-wsl-nginx.sh is retired and only invokes uninstall
 ```
 
-`<domain>` is the complete public hostname and is always the file name stem. It is not a directory.
+Verify the public plane through the webserver publish ports:
 
-Examples:
+```sh
+curl --noproxy '*' -H 'Host: api-dev.birdcoder.cn' http://127.0.0.1/healthz
+curl --noproxy '*' -H 'Host: api-dev.sdkwork.com' http://127.0.0.1/healthz
+```
+
+## 1. Compatibility Artifact Path Contract
+
+Legacy / migration staging paths (not a live stock-nginx install root):
 
 ```text
-/etc/nginx/sites-enabled/sdkwork/api.sdkwork.com.conf
-/etc/nginx/sites-enabled/sdkwork/www.sdkwork.com.conf
-/etc/nginx/sites-enabled/sdkwork/api-dev.sdkwork.com.conf
-/etc/nginx/sites-enabled/sdkwork/im-test.sdkwork.com.conf
-/etc/nginx/sites-enabled/sdkwork/im-staging.sdkwork.com.conf
+target/nginx/sites-enabled/sdkwork/<domain>.conf
+deployments/webserver/nginx.<profile>.<environment>.conf
 ```
+
+`<domain>` is the complete public hostname and is always the file name stem
+when a per-domain staging file is rendered. It is not a directory.
+
+Examples (staging / documentation only):
+
+```text
+target/nginx/sites-enabled/sdkwork/api.sdkwork.com.conf
+target/nginx/sites-enabled/sdkwork/api-dev.sdkwork.com.conf
+target/nginx/sites-enabled/sdkwork/im-test.sdkwork.com.conf
+```
+
+The retired live path `/etc/nginx/sites-enabled/sdkwork/<domain>.conf`
+`MUST NOT` be written by new automation as a production edge. Existing files
+under `/etc/nginx` `MUST` be removed (`uninstall-wsl-nginx.sh` or equivalent)
+before claiming public-edge readiness.
 
 Environment hosts follow the registry in `APP_RUNTIME_TOPOLOGY_NAMING.md`
 section 9: non-production hosts carry a suffix (`api-dev.sdkwork.com`,
 `im-test.sdkwork.com`, `im-staging.sdkwork.com`), production carries none
-(`api.sdkwork.com`, `im.sdkwork.com`). Each environment host gets its own site
-file with the full hostname as the file name stem. Prefix-style hosts such as
+(`api.sdkwork.com`, `im.sdkwork.com`). Prefix-style hosts such as
 `staging-im.sdkwork.com` are retired and `MUST NOT` be deployed.
 
 Multi-domain sites (`SDKWORK_DEPLOY_SPEC.md` section 7.2) bind the primary
 registered host as the site `domain` and additional registered hosts of the
-same profile environment as `aliases`:
-
-```text
-/etc/nginx/sites-enabled/sdkwork/router.sdkwork.com.conf
-```
-
-The generated site file emits `server_name router.sdkwork.com
-router.birdcoder.com router.dtupay.com;` (domain plus every alias) on both the
-80→443 redirect server and the 443 server block. Aliases share the primary
-site file, certificate, and upstream; each alias is never a separate site
-file.
+same profile environment as `aliases`. Generated `server_name` lists the
+primary domain plus every alias. Aliases share the primary certificate and
+upstream; each alias is never a separate live site process.
 
 Rules:
 
-- The site-family directory is `sdkwork` unless an operator explicitly chooses another safe directory name.
-- The deployed nginx file name must be the full domain plus `.conf`.
-- Do not deploy `domain/api.sdkwork.com.conf`, `api.conf`, or `sdkwork.com.conf` for an `api.sdkwork.com` virtual host.
-- Generated config comments must include the domain, site family, canonical deploy path, upstream, and certificate root.
+- The site-family directory name in staging trees is `sdkwork` unless an
+  operator explicitly chooses another safe directory name.
+- The rendered file name must be the full domain plus `.conf` when emitting
+  per-domain staging artifacts.
+- Do not emit `domain/api.sdkwork.com.conf`, `api.conf`, or `sdkwork.com.conf`
+  for an `api.sdkwork.com` virtual host.
+- Generated config comments must include the domain, site family, upstream,
+  and certificate root.
 - `server_name` values are the expose `domain` plus every `aliases` entry,
-  joined by spaces; a multi-base-domain site therefore serves every registered
-  host from one site file.
+  joined by spaces.
 
-The canonical repository template is:
+The canonical repository template (compatibility sample only) is:
 
 ```text
 apps/sdkwork-cloudrouter/etc/nginx/NGINX_SAMPLE.conf
 ```
 
-`API_SAMPLE.conf` is retained only as a compatibility sample for older references. New documentation and operator handoff must point to `etc/nginx/NGINX_SAMPLE.conf` or to generated full-domain examples under `etc/nginx/sdkwork/`.
+`API_SAMPLE.conf` is retained only as a compatibility sample. New
+documentation and operator handoff must point to module
+`deployments/webserver/` (`SDKWORK_WEBSERVER_SPEC.md`) as the live authority.
 
 ## 2. Upstream Contract
 
-Release deployments proxy to the packaged Rust edge server:
+Platform API and module import planes proxy to the packaged gateway / module
+upstream declared in webserver TOML. For the platform cloud gateway the
+default in-process / sibling target is:
 
 ```text
-http://127.0.0.1:3900
+gateway:3900   # Docker attach / compose DNS
+# or host-mapped direct probe:
+http://127.0.0.1:3910
 ```
 
 Rules:
@@ -85,15 +119,23 @@ Rules:
 - The old sample upstream `http://127.0.0.1:8080` is obsolete.
 - Declarative webserver TOML uses the reserved upstream name `gateway` for the
   primary API/application reverse-proxy target (`SDKWORK_WEBSERVER_SPEC.md`
-  §8.1, W30). Generated site files emit `upstream gateway { … }` once per nginx
-  process; every virtual host in that process references the same name. Module
-  checkouts reuse the name `gateway`; isolation comes from separate nginx
-  processes (or composer deduplication when multiple modules share one
-  container runtime).
-- The edge server owns the portal, vendor compatibility open-api gateway surfaces (for example OpenAI `/v1/*` declared per `API_SPEC.md` section 4.5.2), business open-api, backend/admin API, app API, OpenAPI documents, `/healthz`, and `/readyz`.
-- The proxy must preserve `Host`, real client IP, `X-Forwarded-*`, and websocket upgrade headers.
-- Streaming and generation routes must not be broken by proxy buffering; generated configs set `proxy_buffering off` and use long read/send timeouts.
-- `client_max_body_size` must not be lower than the Cloud Router upload body limits. The default generated value is `1100m`.
+  §8.1, W30). Rendered sidecars emit `upstream gateway { … }` once per
+  effective process configuration; every virtual host references the same
+  name. Module checkouts reuse the name `gateway`; isolation comes from
+  separate webserver processes or composer deduplication when multiple
+  modules share one container runtime.
+- The edge owns the portal, vendor compatibility open-api gateway surfaces
+  (for example OpenAI `/v1/*` declared per `API_SPEC.md` section 4.5.2),
+  business open-api, backend/admin API, app API, OpenAPI documents,
+  `/healthz`, and `/readyz` as declared by imported module configs.
+- The proxy must preserve `Host`, real client IP, `X-Forwarded-*`, and
+  websocket upgrade headers.
+- Streaming and generation routes must not be broken by proxy buffering;
+  generated configs set `proxy_buffering off` and use long read/send
+  timeouts. The Rust data plane honors the equivalent bounded streaming
+  defaults (`SDKWORK_WEBSERVER_SPEC.md` §13.4).
+- `client_max_body_size` must not be lower than the Cloud Router upload body
+  limits. The default generated value is `1100m`.
 
 ## 3. Certificate Path Contract
 
@@ -105,7 +147,8 @@ Certificates use a stable root and a certificate name directory:
 /etc/sdkwork/certs/letsencrypt/<cert-name>/chain.pem
 ```
 
-For `api.sdkwork.com` and `www.sdkwork.com`, the default certificate name is `sdkwork.com`:
+For `api.sdkwork.com` and `www.sdkwork.com`, the default certificate name is
+`sdkwork.com`:
 
 ```text
 /etc/sdkwork/certs/letsencrypt/sdkwork.com/fullchain.pem
@@ -114,7 +157,7 @@ For `api.sdkwork.com` and `www.sdkwork.com`, the default certificate name is `sd
 ```
 
 The retired bootstrap path `/opt/certs/letsencrypt/live/` `MUST NOT` appear in
-new nginx configs, webserver TOML, deployment scripts, or documentation
+new webserver TOML, rendered sidecars, deployment scripts, or documentation
 examples. Use `/etc/sdkwork/certs/letsencrypt/` exclusively.
 
 Non-production environment hosts (`api-dev.sdkwork.com`, `im-test.sdkwork.com`,
@@ -122,130 +165,88 @@ Non-production environment hosts (`api-dev.sdkwork.com`, `im-test.sdkwork.com`,
 `APP_RUNTIME_TOPOLOGY_NAMING.md` section 9) SHOULD be covered by a wildcard or
 SAN certificate for `*.sdkwork.com` so one certificate serves every
 environment host. When a wildcard is not available, each environment host uses
-its own certificate directory named after the full hostname; operators pass
-`--cert-name` accordingly. Production hosts keep the bare `sdkwork.com`
-certificate name.
+its own certificate directory named after the full hostname. Production hosts
+keep the bare `sdkwork.com` certificate name.
 
 Multi-base-domain sites: a site whose `aliases` span multiple registered base
 domains (for example `router.sdkwork.com` + `router.birdcoder.com` +
 `router.dtupay.com`) `MUST` use a certificate that covers every bound host —
 either one SAN certificate listing all hosts or one wildcard/SAN certificate
-per base domain (`*.sdkwork.com`, `*.birdcoder.com`, `*.dtupay.com`). The
-certificate directory name follows the primary `domain` unless the operator
-passes an explicit `--cert-name`.
+per base domain (`*.sdkwork.com`, `*.birdcoder.com`, `*.dtupay.com`).
 
 Rules:
 
-- Operators may override the certificate name with `--cert-name`.
+- Operators may override the certificate name with `--cert-name` on render
+  tools that still accept it for staging artifacts.
 - Operators may override the certificate root with `--cert-root`.
 - The certificate name is a directory name, not an arbitrary path.
-- TLS configs should enable `TLSv1.2` and `TLSv1.3`; legacy `TLSv1.1`, `TLSv1`, and broad legacy ciphers are not allowed in new generated configs.
+- TLS configs should enable `TLSv1.2` and `TLSv1.3`; legacy `TLSv1.1`,
+  `TLSv1`, and broad legacy ciphers are not allowed in new generated configs.
 
 ## 4. Generated Command Contract
 
-The Cloud Router workspace exposes these pnpm commands:
+Compatibility render / plan commands may still exist in application
+workspaces for migration and review:
 
 ```sh
 pnpm nginx:plan -- --domain api.sdkwork.com
 pnpm nginx:render -- --domain api.sdkwork.com --output-root target/nginx
-sudo pnpm nginx:deploy -- --domain api.sdkwork.com --cert-name sdkwork.com
 ```
 
 Command behavior:
 
-- `nginx:plan` prints the canonical path, output path, upstream, certificate files, reload commands, and rendered config without writing files.
-- `nginx:render` writes a local staging file. On Windows and macOS, the default staging path is `target/nginx/sites-enabled/sdkwork/<domain>.conf`.
-- `nginx:deploy` writes the selected output file. On Linux with no `--output` or `--output-root`, it writes the canonical `/etc/nginx/sites-enabled/sdkwork/<domain>.conf` path.
-- `--output <path>` writes one exact file.
-- `--output-root <path>` writes `sites-enabled/sdkwork/<domain>.conf` under the given local root.
-- Multi-domain sites are rendered by invoking the commands once per host:
-  plan/render/deploy each registered host (`router.sdkwork.com`,
-  `router.birdcoder.com`, `router.dtupay.com`) or rely on the `expose` list of
-  `deployctl plan/nginx render` (`SDKWORK_DEPLOY_SPEC.md` section 12) which
-  emits one site file per expose item with shared `server_name` aliases.
-- `--platform linux|windows|macos` lets operators produce a platform-specific plan from any workstation.
+- `nginx:plan` prints the canonical staging path, upstream, certificate
+  files, and rendered config without writing files.
+- `nginx:render` writes a local staging file under
+  `target/nginx/sites-enabled/sdkwork/<domain>.conf` (or `--output` /
+  `--output-root`).
+- `nginx:deploy` to `/etc/nginx/...` is **retired**. Automation that still
+  exposes the name `MUST` either refuse or write only to a non-live staging
+  root and instruct operators to load the equivalent
+  `deployments/webserver/` material into `sdkwork-webserver`.
+- Multi-domain sites are rendered by invoking the commands once per host or
+  via `deployctl plan/nginx render` (`SDKWORK_DEPLOY_SPEC.md` section 12)
+  which emits one staging site file per expose item with shared
+  `server_name` aliases.
+- `--platform linux|windows|macos` lets operators produce a platform-specific
+  plan from any workstation.
 
-After deploy, operators validate and reload nginx explicitly:
-
-```sh
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-## 5. Ubuntu Release Build, Install, Start, And Proxy
-
-Build from a source checkout:
+Live reload / verification is webserver-owned:
 
 ```sh
-pnpm release:env:write -- --check
-pnpm release:env:write -- --force
-pnpm build
-pnpm install:package:build -- --package-id linux-x64-service
+# container example (development owns host :80 / :443)
+bash scripts/docker/deploy-docker-environment.sh development
+curl --noproxy '*' -H 'Host: api-dev.sdkwork.com' http://127.0.0.1/healthz
+curl --noproxy '*' -H 'Host: api-dev.birdcoder.cn' http://127.0.0.1/healthz
 ```
 
-Install and start on Ubuntu:
+## 5. Ubuntu Release Build, Install, Start, And Public Edge
+
+Build and install the application package, then publish domains through
+`sdkwork-webserver` (package service or Docker compose). Do not install stock
+nginx as part of the public edge.
 
 ```sh
-sudo apt install ./cloudrouter-linux-x64-server-0.3.0.deb
-sudo editor /etc/sdkwork/router/cloudrouter.toml
-sudo editor /etc/sdkwork/database/database.secret
-sudo systemctl start cloudrouter
-curl http://127.0.0.1:3900/healthz
-curl http://127.0.0.1:3900/readyz
+sudo apt install ./cloudrouter-linux-x64-service-<version>.deb
+# configure application TOML / secrets per DEPLOYMENT_SPEC.md
+sudo systemctl start cloudrouter          # application / gateway process
+# public domains: start sdkwork-webserver (imports.d loads module sidecars)
+curl --noproxy '*' -H 'Host: api.sdkwork.com' http://127.0.0.1/healthz
 ```
 
-Deploy nginx for an API domain:
+## 6. Local Operator Workstations
 
-```sh
-sudo pnpm nginx:deploy -- --domain api.sdkwork.com --cert-name sdkwork.com
-sudo nginx -t
-sudo systemctl reload nginx
-curl https://api.sdkwork.com/healthz
-curl https://api.sdkwork.com/readyz
-```
+On WSL/Ubuntu and Windows:
 
-Deploy nginx for a web domain:
+- Point hosts for registered domains at `127.0.0.1`.
+- Publish `sdkwork-webserver` Docker `:80`/`:443` (development) or the
+  documented test/production import ports.
+- Clear stale Windows `portproxy` rules that forward `:80` to host nginx
+  (`setup-windows-port-forwarding-admin.ps1` resets portproxy).
+- Uninstall host nginx (`uninstall-wsl-nginx.sh`). Never reinstall for domain
+  routing.
 
-```sh
-sudo pnpm nginx:deploy -- --domain www.sdkwork.com --site-type web --cert-name sdkwork.com
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-## 6. Cross-Platform Operator Flow
-
-Linux production host:
-
-```sh
-sudo pnpm nginx:deploy -- --domain api.sdkwork.com --cert-name sdkwork.com
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-Windows workstation staging:
-
-```powershell
-pnpm nginx:render -- --platform windows --domain api.sdkwork.com --output-root target/nginx
-```
-
-macOS workstation staging:
-
-```sh
-pnpm nginx:render -- --platform macos --domain api.sdkwork.com --output-root target/nginx
-```
-
-Windows or macOS hosts with a local nginx install must pass an explicit `--output-root` or `--output` matching their nginx config layout. The rendered nginx content still uses Linux-style certificate paths when that config will be copied to a Linux host.
-
-## 7. Adaptive Web (PC / H5 Device Selection)
-
-Authority: `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §2.1,
-`SDKWORK_DEPLOY_SPEC.md` §8 / §8.1, `SDKWORK_WEBSERVER_SPEC.md` §11.3.
-
-Applies to module public origins with `expose.mode` `web` or `web+api` that
-serve browser SPA roots from stock nginx. It does **not** apply to
-`expose.mode: api` edges (including the `sdkwork-webserver` product public
-ingress): those origins reverse-proxy all traffic to the owning process and
-leave Adaptive Web / static delivery to that process.
+## 7. Adaptive Web PC / H5 Emission
 
 Every independent module that exposes browser UI on a public `web` or
 `web+api` origin `MUST` package both browser surfaces by default:
@@ -257,8 +258,8 @@ Every independent module that exposes browser UI on a public `web` or
 
 ### 7.1 Request Selection
 
-Stock nginx site files and module `deployments/webserver/` renders `MUST`
-select the SPA surface with this contract:
+Rendered sidecars and the webserver Adaptive Web data plane `MUST` select the
+SPA surface with this contract:
 
 | Client class | Preferred surface | If preferred is not packaged |
 | --- | --- | --- |
@@ -279,9 +280,9 @@ Detection order (shared with the website data plane):
 entry **before** the mobile regex so UA strings that contain both `iPad` and
 `Mobile` stay on the tablet surface.
 
-### 7.2 Stock nginx Emission
+### 7.2 Sidecar Emission (nginx-shaped)
 
-Adaptive Web on stock nginx `MUST` emit:
+Adaptive Web on rendered nginx-compatible sidecars `MUST` emit:
 
 1. `http`-level `map` blocks that set `$sdkwork_<appId>_surface_final` to
    `pc` or `h5`.
@@ -292,32 +293,14 @@ Adaptive Web on stock nginx `MUST` emit:
    fixed `root` under `/usr/share/sdkwork/<runtimeCode>/web/{pc,h5,static}/`
    plus SPA or ordinary static `try_files`.
 
+The Rust Adaptive Web plane executes the same selection contract without
+requiring a stock nginx process.
+
 Forbidden:
 
 - Variable `include` paths such as
   `include …/web.$sdkwork_<appId>_surface_final.conf;`
 - A single `location /` with variable `root` that invents a missing SPA shell
-
-Plan folding (`collapse-pc` / `collapse-h5` / `static-fallback`) is applied by
-`sdkwork-specs/tools/webserver/adaptive-web.mjs` and
-`sdkwork-specs/tools/deploy/nginx-render.mjs` before site files or
-`nginx.<profile>.conf` sidecars are written. Reference module wiring:
-`sdkwork-specs/examples/webserver/adaptive-snippets/` (for modules with
-`expose.mode` `web` / `web+api`). The `sdkwork-webserver` product edge is
-`expose.mode: api` and must not include those snippets (validator W23).
-
-### 7.3 Static Fallback
-
-When neither PC nor H5 is packaged, nginx `MUST` serve the configured static
-resource root (`overrides.web.staticRoot`,
-`sdkwork-specs/examples/webserver/adaptive-snippets/web.static.conf`, or the
-`[[http.server.location]]` `match = "/"` `root`) with ordinary file serving:
-
-```nginx
-root /usr/share/sdkwork/<runtimeCode>/web/static;
-index index.html;
-try_files $uri $uri/ =404;
-```
 
 Adaptive maps and `@pc` / `@h5` named locations `MUST NOT` be emitted in
 `static-fallback` mode. When no static root is configured for the public
@@ -325,12 +308,16 @@ domain, plan validation `MUST` fail.
 
 ## 8. Acceptance Checklist
 
-- [ ] The deployed file path is `/etc/nginx/sites-enabled/sdkwork/<domain>.conf`.
-- [ ] The file name is the complete public domain plus `.conf`.
-- [ ] The upstream is `http://127.0.0.1:3900`.
+- [ ] No stock OpenResty/nginx process serves SDKWork public domains.
+- [ ] `/etc/nginx` is absent or empty of SDKWork live site configs on operator
+      hosts that claim public-edge readiness.
+- [ ] Public `:80`/`:443` (or documented env import ports) are published by
+      `sdkwork-webserver`.
+- [ ] Module configs live under `deployments/webserver/` and validate with
+      `SDKWORK_WEBSERVER_SPEC.md` tools.
+- [ ] Upstream name `gateway` is used for the primary API/application target.
 - [ ] TLS certificate paths use `/etc/sdkwork/certs/letsencrypt/<cert-name>/`.
 - [ ] Configs preserve forwarded headers and streaming behavior.
-- [ ] `nginx -t` passes before reload.
-- [ ] `/healthz` and `/readyz` pass through the public domain after reload.
+- [ ] `/healthz` and `/readyz` pass through the public domain via webserver.
 - [ ] Public Adaptive Web hosts use named-location PC/H5 dispatch (or plan-time
       `collapse-*` / `static-fallback`) per §7; variable `include` paths are absent.

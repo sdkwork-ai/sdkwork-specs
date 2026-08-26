@@ -24,8 +24,13 @@ export const BROWSER_DIST_ENV_ALIASES = Object.freeze({
 /** Deployment profiles that select a browser dist layout variant. */
 export const BROWSER_DEPLOYMENT_PROFILES = Object.freeze(['standalone', 'cloud']);
 
-export function normalizeBrowserDeploymentProfile(deploymentProfile) {
-  const profile = String(deploymentProfile ?? 'standalone').trim();
+export function normalizeBrowserDeploymentProfile(deploymentProfile, processEnv = process.env) {
+  const profile = String(
+    deploymentProfile
+      ?? processEnv.SDKWORK_DEPLOYMENT_PROFILE
+      ?? processEnv.SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE
+      ?? 'standalone',
+  ).trim();
   if (!BROWSER_DEPLOYMENT_PROFILES.includes(profile)) {
     throw new Error(
       `browser deployment profile must be one of ${BROWSER_DEPLOYMENT_PROFILES.join(', ')}`,
@@ -52,9 +57,9 @@ export function browserDistEnvAlias(environment) {
  * `dist/standalone/prod`, `dist/cloud/dev`, `dist/cloud/prod`.
  * Never a bare `dist/`.
  */
-export function resolveBrowserDistOutDir(environment, deploymentProfile = 'standalone') {
+export function resolveBrowserDistOutDir(environment, deploymentProfile, processEnv = process.env) {
   const alias = browserDistEnvAlias(environment);
-  const profile = normalizeBrowserDeploymentProfile(deploymentProfile);
+  const profile = normalizeBrowserDeploymentProfile(deploymentProfile, processEnv);
   return `dist/${profile}/${alias}`;
 }
 

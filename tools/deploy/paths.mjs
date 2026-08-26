@@ -5,7 +5,9 @@ export function nginxSiteFile(domain, overrides = {}) {
   if (overrides?.nginx?.siteFile) {
     return overrides.nginx.siteFile;
   }
-  return `/etc/nginx/sites-enabled/sdkwork/${domain}.conf`;
+  // Staging / plan artifact only. Live edge is sdkwork-webserver
+  // (NGINX_SPEC.md §0) — never write /etc/nginx as the public edge.
+  return nginxStagingFile(domain);
 }
 
 export function nginxStagingFile(domain) {

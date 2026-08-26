@@ -86,9 +86,10 @@ Helper / check: `tools/browser-dist-layout.mjs`, `tools/check-browser-dist-layou
 | Neither SPA | — | static only |
 
 Detection: overrides → `Sec-CH-UA-Mobile: ?1` → iPad/tablet (before mobile UA) → mobile UA → desktop.
-`expose.mode: api` (webserver product): nginx reverse-proxies only; process
-`[app_roots]` owns roots (`SDKWORK_WEBSERVER_SPEC.md` §13.6).
-`expose.mode: web` / `web+api`: stock nginx `@pc`/`@h5` (`NGINX_SPEC.md` §7).
+`expose.mode: api` (webserver product): `sdkwork-webserver` reverse-proxies only;
+process `[app_roots]` owns roots (`SDKWORK_WEBSERVER_SPEC.md` §13.6).
+`expose.mode: web` / `web+api`: `sdkwork-webserver` Adaptive Web `@pc`/`@h5`
+(`NGINX_SPEC.md` §7; dialect only — live edge is not stock nginx).
 
 ### 2.2 Same-Origin Terminal Binding
 

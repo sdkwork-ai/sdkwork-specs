@@ -6,7 +6,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -168,12 +168,134 @@ function maybeRunLocalScript(appRoot, relativeScript, args) {
   runNodeScript(scriptPath, args, appRoot);
 }
 
+const SDK_BASE_URL_KEYS = [
+  'appApiBaseUrl',
+  'backendApiBaseUrl',
+  'driveAppApiBaseUrl',
+  'appbaseAppApiBaseUrl',
+  'deployAppApiBaseUrl',
+];
+
+function readJson(filePath, label) {
+  try {
+    return JSON.parse(readFileSync(filePath, 'utf8'));
+  } catch (error) {
+    throw new Error(`${label} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Materialize and validate the deploy-time browser runtime document from the
+ * app-level deployment config (ENVIRONMENT_SPEC.md §5.1.0.1):
+ *   apps/<app>/etc/sdkwork.deployment.config.json -> profiles[profileId].source
+ *   -> public/runtime-env.json.
+ * standalone sources must use the same-origin root `/` for every SDK base URL;
+ * cloud sources must equal the environment's unified `cloudApiBaseUrl` origin
+ * (`api-dev.<domain>` … `api.<domain>`) declared by the repository deployment
+ * config. Apps with a local scripts/materialize-runtime-env.mjs keep their own
+ * materialization (checked before this fallback).
+ */
+export function materializeBrowserRuntimeEnv({ appRoot, deploymentProfile, environment, repositoryRoot, check = false }) {
+  const profileId = `${deploymentProfile}.${environment}`;
+  const deploymentConfigPath = path.join(appRoot, 'etc', 'sdkwork.deployment.config.json');
+  if (!existsSync(deploymentConfigPath)) {
+    throw new Error(`app deployment config is missing: ${deploymentConfigPath}`);
+  }
+  const deployment = readJson(deploymentConfigPath, deploymentConfigPath);
+  const sourceRelative = deployment.profiles?.[profileId]?.source;
+  if (typeof sourceRelative !== 'string' || sourceRelative.length === 0) {
+    throw new Error(`app deployment config does not declare browser source for ${profileId}`);
+  }
+  const sourcePath = path.resolve(path.dirname(deploymentConfigPath), sourceRelative);
+  if (!existsSync(sourcePath)) {
+    throw new Error(`browser runtime source does not exist for ${profileId}: ${sourcePath}`);
+  }
+  const value = readJson(sourcePath, sourcePath);
+
+  if (value.deploymentProfile !== deploymentProfile
+    || value.environment !== environment
+    || value.profileId !== profileId
+    || value.runtimeTarget !== 'browser') {
+    throw new Error(`browser runtime source identity does not match ${profileId}: ${sourcePath}`);
+  }
+
+  if (deploymentProfile === 'standalone') {
+    if (value.browserOriginMode !== 'same-origin') {
+      throw new Error(`${profileId}.browserOriginMode must equal same-origin`);
+    }
+    for (const key of SDK_BASE_URL_KEYS) {
+      if (value[key] !== undefined && value[key] !== '/') {
+        throw new Error(`${profileId}.${key} must use the canonical same-origin root /`);
+      }
+    }
+  } else {
+    if (value.browserOriginMode !== 'cross-origin') {
+      throw new Error(`${profileId}.browserOriginMode must equal cross-origin`);
+    }
+    const cloudApiBaseUrl = resolveCloudApiBaseUrl(repositoryRoot, environment);
+    for (const key of SDK_BASE_URL_KEYS) {
+      const raw = String(value[key] ?? '').trim();
+      if (!raw) continue;
+      let origin;
+      try {
+        origin = new URL(raw).origin;
+      } catch {
+        throw new Error(`${profileId}.${key} must be an absolute HTTP(S) URL`);
+      }
+      if (origin !== cloudApiBaseUrl) {
+        throw new Error(
+          `${profileId}.${key} must equal the unified cloud API edge ${cloudApiBaseUrl} (ENVIRONMENT_SPEC §5.1.0.1), not ${origin}`,
+        );
+      }
+    }
+  }
+
+  const output = deployment.materialization?.output;
+  if (typeof output !== 'string' || output.length === 0) {
+    // dotenv-style surfaces (materialization.format = "dotenv" with committed
+    // .env.<profile>.<environment> inputs) do not materialize a JSON runtime
+    // document; the source validation above still guards the profile values.
+    return value;
+  }
+  const outputPath = path.resolve(path.dirname(deploymentConfigPath), output);
+  const desired = `${JSON.stringify(value, null, 2)}\n`;
+  if (check) {
+    const current = existsSync(outputPath) ? readFileSync(outputPath, 'utf8').replace(/\r\n/g, '\n') : null;
+    if (current !== desired) {
+      throw new Error(`${outputPath} is stale for ${profileId}; rerun the browser build`);
+    }
+    return value;
+  }
+  mkdirSync(path.dirname(outputPath), { recursive: true });
+  writeFileSync(outputPath, desired, 'utf8');
+  console.log(
+    `[build-browser-client] materialized ${profileId} from ${path.relative(appRoot, sourcePath).replaceAll('\\', '/')}`,
+  );
+  return value;
+}
+
+function resolveCloudApiBaseUrl(repositoryRoot, environment) {
+  const deploymentIndex = path.join(repositoryRoot, 'etc', 'sdkwork.deployment.config.json');
+  if (!existsSync(deploymentIndex)) {
+    throw new Error(`repository deployment config is missing: ${deploymentIndex}`);
+  }
+  const deployment = readJson(deploymentIndex, deploymentIndex);
+  const value = deployment.environments?.[environment]?.cloudApiBaseUrl;
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(
+      `repository deployment config must declare environments.${environment}.cloudApiBaseUrl`,
+    );
+  }
+  return new URL(value).origin;
+}
+
 export function buildBrowserClient(options) {
   const repositoryRoot = path.resolve(options.repositoryRoot ?? options.root ?? '.');
   const architecture = String(options.architecture ?? '').trim();
   const environment = normalizeEnvironmentAlias(options.environment ?? 'prod');
   const deploymentProfile = String(options.deploymentProfile ?? 'standalone').trim();
   const dryRun = options.dryRun === true;
+  const skipTypecheck = options.skipTypecheck === true;
 
   if (!CLIENT_ARCHITECTURES.has(architecture)) {
     throw new Error('architecture must be pc or h5');
@@ -206,15 +328,28 @@ export function buildBrowserClient(options) {
   }
 
   maybeRunLocalScript(app.root, 'scripts/verify-build-sources.mjs', []);
-  maybeRunLocalScript(app.root, 'scripts/materialize-runtime-env.mjs', [
-    '--deployment-profile',
-    deploymentProfile,
-    '--environment',
-    environment,
-  ]);
+  const localMaterialize = path.join(app.root, 'scripts', 'materialize-runtime-env.mjs');
+  if (existsSync(localMaterialize)) {
+    runNodeScript(localMaterialize, [
+      '--deployment-profile',
+      deploymentProfile,
+      '--environment',
+      environment,
+    ], app.root);
+  } else {
+    // Canonical materialization: apps without a local runtime-env script still
+    // get the validated deploy-time document (standalone same-origin / cloud
+    // unified api-* edge) before Vite runs.
+    materializeBrowserRuntimeEnv({
+      appRoot: app.root,
+      deploymentProfile,
+      environment,
+      repositoryRoot,
+    });
+  }
 
   const tsconfigPath = path.join(app.root, 'tsconfig.json');
-  if (existsSync(tsconfigPath)) {
+  if (existsSync(tsconfigPath) && !skipTypecheck) {
     runCommand('pnpm', ['exec', 'tsc', '-p', 'tsconfig.json', '--noEmit'], app.root, buildEnv);
   }
 
@@ -312,6 +447,7 @@ function main() {
       architecture: { type: 'string' },
       'deployment-profile': { type: 'string', default: 'standalone' },
       'dry-run': { type: 'boolean', default: false },
+      'skip-typecheck': { type: 'boolean', default: false },
       environment: { type: 'string', default: 'prod' },
       help: { type: 'boolean', short: 'h' },
       root: { type: 'string', default: '.' },
@@ -319,7 +455,7 @@ function main() {
   });
 
   if (values.help) {
-    console.log('Usage: node tools/build-browser-client.mjs --root <repo> --architecture pc|h5 --environment dev|test|staging|prod [--deployment-profile standalone|cloud]');
+    console.log('Usage: node tools/build-browser-client.mjs --root <repo> --architecture pc|h5 --environment dev|test|staging|prod [--deployment-profile standalone|cloud] [--skip-typecheck]');
     console.log('       node tools/build-browser-client.mjs --app-root <apps/...> --environment dev|test|staging|prod [--deployment-profile standalone|cloud]');
     return;
   }
@@ -330,6 +466,7 @@ function main() {
       deploymentProfile: values['deployment-profile'],
       dryRun: values['dry-run'],
       environment: values.environment,
+      skipTypecheck: values['skip-typecheck'],
     });
     return;
   }
@@ -344,6 +481,7 @@ function main() {
     dryRun: values['dry-run'],
     environment: values.environment,
     repositoryRoot: values.root,
+    skipTypecheck: values['skip-typecheck'],
   });
 }
 

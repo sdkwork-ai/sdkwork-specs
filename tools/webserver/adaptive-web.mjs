@@ -52,7 +52,8 @@ export function detectBrowserSurfacesForWebserver(moduleRoot, webserverDir = nul
 }
 
 /**
- * Fold Adaptive Web locations on the effective TOML document for stock nginx.
+ * Fold Adaptive Web locations on the effective TOML document for sdkwork-webserver
+ * nginx-compatible sidecars (live edge is webserver, not stock nginx).
  *
  * Servers without Adaptive Web snippet wiring are left unchanged (edge
  * reverse-proxy only). Inventory-based collapse/static-fallback applies only

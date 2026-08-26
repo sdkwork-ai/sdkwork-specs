@@ -141,7 +141,7 @@ Read-only SPA/static trees under the platform share root
 
 Container images `MAY` prefix with `/app` (e.g. `/app/share/sdkwork/<code>/web/...`).
 Archive installs under `/opt/sdkwork/<code>/` use `share/web/{pc,h5,static}/` inside that tree.
-Packagers copy one source `dist/<envAlias>/` into these flat paths (no `dev|prod` segment retained).
+Packagers copy one source `dist/<profile>/<envAlias>/` (for example `dist/standalone/prod/`) into these flat paths (no dist, profile, or environment segment retained).
 
 ### 4.2 Linux User Scope
 
