@@ -24,18 +24,41 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
+import {
+  deriveCloudApiOriginsFromTopology,
+  expectedPlatformGatewayHost,
+  readRepositoryTopology,
+  validateCloudApiOriginListForEnvironment,
+} from './browser-cloud-api-base.mjs';
 import { discoverBrowserAppRoots, materializeBrowserRuntimeEnv } from './build-browser-client.mjs';
+import { DEFAULT_PRODUCT_BASE_DOMAINS } from './webserver/host-registry.mjs';
 
 const ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
 const PROFILES = ['standalone', 'cloud'];
 const LEGACY_DIST_ALIASES = ['dev', 'test', 'staging', 'prod'];
 const SDK_URL_KEY = /API_BASE_URL|API_GATEWAY|API_EDGE|_API_URL/;
-const EDGE_HOSTS = {
-  development: 'api-dev.sdkwork.com',
-  test: 'api-test.sdkwork.com',
-  staging: 'api-staging.sdkwork.com',
-  production: 'api.sdkwork.com',
-};
+
+function isAllowedCloudApiHost(hostname, environment) {
+  return expectedEdgeHosts(environment).includes(String(hostname ?? '').trim().toLowerCase());
+}
+
+function cloudApiUrlUsesAllowedHosts(value, environment) {
+  const segments = String(value ?? '').split(/[,;]+/u);
+  for (const segment of segments) {
+    const token = segment.trim();
+    if (!token) continue;
+    let url;
+    try {
+      url = new URL(token);
+    } catch {
+      return false;
+    }
+    if (!isAllowedCloudApiHost(url.hostname, environment)) {
+      return false;
+    }
+  }
+  return segments.some((segment) => segment.trim().length > 0);
+}
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -49,6 +72,10 @@ function findBrowserRuntimeEnvDir(appRoot) {
     }
   }
   return path.join(appRoot, 'etc', 'browser');
+}
+
+function expectedEdgeHosts(environment) {
+  return DEFAULT_PRODUCT_BASE_DOMAINS.map((baseDomain) => expectedPlatformGatewayHost(environment, baseDomain));
 }
 
 function auditRepo(repositoryRoot, repoName) {
@@ -81,14 +108,42 @@ function auditRepo(repositoryRoot, repoName) {
     issues.push(`A: must declare both standalone and cloud, got ${JSON.stringify(declaredProfiles)}`);
   }
 
-  // B. repo deployment config cloudApiBaseUrl
+  // B. repo deployment config cloudApiBaseUrl (+ topology parity)
   const repoDeployPath = path.join(repositoryRoot, 'etc', 'sdkwork.deployment.config.json');
+  let deployment = null;
+  let topology = null;
   if (fs.existsSync(repoDeployPath)) {
-    const envs = readJson(repoDeployPath).environments ?? {};
+    deployment = readJson(repoDeployPath);
+    const envs = deployment.environments ?? {};
+    try {
+      topology = readRepositoryTopology(repositoryRoot, deployment);
+    } catch {
+      topology = null;
+    }
     for (const environment of ENVIRONMENTS) {
       const value = envs[environment]?.cloudApiBaseUrl;
       if (typeof value !== 'string' || value.length === 0) {
         issues.push(`B: environments.${environment}.cloudApiBaseUrl missing`);
+        continue;
+      }
+      try {
+        validateCloudApiOriginListForEnvironment(value, environment);
+      } catch (error) {
+        issues.push(`B: environments.${environment}.cloudApiBaseUrl invalid (${error instanceof Error ? error.message : String(error)})`);
+        continue;
+      }
+      if (topology && !isStandaloneOnly) {
+        try {
+          const expected = deriveCloudApiOriginsFromTopology(topology, environment);
+          const actual = validateCloudApiOriginListForEnvironment(value, environment);
+          if (actual.length < expected.length) {
+            issues.push(
+              `B: environments.${environment}.cloudApiBaseUrl covers ${actual.length}/${expected.length} topology gateway base domains`,
+            );
+          }
+        } catch (error) {
+          issues.push(`B: topology gateway hosts unavailable (${error instanceof Error ? error.message : String(error)})`);
+        }
       }
     }
   } else {
@@ -178,7 +233,6 @@ function auditRepo(repositoryRoot, repoName) {
     for (const environment of ENVIRONMENTS) {
       const envFile = path.join(app.root, `.env.cloud.${environment}`);
       if (!fs.existsSync(envFile)) continue;
-      const expectedHost = EDGE_HOSTS[environment];
       const lines = fs.readFileSync(envFile, 'utf8').split(/\r?\n/);
       for (const line of lines) {
         const trimmed = line.trim();
@@ -188,14 +242,8 @@ function auditRepo(repositoryRoot, repoName) {
         const key = line.slice(0, eq).trim();
         const value = line.slice(eq + 1).trim();
         if (!SDK_URL_KEY.test(key) || !/^https?:\/\//.test(value)) continue;
-        let url;
-        try {
-          url = new URL(value);
-        } catch {
-          continue;
-        }
-        if (url.hostname !== expectedHost) {
-          issues.push(`G: ${app.name}: ${envFile} ${key} -> ${value} (must be ${expectedHost})`);
+        if (!cloudApiUrlUsesAllowedHosts(value, environment)) {
+          issues.push(`G: ${app.name}: ${envFile} ${key} -> ${value} (must use registered api-* hosts for ${environment})`);
         }
       }
     }

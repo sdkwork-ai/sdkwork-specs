@@ -21,6 +21,8 @@
  * Usage:
  *   node tools/align-browser-runtime-env.mjs --workspace <sdkwork-space-root>
  *   node tools/align-browser-runtime-env.mjs --root <repo> [--dry-run]
+ *
+ * Run `align-cloud-api-base-url.mjs` first when topology/webserver hosts change.
  */
 
 import fs from 'node:fs';
@@ -29,20 +31,20 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
+import {
+  attachCloudApiBaseUrls,
+  cloudSdkBaseUrlMaterializationValue,
+  ENVIRONMENTS,
+  resolveCloudApiOriginListForRepository,
+  SDK_BASE_URL_KEYS,
+} from './browser-cloud-api-base.mjs';
 import { discoverBrowserAppRoots } from './build-browser-client.mjs';
 
-const ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
+const LIFECYCLE_ENVIRONMENTS = [...ENVIRONMENTS];
 const PROFILES = ['standalone', 'cloud'];
 const PROFILE_MATRIX = PROFILES.flatMap((profile) =>
-  ENVIRONMENTS.map((environment) => `${profile}.${environment}`),
+  LIFECYCLE_ENVIRONMENTS.map((environment) => `${profile}.${environment}`),
 );
-const SDK_BASE_URL_KEYS = [
-  'appApiBaseUrl',
-  'backendApiBaseUrl',
-  'driveAppApiBaseUrl',
-  'appbaseAppApiBaseUrl',
-  'deployAppApiBaseUrl',
-];
 const COMPONENT_DEPLOYMENT_SCHEMA = {
   schemaVersion: 1,
   kind: 'sdkwork.component-deployment',
@@ -76,7 +78,7 @@ function findBrowserRuntimeEnvDir(appRoot) {
   return path.join(appRoot, 'etc', 'browser');
 }
 
-function resolveCloudApiBaseUrl(repositoryRoot) {
+function resolveCloudApiBaseUrlByEnvironment(repositoryRoot) {
   const deploymentIndex = path.join(repositoryRoot, 'etc', 'sdkwork.deployment.config.json');
   if (!fs.existsSync(deploymentIndex)) {
     return null;
@@ -88,13 +90,14 @@ function resolveCloudApiBaseUrl(repositoryRoot) {
     return null;
   }
   const result = {};
-  for (const environment of ENVIRONMENTS) {
-    const value = deployment.environments?.[environment]?.cloudApiBaseUrl;
-    if (typeof value !== 'string' || value.length === 0) {
-      return null;
-    }
+  for (const environment of LIFECYCLE_ENVIRONMENTS) {
     try {
-      result[environment] = new URL(value).origin;
+      result[environment] = resolveCloudApiOriginListForRepository({
+        repositoryRoot,
+        environment,
+        deployment,
+        preferTopology: true,
+      });
     } catch {
       return null;
     }
@@ -162,7 +165,7 @@ export function alignBrowserRuntimeEnv(repositoryRoot, options = {}) {
   const dryRun = options.dryRun === true;
   const changes = [];
   const apps = discoverBrowserAppRoots(repositoryRoot);
-  const cloudApiBaseUrl = resolveCloudApiBaseUrl(repositoryRoot);
+  const cloudApiBaseUrl = resolveCloudApiBaseUrlByEnvironment(repositoryRoot);
   if (!cloudApiBaseUrl) {
     throw new Error(
       `repository deployment config must declare environments.<env>.cloudApiBaseUrl for every environment: ${repositoryRoot}/etc/sdkwork.deployment.config.json`,
@@ -180,7 +183,7 @@ export function alignBrowserRuntimeEnv(repositoryRoot, options = {}) {
         .filter((profile) => PROFILES.includes(profile))
     : PROFILES;
   const profileMatrix = profiles.flatMap((profile) =>
-    ENVIRONMENTS.map((environment) => `${profile}.${environment}`),
+    LIFECYCLE_ENVIRONMENTS.map((environment) => `${profile}.${environment}`),
   );
 
   for (const app of apps) {
@@ -191,10 +194,10 @@ export function alignBrowserRuntimeEnv(repositoryRoot, options = {}) {
     const profileMap = {};
 
     for (const profile of profiles) {
-      for (const environment of ENVIRONMENTS) {
+      for (const environment of LIFECYCLE_ENVIRONMENTS) {
         const profileId = `${profile}.${environment}`;
         const sameOrigin = profile === 'standalone';
-        const sdkUrl = sameOrigin ? '/' : cloudApiBaseUrl[environment];
+        const sdkUrl = sameOrigin ? '/' : cloudSdkBaseUrlMaterializationValue(cloudApiBaseUrl[environment]);
         const doc = {
           environment,
           deploymentProfile: profile,
@@ -205,6 +208,9 @@ export function alignBrowserRuntimeEnv(repositoryRoot, options = {}) {
         };
         for (const key of SDK_BASE_URL_KEYS) {
           doc[key] = sdkUrl;
+        }
+        if (!sameOrigin) {
+          attachCloudApiBaseUrls(doc, cloudApiBaseUrl[environment]);
         }
         const fileName = `runtime-env.${profileId}.json`;
         const targetPath = path.join(browserDir, fileName);

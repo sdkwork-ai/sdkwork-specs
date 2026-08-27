@@ -13,9 +13,18 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import {
+  attachCloudApiBaseUrls,
+  cloudSdkBaseUrlMaterializationValue,
+  readCloudApiOriginListFromDeployment,
+  resolveCloudApiOriginListForRepository,
+  SDK_BASE_URL_KEYS,
+  validateCloudApiOriginForEnvironment,
+} from './browser-cloud-api-base.mjs';
+import {
   LIFECYCLE_ENVIRONMENTS,
   resolveBrowserDistOutDir,
 } from './browser-dist-layout.mjs';
+import { ensureBuildAccessToken } from './ensure-build-access-token.mjs';
 
 const SPECS_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ENVIRONMENT_ALIASES = Object.freeze({
@@ -168,13 +177,6 @@ function maybeRunLocalScript(appRoot, relativeScript, args) {
   runNodeScript(scriptPath, args, appRoot);
 }
 
-const SDK_BASE_URL_KEYS = [
-  'appApiBaseUrl',
-  'backendApiBaseUrl',
-  'driveAppApiBaseUrl',
-  'appbaseAppApiBaseUrl',
-  'deployAppApiBaseUrl',
-];
 
 function readJson(filePath, label) {
   try {
@@ -232,22 +234,39 @@ export function materializeBrowserRuntimeEnv({ appRoot, deploymentProfile, envir
     if (value.browserOriginMode !== 'cross-origin') {
       throw new Error(`${profileId}.browserOriginMode must equal cross-origin`);
     }
-    const cloudApiBaseUrl = resolveCloudApiBaseUrl(repositoryRoot, environment);
+    const deployment = readJson(path.join(repositoryRoot, 'etc', 'sdkwork.deployment.config.json'), 'deployment config');
+    const cloudApiOrigins = resolveCloudApiOriginListForRepository({
+      repositoryRoot,
+      environment,
+      deployment,
+      preferTopology: true,
+    });
+    const expectedMaterialized = cloudSdkBaseUrlMaterializationValue(cloudApiOrigins);
     for (const key of SDK_BASE_URL_KEYS) {
       const raw = String(value[key] ?? '').trim();
       if (!raw) continue;
+      if (raw.includes(',') || raw.includes(';')) {
+        if (raw !== expectedMaterialized) {
+          throw new Error(
+            `${profileId}.${key} must equal the declared cloud API edge set ${expectedMaterialized} (ENVIRONMENT_SPEC §5.1.0.1)`,
+          );
+        }
+        continue;
+      }
       let origin;
       try {
         origin = new URL(raw).origin;
       } catch {
         throw new Error(`${profileId}.${key} must be an absolute HTTP(S) URL`);
       }
-      if (origin !== cloudApiBaseUrl) {
+      validateCloudApiOriginForEnvironment(origin, environment);
+      if (!cloudApiOrigins.includes(origin)) {
         throw new Error(
-          `${profileId}.${key} must equal the unified cloud API edge ${cloudApiBaseUrl} (ENVIRONMENT_SPEC §5.1.0.1), not ${origin}`,
+          `${profileId}.${key} origin ${origin} must be one of ${cloudApiOrigins.join('; ')} (ENVIRONMENT_SPEC §5.1.0.1)`,
         );
       }
     }
+    attachCloudApiBaseUrls(value, cloudApiOrigins);
   }
 
   const output = deployment.materialization?.output;
@@ -274,22 +293,7 @@ export function materializeBrowserRuntimeEnv({ appRoot, deploymentProfile, envir
   return value;
 }
 
-function resolveCloudApiBaseUrl(repositoryRoot, environment) {
-  const deploymentIndex = path.join(repositoryRoot, 'etc', 'sdkwork.deployment.config.json');
-  if (!existsSync(deploymentIndex)) {
-    throw new Error(`repository deployment config is missing: ${deploymentIndex}`);
-  }
-  const deployment = readJson(deploymentIndex, deploymentIndex);
-  const value = deployment.environments?.[environment]?.cloudApiBaseUrl;
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(
-      `repository deployment config must declare environments.${environment}.cloudApiBaseUrl`,
-    );
-  }
-  return new URL(value).origin;
-}
-
-export function buildBrowserClient(options) {
+export async function buildBrowserClient(options) {
   const repositoryRoot = path.resolve(options.repositoryRoot ?? options.root ?? '.');
   const architecture = String(options.architecture ?? '').trim();
   const environment = normalizeEnvironmentAlias(options.environment ?? 'prod');
@@ -325,6 +329,29 @@ export function buildBrowserClient(options) {
 
   if (dryRun) {
     return plan;
+  }
+
+  let bootstrapAccessToken = '';
+  try {
+    bootstrapAccessToken = await ensureBuildAccessToken({
+      // development + test builds get a disposable local JWT; staging/production
+      // keep any privately provisioned SDKWORK_ACCESS_TOKEN and otherwise stay
+      // credential-free (ENVIRONMENT_SPEC §6.1).
+      allowTestTokenGeneration: true,
+      appRoot: app.root,
+      environment,
+    });
+  } catch (error) {
+    console.warn(
+      `[build-browser-client] bootstrap access token unavailable: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (bootstrapAccessToken) {
+    buildEnv.SDKWORK_ACCESS_TOKEN = bootstrapAccessToken;
+  } else if (environment === 'development' || environment === 'test') {
+    console.warn(
+      `[build-browser-client] SDKWORK_ACCESS_TOKEN empty for ${deploymentProfile}.${environment}; protected SDK calls may fail before login`,
+    );
   }
 
   maybeRunLocalScript(app.root, 'scripts/verify-build-sources.mjs', []);
@@ -385,7 +412,7 @@ function inferArchitectureFromAppRoot(appRoot) {
   throw new Error(`unable to infer browser architecture from ${base}`);
 }
 
-export function buildBrowserClientFromAppSurface(options) {
+export async function buildBrowserClientFromAppSurface(options) {
   const appRoot = path.resolve(options.appRoot ?? options.root ?? '.');
   const architecture = String(options.architecture ?? inferArchitectureFromAppRoot(appRoot)).trim();
   return buildBrowserClient({
@@ -439,7 +466,7 @@ export function canonicalAppSurfaceBuildCommand(appRoot, environmentAlias, deplo
   return `node ${relativeTool} ${args.join(' ')}`;
 }
 
-function main() {
+async function main() {
   const { values } = parseArgs({
     args: process.argv.slice(2),
     options: {
@@ -461,7 +488,7 @@ function main() {
   }
 
   if (values['app-root']) {
-    buildBrowserClientFromAppSurface({
+    await buildBrowserClientFromAppSurface({
       appRoot: values['app-root'],
       deploymentProfile: values['deployment-profile'],
       dryRun: values['dry-run'],
@@ -475,7 +502,7 @@ function main() {
     throw new Error('--architecture pc|h5 is required when --app-root is omitted');
   }
 
-  buildBrowserClient({
+  await buildBrowserClient({
     architecture: values.architecture,
     deploymentProfile: values['deployment-profile'],
     dryRun: values['dry-run'],
@@ -487,7 +514,7 @@ function main() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    main();
+    await main();
   } catch (error) {
     console.error(`[build-browser-client] ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;

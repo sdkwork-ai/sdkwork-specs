@@ -273,8 +273,11 @@ export function buildAppRootsExample({ appId, moduleRoot }) {
   if (!moduleRoot || !fs.existsSync(moduleRoot)) return null;
   const appsDir = path.join(moduleRoot, 'apps');
   if (!fs.existsSync(appsDir)) return null;
-  const pcDir = fs.readdirSync(appsDir).find((name) => name.includes('-pc'));
-  const h5Dir = fs.readdirSync(appsDir).find((name) => name.includes('-h5'));
+  const appEntries = fs.readdirSync(appsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+  const pcDir = appEntries.find((name) => name.startsWith('sdkwork-') && name.endsWith('-pc'));
+  const h5Dir = appEntries.find((name) => name.startsWith('sdkwork-') && name.endsWith('-h5'));
   if (!pcDir && !h5Dir) return null;
 
   const lines = [
@@ -285,11 +288,17 @@ export function buildAppRootsExample({ appId, moduleRoot }) {
     'tablet_surface = "pc"',
     '',
   ];
+  // FRONTEND_CODE_SPEC.md §7 / SDKWORK_WEBSERVER_SPEC.md §13.6 / §17.1:
+  // process Adaptive Web roots are dist/<profile>/<envAlias>/; the gateway
+  // catalog defaults to the standalone profile (same-origin). Cloud bundles
+  // coexist under dist/cloud/<alias>/ for CDN publish and are not the default
+  // in-process static roots.
+  const defaultProfile = 'standalone';
   if (pcDir) {
     lines.push('[app_roots.pc_static_by_environment]');
     for (const env of LIFECYCLE_ENVIRONMENTS) {
       const alias = env === 'development' ? 'dev' : env === 'production' ? 'prod' : env;
-      lines.push(`${env} = "apps/${pcDir}/dist/${alias}"`);
+      lines.push(`${env} = "apps/${pcDir}/dist/${defaultProfile}/${alias}"`);
     }
     lines.push('');
   }
@@ -297,7 +306,7 @@ export function buildAppRootsExample({ appId, moduleRoot }) {
     lines.push('[app_roots.h5_static_by_environment]');
     for (const env of LIFECYCLE_ENVIRONMENTS) {
       const alias = env === 'development' ? 'dev' : env === 'production' ? 'prod' : env;
-      lines.push(`${env} = "apps/${h5Dir}/dist/${alias}"`);
+      lines.push(`${env} = "apps/${h5Dir}/dist/${defaultProfile}/${alias}"`);
     }
     lines.push('');
   }

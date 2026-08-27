@@ -10,6 +10,11 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import {
+  cloudSdkBaseUrlMaterializationValue,
+  resolveCloudApiOriginListForRepository,
+} from './browser-cloud-api-base.mjs';
+
 export const CLIENT_ENV_DEPLOYMENT_PROFILES = ['standalone', 'cloud'];
 export const CLIENT_ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
 export const CLIENT_ENV_PROFILE_IDS = CLIENT_ENV_DEPLOYMENT_PROFILES.flatMap(
@@ -147,6 +152,66 @@ function assertCloudClientUrls(values, profile) {
       throw new Error(`${profile.profileId} ${key} must use an HTTP(S)/WS(S) URL.`);
     }
   }
+}
+
+function applyCloudGatewayProjection(values, deploymentIndex, profile, repositoryRoot) {
+  if (profile.deploymentProfile !== 'cloud') {
+    return values;
+  }
+  const materialized = cloudSdkBaseUrlMaterializationValue(
+    resolveCloudApiOriginListForRepository({
+      repositoryRoot,
+      environment: profile.environment,
+      deployment: deploymentIndex,
+      preferTopology: true,
+    }),
+  );
+  const projected = { ...values };
+  for (const key of Object.keys(projected)) {
+    if (!shouldExpandCloudGatewayKey(key)) {
+      continue;
+    }
+    const value = String(projected[key] ?? '').trim();
+    if (!/^https?:\/\//u.test(value)) {
+      continue;
+    }
+    projected[key] = materialized;
+  }
+  return projected;
+}
+
+function shouldExpandCloudGatewayKey(key) {
+  if (/(?:APPLICATION_PUBLIC|H5_APPLICATION_PUBLIC|OPEN_API|WEBSOCKET)/u.test(key)) {
+    return false;
+  }
+  if (/PLATFORM_API_GATEWAY/u.test(key)) {
+    return true;
+  }
+  return /(?:_APP_API_BASE_URL|_API_BASE_URL|_SDK_BASE_URL)$/u.test(key);
+}
+
+function expandCloudGatewayUrls(sourceValues, deploymentIndex, profile, repositoryRoot) {
+  if (profile.deploymentProfile !== 'cloud') {
+    return sourceValues;
+  }
+  const origins = resolveCloudApiOriginListForRepository({
+    repositoryRoot,
+    environment: profile.environment,
+    deployment: deploymentIndex,
+    preferTopology: true,
+  });
+  const materialized = cloudSdkBaseUrlMaterializationValue(origins);
+  const expanded = { ...sourceValues };
+  for (const [key, value] of Object.entries(expanded)) {
+    if (!shouldExpandCloudGatewayKey(key)) {
+      continue;
+    }
+    if (typeof value !== 'string' || !/^https?:\/\//u.test(value.trim())) {
+      continue;
+    }
+    expanded[key] = materialized;
+  }
+  return expanded;
 }
 
 function identityValues(surface, profile) {
@@ -327,13 +392,24 @@ export function materializeClientEnv({
       config,
       profileId,
     });
+    const sourceValues = expandCloudGatewayUrls(
+      sourceProfile.values,
+      deploymentIndex,
+      sourceProfile.profile,
+      normalizedRoot,
+    );
     for (const surface of config.surfaces) {
       const outputPath = resolveSurfaceOutputPath(normalizedRoot, surface, profileId);
-      const values = createClientSurfaceValues({
-        surface,
-        sourceValues: sourceProfile.values,
-        profile: sourceProfile.profile,
-      });
+      const values = applyCloudGatewayProjection(
+        createClientSurfaceValues({
+          surface,
+          sourceValues,
+          profile: sourceProfile.profile,
+        }),
+        deploymentIndex,
+        sourceProfile.profile,
+        normalizedRoot,
+      );
       const content = surface.format === 'vite'
         ? serializeDotenv({
             values,

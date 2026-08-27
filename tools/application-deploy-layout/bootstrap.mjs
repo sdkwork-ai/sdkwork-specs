@@ -1,5 +1,6 @@
 import { envPrefixFromCode } from './discover.mjs';
-import { expandSurfaceMultiBase, PLATFORM_GATEWAY_ROLE } from '../webserver/host-registry.mjs';
+import { DEFAULT_PRODUCT_BASE_DOMAINS, expandSurfaceMultiBase, PLATFORM_GATEWAY_ROLE } from '../webserver/host-registry.mjs';
+import { deriveCloudApiBaseUrlFromTopology } from '../browser-cloud-api-base.mjs';
 
 const PROFILE_IDS = [
   'standalone.development',
@@ -104,6 +105,17 @@ export function renderMinimalDeploymentIndex(appId) {
   const profiles = Object.fromEntries(
     PROFILE_IDS.map((profileId) => [profileId, { config: `topology/${profileId}.env` }]),
   );
+  const topology = {
+    cloudPublicHosts: {
+      'platform.api-gateway': expandSurfaceMultiBase({}, PLATFORM_GATEWAY_ROLE),
+    },
+  };
+  const environments = Object.fromEntries(
+    ['development', 'test', 'staging', 'production'].map((environment) => [
+      environment,
+      { cloudApiBaseUrl: deriveCloudApiBaseUrlFromTopology(topology, environment) },
+    ]),
+  );
   return `${JSON.stringify(
     {
       schemaVersion: 1,
@@ -111,6 +123,7 @@ export function renderMinimalDeploymentIndex(appId) {
       application: appId,
       topology: '../specs/topology.spec.json',
       defaultProfile: 'standalone.development',
+      environments,
       profiles,
     },
     null,
@@ -129,14 +142,14 @@ export function renderMinimalProfileEnv(profileId, runtimeCode) {
         ? '-dev'
         : `-${environment}`;
   const appHost = `https://${roleHost}${suffix}.sdkwork.com`;
-  const apiHost = `https://api${suffix}.sdkwork.com`;
+  const apiHosts = DEFAULT_PRODUCT_BASE_DOMAINS.map((baseDomain) => `https://api${suffix}.${baseDomain}`).join(';');
   return [
     `# Bootstrap profile ${profileId} — replace with application-specific values.`,
     `SDKWORK_${prefix}_DEPLOYMENT_PROFILE=${deploymentProfile}`,
     `SDKWORK_${prefix}_ENVIRONMENT=${environment}`,
     `SDKWORK_${prefix}_PROFILE_ID=${profileId}`,
     `SDKWORK_${prefix}_APPLICATION_PUBLIC_HTTP_URL=${appHost}`,
-    `SDKWORK_${prefix}_PLATFORM_API_GATEWAY_HTTP_URL=${apiHost}`,
+    `SDKWORK_${prefix}_PLATFORM_API_GATEWAY_HTTP_URL=${apiHosts.split(';')[0]}`,
     '',
   ].join('\n');
 }

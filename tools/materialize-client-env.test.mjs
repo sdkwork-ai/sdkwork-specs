@@ -80,7 +80,7 @@ test('client projection rejects secrets and cloud loopback URLs', () => {
         profileId: 'cloud.test',
       },
     }),
-    /explicit remote HTTPS\/WSS URL/u,
+    /remote public host|explicit remote HTTPS\/WSS URL/u,
   );
 });
 

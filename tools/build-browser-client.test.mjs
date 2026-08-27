@@ -51,9 +51,9 @@ test('canonicalRootBuildCommand references build-browser-client.mjs', () => {
   assert.match(command, /--environment dev/u);
 });
 
-test('buildBrowserClient dry-run resolves dist alias', () => {
+test('buildBrowserClient dry-run resolves dist alias', async () => {
   const root = fixtureRoot();
-  const plan = buildBrowserClient({
+  const plan = await buildBrowserClient({
     architecture: 'pc',
     dryRun: true,
     environment: 'dev',
@@ -64,9 +64,9 @@ test('buildBrowserClient dry-run resolves dist alias', () => {
   assert.equal(plan.viteMode, 'standalone.development');
 });
 
-test('buildBrowserClient cloud dry-run resolves profile dist alias', () => {
+test('buildBrowserClient cloud dry-run resolves profile dist alias', async () => {
   const root = fixtureRoot();
-  const plan = buildBrowserClient({
+  const plan = await buildBrowserClient({
     architecture: 'pc',
     deploymentProfile: 'cloud',
     dryRun: true,

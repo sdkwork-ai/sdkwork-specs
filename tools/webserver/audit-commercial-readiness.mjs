@@ -97,6 +97,20 @@ export function auditCommercialReadiness(workspaceRoot) {
     const appRootsPath = path.join(webserverDir, 'app-roots.example.toml');
     if (hasApps && !fs.existsSync(appRootsPath)) {
       localAdd('warning', name, 'PC/H5 apps present but app-roots.example.toml missing');
+    } else if (hasApps && fs.existsSync(appRootsPath)) {
+      const appRootsText = fs.readFileSync(appRootsPath, 'utf8');
+      // Flat dist/<alias> paths are retired; process roots must declare
+      // dist/standalone/<alias> (SDKWORK_WEBSERVER_SPEC.md §13.6 / §17.1).
+      if (
+        /dist\/(?:dev|test|staging|prod)"/u.test(appRootsText)
+        && !/dist\/(?:standalone|cloud)\//u.test(appRootsText)
+      ) {
+        localAdd(
+          'critical',
+          name,
+          'app-roots.example.toml still uses flat dist/<alias>; expected dist/standalone/<alias>',
+        );
+      }
     }
     if (adaptiveEdge && !surfaces.pcExists && !surfaces.h5Exists) {
       localAdd(
