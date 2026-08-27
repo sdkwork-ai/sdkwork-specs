@@ -68,6 +68,24 @@ const DEFAULT_VITE_CONFIG_NAMES = new Set([
   'vite.config.cjs',
 ]);
 
+/**
+ * Prefer the app/build tsconfig for production typecheck so e2e/scripts
+ * harnesses do not block Adaptive Web dist builds.
+ * Order: tsconfig.build.json → tsconfig.app.json → tsconfig.json.
+ *
+ * @param {string} appRoot
+ * @returns {string|null} absolute path or null when none exist
+ */
+export function resolveBrowserTypecheckTsconfig(appRoot) {
+  for (const name of ['tsconfig.build.json', 'tsconfig.app.json', 'tsconfig.json']) {
+    const candidate = path.join(appRoot, name);
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 export function findViteConfig(appRoot) {
   for (const name of VITE_CONFIG_NAMES) {
     const candidate = path.join(appRoot, name);
@@ -142,18 +160,70 @@ function resolveSpecsRelativeTool(repositoryRoot, toolName) {
   throw new Error(`unable to locate ${toolName}`);
 }
 
-function runCommand(command, args, cwd, env = process.env) {
-  const result = spawnSync(command, args, {
-    cwd,
-    encoding: 'utf8',
-    env,
-    shell: process.platform === 'win32',
-    stdio: 'inherit',
-    windowsHide: true,
-  });
-  if (result.status !== 0) {
-    throw new Error(`${command} ${args.join(' ')} failed with exit ${result.status ?? 'unknown'}`);
+function isTransientToolchainCrash(result) {
+  const combined = `${result.stdout ?? ''}\n${result.stderr ?? ''}\n${result.error?.message ?? ''}`;
+  if (/Fatal error in|unreachable code|SIGTRAP|SIGSEGV|was killed with SIG/i.test(combined)) {
+    return true;
   }
+  if (result.signal && ['SIGTRAP', 'SIGSEGV', 'SIGABRT', 'SIGILL'].includes(result.signal)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @param {string} cwd
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {{ retries?: number, inherit?: boolean }} [options]
+ */
+function runCommand(command, args, cwd, env = process.env, options = {}) {
+  const retries = Math.max(0, Number(options.retries ?? 0));
+  const inherit = options.inherit !== false;
+  let attempt = 0;
+  let lastResult;
+  while (attempt <= retries) {
+    attempt += 1;
+    if (attempt > 1) {
+      console.warn(
+        `[build-browser-client] retrying ${command} ${args.join(' ')} (attempt ${attempt}/${retries + 1}) after transient toolchain crash`,
+      );
+    }
+    lastResult = spawnSync(command, args, {
+      cwd,
+      encoding: 'utf8',
+      env,
+      shell: process.platform === 'win32',
+      stdio: inherit ? 'inherit' : ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (lastResult.status === 0 && !lastResult.error) {
+      if (!inherit) {
+        if (lastResult.stdout) {
+          process.stdout.write(lastResult.stdout.endsWith('\n') ? lastResult.stdout : `${lastResult.stdout}\n`);
+        }
+        if (lastResult.stderr) {
+          process.stderr.write(lastResult.stderr.endsWith('\n') ? lastResult.stderr : `${lastResult.stderr}\n`);
+        }
+      }
+      return;
+    }
+    if (!inherit) {
+      if (lastResult.stdout) {
+        process.stdout.write(lastResult.stdout.endsWith('\n') ? lastResult.stdout : `${lastResult.stdout}\n`);
+      }
+      if (lastResult.stderr) {
+        process.stderr.write(lastResult.stderr.endsWith('\n') ? lastResult.stderr : `${lastResult.stderr}\n`);
+      }
+    }
+    if (attempt <= retries && isTransientToolchainCrash(lastResult)) {
+      continue;
+    }
+    break;
+  }
+  throw new Error(`${command} ${args.join(' ')} failed with exit ${lastResult?.status ?? lastResult?.signal ?? 'unknown'}`);
 }
 
 function runNodeScript(scriptPath, args, cwd) {
@@ -354,9 +424,13 @@ export async function buildBrowserClient(options) {
     );
   }
 
+  console.log(
+    `[build-browser-client] START ${app.relative} ${architecture} ${deploymentProfile}.${environment} -> ${outDir}/`,
+  );
   maybeRunLocalScript(app.root, 'scripts/verify-build-sources.mjs', []);
   const localMaterialize = path.join(app.root, 'scripts', 'materialize-runtime-env.mjs');
   if (existsSync(localMaterialize)) {
+    console.log(`[build-browser-client] materialize runtime env (local script)`);
     runNodeScript(localMaterialize, [
       '--deployment-profile',
       deploymentProfile,
@@ -367,6 +441,7 @@ export async function buildBrowserClient(options) {
     // Canonical materialization: apps without a local runtime-env script still
     // get the validated deploy-time document (standalone same-origin / cloud
     // unified api-* edge) before Vite runs.
+    console.log(`[build-browser-client] materialize runtime env (canonical)`);
     materializeBrowserRuntimeEnv({
       appRoot: app.root,
       deploymentProfile,
@@ -375,9 +450,19 @@ export async function buildBrowserClient(options) {
     });
   }
 
-  const tsconfigPath = path.join(app.root, 'tsconfig.json');
-  if (existsSync(tsconfigPath) && !skipTypecheck) {
-    runCommand('pnpm', ['exec', 'tsc', '-p', 'tsconfig.json', '--noEmit'], app.root, buildEnv);
+  const tsconfigPath = resolveBrowserTypecheckTsconfig(app.root);
+  if (tsconfigPath && !skipTypecheck) {
+    const tsconfigRel = path.basename(tsconfigPath);
+    console.log(`[build-browser-client] typecheck pnpm exec tsc -p ${tsconfigRel} --noEmit`);
+    // Capture + retry: Node/V8 can SIGTRAP mid-tsc on large graphs under WSL/NTFS.
+    runCommand('pnpm', ['exec', 'tsc', '-p', tsconfigRel, '--noEmit'], app.root, buildEnv, {
+      inherit: false,
+      retries: 2,
+    });
+  } else if (skipTypecheck) {
+    console.log(`[build-browser-client] typecheck skipped (--skip-typecheck)`);
+  } else {
+    console.log(`[build-browser-client] typecheck skipped (no tsconfig.json)`);
   }
 
   const viteConfig = findViteConfig(app.root);
@@ -388,6 +473,7 @@ export async function buildBrowserClient(options) {
       viteArgs.push('--config', path.relative(app.root, viteConfig).replaceAll('\\', '/'));
     }
   }
+  console.log(`[build-browser-client] bundle pnpm ${viteArgs.join(' ')}`);
   runCommand('pnpm', viteArgs, app.root, buildEnv);
 
   const outputIndex = path.join(app.root, outDir, 'index.html');
@@ -396,7 +482,7 @@ export async function buildBrowserClient(options) {
   }
 
   console.log(
-    `[build-browser-client] ${app.relative} ${architecture} ${deploymentProfile}.${environment} -> ${outDir}/`,
+    `[build-browser-client] PASS ${app.relative} ${architecture} ${deploymentProfile}.${environment} -> ${outDir}/ (FRONTEND_CODE_SPEC.md §7 / SDKWORK_WEBSERVER_SPEC.md §17.1)`,
   );
   return plan;
 }

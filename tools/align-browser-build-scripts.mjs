@@ -17,6 +17,7 @@ import {
   discoverBrowserAppRoots,
   standardRootBuildScript,
 } from './build-browser-client.mjs';
+import { declaredDeploymentProfiles } from './check-browser-build-scripts.mjs';
 import { checkBrowserDistLayout } from './check-browser-dist-layout.mjs';
 
 const VITE_OUTDIR_IMPORT = "import { resolveBrowserDistOutDir } from '../../../../sdkwork-specs/tools/browser-dist-layout.mjs';\n";
@@ -120,9 +121,10 @@ export function alignBrowserBuildScripts(root, options = {}) {
   let rootChanged = false;
 
   const architectures = [...new Set(apps.map((app) => app.architecture))];
+  const profiles = declaredDeploymentProfiles(root);
   for (const architecture of architectures) {
     for (const environmentAlias of STANDARD_ENVIRONMENT_ALIASES) {
-      for (const deploymentProfile of ['standalone', 'cloud']) {
+      for (const deploymentProfile of profiles) {
         const scriptName = standardRootBuildScript(architecture, environmentAlias, deploymentProfile);
         const command = canonicalRootBuildCommand(root, architecture, environmentAlias, deploymentProfile);
         if (manifest.scripts[scriptName] !== command) {
@@ -149,7 +151,7 @@ export function alignBrowserBuildScripts(root, options = {}) {
     appManifest.scripts ??= {};
     let appChanged = false;
     for (const environmentAlias of STANDARD_ENVIRONMENT_ALIASES) {
-      for (const deploymentProfile of ['standalone', 'cloud']) {
+      for (const deploymentProfile of profiles) {
         const scriptName = deploymentProfile === 'standalone'
           ? `build:${environmentAlias}`
           : `build:${environmentAlias}:${deploymentProfile}`;

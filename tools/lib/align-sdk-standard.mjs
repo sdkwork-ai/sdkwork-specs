@@ -277,6 +277,33 @@ function ensureComposedPackageJson(family, workspaceRoot, context) {
     }
   }
 
+  // Composed consumer packages publish the transport sources
+  // (`generated/server-openapi/src`, `generated/domains/server-openapi/src`)
+  // in their `files`, so every runtime dependency the transport declares (for
+  // example `@sdkwork/utils`, injected by the generator for sdkwork-v3
+  // profiles) MUST also be declared by the composed facade. Generated
+  // transports are forbidden in `pnpm-workspace.yaml`
+  // (`forbidden-workspace-transport`), so the facade is the only link that
+  // resolves those imports both locally (tsc) and for npm consumers.
+  const desiredSdkUtilsVersion = context.sdkUtilsVersion;
+  const transportPkg = fs.existsSync(family.transportPackageJsonPath)
+    ? readJson(family.transportPackageJsonPath)
+    : null;
+  const transportDeclaresUtils = Boolean(transportPkg?.dependencies?.['@sdkwork/utils']);
+  const currentSdkUtilsSpec = pkg.dependencies?.['@sdkwork/utils'];
+  if (transportDeclaresUtils && currentSdkUtilsSpec !== desiredSdkUtilsVersion) {
+    const shouldRewriteUtils = !currentSdkUtilsSpec
+      || isWorkspaceProtocolSpec(currentSdkUtilsSpec)
+      || currentSdkUtilsSpec === SDK_UTILS_PUBLISHED_FALLBACK;
+    if (shouldRewriteUtils) {
+      pkg.dependencies = {
+        ...(pkg.dependencies ?? {}),
+        '@sdkwork/utils': desiredSdkUtilsVersion,
+      };
+      changed = true;
+    }
+  }
+
   // Rewrite any remaining `workspace:*` specs in `dependencies`,
   // `peerDependencies`, and `devDependencies` to concrete published versions.
   // This covers:
@@ -640,6 +667,21 @@ export function collectSdkStandardViolations(workspaceRoot) {
           file: family.composedPackageJsonPath,
           message: 'consumer package must not export ./generated',
         });
+      }
+      // Generated transports are excluded from `pnpm-workspace.yaml`, so a
+      // runtime dependency the transport declares (for example
+      // `@sdkwork/utils` for sdkwork-v3 profiles) must be re-declared by the
+      // composed facade; otherwise both tsc and npm consumers fail to resolve
+      // it. `alignSdkStandard` adds the concrete spec when missing.
+      if (fs.existsSync(family.transportPackageJsonPath)) {
+        const transportPkg = readJson(family.transportPackageJsonPath);
+        if (transportPkg.dependencies?.['@sdkwork/utils'] && !pkg.dependencies?.['@sdkwork/utils']) {
+          violations.push({
+            kind: 'composed-missing-transport-dependency',
+            file: family.composedPackageJsonPath,
+            message: `consumer package must declare @sdkwork/utils (declared by transport ${family.transportPackageName})`,
+          });
+        }
       }
     }
 

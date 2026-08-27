@@ -93,3 +93,15 @@ test('findViteConfig discovers vite.config.web.mjs', async () => {
   const configPath = findViteConfig(pcRoot);
   assert.equal(path.basename(configPath), 'vite.config.web.mjs');
 });
+
+test('resolveBrowserTypecheckTsconfig prefers build then app then root', async () => {
+  const { resolveBrowserTypecheckTsconfig } = await import('./build-browser-client.mjs');
+  const root = fixtureRoot();
+  const pcRoot = path.join(root, 'apps', 'sdkwork-demo-pc');
+  fs.writeFileSync(path.join(pcRoot, 'tsconfig.json'), '{}\n');
+  assert.equal(path.basename(resolveBrowserTypecheckTsconfig(pcRoot)), 'tsconfig.json');
+  fs.writeFileSync(path.join(pcRoot, 'tsconfig.app.json'), '{}\n');
+  assert.equal(path.basename(resolveBrowserTypecheckTsconfig(pcRoot)), 'tsconfig.app.json');
+  fs.writeFileSync(path.join(pcRoot, 'tsconfig.build.json'), '{}\n');
+  assert.equal(path.basename(resolveBrowserTypecheckTsconfig(pcRoot)), 'tsconfig.build.json');
+});
