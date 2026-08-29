@@ -459,6 +459,21 @@ Rules:
   The Node-side dev server reads that target from the parent topology profile;
   browser modules receive same-origin SDK paths only.
 
+#### 5.1.4.1 VITE And PORTAL_PUBLIC Lifecycle
+
+Rules:
+
+- `VITE_*` keys are the authored browser contract. They are injected at build time and are the only browser-visible env keys. Browser bundles must not read `process.env` directly.
+- `PORTAL_PUBLIC_*` keys are the runtime contract. They are injected at runtime and are the only runtime env keys. Browser bundles must not read `import.meta.env` directly.
+- In `standalone` browser development, authored `VITE_*` same-origin relative API paths `MUST` win over any `PORTAL_PUBLIC_*` value derived from a dev launcher or shared gateway ingress. A dev runner `MUST NOT` inject absolute `PORTAL_PUBLIC_SDK_BASE_URL` or per-dependency absolute SDK base URLs when the browser contract is same-origin mounted.
+- In `cloud` browser/runtime config, public ingress and platform gateway URLs `MUST` be materialized into `PORTAL_PUBLIC_*` (or equivalent runtime config) from topology. Per-surface and per-dependency absolute base URLs `MUST` remain available when selected surfaces route to different hosts.
+- When both `VITE_*` and `PORTAL_PUBLIC_*` exist for the same logical surface, resolution order is:
+  1. explicit per-SDK override in authored runtime config or component spec;
+  2. authored `VITE_*` same-origin relative path in `standalone` dev;
+  3. topology-derived `PORTAL_PUBLIC_*` absolute URL in `cloud` or packaged runtime;
+  4. fail closed when the resolved base URL is empty for a required SDK client.
+- SDK client factories `MUST NOT` pre-strip canonical API path prefixes before passing `config.baseUrl` to generated SDK clients when the authored value is a same-origin relative path such as `/app/v3/api`. Prefix normalization belongs to the generated SDK transport layer and must preserve non-empty relative origins.
+
 ### 5.1.5 Flutter Dart-Define JSON Format
 
 Flutter roots use JSON because `--dart-define-from-file` is the native build
@@ -772,6 +787,27 @@ Rules:
 - Test fixtures may contain fake token strings only when the file is clearly test-only, excluded from production bundles, and covered by static scans that prevent reuse in release config.
 - Runtime env, tracked `.env.example`, bootstrap overlays, runtime TOML, and public runtime config `MUST NOT` define fixed IAM identity scope through `SDKWORK_IAM_BOOTSTRAP_*`, `SDKWORK_IAM_LOCAL_*`, `SDKWORK_USER_CENTER_BOOTSTRAP_*`, runtime `SDKWORK_APP_ID`, `VITE_SDKWORK_APP_ID`, or equivalent tenant/organization/user/owner bootstrap variables. Current tenant, organization, user, session, and app scope `MUST` come from dual-token JWT claims after login according to `IAM_LOGIN_INTEGRATION_SPEC.md`.
 - Release and CI tooling `MAY` use `SDKWORK_APP_ID` only as build or workflow metadata. That variable `MUST NOT` be read by live IAM runtime, TokenManager, or protected SDK client scope resolution.
+
+### 6.2 Standalone Same-Origin Versus Cloud Independent API Base URLs
+
+This section is the normative decision matrix for browser SDK base URL configuration across deployment profiles. Authority for assembly composition remains `API_ASSEMBLY_SPEC.md`; authority for topology materialization remains `CONFIG_SPEC.md` and `DEPLOYMENT_SPEC.md`.
+
+| Concern | `standalone` profile | `cloud` profile |
+| --- | --- | --- |
+| Browser SDK base URL default | Same-origin relative canonical API paths (`/app/v3/api`, `/feeds/v3/api`, …) | Absolute URLs from `application.public-ingress` and `platform.api-gateway` |
+| API process ownership | Application `sdkwork-api-<application-code>-standalone-gateway` started by the application dev runner or packaged artifact | Deployed application and platform API surfaces; no local standalone gateway in cloud runners |
+| Dev ingress | One browser-visible origin; internal API listener reached through Vite `dev-server-proxy` or equivalent canonical-path proxy | Public ingress URL(s) declared in topology |
+| Dependency APIs in standalone | Selected into the application standalone gateway through `dependencyApiSurfaces` and `API_ASSEMBLY_SPEC.md` §6.1 | Resolved from deployed platform/application surfaces or explicit per-dependency absolute base URLs |
+| Forbidden browser defaults | Pointing generated SDK clients at sibling module dev ports (`8095`, `18095`, `3902`, …) when same-origin federation is declared | Assuming localhost or undeclared private upstreams |
+
+Rules:
+
+- `standalone` browser clients `MUST` default to same-origin relative SDK base URLs for every surface mounted on the application standalone gateway. Example authored keys: `VITE_<APP_CODE>_APP_API_BASE_URL=/app/v3/api`, `VITE_<APP_CODE>_FEEDS_APP_API_BASE_URL=/feeds/v3/api`.
+- `standalone` dev runners `MUST` proxy those canonical paths to the application standalone gateway listener. The browser `MUST NOT` be configured to call dependency-owned standalone gateway ports directly when `dependencyApiSurfaces.runtimeMode` is `same-origin` or `same-origin-mounted`.
+- `cloud` browser and server runtime `MUST` resolve SDK base URLs from declared topology: application-owned surfaces from `application.public-ingress`, platform dependency surfaces from `platform.api-gateway`, and explicit overrides per `dependencyApiSurfaces` when surfaces are not co-hosted.
+- Each application `MUST` be able to start its `sdkwork-api-<application-code>-standalone-gateway` independently and serve composed APIs on a declared listener without requiring sibling application repositories to be running, except for explicitly declared external upstream overrides in topology or dev profile.
+- Standalone gateway completeness `MUST` follow `API_ASSEMBLY_SPEC.md` §6.1.1: every `dependencyApiSurfaces` entry with `runtimeMode` `same-origin` or `same-origin-mounted` `MUST` be integrated into the application api-assembly with matching route manifests, OpenAPI inventories, and verification evidence.
+- Environment examples, dev launcher output, and HAR-visible browser requests `MUST` reflect the selected profile. A `standalone` example `MUST NOT` document absolute sibling-module ports as the default browser contract when same-origin federation is the declared integration mode.
 
 ## 7. Database Selection Standard
 

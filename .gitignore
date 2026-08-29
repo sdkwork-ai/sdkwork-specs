@@ -77,3 +77,9 @@ tools/_tmp-*
 tools/postgres/tmp-*.cjs
 # Runtime-generated environment configuration
 **/public/runtime-env.json
+
+# SDKWork baseline ignore patterns (auto-appended)
+**/*.bootstrap.local.json
+etc/**/*.local.*
+/etc/secrets/
+

@@ -411,6 +411,28 @@ Standalone dependency composition rules:
 - A standalone client `MUST` use the application public-ingress origin for every selected same-origin dependency SDK. The standalone profile `MUST NOT` publish a platform API gateway URL, dependency sidecar URL, alternate loopback port, or `VITE_*` platform-gateway URL for that dependency.
 - Selecting a dependency assembly means linking and initializing its Rust backend contribution inside the current application standalone gateway process. It `MUST NOT` start the dependency's standalone gateway binary or require a second HTTP listener.
 
+#### 6.1.1 Standalone Dependency Integration Completeness
+
+When an application declares `dependencyApiSurfaces` with `runtimeMode` `same-origin` or `same-origin-mounted`, the owning application api-assembly and standalone gateway `MUST` integrate the full declared dependency API surface. Partial integration is a contract violation.
+
+Checklist — every declared same-origin dependency `MUST` satisfy all items:
+
+| Check | Requirement |
+| --- | --- |
+| Assembly selection | Dependency api-assembly or approved route crate set is registered in the application standalone gateway bootstrap |
+| Route manifest | All dependency-owned routes appear in the composed standalone route manifest |
+| OpenAPI inventory | Composed OpenAPI route inventory matches the route manifest after approved augmentation rules; manifest-only or OpenAPI-only drift `MUST` fail verification |
+| Listener exposure | Canonical browser paths (for example `/feeds/v3/api`) are served by the application standalone gateway or declared same-origin mount, not by a sibling dev port in browser clients |
+| SDK bootstrap | Frontend/runtime resolves the dependency SDK `baseUrl` as a same-origin relative path in `standalone` per `ENVIRONMENT_SPEC.md` §6.2 |
+| Independent start | `sdkwork-api-<application-code>-standalone-gateway` starts and passes readiness with only declared external upstreams; missing same-origin dependency routes `MUST` fail startup or verification |
+
+Rules:
+
+- Dependency integration `MUST` follow declared `dependencyApiSurfaces` ownership and `runtimeMode`. Do not import dependency route crates into application-owned generated SDK authorities; compose at the api-assembly boundary only.
+- When federated open routes exist (for example feeds open runtime), bootstrap `MUST` apply the same OpenAPI augmentation policy used for application app/backend surfaces so composed inventories stay aligned with route manifests.
+- Repository verification for api-assembly changes `MUST` include standalone gateway build/start evidence and any repository-owned assembly inventory checks. Cross-reference `ENVIRONMENT_SPEC.md` §6.2 for browser URL expectations.
+- The standalone gateway `MUST` be able to start independently and serve the composed API surface for its owning application without requiring sibling application repositories to be running, except for explicitly declared external upstream overrides.
+
 ### 6.2 Cloud
 
 Only the `sdkwork-api-cloud-gateway` repository owns the platform cloud gateway

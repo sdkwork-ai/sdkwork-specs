@@ -96,6 +96,13 @@ Rules:
   on-device gateway. They may consume the application standalone gateway on a
   developer machine, customer-private host, LAN appliance, or other declared
   private endpoint. Offline capability is a separate contract.
+- Standalone browser SDK base URLs `MUST` use same-origin relative canonical
+  API paths with dev/proxy ingress to the application standalone gateway.
+  Cross-reference `ENVIRONMENT_SPEC.md` §6.2 and `API_ASSEMBLY_SPEC.md` §6.1.1.
+- The application `sdkwork-api-<application-code>-standalone-gateway`
+  `MUST` start independently and expose the full same-origin-mounted API
+  surface composed in api-assembly without requiring sibling application
+  repositories to be running, except for declared external upstream overrides.
 
 ### 1.2 Cloud Profile
 
@@ -115,6 +122,12 @@ Rules:
   when a gateway serves all SDK surfaces while preserving canonical API paths,
   and `MUST` support explicit per-surface or per-dependency base URL overrides
   when selected surfaces route to different hosts.
+- Cloud deployments `MUST` use independent absolute API base URLs from
+  declared topology (`application.public-ingress`, `platform.api-gateway`, and
+  documented per-dependency overrides). Browser clients `MUST NOT` rely on
+  same-origin relative paths unless production ingress explicitly co-hosts every
+  derived surface on one origin. Cross-reference `ENVIRONMENT_SPEC.md` §6.2 and
+  `CONFIG_SPEC.md` §3.1.
 - Cloud release artifacts are container images, charts/manifests, deployment
   bundles, or provider-specific deployment packages with SBOM, provenance,
   checksums, signing, rollout, and rollback evidence.

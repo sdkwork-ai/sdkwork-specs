@@ -184,6 +184,18 @@ Rules:
   dependency API assembly exists. Existing exceptions follow
   `MIGRATION_SPEC.md` and are removed from the final compliant state.
 
+### 2.4 Standalone Same-Origin Versus Cloud Independent SDK Base URLs
+
+Application SDK bootstrap `MUST` resolve `config.baseUrl` according to deployment profile and declared `dependencyApiSurfaces`. Authority: `ENVIRONMENT_SPEC.md` §5.1.4.1 and §6.2, `CONFIG_SPEC.md` §3.1.
+
+Rules:
+
+- In `standalone` browser and desktop renderer surfaces, application-owned and same-origin-mounted dependency SDK clients `MUST` default to same-origin relative canonical API paths (for example `/app/v3/api`, `/feeds/v3/api`). Dev proxy routing to the application standalone gateway is an ingress concern; SDK clients `MUST NOT` embed sibling module localhost ports as the default base URL.
+- In `cloud` surfaces, SDK clients `MUST` resolve absolute base URLs from runtime topology: `application.public-ingress` for application-owned APIs, `platform.api-gateway` for platform dependency APIs, and explicit per-dependency overrides when topology declares a different host.
+- Shared runtime/bootstrap packages (for example application commons SDK inventory) `MUST` centralize base URL resolution per surface. Feature packages `MUST NOT` hardcode absolute dev ports or duplicate conflicting resolution logic.
+- Generated SDK client factories `MUST` receive a non-empty `config.baseUrl` for required clients. Same-origin relative paths are valid base URLs and `MUST NOT` be normalized to empty strings before client construction.
+- When a dependency is integrated only in `cloud` (not same-origin-mounted in standalone), standalone bootstrap `MUST NOT` fabricate a same-origin path for that dependency. Conversely, when a dependency is `same-origin-mounted`, standalone bootstrap `MUST NOT` fall back to a remote absolute URL unless topology explicitly declares an external upstream override.
+
 ## 3. Architecture-Specific SDK Families
 
 Each application architecture uses the SDK family and IAM wrapper that match its language and runtime.
