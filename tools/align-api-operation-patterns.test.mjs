@@ -97,6 +97,64 @@ paths:
   assert.match(second.stdout, /would align 0 files \(0 changes\)/u);
 });
 
+test('alignOpenApiOperationPatterns strips duplicated tag root from operationId', () => {
+  const input = document({
+    '/app/v3/api/wallet/overview': {
+      get: {
+        tags: ['wallet'],
+        operationId: 'wallet.overview.retrieve',
+        responses: { 200: { description: 'ok' } },
+      },
+    },
+  });
+
+  const result = alignOpenApiOperationPatterns(input);
+  assert.ok(result.changes > 0);
+  assert.equal(input.paths['/app/v3/api/wallet/overview'].get.operationId, 'overview.retrieve');
+  assert.equal(classifyOpenApiOperationPatterns(JSON.stringify(input)).length, 0);
+});
+
+test('alignOpenApiOperationPatterns converts int64 integer to string with marker', () => {
+  const input = {
+    ...document({}),
+    components: {
+      schemas: {
+        CartItem: {
+          type: 'object',
+          properties: { quantity: { type: 'integer', format: 'int64' } },
+        },
+      },
+    },
+  };
+
+  const result = alignOpenApiOperationPatterns(input);
+  assert.ok(result.changes > 0);
+  assert.equal(input.components.schemas.CartItem.properties.quantity.type, 'string');
+  assert.equal(input.components.schemas.CartItem.properties.quantity['x-sdkwork-int64-string'], true);
+  assert.equal(classifyOpenApiOperationPatterns(JSON.stringify(input)).length, 0);
+});
+
+test('alignOpenApiOperationPatterns closes idempotency header contract', () => {
+  const input = document({
+    '/app/v3/api/items': {
+      post: {
+        operationId: 'items.create',
+        'x-sdkwork-idempotent': true,
+        responses: { 201: { description: 'created' } },
+      },
+    },
+  });
+
+  const result = alignOpenApiOperationPatterns(input);
+  assert.ok(result.changes > 0);
+  const post = input.paths['/app/v3/api/items'].post;
+  const header = post.parameters.find((p) => p.name === 'Idempotency-Key');
+  assert.ok(header);
+  assert.equal(header.required, true);
+  assert.deepEqual(header.schema, { type: 'string', minLength: 1, maxLength: 128 });
+  assert.equal(classifyOpenApiOperationPatterns(JSON.stringify(input)).length, 0);
+});
+
 test('workspace aligner preserves JSON-compatible YAML source formatting', () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-operation-json-yaml-aligner-'));
   const authority = path.join(workspace, 'sdkwork-test', 'apis', 'app-api', 'test', 'openapi.yaml');

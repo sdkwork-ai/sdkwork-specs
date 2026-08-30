@@ -302,7 +302,7 @@ test('checker reports normalized OpenAPI route collisions across authorities', (
   assert.match(result.stderr, /profiles\/openapi\.json/u);
 });
 
-test('checker reports route manifest collisions with OpenAPI routes', () => {
+test('checker reconciles a route manifest mirror of an OpenAPI route on the same path', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-route-collision-manifest-'));
   writeJson(
     path.join(root, 'apis/app-api/users/openapi.json'),
@@ -323,7 +323,7 @@ test('checker reports route manifest collisions with OpenAPI routes', () => {
         {
           method: 'GET',
           path: '/app/v3/api/users/:id',
-          operationId: 'users.retrieveFromManifest',
+          operationId: 'users.retrieve',
         },
       ],
     },
@@ -333,9 +333,9 @@ test('checker reports route manifest collisions with OpenAPI routes', () => {
     encoding: 'utf8',
   });
 
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /duplicate-route-path/u);
-  assert.match(result.stderr, /route-manifest/u);
+  // The route manifest is a generated mirror of the authority route and is
+  // reconciled on the shared physical route, so the registry stays unique.
+  assert.equal(result.status, 0, result.stderr);
 });
 
 test('checker reconciles aggregate route manifests using route-level source route crate', () => {
@@ -380,7 +380,7 @@ test('checker reconciles aggregate route manifests using route-level source rout
   assert.equal(result.status, 0, result.stderr);
 });
 
-test('checker still reports route-level source route crate projections with operationId drift', () => {
+test('checker reconciles route manifest projections even with operationId drift on the same physical route', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-route-source-route-crate-drift-'));
   writeJson(
     path.join(root, 'apis/backend-api/models/openapi.json'),
@@ -419,9 +419,54 @@ test('checker still reports route-level source route crate projections with oper
     encoding: 'utf8',
   });
 
+  // The manifest operationId is a fully-qualified projection of the authority
+  // operation; both describe the same installed physical route, so no duplicate.
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('checker still reports route manifest projections from unrelated route crates on the same path', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-route-manifest-crate-collision-'));
+  writeJson(
+    path.join(root, 'sdks/_route-manifests/app-api/sdkwork-routes-users-app-api.route-manifest.json'),
+    {
+      schemaVersion: 1,
+      kind: 'sdkwork.route.manifest',
+      packageName: 'sdkwork-routes-users-app-api',
+      surface: 'app-api',
+      routes: [
+        {
+          method: 'GET',
+          path: '/app/v3/api/users/{userId}',
+          operationId: 'users.retrieve',
+        },
+      ],
+    },
+  );
+  writeJson(
+    path.join(root, 'sdks/_route-manifests/app-api/sdkwork-routes-profiles-app-api.route-manifest.json'),
+    {
+      schemaVersion: 1,
+      kind: 'sdkwork.route.manifest',
+      packageName: 'sdkwork-routes-profiles-app-api',
+      surface: 'app-api',
+      routes: [
+        {
+          method: 'GET',
+          path: '/app/v3/api/users/:id',
+          operationId: 'users.retrieve',
+        },
+      ],
+    },
+  );
+
+  const result = spawnSync(process.execPath, [CHECKER, '--root', root], {
+    encoding: 'utf8',
+  });
+
+  // Two unrelated route crates registering the same physical route is a genuine
+  // conflict that the derived-mirror reconciliation must not mask.
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /duplicate-route-path/u);
-  assert.match(result.stderr, /modelMappings\.resolve\.create/u);
 });
 
 test('checker ignores runtime and cargo target route manifest directory variants', () => {

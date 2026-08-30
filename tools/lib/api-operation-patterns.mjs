@@ -123,7 +123,7 @@ function classifyIdempotencyContract(entry, document) {
     && parameter.name.toLowerCase() === 'idempotency-key'
   ));
 
-  if (marker !== undefined && typeof marker !== 'boolean') {
+  if (marker !== undefined && marker !== null && typeof marker !== 'boolean') {
     issues.push({
       kind: 'invalid-idempotency-marker',
       detail: `${operationLabel} x-sdkwork-idempotent must be a boolean`,

@@ -501,6 +501,60 @@ Workspace verification:
 - `node tools/sweep-browser-build-workspace.mjs --workspace <sdkwork-space-root>`
 - `node tools/align-browser-build-scripts.mjs --workspace <sdkwork-space-root>`
 
+### 4.4 Unified Container Install Bundle
+
+The unified install image is built exactly once per release and carries no
+environment binding. Environment selection and instance count are deployment
+inputs resolved at container start, never at image build time.
+
+Grammar:
+
+```text
+build:container:install
+deploy:apply:standalone:docker
+```
+
+Repository root examples (`sdkwork-webserver` operator surface):
+
+```text
+pnpm build:container:install
+pnpm build:container:install -- --tag 0.1.0 --out dist/docker-install
+pnpm deploy:apply:standalone:docker -- --environment production --replicas 3
+pnpm deploy:apply:standalone:docker -- --environment development --down
+```
+
+`build:container:install` packages the self-contained install bundle:
+
+```text
+sdkwork-webserver-install-<version>.bundle/
+  image.tar.gz / image.sha256 / image.env
+  compose/docker-compose.bundle.yml       # environment-neutral multi-instance template
+  compose/docker-compose.bundle-edge.yml  # instance-1 80/443 edge overlay
+  env/{development,test,production}.env.example
+  deploy.sh / manifest.json / README.md
+```
+
+Rules:
+
+- One image, every environment: the image `MUST NOT` bake environment,
+  domain, database, or credential values. The entrypoint resolves
+  `SDKWORK_WEBSERVER_ENVIRONMENT` and deployment inputs at container start.
+- Every environment supports N instances. Each instance is one compose
+  project (`sdkwork-webserver-<environment>-i<index>`) with a unique node
+  identity (`SDKWORK_WEBSERVER_NODE_UUID`), its own management host port, and
+  the per-environment shared network plus shared secrets/data volumes. Only
+  instance 1 publishes the 80/443 import-plane edge.
+- Shared PostgreSQL and Redis are prerequisites for multi-instance
+  deployment. Instance 1 starts first, completes database migration, and
+  reaches health before instances 2..N start.
+- `deploy.sh` is the single generic bundle entrypoint; it `MUST` require an
+  explicit `--environment`, fail before side effects when it is missing or
+  unknown, and stay idempotent (re-running updates the existing stack).
+- `deploy:apply:standalone:docker` runs the bundle deploy script from the
+  repository root with explicit environment and replica arguments.
+- Bundle artifacts are immutable release outputs (`release:package:*` phase
+  semantics); they `MUST NOT` rebuild a different image during deployment.
+
 ## 5. Axis Values
 
 Script suffixes use canonical values from `APP_RUNTIME_TOPOLOGY_NAMING.md`, `CONFIG_SPEC.md`, and `ENVIRONMENT_SPEC.md`.

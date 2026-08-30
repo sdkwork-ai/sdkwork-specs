@@ -40,6 +40,15 @@ export const RUNTIME_MODES = new Set([
   'external-via-declared-upstream',
 ]);
 
+function isPlatformRuntimeDependency(dep) {
+  const mode = String(dep?.dependencyMode ?? '').toLowerCase();
+  if (mode === 'platform-framework' || mode === 'platform-kernel') return true;
+  // A dependency that explicitly forbids generated transport and names no API
+  // surface is carrying no SDK connectivity; treat it as platform linkage only
+  // when it is explicitly declared as a platform/util mode.
+  return mode.startsWith('platform-');
+}
+
 function readJsonIfExists(filePath) {
   if (!fs.existsSync(filePath)) return null;
   return readJson(filePath);
@@ -426,6 +435,11 @@ export function resolveComposition(repoRoot, options = {}) {
 
   for (const dep of sdkDependencies) {
     const workspace = dep.workspace;
+    // Platform runtime dependencies (dependencyMode: platform-framework /
+    // platform-kernel) are native package linkage, not HTTP API surface
+    // consumers. They must not be required to resolve SDK ownership or a
+    // connectivity plane, and they contribute no API integration.
+    if (isPlatformRuntimeDependency(dep)) continue;
     const sdkFamilyManifest = loadSdkFamilyManifest(repoRoot, workspace);
     const manifestDiscovery = sdkFamilyManifest?.discoverySurface ?? null;
     const dependencyIntegration = loadDependencyIntegration(repoRoot, workspace);

@@ -397,8 +397,10 @@ function parseYamlParameterLine(
   currentParameter,
   inParameterSchema,
 ) {
-  const listIndent = propertyIndent - 2;
-  const listMatch = line.match(new RegExp(`^ {${listIndent}}-\\s*(.*)$`, 'u'));
+  // Parameter lists across SDKWork OpenAPI files are authored with both
+  // key+2 indentation and with dash-list items aligned to the `parameters:` key.
+  // Match by token, not by a fixed indentation, so both styles parse.
+  const listMatch = line.match(/^\s*-\s+(.+?)\s*$/u);
   if (listMatch) {
     const parameter = {};
     target.push(parameter);
@@ -412,20 +414,18 @@ function parseYamlParameterLine(
   if (!currentParameter) {
     return false;
   }
-  const propertyMatch = line.match(new RegExp(`^ {${propertyIndent}}(name|in|required|\\$ref):\\s*(.+?)\\s*$`, 'u'));
+  const propertyMatch = line.match(/^\s*(name|in|required|\$ref):\s*(.+?)\s*$/u);
   if (propertyMatch) {
     currentParameter[propertyMatch[1]] = parseYamlScalarValue(propertyMatch[2].trim());
     updateCurrent(currentParameter, false);
     return true;
   }
-  if (new RegExp(`^ {${propertyIndent}}schema:\\s*$`, 'u').test(line)) {
+  if (/^\s*schema:\s*$/u.test(line)) {
     currentParameter.schema = {};
     updateCurrent(currentParameter, true);
     return true;
   }
-  const schemaPropertyMatch = line.match(
-    new RegExp(`^ {${propertyIndent + 2}}(type|minLength|maxLength|pattern):\\s*(.+?)\\s*$`, 'u'),
-  );
+  const schemaPropertyMatch = line.match(/^\s*(type|minLength|maxLength|pattern):\s*(.+?)\s*$/u);
   if (inParameterSchema && schemaPropertyMatch) {
     currentParameter.schema[schemaPropertyMatch[1]] = parseYamlScalarValue(schemaPropertyMatch[2].trim());
     updateCurrent(currentParameter, true);

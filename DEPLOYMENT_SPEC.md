@@ -527,7 +527,48 @@ host-mapped probe `http://127.0.0.1:3910` for development). Certificate
 material uses `/etc/sdkwork/certs/letsencrypt/<cert-name>/fullchain.pem` plus
 `/etc/sdkwork/certs/letsencrypt/<cert-name>/privkey.pem`.
 
-## 6. Acceptance Checklist
+## 6. Container Install Image And Multi-Instance Deployment
+
+The unified container install image is one immutable artifact per release. It
+carries no environment binding: the lifecycle environment, domain, database,
+and credentials are deployment inputs resolved by the container entrypoint at
+start.
+
+Rules:
+
+- One image, every environment: `development`, `test`, and `production`
+  deployments use the same image tag. Environment selection `MUST` happen at
+  deploy time through the deployment env file (`SDKWORK_WEBSERVER_ENVIRONMENT`
+  and related variables); image builds `MUST NOT` bake environment values.
+- Every environment supports multi-instance deployment. Each instance:
+  - runs as its own compose project `sdkwork-webserver-<environment>-i<index>`;
+  - owns a unique node identity (`SDKWORK_WEBSERVER_NODE_UUID` or the
+    container-hostname-derived default) and its own management host port;
+  - joins the per-environment shared network and mounts the per-environment
+    shared secrets/data volumes.
+- Only instance 1 publishes the 80/443 import-plane edge host ports. External
+  load balancing across instances uses the per-instance management ports.
+- Shared PostgreSQL and Redis are prerequisites. Instance 1 starts first,
+  completes database migration, and reaches health before instances 2..N
+  start.
+- The bundle deploy script is the single generic entrypoint:
+  `deploy.sh --environment <env> [--replicas N] [--external] [--down|--ps|--logs]`.
+  It `MUST` fail before side effects when the environment is missing or
+  unknown, and `MUST` stay idempotent (re-running updates the existing stack).
+- Container space mounts follow `SDKWORK_WEBSERVER_SPEC.md` section 17: the
+  space root is read-only and the `sdkwork-space` checkout subtree is a
+  read-write overlay (clone/pull target). The import plane default active set
+  is `cloud` (`SDKWORK_WEBSERVER_IMPORT_PROFILE`), and every container listens
+  on gateway port 3800 internally so module `server.standalone.toml` upstreams
+  stay uniform across instances and hosts.
+- Multiple independently configurable webservers: a per-instance override file
+  `env/<environment>.i<index>.env` is layered on top of the base environment
+  env file (later `--env-file` wins), so each instance can carry its own
+  primary domain, clone URL, TLS/ACME profile, or any other deployment input.
+- See `PNPM_SCRIPT_SPEC.md` section 4.4 for the owning commands
+  (`build:container:install`, `deploy:apply:standalone:docker`).
+
+## 7. Acceptance Checklist
 
 - [ ] Deployment profile is explicit and is either `standalone` or `cloud`.
 - [ ] Runtime target is explicit and separate from deployment profile.
@@ -541,3 +582,7 @@ material uses `/etc/sdkwork/certs/letsencrypt/<cert-name>/fullchain.pem` plus
 - [ ] Discovery endpoint and registration lifecycle are declared when dynamic RPC resolution is enabled.
 - [ ] RPC framework integration is verified for RPC-enabled service hosts.
 - [ ] Environment config is documented and typed.
+- [ ] The unified install image is environment-neutral and supports every
+      lifecycle environment at deploy time.
+- [ ] Every environment can deploy N instances with unique node identities
+      and shared per-environment state.

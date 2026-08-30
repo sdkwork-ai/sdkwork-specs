@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { toPosix } from './app-composition.mjs';
 
-const SKIP_DIRS = new Set(['.git', 'target', 'node_modules', 'dist', 'build']);
+const SKIP_DIRS = new Set(['.git', '.tmp', 'target', 'node_modules', 'dist', 'build']);
 
 const HTTP_FRAMEWORK_CRATES = new Set([
   'axum',

@@ -176,6 +176,20 @@ export function loadSdkFamilyManifestForWorkspaceConsumer(repoRoot, workspace) {
       if (manifest) return manifest;
     }
   }
+  // Multi-segment and non-standard family names (for example
+  // sdkwork-drive-admin-storage-sdk, sdkwork-modelkit-sdk-typescript) may not
+  // match the domain-derivation regex above. Always fall back to a workspace
+  // scan so a correctly-owned sdk-manifest.json can still be resolved before
+  // giving up. Guard against the common no-op path (repo index) cheaply.
+  try {
+    const ownerRoot = findSdkFamilyOwnerRepo(repoRoot, workspace);
+    if (ownerRoot) {
+      const manifest = loadSdkFamilyManifestFromFamilyMetadata(ownerRoot, workspace);
+      if (manifest) return manifest;
+    }
+  } catch {
+    // fall through to local metadata lookup
+  }
   return loadSdkFamilyManifestFromFamilyMetadata(repoRoot, workspace);
 }
 

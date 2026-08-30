@@ -74,6 +74,8 @@ Thumbs.db
 Thumbs.db
 
 tools/_tmp-*
+tools/tmp-*.mjs
+tools/_*.txt
 tools/postgres/tmp-*.cjs
 # Runtime-generated environment configuration
 **/public/runtime-env.json

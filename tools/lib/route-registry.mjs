@@ -143,6 +143,7 @@ function collapseEquivalentRepresentations(entries) {
 }
 
 function representsSameRouteDeclaration(left, right) {
+  if (isDerivedRouteManifestMirror(left, right)) return true;
   if (!left.operationId || left.operationId !== right.operationId) return false;
   if (isEquivalentDependencyOwnedProjection(left, right)) return true;
   if (left.routeCrate && right.routeCrate && left.routeCrate !== right.routeCrate) return false;
@@ -151,6 +152,25 @@ function representsSameRouteDeclaration(left, right) {
   if (isEquivalentOpenApiProjection(left, right)) return true;
   if (left.sourceKind === right.sourceKind) return false;
   return true;
+}
+
+/**
+ * A route manifest produced by SDK generation is a derived mirror of the
+ * OpenAPI authority that owns the route. When a route-manifest entry shares
+ * the same physical route (surface/method/path, already grouped together) as an
+ * OpenAPI projection, they describe the same installed route even though the
+ * manifest names operations with a fully-qualified operationId that may differ
+ * from the authority's short operationId. Treat the manifest as covered by the
+ * authority instead of reporting a false duplicate.
+ */
+function isDerivedRouteManifestMirror(left, right) {
+  const manifest = left.sourceKind === 'route-manifest' ? left
+    : right.sourceKind === 'route-manifest' ? right
+      : null;
+  const openApi = left.sourceKind === 'openapi' ? left
+    : right.sourceKind === 'openapi' ? right
+      : null;
+  return Boolean(manifest && openApi);
 }
 
 function isEquivalentDependencyOwnedProjection(left, right) {
