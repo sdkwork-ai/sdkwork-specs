@@ -189,7 +189,7 @@ mode, and runtime target separate.
 
 | Concern | Standard values | Owner |
 | --- | --- | --- |
-| Lifecycle environment | `development`, `test`, `staging`, `production` | `CONFIG_SPEC.md` typed runtime config |
+| Lifecycle environment | `development`, `test`, `staging`, `demo`, `production` | `CONFIG_SPEC.md` typed runtime config |
 | Profile alias | `dev`, `test`, `staging`, `prod` | legacy command/operator compatibility only |
 | Build mode | Vite/Tauri/Spring/build-tool mode | build scripts and tool config |
 | Deployment profile | `standalone`, `cloud` | runtime/bootstrap |
@@ -203,13 +203,13 @@ Standard config ownership:
 | Browser deploy-time runtime | `config/browser/runtime-env.<deployment-profile>.<environment>.example.json`, `/runtime-env.js` | promotable public SDK base URLs, public feature flags, public app metadata | secrets, database URLs, Redis URLs, tokens, private service endpoints |
 
 The browser runtime source matrix is one file per supported
-`<deployment-profile>.<environment>` combination (all eight when both
-`standalone` and `cloud` ship all four lifecycle environments) using the
+`<deployment-profile>.<environment>` combination (all ten when both
+`standalone` and `cloud` ship all five lifecycle environments) using the
 canonical `runtime-env.<deployment-profile>.<environment>.json` name — never
 environment-only or profile-only names. Value rules per profile follow
 `ENVIRONMENT_SPEC.md` §5.1.0.1: `standalone` sources use the same-origin root
 `/` for every SDK base URL; `cloud` sources use the unified `cloudApiBaseUrl`
-origin for the environment (`api-dev.<domain>` … `api.<domain>`).
+origin for the environment (`api-dev.<domain>` … `api-demo.<domain>` … `api.<domain>`).
 | Desktop user runtime | `config/desktop/<application-code>.<deployment-profile>.<environment>.toml.example`, user `~/.sdkwork/<application-code>/config/<application-code>.toml` | installed desktop mode, local service toggle, declared client-local user-private SQLite path, secure storage provider | server PostgreSQL defaults for dev services, API route constants, signing secrets |
 | Server runtime | `config/server/<application-code>.<deployment-profile>.<environment>.toml.example`, `/etc/sdkwork/<application-code>/<process>.toml` | bind address, PostgreSQL, Redis, reverse proxy trust, service paths | browser-only `VITE_*`, Tauri packaging metadata |
 | Container runtime | `config/container/<application-code>.<deployment-profile>.<environment>.toml.example`, mounted `/etc/sdkwork/...` | container service config, mounted secrets, external services, volumes | image-baked secrets or mutable database state |
@@ -217,7 +217,7 @@ origin for the environment (`api-dev.<domain>` … `api.<domain>`).
 
 Rules:
 
-- PC roots `MUST` provide safe example config for every runtime target they support. `development`, `test`, `staging`, and `production` examples are required for server/container targets; browser and desktop targets should provide the same set unless the target is explicitly dev-only.
+- PC roots `MUST` provide safe example config for every runtime target they support. `development`, `test`, `staging`, `demo`, and `production` examples are required for server/container targets; browser and desktop targets should provide the same set unless the target is explicitly dev-only.
 - PC Vite renderers `MUST` use `.env.<deploymentProfile>.<environment>` and
   `vite --mode <deploymentProfile>.<environment>` as defined by
   `ENVIRONMENT_SPEC.md` section 5.1. Root `.env.*` files are materialized from
@@ -682,7 +682,7 @@ Required verification for PC application architecture changes:
 | SDK boundary | Static scan proves app/console use app SDKs, `backend-admin` packages use backend SDKs, protected open-api uses declared open-api credential provider, and no raw HTTP/manual auth headers were introduced. |
 | SDK export boundary | Static scan proves `pc-core` exports app SDK/appbase app SDK wrappers and no backend SDK wrappers, while backend SDK/appbase backend SDK wrappers are exported only from `pc-admin-core` or another `backend-admin` boundary. |
 | IAM boundary | Tests prove appbase IAM runtime, global TokenManager, logout clearing, session restore, and route guards behave across app, console, and admin surfaces. |
-| Config profile boundary | Static and runtime tests prove `development/test/staging/production`, profile aliases, deployment profile, build mode, and runtime target are separated; browser, desktop, server, container, and Tauri platform config files do not leak into each other. |
+| Config profile boundary | Static and runtime tests prove `development/test/staging/demo/production`, profile aliases, deployment profile, build mode, and runtime target are separated; browser, desktop, server, container, and Tauri platform config files do not leak into each other. |
 | Environment file hygiene | Static scan proves checked-in files are safe examples only and ignored host-local files include `.env.local`, `.env.<profile>.local`, `.env.postgres`, `.env.release.local`, and `config/*.local.toml`. |
 | Root thinness | Static scan or code review proves root `src/` owns bootstrap/composition only, not business services or mock data. |
 | Desktop and tablet parity | When native targets exist, Tauri config, platform config files, host adapters, web fallback, renderer reuse, iPadOS packaging, and Android tablet packaging pass `DESKTOP_APP_ARCHITECTURE_SPEC.md`. |

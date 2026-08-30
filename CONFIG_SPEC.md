@@ -52,9 +52,9 @@ Rules:
 ## 2. Standard Runtime Config
 
 ```ts
-export type SdkworkEnvironment = "development" | "test" | "staging" | "production";
+export type SdkworkEnvironment = "development" | "test" | "staging" | "demo" | "production";
 export type SdkworkConfigProfile = "dev" | "test" | "staging" | "prod";
-export type SdkworkBuildMode = "development" | "test" | "staging" | "production";
+export type SdkworkBuildMode = "development" | "test" | "staging" | "demo" | "production";
 export type SdkworkDeploymentProfile = "standalone" | "cloud";
 export type SdkworkBrowserOriginMode = "same-origin" | "cross-origin";
 export type SdkworkGatewayPlacement =

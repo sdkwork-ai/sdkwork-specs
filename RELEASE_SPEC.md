@@ -108,8 +108,7 @@ Rules:
   runtime config is a versioned deployment/publication input with its own
   provenance.
 - Production-publishable `server` and `container` artifacts that embed runtime
-  config templates `MUST` use an explicit production-safe allowlist and `MUST
-  NOT` include development, test, or staging templates. Non-production profiles
+  config templates `MUST` use an explicit production-safe allowlist and `MUST NOT` include development, test, staging, or demo templates. Non-production profiles
   remain source/deployment inputs and are supplied through external config
   mounts, a controlled environment overlay, or a separately identified
   non-production artifact; they are not bundled as operator reference files in

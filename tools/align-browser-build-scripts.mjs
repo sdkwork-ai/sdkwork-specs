@@ -22,9 +22,9 @@ import { checkBrowserDistLayout } from './check-browser-dist-layout.mjs';
 
 const VITE_OUTDIR_IMPORT = "import { resolveBrowserDistOutDir } from '../../../../sdkwork-specs/tools/browser-dist-layout.mjs';\n";
 const VITE_OUTDIR_HELPER = `function resolveViteEnvironment(mode: string | undefined, processEnv = process.env) {
-  const profileMatch = /^(standalone|cloud)\\.(development|test|staging|production)$/u.exec(mode ?? '');
+  const profileMatch = /^(standalone|cloud)\\.(development|test|staging|demo|production)$/u.exec(mode ?? '');
   const environment = profileMatch?.[2]
-    ?? (['development', 'test', 'staging', 'production'].includes(processEnv.SDKWORK_ENVIRONMENT ?? '')
+    ?? (['development', 'test', 'staging', 'demo', 'production'].includes(processEnv.SDKWORK_ENVIRONMENT ?? '')
       ? (processEnv.SDKWORK_ENVIRONMENT ?? 'production')
       : 'production');
   return environment;

@@ -6,10 +6,12 @@ const PROFILE_IDS = [
   'standalone.development',
   'standalone.test',
   'standalone.staging',
+  'standalone.demo',
   'standalone.production',
   'cloud.development',
   'cloud.test',
   'cloud.staging',
+  'cloud.demo',
   'cloud.production',
 ];
 
@@ -111,7 +113,7 @@ export function renderMinimalDeploymentIndex(appId) {
     },
   };
   const environments = Object.fromEntries(
-    ['development', 'test', 'staging', 'production'].map((environment) => [
+    ['development', 'test', 'staging', 'demo', 'production'].map((environment) => [
       environment,
       { cloudApiBaseUrl: deriveCloudApiBaseUrlFromTopology(topology, environment) },
     ]),

@@ -2259,7 +2259,7 @@ Rules:
 - Services `SHOULD` depend on interfaces that match generated SDK resource surfaces.
 - UI packages `MUST` not import generated SDK internals directly when a service package exists.
 - Environment, deployment profile, and runtime target switching is handled by
-  SDK client initialization: development, test, staging, production,
+  SDK client initialization: development, test, staging, demo, production,
   standalone, cloud, browser, desktop, server, container, and other approved
   runtime targets.
 

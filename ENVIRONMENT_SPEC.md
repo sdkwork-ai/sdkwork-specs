@@ -12,7 +12,7 @@ This standard defines the canonical environment and runtime configuration model 
 
 Environment configuration must satisfy these goals:
 
-- One application can run in development, test, staging, and production without code changes.
+- One application can run in development, test, staging, demo, and production without code changes.
 - `dev`, `test`, `staging`, and `prod` may be accepted as command aliases while
   application runtime normalizes them before composing the canonical profile
   id. They are not canonical env file suffixes.
@@ -20,7 +20,7 @@ Environment configuration must satisfy these goals:
   explicit browser, H5, desktop, tablet, Capacitor, Flutter, native mobile,
   mini program, service/server, container, and test-runner runtime targets.
 - Browser renderer, H5 mobile renderer, desktop native host, tablet native host, Capacitor host, Flutter host, mini program runtime, native Android host, native iOS host, native Harmony host, server process, container process, and test runner config are separated.
-- Server-side development, test, staging, and release deployments use PostgreSQL for authoritative relational persistence.
+- Server-side development, test, staging, demo, and production deployments use PostgreSQL for authoritative relational persistence.
 - Desktop installs use SQLite only for declared client-local data in the SDKWork user private data directory defined by `RUNTIME_DIRECTORY_SPEC.md`.
 - Desktop/Tauri development commands that start backend services use the server PostgreSQL development profile. SQLite profiles belong only to installed or explicitly tested client-local data.
 - Every database setting can be specified in a runtime config file and overridden by environment variables for emergency operations.
@@ -35,7 +35,7 @@ Environment configuration must satisfy these goals:
 
 | Term | Meaning |
 | --- | --- |
-| Environment | Lifecycle stage: `development`, `test`, `staging`, or `production`. |
+| Environment | Lifecycle stage: `development`, `test`, `staging`, `demo`, or `production`. `demo` is the independent demonstration/deployment tier, fully isolated from dev/test/staging/prod. |
 | Environment profile alias | Legacy command/operator alias: `dev`, `test`, `staging`, or `prod`. `dev` maps to `development`; `prod` maps to `production`; aliases are normalized before canonical profile selection. |
 | Deployment profile | Application deployment architecture: `standalone` or `cloud`. |
 | Runtime target | Code execution target: `browser`, `desktop`, `tablet-ipados`, `tablet-android`, `capacitor-ios`, `capacitor-android`, `flutter-ios`, `flutter-android`, `android-native`, `ios-native`, `harmony-native`, `mini-program`, `server`, `container`, or `test-runner`. |
@@ -141,7 +141,7 @@ These variables form the baseline for SDKWork applications.
 
 | Variable | Visibility | Required | Description |
 | --- | --- | --- | --- |
-| `SDKWORK_<APPLICATION_CODE>_ENVIRONMENT` | private | SHOULD | Lifecycle stage: `development`, `test`, `staging`, `production`. |
+| `SDKWORK_<APPLICATION_CODE>_ENVIRONMENT` | private | SHOULD | Lifecycle stage: `development`, `test`, `staging`, `demo`, `production`. |
 | `SDKWORK_<APPLICATION_CODE>_CONFIG_PROFILE` | private | SHOULD | Legacy command/operator profile alias: `dev`, `test`, `staging`, `prod`. Startup must normalize it before canonical profile selection. |
 | `SDKWORK_<APPLICATION_CODE>_DEPLOYMENT_PROFILE` | private | SHOULD | Application deployment architecture: `standalone` or `cloud`. |
 | `SDKWORK_<APPLICATION_CODE>_RUNTIME_TARGET` | private | SHOULD | Execution target: `browser`, `desktop`, `tablet-ipados`, `tablet-android`, `capacitor-ios`, `capacitor-android`, `flutter-ios`, `flutter-android`, `android-native`, `ios-native`, `harmony-native`, `mini-program`, `server`, `container`, `test-runner`. |
@@ -173,7 +173,7 @@ These variables form the baseline for SDKWork applications.
 | `SDKWORK_DATABASE_ENGINE` | private | MAY | `postgresql` for authoritative server/container/cloud targets; `sqlite` only for declared client-local desktop/native data. |
 | `SDKWORK_DATABASE_HOST` | private | MAY | PostgreSQL host. Prefer this structured field over a URL for release deployments. |
 | `SDKWORK_DATABASE_PORT` | private | MAY | PostgreSQL port, normally `5432`. |
-| `SDKWORK_DATABASE_NAME` | private | MAY | Workspace PostgreSQL database name selected by environment, such as `sdkwork_ai_dev`, `sdkwork_ai_test`, `sdkwork_ai_staging`, or `sdkwork_ai_prod`. |
+| `SDKWORK_DATABASE_NAME` | private | MAY | Workspace PostgreSQL database name selected by environment, such as `sdkwork_ai_dev`, `sdkwork_ai_test`, `sdkwork_ai_staging`, `sdkwork_ai_demo`, or `sdkwork_ai_prod`. A `demo` environment `MUST` use a dedicated database (typically a `_demo` suffix) so guest/demonstration data never shares dev/test/prod persistence. |
 | `SDKWORK_DATABASE_SCHEMA` | private | MAY | Workspace PostgreSQL schema selected by environment. It must not be derived from application code or module id. |
 | `SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC` | private | MAY | PostgreSQL schema search-path compatibility switch. Defaults to and SHOULD be explicitly set to `false`; normal application, migration, bootstrap, test, and worker connections use the canonical schema only. `true` is allowed only for a dated, reviewed migration exception with collision tests and a removal milestone. Extension-owned objects outside the application schema must be schema-qualified. |
 | `SDKWORK_DATABASE_USERNAME` | private | MAY | Workspace PostgreSQL username selected by environment. |
@@ -237,19 +237,21 @@ The complete standard matrix is:
 | `standalone.development` | Application-owned standalone ingress | Development |
 | `standalone.test` | Application-owned standalone ingress | Isolated automated or manual test |
 | `standalone.staging` | Application-owned standalone ingress | Production-like rehearsal |
+| `standalone.demo` | Application-owned standalone ingress | Independent demonstration/deployment showcase |
 | `standalone.production` | Application-owned standalone ingress | Production |
 | `cloud.development` | Explicit deployed cloud surfaces | Development |
 | `cloud.test` | Explicit deployed cloud surfaces | Isolated cloud test |
 | `cloud.staging` | Explicit deployed cloud surfaces | Production-like cloud rehearsal |
+| `cloud.demo` | Explicit deployed cloud surfaces | Independent cloud demonstration/deployment showcase |
 | `cloud.production` | Explicit deployed cloud surfaces | Production cloud |
 
 Rules:
 
 - Profile ids `MUST` contain exactly two segments. The first segment is only
   `standalone` or `cloud`; the second is only `development`, `test`, `staging`,
-  or `production`.
-- A deployable application that declares both deployment profiles and all four
-  lifecycle environments `MUST` provide all eight source profiles. A root that
+  `demo`, or `production`.
+- A deployable application that declares both deployment profiles and all five
+  lifecycle environments `MUST` provide all ten source profiles. A root that
   intentionally supports a smaller matrix `MUST` declare the supported
   combinations in `etc/sdkwork.deployment.config.json` and its release metadata;
   missing combinations fail selection rather than falling back.
@@ -353,7 +355,7 @@ framework's canonical namespace:
 
 | Logical field | Canonical value |
 | --- | --- |
-| `environment` | `development`, `test`, `staging`, or `production` |
+| `environment` | `development`, `test`, `staging`, `demo`, or `production` |
 | `deploymentProfile` | `standalone` or `cloud` |
 | `profileId` | Exact concatenation `<deploymentProfile>.<environment>` |
 | `runtimeTarget` | Exact `CONFIG_SPEC.md` runtime target |
@@ -1845,7 +1847,7 @@ Every application that adopts this standard should provide:
 
 - Unit tests for env parsing and default resolution.
 - Profile normalization tests for `dev -> development`, `prod -> production`, and rejection of unknown profile names.
-- Canonical matrix tests for the eight
+- Canonical matrix tests for the ten
   `<deploymentProfile>.<environment>` combinations, undeclared-profile
   rejection, no cross-profile fallback, and source/materialized identity
   equality.

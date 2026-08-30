@@ -31,7 +31,7 @@ document uses a retired synonym, that document is wrong.
 | Canonical key | Spoken name | Allowed values | Meaning |
 | --- | --- | --- | --- |
 | `deploymentProfile` | deployment profile | `standalone`, `cloud` | Active application API/runtime topology |
-| `environment` | environment tier | `development`, `test`, `staging`, `production` | Lifecycle stage from `ENVIRONMENT_SPEC.md` |
+| `environment` | environment tier | `development`, `test`, `staging`, `production`, `demo` | Lifecycle stage from `ENVIRONMENT_SPEC.md`; `demo` is the independent demonstration/deployment tier |
 | `connectivityPlane` | connectivity plane | `application`, `platform`, `operations`, `edge` | Who owns the route and protocol termination |
 | `orchestration.processes[].role` | process role | `client`, gateway/API/data/migration/worker roles, `tunnel` | Machine authority for local-process safety checks in topology v5 |
 
@@ -87,8 +87,10 @@ Examples:
 | Profile id | Short spoken form |
 | --- | --- |
 | `standalone.development` | standalone dev |
+| `standalone.demo` | standalone demo |
 | `standalone.production` | standalone prod |
 | `cloud.staging` | cloud staging |
+| `cloud.demo` | cloud demo |
 | `cloud.production` | cloud prod |
 
 Profile env file path:
@@ -283,6 +285,7 @@ role and the base domain; production hosts carry no suffix.
 | `development` | `-dev` | `im-dev.sdkwork.com` | `api-dev.sdkwork.com` |
 | `test` | `-test` | `im-test.sdkwork.com` | `api-test.sdkwork.com` |
 | `staging` | `-staging` | `im-staging.sdkwork.com` | `api-staging.sdkwork.com` |
+| `demo` | `-demo` | `im-demo.sdkwork.com` | `api-demo.sdkwork.com` |
 | `production` | (no suffix) | `im.sdkwork.com` | `api.sdkwork.com` |
 
 Rules:
@@ -304,11 +307,12 @@ Rules:
   `api-staging.sdkwork.com`). Prefix style (`test-im.sdkwork.com`,
   `staging-api.sdkwork.com`) is retired and `MUST NOT` appear in new
   configuration, examples, certificates, or documentation.
-- `dev`, `test`, and `staging` are domain-registry-only suffixes. They apply to
+- `dev`, `test`, `staging`, and `demo` are domain-registry-only suffixes.
+  They apply to
   public hostnames, certificates, and nginx site file names; they `MUST NOT`
   replace canonical `environment` values (`development`, `test`, `staging`,
-  `production`) in profile ids, env keys, or materialized runtime documents
-  (`ENVIRONMENT_SPEC.md` section 5.1). A profile id stays
+  `demo`, `production`) in profile ids, env keys, or materialized runtime
+  documents (`ENVIRONMENT_SPEC.md` section 5.1). A profile id stays
   `cloud.development`; its public host is `im-dev.sdkwork.com`.
 - `sdkwork.com` is the primary base domain for SDKWork-managed cloud
   deployments. SDKWork-managed cloud products `MUST` bind every base domain

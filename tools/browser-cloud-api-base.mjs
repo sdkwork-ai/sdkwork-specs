@@ -15,7 +15,7 @@ import path from 'node:path';
 import { baseDomainFromHost, environmentSuffix, hostsForRoleAcrossBases, PLATFORM_GATEWAY_ROLE } from './webserver/host-registry.mjs';
 import { hostsForSurface } from './webserver/build-from-topology.mjs';
 
-export const ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
+export const ENVIRONMENTS = ['development', 'test', 'staging', 'demo', 'production'];
 
 export const CLOUD_API_BASE_URL_SEPARATORS = /[,;]+/u;
 export const SDK_BASE_URL_KEYS = [

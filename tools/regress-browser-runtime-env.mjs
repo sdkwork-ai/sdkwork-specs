@@ -16,7 +16,7 @@ import { parseArgs } from 'node:util';
 
 import { buildBrowserClient, discoverBrowserAppRoots, materializeBrowserRuntimeEnv } from './build-browser-client.mjs';
 
-const ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
+const ENVIRONMENTS = ['development', 'test', 'staging', 'demo', 'production'];
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));

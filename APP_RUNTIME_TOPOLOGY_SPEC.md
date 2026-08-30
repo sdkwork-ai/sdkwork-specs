@@ -32,7 +32,7 @@ Applications `MUST` use these axes.
 | Axis | Key | Values | Question it answers |
 | --- | --- | --- | --- |
 | Deployment profile | `deploymentProfile` | `standalone`, `cloud` | What deployment architecture is this application using? |
-| Environment tier | `environment` | `development`, `test`, `staging`, `production` | Which lifecycle stage is active? |
+| Environment tier | `environment` | `development`, `test`, `staging`, `production`, `demo` | Which lifecycle stage is active? (`demo` is the independent demonstration/deployment tier) |
 | Connectivity plane | `connectivityPlane` | `application`, `platform`, `operations`, `edge` | Who owns this route? |
 | Browser origin mode | `browserDeliveries[].originMode` | `same-origin` | Do the page and browser-visible API requests share one origin? |
 | Browser delivery mode | `browserDeliveries[].deliveryMode` | `dev-server-proxy`, `gateway-static` | How does that browser origin reach the application ingress in this profile? |
@@ -200,7 +200,7 @@ Field contract:
 | `httpHosts` | Optional complete production host set for the surface (multi-base-domain bindings per `APP_RUNTIME_TOPOLOGY_NAMING.md` section 9). When both are declared, `httpHost` `MUST` be an element of `httpHosts`. When only `httpHosts` is declared, `httpHost` defaults to its first element. |
 | `websocketHost` | Optional production WebSocket hostname; defaults to `httpHost`. |
 | `note` | Optional registry annotation (top-level entries only; never used for routing). |
-| `environments` | Optional per-environment overrides keyed by canonical environment (`development`, `test`, `staging`, `production`). Each entry may override `httpHost`, `httpHosts`, and/or `websocketHost`. |
+| `environments` | Optional per-environment overrides keyed by canonical environment (`development`, `test`, `staging`, `demo`, `production`). Each entry may override `httpHost`, `httpHosts`, and/or `websocketHost`. |
 
 Resolution rules:
 

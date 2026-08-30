@@ -68,7 +68,7 @@ Required common labels:
 | Label | Requirement |
 | --- | --- |
 | `service` | Stable process or service name. |
-| `environment` | `development`, `test`, `staging`, or `production`. |
+| `environment` | `development`, `test`, `staging`, `demo`, or `production`. |
 | `deployment_profile` | `standalone` or `cloud`. |
 | `runtime_target` | One exact `CONFIG_SPEC.md` runtime target: `browser`, `desktop`, `tablet-ipados`, `tablet-android`, `capacitor-ios`, `capacitor-android`, `flutter-ios`, `flutter-android`, `android-native`, `ios-native`, `harmony-native`, `mini-program`, `server`, `container`, or `test-runner`. |
 | `runtime_profile` | Backend/runtime profile, such as `postgresql`, `sqlite`, or `redis`, when the metric depends on infrastructure. |

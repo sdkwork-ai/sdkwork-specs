@@ -1,4 +1,4 @@
-﻿# Application Module Standard
+# Application Module Standard
 
 - Version: 1.0
 - Scope: all SDKWork standalone/cloud, desktop, web, and mobile applications
@@ -263,7 +263,7 @@ export type AppModuleRuntimeTarget =
 export interface AppModuleRuntime<TAppClient, TBackendClient> {
   appClient: TAppClient;
   backendClient?: TBackendClient;
-  environment: "development" | "test" | "staging" | "production";
+  environment: "development" | "test" | "staging" | "demo" | "production";
   deploymentProfile: "standalone" | "cloud";
   runtimeTarget?: AppModuleRuntimeTarget;
 }

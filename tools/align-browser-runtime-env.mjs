@@ -4,8 +4,8 @@
  * Align every Adaptive Web app surface to the standard browser runtime-env
  * matrix (ENVIRONMENT_SPEC.md §5.1.0.1):
  *   apps/<app>/etc/browser/runtime-env.<deploymentProfile>.<environment>.json
- * for all eight profile×environment combinations (standalone/cloud ×
- * development/test/staging/production), wired through the app-level
+ * for all ten profile×environment combinations (standalone/cloud ×
+ * development/test/staging/demo/production), wired through the app-level
  * etc/sdkwork.deployment.config.json `profiles` map.
  *
  * Values per profile:

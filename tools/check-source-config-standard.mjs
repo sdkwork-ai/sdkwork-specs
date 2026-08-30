@@ -8,8 +8,8 @@ import { fileURLToPath } from 'node:url';
 
 const SECRET_KEY = /(?:password|private[_-]?key|signing[_-]?secret|access[_-]?token|refresh[_-]?token|api[_-]?key)$/iu;
 const SAFE_SECRET_REFERENCE = /(?:file|path|ref|reference)$/iu;
-const PRODUCTION_LIKE_ENVIRONMENT = /^(?:prod|production|stage|staging|live)$/iu;
-const PROFILE_ID = /^(standalone|cloud)\.(development|test|staging|production)$/u;
+const PRODUCTION_LIKE_ENVIRONMENT = /^(?:prod|production|stage|staging|demo|live)$/iu;
+const PROFILE_ID = /^(standalone|cloud)\.(development|test|staging|demo|production)$/u;
 
 function findRepositoryRoot(start) {
   let current = path.resolve(start);
@@ -173,7 +173,7 @@ function inspectDeploymentIndex(resolvedRoot, configPath, config, issues, { enfo
   for (const [profileId, entry] of entries) {
     const match = profileId.match(PROFILE_ID);
     if (!match) {
-      issues.push(`etc/sdkwork.deployment.config.json#/profiles/${profileId}: profile id must use <standalone|cloud>.<development|test|staging|production>`);
+      issues.push(`etc/sdkwork.deployment.config.json#/profiles/${profileId}: profile id must use <standalone|cloud>.<development|test|staging|demo|production>`);
       continue;
     }
     if (!entry || typeof entry !== 'object' || typeof entry.config !== 'string' || !entry.config.trim()) {

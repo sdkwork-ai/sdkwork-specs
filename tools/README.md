@@ -42,7 +42,7 @@ Rules:
   supports `--check` for stale-file verification.
 - `check-source-config-standard.mjs` validates deployable-root `etc/`
   ownership, canonical `standalone|cloud` x
-  `development|test|staging|production` profile ids, default-profile
+  `development|test|staging|demo|production` profile ids, default-profile
   membership, in-`etc/` references, referenced-file existence, secret
   boundaries, retired `configs/` debt, and production gateway CORS. Add
   `--enforce-profile-identity` whenever env profiles or materializers are

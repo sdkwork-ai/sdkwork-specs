@@ -116,12 +116,12 @@ Rules:
 - `etc/README.md` `MUST` identify the config entrypoint, supported environment/profile combinations,
   schema authority, local override policy, secret sources, materialization target, and validation command.
 - Profile ids use `<deployment-profile>.<environment>` where deployment profile is `standalone` or
-  `cloud` and environment is `development`, `test`, `staging`, or `production`.
+  `cloud` and environment is `development`, `test`, `staging`, `demo`, or `production`.
 - `etc/sdkwork.deployment.config.json` `MUST` be a profile index, not a second
   environment-value store. Each owned profile entry points to one source file
   under `etc/`; the referenced file path stays relative to `etc/` and cannot
   escape the deployable root.
-- The canonical full matrix contains eight profile ids. A root may declare a
+- The canonical full matrix contains ten profile ids. A root may declare a
   smaller supported matrix only when its application/release contracts exclude
   the missing combinations. Selection of an undeclared profile fails closed.
 - A pnpm-managed application root `MUST` provide both

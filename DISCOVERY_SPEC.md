@@ -66,7 +66,7 @@ namespace + environment + service_name + instance_id
 | Field | Requirement |
 | --- | --- |
 | `namespace` | Tenant or platform partition. Production cross-namespace calls require explicit resolver policy. |
-| `environment` | Lifecycle environment such as `development`, `test`, `staging`, `production`. |
+| `environment` | Lifecycle environment such as `development`, `test`, `staging`, `demo`, `production`. |
 | `service_name` | Canonical discovery service name from `NAMING_SPEC.md` discovery naming rules. |
 | `instance_id` | Stable per-process identity for the lifetime of one RPC server process. |
 
@@ -184,7 +184,7 @@ Runtime storage is selected by typed config, not ad hoc connection strings in bu
 | Provider | Use |
 | --- | --- |
 | `memory` | Deterministic tests and local development only. |
-| `postgres` | Required durable relational provider for development/test/staging/production registry, config, and watch storage. |
+| `postgres` | Required durable relational provider for development/test/staging/demo/production registry, config, and watch storage. |
 | `redis` | Optional durable provider for single-writer or restart-recovery deployments. |
 | `etcd` | Planned distributed adapter; must implement the same store contract tests before acceptance. |
 | `consul` | Planned distributed adapter; must implement the same store contract tests before acceptance. |

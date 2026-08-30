@@ -33,7 +33,7 @@ import {
 import { discoverBrowserAppRoots, materializeBrowserRuntimeEnv } from './build-browser-client.mjs';
 import { DEFAULT_PRODUCT_BASE_DOMAINS } from './webserver/host-registry.mjs';
 
-const ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
+const ENVIRONMENTS = ['development', 'test', 'staging', 'demo', 'production'];
 const PROFILES = ['standalone', 'cloud'];
 const LEGACY_DIST_ALIASES = ['dev', 'test', 'staging', 'prod'];
 const SDK_URL_KEY = /API_BASE_URL|API_GATEWAY|API_EDGE|_API_URL/;

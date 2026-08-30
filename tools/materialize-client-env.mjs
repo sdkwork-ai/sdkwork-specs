@@ -16,7 +16,7 @@ import {
 } from './browser-cloud-api-base.mjs';
 
 export const CLIENT_ENV_DEPLOYMENT_PROFILES = ['standalone', 'cloud'];
-export const CLIENT_ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
+export const CLIENT_ENVIRONMENTS = ['development', 'test', 'staging', 'demo', 'production'];
 export const CLIENT_ENV_PROFILE_IDS = CLIENT_ENV_DEPLOYMENT_PROFILES.flatMap(
   (deploymentProfile) => CLIENT_ENVIRONMENTS.map(
     (environment) => `${deploymentProfile}.${environment}`,
