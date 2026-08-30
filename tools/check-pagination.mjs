@@ -42,22 +42,70 @@ const RUST_SMELLS = [
   },
 ];
 
+// `listAll*` helpers that are spec-compliant batch loads (owner/admin management
+// of a small bounded domain-configuration set). The checker cannot infer this from
+// the usage site, so these are explicitly declared compliant rather than treated
+// as client-side aggregation debt (PAGINATION_SPEC reserves listAll* for batch).
+const COMPLIANT_BATCH_LIST_ALL = new Set(['listAllMembershipTiers']);
+
+// Interactive UI directories. The `ts-client-slice-pagination` heuristic should
+// only fire on list-pagination inside interactive UI; backend services, ports,
+// mocks and background batch modules slice materialized windows legitimately.
+function isInteractiveUiFile(rel) {
+  return /(?:^|\/)(?:pages|screens|views|components)\//u.test(rel.replace(/\\/g, '/'));
+}
+
+// Detects whether the receiver of a `.slice(...)` call is a string (string slicing
+// is never pagination) by resolving the direct receiver identifier and checking for
+// a nearby `name : string` type declaration.
+function isStringSlice(text, matchIndex) {
+  let i = matchIndex - 1;
+  while (i >= 0 && /[A-Za-z0-9_$]/u.test(text[i])) i -= 1;
+  const name = text.slice(i + 1, matchIndex);
+  if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(name)) {
+    return false;
+  }
+  const windowStart = Math.max(0, matchIndex - 600);
+  const windowText = text.slice(windowStart, matchIndex);
+  const pattern = new RegExp(`\\b${name}\\s*:\\s*string(?:\\b|\\[|\\])`, 'u');
+  return pattern.test(windowText);
+}
+
 const TS_SMELLS = [
   {
     id: 'ts-list-all-helper',
     pattern: /\blistAll[A-Z][A-Za-z0-9]*\s*\(/g,
     message: 'listAll* aggregation helper — reserve for export/batch only',
+    suppress(file, rel, text, match) {
+      if (isTestLikePath(rel)) {
+        return true;
+      }
+      const helperMatch = /\blistAll[A-Z][A-Za-z0-9]*/u.exec(match[0]);
+      return helperMatch !== null && COMPLIANT_BATCH_LIST_ALL.has(helperMatch[0]);
+    },
   },
   {
     id: 'ts-client-slice-pagination',
     pattern: /\.slice\s*\(\s*(?:offset|start|page)/gi,
     message: 'client slice with offset/page — likely client-side pagination',
+    suppress(file, rel, text, match) {
+      if (isTestLikePath(rel)) {
+        return true;
+      }
+      if (!isInteractiveUiFile(rel) || isStringSlice(text, match.index)) {
+        return true;
+      }
+      return false;
+    },
   },
   {
     id: 'ts-get-contacts-interactive',
     pattern: /contactService\.getContacts\s*\(/g,
     message: 'getContacts() loads first page only — prefer listContactsPage in interactive UI',
     pathsOnly: ['apps/'],
+    suppress(file, rel) {
+      return isTestLikePath(rel);
+    },
   },
 ];
 
@@ -210,6 +258,26 @@ function hasRepoManifest(root) {
   return fs.existsSync(path.join(root, 'Cargo.toml')) || fs.existsSync(path.join(root, 'package.json'));
 }
 
+/**
+ * SDKWork pagination governance boundary. A repo is governed when it is either
+ * a first-party SDKWork repo (sdkwork-* prefix) or its AGENTS.md references the
+ * SDKWork spec system (sdkwork-specs). Independent tools vendored into the
+ * workspace (e.g. hermes-agent, deepseek-harness) that run their own private
+ * server surface are NOT governed by SDKWork pagination conventions.
+ */
+function isGovernedRepo(repoRoot) {
+  const name = path.basename(repoRoot);
+  if (name.startsWith('sdkwork-')) {
+    return true;
+  }
+  try {
+    const agentsText = fs.readFileSync(path.join(repoRoot, 'AGENTS.md'), 'utf8');
+    return /sdkwork-specs|PAGINATION_SPEC\.md/u.test(agentsText);
+  } catch {
+    return false;
+  }
+}
+
 function isDirectoryLike(entry, fullPath) {
   if (entry.isDirectory()) {
     return true;
@@ -252,6 +320,7 @@ function discoverDataRepoRoots(workspaceRoot, roots, seen) {
       isDirectoryLike(entry, child)
       && hasRepoManifest(child)
       && fs.existsSync(path.join(child, 'AGENTS.md'))
+      && isGovernedRepo(child)
     ) {
       pushRepoRoot(roots, seen, child);
     }
@@ -275,7 +344,7 @@ function discoverRepoRoots(workspaceRoot) {
     if (!isDirectoryLike(entry, child) || isIgnoredDir(entry.name)) {
       continue;
     }
-    if (hasRepoManifest(child)) {
+    if (hasRepoManifest(child) && isGovernedRepo(child)) {
       pushRepoRoot(roots, seen, child);
     }
   }
@@ -300,6 +369,9 @@ function scanFile(file, repoRoot, smells, issues) {
     let match;
     const pattern = new RegExp(smell.pattern.source, smell.pattern.flags);
     while ((match = pattern.exec(text)) !== null) {
+      if (smell.suppress && smell.suppress(file, rel, text, match)) {
+        continue;
+      }
       const line = text.slice(0, match.index).split('\n').length;
       issues.push(`${rel}:${line}: [${smell.debtId ?? smell.id}] ${smell.message}`);
       if (!smell.pattern.global) {
