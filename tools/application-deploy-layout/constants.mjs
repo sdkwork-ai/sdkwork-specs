@@ -7,6 +7,7 @@ export const FRAMEWORK_REPOS = new Set([
   'sdkwork-catalog',
   'sdkwork-log',
   'sdkwork-github-workflow',
+  'sdkwork-sdk-generator',
 ]);
 
 export const LAYOUT_MARKER_START = '<!-- SDKWORK-DEPLOY-LAYOUT: v1 -->';

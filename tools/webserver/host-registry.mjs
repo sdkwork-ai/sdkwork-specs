@@ -40,7 +40,7 @@ export const REGISTERED_APP_ROLE_HOSTS = {
   'sdkwork-webserver': 'server',
 };
 
-const NON_PRODUCTION_SUFFIXES = ['-dev', '-test', '-staging'];
+const NON_PRODUCTION_SUFFIXES = ['-dev', '-test', '-staging', '-demo'];
 
 const RETIRED_PREFIX_SUFFIX = /^(dev|test|staging)-/u;
 const RETIRED_PROD_SUFFIX = /-(prod|production)\./u;
@@ -68,6 +68,7 @@ export function environmentSuffix(environment) {
   if (environment === 'development') return '-dev';
   if (environment === 'test') return '-test';
   if (environment === 'staging') return '-staging';
+  if (environment === 'demo') return '-demo';
   return '';
 }
 

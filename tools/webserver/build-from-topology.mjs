@@ -52,7 +52,10 @@ function ensureStaticFallbackDir(webserverDir) {
 export function deriveEnvHosts(productionHosts, environment) {
   if (environment === 'production') return [...productionHosts];
   const suffix =
-    environment === 'development' ? '-dev' : environment === 'test' ? '-test' : '-staging';
+    environment === 'development' ? '-dev'
+      : environment === 'test' ? '-test'
+        : environment === 'demo' ? '-demo'
+          : '-staging';
   return productionHosts.map((host) => {
     const parts = host.split('.');
     if (parts.length < 2) return host;

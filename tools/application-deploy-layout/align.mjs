@@ -41,8 +41,10 @@ function bootstrapCoreArtifacts(repoRoot, appId, runtimeCode, dryRun) {
   }
 
   const deploymentIndexPath = path.join(repoRoot, 'etc/sdkwork.deployment.config.json');
-  if (writeIfMissing(deploymentIndexPath, renderMinimalDeploymentIndex(appId), dryRun)) {
-    written.push('etc/sdkwork.deployment.config.json');
+  if (!fs.existsSync(deploymentIndexPath)) {
+    if (writeIfMissing(deploymentIndexPath, renderMinimalDeploymentIndex(appId), dryRun)) {
+      written.push('etc/sdkwork.deployment.config.json');
+    }
   }
 
   for (const profileId of PROFILE_IDS) {

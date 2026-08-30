@@ -68,6 +68,18 @@ Replace `<code>` with `topology.applicationCode` (runtime code). Linux/container
 | Logs | `/var/log/sdkwork/<code>/` |
 | Runtime state | `/run/sdkwork/<code>/` |
 
+Rules:
+
+- `topology.applicationCode` `MUST` be lowercase kebab-case (`NAMING_SPEC.md` L2
+  application code; for example `api-gateway`, `cloudrouter`, `webserver`).
+  Underscore codes (`api_gateway`) `MUST NOT` appear in installers, container
+  images, systemd units, or operator documentation. Snake_case applies only to
+  derived database/schema identifiers per `DATABASE_SPEC.md` (for example the
+  database `sdkwork_api_gateway_demo` is legal even though the application
+  code is `api-gateway`).
+- Legacy underscore installs (`/etc/sdkwork/api_gateway/`) remain readable as
+  runtime fallbacks during migration but are never written by new tooling.
+
 Source builds → install: `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §2.1.
 Cross-OS share roots: `RUNTIME_DIRECTORY_SPEC.md` §4.1.1.
 

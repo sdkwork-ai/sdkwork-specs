@@ -514,7 +514,7 @@ build:container:install
 deploy:apply:standalone:docker
 ```
 
-Repository root examples (`sdkwork-webserver` operator surface):
+Repository root examples:
 
 ```text
 pnpm build:container:install
@@ -523,30 +523,39 @@ pnpm deploy:apply:standalone:docker -- --environment production --replicas 3
 pnpm deploy:apply:standalone:docker -- --environment development --down
 ```
 
+The same commands apply to every unified-bundle application. For
+`sdkwork-api-cloud-gateway` the environments are `development`, `test`,
+`staging`, and `production` (the bundle env set matches the application's
+declared lifecycle environments).
+
 `build:container:install` packages the self-contained install bundle:
 
 ```text
-sdkwork-webserver-install-<version>.bundle/
+<application>-install-<version>.bundle/
   image.tar.gz / image.sha256 / image.env
   compose/docker-compose.bundle.yml       # environment-neutral multi-instance template
-  compose/docker-compose.bundle-edge.yml  # instance-1 80/443 edge overlay
-  env/{development,test,production}.env.example
+  compose/docker-compose.bundle-edge.yml  # optional app-specific edge overlay
+  env/<environment>.env.example           # one per declared environment
   deploy.sh / manifest.json / README.md
 ```
 
 Rules:
 
 - One image, every environment: the image `MUST NOT` bake environment,
-  domain, database, or credential values. The entrypoint resolves
-  `SDKWORK_WEBSERVER_ENVIRONMENT` and deployment inputs at container start.
+  domain, database, or credential values. The entrypoint resolves the
+  application environment variable (`SDKWORK_WEBSERVER_ENVIRONMENT`,
+  `GATEWAY_ENVIRONMENT`, ...) and deployment inputs at container start.
 - Every environment supports N instances. Each instance is one compose
-  project (`sdkwork-webserver-<environment>-i<index>`) with a unique node
-  identity (`SDKWORK_WEBSERVER_NODE_UUID`), its own management host port, and
-  the per-environment shared network plus shared secrets/data volumes. Only
-  instance 1 publishes the 80/443 import-plane edge.
+  project (`<application>-<environment>-i<index>`) with a unique node
+  identity, its own host port, and the per-environment shared network plus
+  shared secrets/data volumes. Only application-designated instances publish
+  edge host ports (for example the sdkwork-webserver 80/443 import plane on
+  instance 1).
 - Shared PostgreSQL and Redis are prerequisites for multi-instance
   deployment. Instance 1 starts first, completes database migration, and
-  reaches health before instances 2..N start.
+  reaches health before instances 2..N start. Application-specific singleton
+  services (for example the gateway knowledgebase-rpc sidecar) stay
+  single-instance per environment and start before instance 1.
 - `deploy.sh` is the single generic bundle entrypoint; it `MUST` require an
   explicit `--environment`, fail before side effects when it is missing or
   unknown, and stay idempotent (re-running updates the existing stack).

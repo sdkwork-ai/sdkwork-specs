@@ -74,6 +74,7 @@ Thumbs.db
 Thumbs.db
 
 tools/_tmp-*
+tools/_fix_*.mjs
 tools/tmp-*.mjs
 tools/_*.txt
 tools/postgres/tmp-*.cjs

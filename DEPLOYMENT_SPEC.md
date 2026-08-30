@@ -536,32 +536,50 @@ start.
 
 Rules:
 
-- One image, every environment: `development`, `test`, and `production`
-  deployments use the same image tag. Environment selection `MUST` happen at
-  deploy time through the deployment env file (`SDKWORK_WEBSERVER_ENVIRONMENT`
-  and related variables); image builds `MUST NOT` bake environment values.
+- One image, every environment: all lifecycle environments of the
+  application (`development`, `test`, `staging`, and `production` where
+  declared) use the same image tag. Environment selection `MUST` happen at
+  deploy time through the deployment env file (for example
+  `SDKWORK_WEBSERVER_ENVIRONMENT` / `GATEWAY_ENVIRONMENT` and related
+  variables); image builds `MUST NOT` bake environment values.
 - Every environment supports multi-instance deployment. Each instance:
-  - runs as its own compose project `sdkwork-webserver-<environment>-i<index>`;
-  - owns a unique node identity (`SDKWORK_WEBSERVER_NODE_UUID` or the
-    container-hostname-derived default) and its own management host port;
+  - runs as its own compose project `<application>-<environment>-i<index>`
+    (for example `sdkwork-webserver-production-i1` or
+    `sdkwork-api-cloud-gateway-production-i2`);
+  - owns a unique node identity (the application's node-identity variable —
+    `SDKWORK_WEBSERVER_NODE_UUID` for sdkwork-webserver — or the
+    container-hostname-derived default) and its own host port;
   - joins the per-environment shared network and mounts the per-environment
     shared secrets/data volumes.
-- Only instance 1 publishes the 80/443 import-plane edge host ports. External
-  load balancing across instances uses the per-instance management ports.
+- Only one instance publishes application-designated edge host ports (for
+  example the sdkwork-webserver 80/443 import plane on instance 1). External
+  load balancing across instances uses the per-instance host ports; a
+  deterministic instance port plan (for example the gateway
+  `GATEWAY_HOST_PORT + (index - 1) * 10` stride) keeps environments
+  collision-free.
 - Shared PostgreSQL and Redis are prerequisites. Instance 1 starts first,
   completes database migration, and reaches health before instances 2..N
   start.
+- Application-specific singleton services stay single-instance per
+  environment: the sdkwork-api-cloud-gateway bundle runs one
+  knowledgebase-rpc singleton (the `<application>-<environment>-deps`
+  project) that provisions shared secrets material before instance 1, and
+  every gateway instance reaches it over the shared network by service DNS
+  name. The public reverse proxy remains owned by the independent
+  sdkwork-webserver deployment, which upstreams the per-instance gateway
+  host ports.
 - The bundle deploy script is the single generic entrypoint:
-  `deploy.sh --environment <env> [--replicas N] [--external] [--down|--ps|--logs]`.
+  `deploy.sh --environment <env> [--replicas N] [--down|--ps|--logs]`.
   It `MUST` fail before side effects when the environment is missing or
   unknown, and `MUST` stay idempotent (re-running updates the existing stack).
-- Container space mounts follow `SDKWORK_WEBSERVER_SPEC.md` section 17: the
-  space root is read-only and the `sdkwork-space` checkout subtree is a
-  read-write overlay (clone/pull target). The import plane default active set
-  is `cloud` (`SDKWORK_WEBSERVER_IMPORT_PROFILE`), and every container listens
-  on gateway port 3800 internally so module `server.standalone.toml` upstreams
+- Container space mounts follow `SDKWORK_WEBSERVER_SPEC.md` section 17
+  (sdkwork-webserver only): the space root is read-only and the
+  `sdkwork-space` checkout subtree is a read-write overlay (clone/pull
+  target). The import plane default active set is `cloud`
+  (`SDKWORK_WEBSERVER_IMPORT_PROFILE`), and every container listens on
+  gateway port 3800 internally so module `server.standalone.toml` upstreams
   stay uniform across instances and hosts.
-- Multiple independently configurable webservers: a per-instance override file
+- Multiple independently configurable instances: a per-instance override file
   `env/<environment>.i<index>.env` is layered on top of the base environment
   env file (later `--env-file` wins), so each instance can carry its own
   primary domain, clone URL, TLS/ACME profile, or any other deployment input.
