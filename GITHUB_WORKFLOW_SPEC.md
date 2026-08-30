@@ -306,6 +306,19 @@ Rules:
 
 - Dependencies `MUST` be declared in `sdkwork.workflow.json`, not hidden in application YAML.
 - Runtime, build, package, or release dependencies `MUST` use `dependencies[]`.
+- `dependencies[]` `MUST` be complete: every sibling repository referenced by
+  the repository's native build-tool workspace (Cargo `path = "../sdkwork-*"`,
+  `pnpm-workspace.yaml` `../sdkwork-*` members, pubspec `dependency_overrides`)
+  `MUST` have a matching `dependencies[]` entry so the checkout materializes
+  the same `../<id>` layout local development resolves. Verify with
+  `sdkwork-specs/tools/check-dependency-list-completeness.mjs` before pushing
+  a tag or running `workflow_dispatch`.
+- Packaging and release workflows `MUST` be rehearsable locally through a
+  pnpm script that runs
+  `sdkwork-specs/tools/simulate-release-build.mjs` (or an equivalent
+  repository-local script) in the CI layout — clone this repository and every
+  pinned sibling into a throwaway tree, frozen-lockfile install, run the
+  package step (DEPENDENCY_MANAGEMENT_SPEC.md §5.2).
 - CI-only or boundary-test-only repositories `MAY` use
   `verificationDependencies[]` when the repository must be checked out for
   verification but is not a runtime, package, source, SDK/API ownership, or

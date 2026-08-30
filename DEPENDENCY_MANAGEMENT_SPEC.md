@@ -272,6 +272,18 @@ Release and CI dependency refs must be reproducible, but release checkout layout
 Rules:
 
 - SDKWork application release dependencies `MUST` be declared in `sdkwork.workflow.json` when packaging or release requires checking out another SDKWork repository.
+- `dependencies[]` `MUST` be complete with respect to the repository's native
+  build-tool workspace: every sibling SDKWork repository referenced by the
+  repository root workspace (Cargo workspace `[workspace.dependencies]` /
+  member `path = "../sdkwork-*"` entries, `pnpm-workspace.yaml` `../sdkwork-*`
+  members, `pubspec.yaml` `dependency_overrides` paths) `MUST` have a matching
+  `dependencies[]` entry so CI and release checkouts materialize the same
+  `../<id>` layout that local development resolves. A missing entry is a
+  release-blocking defect, not a warning.
+- Completeness `MUST` be verified by an executable check
+  (`sdkwork-specs/tools/check-dependency-list-completeness.mjs`) that compares
+  native workspace sibling references against `sdkwork.workflow.json`
+  `dependencies[]` ids and fails on any unlisted sibling repository.
 - SDKWork verification-only dependencies `MAY` be declared in
   `sdkwork.workflow.json` `verificationDependencies[]` when CI must check out a
   sibling repository solely to prove a boundary, migration, or compatibility
@@ -409,6 +421,46 @@ Rules:
 - Application API assembly crates `MUST NOT` duplicate SDK dependency catalogs already expressed in
   `sdkwork.app.config.json` `sdkDependencies` or Cargo `[workspace.dependencies]`. API assembly only
   merges application-owned route crates discovered in the owning repository workspace.
+
+## 5.2 Local CI Packaging Rehearsal
+
+Packaging and release flows `MUST` be rehearsable on a developer machine in the
+exact layout CI uses, before any commit or tag push. The rehearsal clones the
+consuming repository and every pinned sibling repository into a throwaway
+directory tree via git (no `node_modules`, no pre-existing target artifacts in
+the siblings), installs with the frozen lockfile, and runs the requested
+package/build step. It passes only if the full step passes in that layout — the
+same layout the GitHub workflows build.
+
+Rules:
+
+- A repository that packages or releases `MUST` provide a pnpm script
+  (`package.json` `scripts`) that runs the local CI packaging rehearsal and
+  exits non-zero on failure. The script name follows the
+  `PNPM_SCRIPT_SPEC.md` naming conventions (for example
+  `gateway:package:ci-sim`, `package:ci-sim`, or `build:ci-sim`).
+- The rehearsal script `MUST` clone the consuming repository and every sibling
+  referenced by `sdkwork.workflow.json` `dependencies[]` (and
+  `verificationDependencies[]` when the script covers them) from local
+  `../sdkwork-*` checkouts, checking out the same refs the workflow would use:
+  pinned commit SHAs when declared, otherwise the current local HEAD of each
+  sibling.
+- The rehearsal tree layout `MUST` mirror CI: the consuming repository and its
+  siblings live side by side under one throwaway parent, so `../sdkwork-*`
+  relative workspace paths resolve exactly as on GitHub runners.
+- The rehearsal `MUST` install with the frozen lockfile
+  (`pnpm install --frozen-lockfile` / `cargo build --locked`) and must not
+  mutate the developer's working tree, lockfiles, or the sibling checkouts.
+- On failure the rehearsal `MUST` keep the throwaway tree for inspection and
+  print its path; on success it `MUST` remove the tree.
+- The rehearsal `MUST NOT` require network access to GitHub for dependency
+  checkout: siblings are cloned from the local checkout root. This makes the
+  rehearsal offline-testable and deterministic against local state.
+- Rehearsal output `MUST` be treated as the release gate before pushing a tag
+  or running `workflow_dispatch`; a failing rehearsal means the workflow will
+  fail in the same way on GitHub.
+- Reference implementation: `sdkwork-birdcoder2/scripts/simulate-ci-build.mjs`
+  and the reusable template `sdkwork-specs/tools/simulate-release-build.mjs`.
 
 ## 6. SDK/API Ownership
 
