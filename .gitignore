@@ -86,3 +86,5 @@ tools/postgres/tmp-*.cjs
 etc/**/*.local.*
 /etc/secrets/
 
+
+.workbuddy/

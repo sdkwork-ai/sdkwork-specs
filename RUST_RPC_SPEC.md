@@ -1,12 +1,19 @@
 # SDKWork Rust RPC Standard
 
-- Version: 1.0
+- Version: 1.1
 - Baseline: Rust `tonic`/`prost` gRPC stack over SDKWork proto contracts
 - Scope: Rust standalone/cloud RPC server crates, generated proto crates, typed RPC clients, runtime adapters, bootstrap, tests, and packaging
-- Related: `RPC_SPEC.md`, `RPC_FRAMEWORK_SPEC.md`, `RPC_RESILIENCE_SPEC.md`, `DISCOVERY_SPEC.md`, `RPC_SDK_WORKSPACE_SPEC.md`, `API_SPEC.md`, `DRIVE_SPEC.md`, `SDK_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `DATABASE_SPEC.md`, `DEPLOYMENT_SPEC.md`, `ENVIRONMENT_SPEC.md`, `SECURITY_SPEC.md`, `OBSERVABILITY_SPEC.md`, `TEST_SPEC.md`
+- Related: `RPC_SPEC.md`, `RPC_FRAMEWORK_SPEC.md`, `RPC_RESILIENCE_SPEC.md`, `DISCOVERY_SPEC.md`, `RPC_SDK_WORKSPACE_SPEC.md`, `API_SPEC.md`, `DRIVE_SPEC.md`, `SDK_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `DATABASE_SPEC.md`, `DEPLOYMENT_SPEC.md`, `ENVIRONMENT_SPEC.md`, `SECURITY_SPEC.md`, `OBSERVABILITY_SPEC.md`, `TEST_SPEC.md`, `RUST_CODE_SPEC.md`
 - Canonical location: `specs/RUST_RPC_SPEC.md`
 
 This document defines how SDKWork Rust services implement the language-neutral RPC standard. Rust RPC is an adapter layer. It exposes gRPC services and generated clients while preserving the existing SDKWork domain/runtime/storage boundaries.
+
+All Rust baseline rules apply unchanged to RPC crates: error typing and `anyhow` boundaries
+(`RUST_CODE_SPEC.md` section 5), safety and `unsafe` discipline (section 6), panic and fallibility
+(section 7), async, state, and concurrency (section 8), API design and semver (section 10),
+manifest and toolchain configuration (section 13), and formatting/verification (section 16). This
+spec adds only the RPC-specific layer (proto contracts, tonic adapters, status mapping) and does
+not repeat the shared baseline.
 
 ## 1. Rust RPC Positioning
 

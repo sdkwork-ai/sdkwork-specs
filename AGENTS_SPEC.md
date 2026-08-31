@@ -123,6 +123,7 @@ Rules:
 | Rust code | `RUST_CODE_SPEC.md`, plus `RUST_RPC_SPEC.md`, `RPC_FRAMEWORK_SPEC.md`, `DISCOVERY_SPEC.md`, and `RPC_RESILIENCE_SPEC.md` when RPC is touched |
 | Java/Spring code | `JAVA_CODE_SPEC.md`, `WEB_BACKEND_SPEC.md` when HTTP backend code is touched, `RPC_FRAMEWORK_SPEC.md` when gRPC is touched |
 | TypeScript/Node code | `TYPESCRIPT_CODE_SPEC.md` |
+| Dart/Flutter code | `DART_CODE_SPEC.md`, plus `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md` and `APP_FLUTTER_UI_SPEC.md` when Flutter packages or app roots are touched |
 | Frontend/UI code | `COMPOSABLE_ARCHITECTURE_SPEC.md` when reusable package boundaries or SDK composition are touched, `FRONTEND_CODE_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, and exactly one detailed UI architecture spec |
 | API changes | `API_SPEC.md`, `PAGINATION_SPEC.md` when list/search pagination is touched, `WEB_FRAMEWORK_SPEC.md` when Rust HTTP runtime is touched, `WEB_BACKEND_SPEC.md`, `SDK_SPEC.md`, `TEST_SPEC.md` |
 | Rust HTTP route crates / gateways / migration-only API servers | `COMPOSABLE_ARCHITECTURE_SPEC.md`, `API_SPEC.md`, `SUBJECT_ID_SPEC.md` when SQL subject scope is involved, `WEB_FRAMEWORK_SPEC.md`, `WEB_BACKEND_SPEC.md`, `RUST_CODE_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md` |

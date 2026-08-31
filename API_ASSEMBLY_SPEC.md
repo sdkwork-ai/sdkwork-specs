@@ -1,6 +1,6 @@
 # API Assembly Standard
 
-- Version: 1.2
+- Version: 1.3
 - Scope: application-owned HTTP API composition, host-neutral assembly crates, route-surface completeness, gateway dependency direction, manifests, pnpm commands, migration, and verification
 - Related: `APPLICATION_GATEWAY_SPEC.md`, `APPLICATION_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `APP_PERMISSION_COMPOSITION_SPEC.md`, `COMPOSABLE_ARCHITECTURE_SPEC.md`, `COMPONENT_SPEC.md`, `NAMING_SPEC.md`, `WEB_FRAMEWORK_SPEC.md`, `WEB_BACKEND_SPEC.md`, `APP_RUNTIME_TOPOLOGY_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `MIGRATION_SPEC.md`, `TEST_SPEC.md`
 
@@ -253,6 +253,78 @@ Platform release candidates run `--strict-selected-standalone-parity`; it resolv
 workspace selected by the cloud gateway component contract, requires that workspace's standalone
 gateway, and applies the same complete-hosting checks. Unrelated workspace applications do not
 block that application-scoped release gate.
+
+## 4.2 Cross-Module Composition Dedup And Collision Resolution
+
+Any host that composes multiple assemblies (the platform cloud gateway and any
+standalone gateway that selects dependency assemblies) `MUST` guarantee that
+every normalized `(surface, method, path)` identity is mounted exactly once.
+This section owns the dedup, collision-resolution, and ownership rules for
+multi-module composition. It applies to every combination of assemblies, so a
+`platform-foundation-*` suite that enables multiple applications stays
+collision-free without requiring every application to know the others.
+
+### 4.2.1 Route Ownership Uniqueness
+
+- Normalized `(surface, method, path)` identities `MUST` be unique across every
+  set of assemblies mounted by one gateway host. Duplicates that reach runtime
+  composition are composition errors (`ComposedApiAssembly::try_compose` fails
+  closed on route collisions).
+- The gateway `component.spec.json` `apiSurfaces` declaration is the ownership
+  authority: the first declared surface whose prefix matches a route path is
+  the **primary owner** of that route.
+- A route declared by an assembly whose matching surface is not the primary
+  owner is a **duplicate contribution**. Duplicate contributions `MUST NOT` be
+  mounted; the host skips them and records a resolution entry for observability.
+- Unresolved multi-owner routes fail both static checks and runtime
+  composition. "Two applications happen to define the same path" is never a
+  valid silent pass; it requires either an ownership decision in the gateway
+  contract or a composition-surface exclusion (4.2.2).
+
+### 4.2.2 Composition Surface Selection
+
+An assembly `MAY` expose different route surfaces per composition context
+through its `ApiAssemblyContext` (for example `cloud_gateway()` may expose only
+the service-to-service `internal` surface while `default()` exposes the full
+app/backend/internal business surface). This is the canonical mechanism for
+keeping a complete business surface available to the standalone host while
+excluding it from platform composition.
+
+Rules:
+
+- The assembly `MUST` keep its executable router, route manifest, OpenAPI
+  contribution, and permission catalog consistent for the selected context
+  (API_ASSEMBLY_SPEC §4). A context that drops a surface drops it from every
+  inventory, not only from the router.
+- The gateway static closure check scopes route discovery to the dependency's
+  declared `apiSurfaces`. Surfaces excluded by the composition context are not
+  part of the combined route inventory and `MUST NOT` be declared as gateway
+  surfaces.
+- Contract-level duplicates that are isolated by composition-surface selection
+  are permitted but `MUST` be recorded in the gateway component contract under
+  `contracts.resolvedDedup` so the resolution is auditable, with the primary
+  owner, the excluded surface, and the affected normalized route identities.
+
+### 4.2.3 Ownership Resolution Gate
+
+Canonical gates:
+
+```text
+node <gateway-repo>/scripts/check-gateway-api-closure.mjs --root .
+node ../sdkwork-specs/tools/check-cross-module-api-collisions.mjs --workspace ..
+```
+
+- `check-gateway-api-closure` validates the gateway-view route inventory: every
+  mounted route matches a declared surface, every declared surface has a
+  provider route, and multi-owner routes resolve to the primary owner (first
+  `apiSurfaces` declaration wins; the losing duplicate contribution is skipped).
+- `check-cross-module-api-collisions` audits contract-level duplicate
+  `(surface, method, path)` identities across application assemblies and
+  reports them for dedup review. Contract duplicates isolated by
+  composition-surface selection are documented findings, not blocking failures.
+- Runtime composition (`ComposedApiAssembly::try_compose`) remains the final
+  guard: any duplicate that survives static checks fails closed with the
+  colliding operations named.
 
 ## 5. Assembly Manifest
 
@@ -577,6 +649,13 @@ Required workspace checks:
 node ../sdkwork-specs/tools/audit-api-assembly-workspace.mjs --workspace ..
 node ../sdkwork-specs/tools/check-application-cloud-gateway-boundary.mjs --workspace ..
 node ../sdkwork-specs/tools/check-api-assembly-integration-closure.mjs --workspace .. --strict-standalone-hosting
+node ../sdkwork-specs/tools/check-cross-module-api-collisions.mjs --workspace ..
+```
+
+Gateway hosts additionally run the gateway-view dedup gate:
+
+```text
+node <gateway-repo>/scripts/check-gateway-api-closure.mjs --root <gateway-repo>
 ```
 
 ## 11. Acceptance Checklist
@@ -591,3 +670,5 @@ node ../sdkwork-specs/tools/check-api-assembly-integration-closure.mjs --workspa
 - [ ] `pnpm dev` delegates to standalone and starts one application HTTP ingress.
 - [ ] `pnpm dev:cloud` is remote-client-only.
 - [ ] Executable routes, bound manifests, served OpenAPI, SDK authorities, permissions, readiness, auth profiles, and collision checks agree for each selected profile.
+- [ ] Cross-module `(surface, method, path)` identities mounted by one gateway are unique; multi-owner routes resolve to the primary owner declared by the gateway `apiSurfaces` order, and composition-surface exclusions are recorded in `contracts.resolvedDedup`.
+- [ ] Composition contexts (`ApiAssemblyContext`) keep router, manifest, OpenAPI, and permission inventories consistent for the selected surface set.

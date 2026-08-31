@@ -1,20 +1,27 @@
 # TypeScript Code Standard
 
-- Version: 1.2
+- Version: 2.0
 - Scope: TypeScript, JavaScript, Node tooling, package exports, service facades, generated TypeScript SDK composition, and TypeScript tests
-- Related: `CODE_STYLE_SPEC.md`, `NAMING_SPEC.md`, `APPLICATION_LAYERED_ARCHITECTURE_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `FRONTEND_SPEC.md`, `I18N_SPEC.md`, `TEST_SPEC.md`
+- Related: `CODE_STYLE_SPEC.md`, `NAMING_SPEC.md`, `APPLICATION_LAYERED_ARCHITECTURE_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `FRONTEND_SPEC.md`, `FRONTEND_CODE_SPEC.md`, `I18N_SPEC.md`, `TEST_SPEC.md`, `DEPENDENCY_MANAGEMENT_SPEC.md`, `OBSERVABILITY_SPEC.md`
 
 This standard applies only when TypeScript, JavaScript, Node scripts, package manifests, or TypeScript SDK facades are touched. TypeScript service, adapter, and runtime/bootstrap boundaries follow `APPLICATION_LAYERED_ARCHITECTURE_SPEC.md`.
+
+This standard targets industry-best TypeScript practice as published by the TypeScript Handbook, the Google TypeScript Style Guide, and the ESLint/TypeScript-ESLint ecosystem, narrowed to SDKWork's multi-repository, multi-package workspace. Where a rule is not machine-checkable, the standard states the review evidence required.
 
 ## 1. Baseline
 
 Rules:
 
-- Follow the repository `tsconfig` and package manager configuration.
-- Prefer strict typing at public boundaries.
-- Do not introduce implicit `any` in public APIs.
+- Every TypeScript project `MUST` run with `strict: true` (and the extended strict family:
+  `noImplicitAny`, `strictNullChecks`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`,
+  `noImplicitReturns`, `noFallthroughCasesInSwitch`, `useUnknownInCatchVariables` where the
+  toolchain supports them). A `tsconfig` that disables strictness for new code is a review failure.
+- Prefer strict typing at public boundaries. Public APIs `MUST NOT` expose `any`.
+- Do not introduce implicit `any` in public APIs. `any` in authored code is forbidden unless a
+  reviewed boundary requires it (untyped third-party interop) and the escape is documented.
 - Generated TypeScript SDK output under generator-owned directories must not be hand-edited.
 - Handwritten customizations belong in generated `custom/` roots or approved composed facades.
+- Prefer `unknown` over `any` for values whose type is not yet known; narrow with type guards.
 
 ## 2. Source File Design Principles
 
@@ -124,6 +131,8 @@ Rules:
 - UI-facing TypeScript packages preserve the UI -> service -> injected SDK/client-port flow from `APPLICATION_LAYERED_ARCHITECTURE_SPEC.md`.
 - Node scripts should be deterministic, fail fast, and avoid hidden global state.
 - TypeScript packages that own user-facing copy, operator-facing copy, backend message resources, or i18n key contracts `MUST` use the `src/i18n/<locale>/<domain>/<capability>/<fragment>.ts|json` or `src/i18n/keys/<domain>/<capability>.ts|json` layouts from `I18N_SPEC.md` section 6.1. `src/i18n/index.ts` and `manifest.ts` remain thin exports or generated aggregators.
+- A package `MUST` declare its public surface explicitly: `package.json#exports` with `types` +
+  `import`/`require` conditions; `src/index.ts` exports only stable, documented items.
 
 ### 2.1 `@sdkwork/utils` Package Exports
 
@@ -139,17 +148,105 @@ Rules:
 - When adding a module to `specs/utils.contract.json`, update
   `scripts/check-typescript-exports.mjs` coverage by keeping `package.json#exports` in sync.
 
-## 3. SDK And HTTP Boundaries
+## 4. Type Discipline
 
 Rules:
 
-- Business services use generated SDK clients or approved composed wrappers.
-- Raw `fetch`, `axios`, or handwritten HTTP clients are forbidden for SDKWork APIs when generated SDK methods exist.
-- Do not manually assemble `Authorization`, `Access-Token`, or `X-API-Key` headers in business modules.
-- Protected app-api/backend-api SDKs use the global TokenManager or equivalent credential hook.
-- Protected open-api SDKs use approved open-api credential providers matching their declared auth mode.
+- Prefer `interface` for public object contracts and structural extension; prefer `type` for
+  unions, intersections, mapped types, and tuples. Do not mix both for the same shape.
+- Model closed variant sets with discriminated unions: a shared `kind`/`type` literal field and
+  `switch`/exhaustive narrowing. A boolean flag that switches shape is a smell.
+- Do not use `as` casts to bypass the type system. `as` is allowed only at reviewed boundaries
+  (JSON from untyped external sources, DOM interop) and `MUST` be paired with a runtime guard or
+  a comment explaining why the cast is safe.
+- Prefer `satisfies` over `as` when the goal is to keep the inferred literal type while checking
+  a constraint.
+- Branded/nominal types: use a brand field (`type UserId = string & { __brand: 'UserId' }`) for
+  ids and units that must not be mixed; `MUST NOT` pass a bare `string` where a branded id is
+  expected.
+- Object literals and arrays `MUST` be `readonly` (`Readonly<T>`, `readonly` tuple elements,
+  `as const` for constants) unless mutation is a documented requirement.
+- `null` vs `undefined` discipline: prefer `undefined` for optional values and `null` for
+  intentional "no value" sentinels; pick one per boundary and document it. Do not return `null |
+  undefined` unions.
+- Optional properties use `?`; with `exactOptionalPropertyTypes`, do not assign `undefined`
+  explicitly where the property is optional.
+- Enums: prefer string-literal unions (`type Status = 'active' | 'inactive'`) over
+  `enum` for data values; `const enum` is forbidden (isolatedModules incompatibility). Numeric
+  enums are allowed only at a legacy/API boundary with an explicit comment.
+- Function signatures `MUST` type parameters and return values explicitly at public boundaries;
+  rely on inference internally only when it is unambiguous.
+- Do not use `Function` as a type; use a specific `(...args) => R` signature.
+- Promises `MUST` be awaited or handled; `void`-returning callbacks that initiate work
+  `MUST` handle rejection (see section 6).
 
-## 4. Naming
+## 5. Errors And Results
+
+Rules:
+
+- Define typed error classes or error unions at package/service boundaries. A generic
+  `throw new Error('...')` for business failures is a review failure; prefer
+  `err-code`-style codes or a `ProblemDetails`-shaped error for API-facing failures.
+- Service/business modules `MUST` surface failures as typed results (custom `Result<T, E>`,
+  `Either`, or thrown typed errors) consistently within the package; do not mix styles.
+- Business code `MUST NOT` throw raw SDK/client exceptions outward; map them to domain errors at
+  the adapter boundary, preserving the cause and a stable `code`.
+- API-facing failures `MUST` follow `API_SPEC.md` Problem Details; the mapping lives in one
+  module per package (e.g. `errors/problem.ts`), not scattered across call sites.
+- `MUST NOT` swallow errors with empty `catch {}` or `catch (e) { /* ignore */ }`. If an error is
+  intentionally ignored, log it at `debug` with a reason.
+- `try/catch` `MUST` catch the narrowest scope; do not wrap an entire request handler in one
+  `catch` and re-type everything.
+- Async failures `MUST` be awaited inside `try`; an unhandled promise rejection is a bug.
+- Logging errors `MUST` include the error chain and stable code; never log secrets, tokens, or
+  PII (see `OBSERVABILITY_SPEC.md`).
+
+## 6. Async And Concurrency
+
+Rules:
+
+- Prefer `async/await` over promise chains for readability; a promise chain is acceptable when it
+  expresses a pipeline and has a single rejection handler.
+- Every promise `MUST` be settled: awaited, `.then`/`.catch` handled, or passed to a documented
+  sink. Enable `no-floating-promises` / `@typescript-eslint/no-floating-promises`.
+- `Promise.all` for independent parallel work; `Promise.allSettled` when partial failure is
+  acceptable and each result is inspected; `Promise.all` `MUST NOT` be used when one rejection
+  must not cancel independent work.
+- Long-running or cancellable work `MUST` accept an `AbortSignal`; pass the signal to
+  `fetch`/SDK calls and check it between steps. `MUST NOT` start work the caller cannot stop.
+- Add timeouts to external awaits (`Promise.race` with a timer or an SDK timeout); no unbounded
+  external await is allowed.
+- Bound concurrency for fan-out (`p-limit` or a small worker pool); do not `Promise.all` over an
+  unbounded input list.
+- Avoid `async` in places that serialize: hot loops over `await` run sequentially — restructure
+  with `Promise.all` when independent.
+- Shared mutable state across awaits `MUST` be avoided; if needed, use a documented lock or queue
+  primitive, never unguarded mutation between awaits.
+- Event handlers and timers `MUST` be cleaned up (`addEventListener`/`setInterval` pairs removed
+  on dispose); leaked timers are a bug.
+
+## 7. API Design And Semver
+
+Rules:
+
+- Public API is a semver contract: removing/renaming an exported item, changing a signature, or
+  tightening types is breaking and `MUST` follow the repository release policy and
+  `MIGRATION_SPEC.md`.
+- Keep the exported surface minimal: export only what consumers use; prefer `@internal` or
+  `src/internal/` for plumbing.
+- Mark deprecated exports with `@deprecated` (JSDoc tag), which emits `deprecated` diagnostics
+  under lint; remove deprecated exports on the next major.
+- Generic discipline: bound type parameters to the minimum; prefer inference over explicit
+  parameterization at call sites; use `const` type parameters (`<const T>`) only when literal
+  preservation is required.
+- Do not expose implementation types (`tsc` output paths, internal classes) through public
+  signatures; export contracts, not internals.
+- Public functions `MUST` validate their input and throw/return typed errors; do not assume
+  callers pre-validate.
+- Use `unknown` in catch clauses (`useUnknownInCatchVariables`) and narrow with guards; never
+  treat a caught value as `Error` without a check.
+
+## 8. Naming
 
 Rules:
 
@@ -158,9 +255,47 @@ Rules:
 - Types, interfaces, classes, and React components use PascalCase.
 - Functions, variables, and hooks use camelCase.
 - Hooks start with `use`.
+- Boolean variables read as predicates (`isLoading`, `hasError`, `canSubmit`); avoid
+  non-boolean names for booleans (`loading` alone is ambiguous).
 - Test files use the local pattern, commonly `*.test.ts`, `*.test.tsx`, or `*.test.mjs`.
 
-## 5. Node Script And Build Runner Resilience
+## 9. Documentation
+
+Rules:
+
+- Public exports `MUST` carry JSDoc comments describing the contract: what, when it fails, and
+  invariants. `@param`, `@returns`, and `@throws`/`@returns-error` are required for non-obvious
+  behavior.
+- Document error conditions: which inputs produce which failures, and whether the operation is
+  retryable.
+- Use `@example` for non-trivial public functions; examples `MUST` be runnable.
+- Internal comments explain *why*; do not restate code. Comment invariants, trade-offs, and
+  historical constraints.
+- `TODO`/`FIXME` `MUST` reference a tracking issue id; a bare `TODO` is forbidden.
+- Generated code `MUST NOT` be hand-documented; suppress docs only at generator-owned files with
+  a documented rationale.
+
+## 10. Testing
+
+Rules:
+
+- Every package `MUST` have tests covering its public behavior: unit tests for pure logic and
+  integration tests for service/port boundaries. Use `vitest` or `jest` per repository baseline.
+- Name tests as behavior sentences (`returns_conflict_on_duplicate_key`,
+  `renders_empty_state_when_list_is_empty`); no `test_` prefixes and no "test does X" names.
+- Tests `MUST` be isolated and order-independent: no shared mutable module state, no dependence
+  on other tests, and deterministic time (fake timers where timing matters).
+- Mock at boundaries: fake injected SDK clients/ports rather than deep-mocking internals; `MUST
+  NOT` mock what a real, cheap implementation provides.
+- Async tests `MUST` await all promises and handle rejections; enable fake timers explicitly per
+  test.
+- Coverage of the changed path is required; a test that does not assert is a liability.
+- Regression tests `MUST` accompany bug fixes: reproduce, fix, lock with a failing-on-old-code
+  test.
+- Test-only code `MUST NOT` be reachable from production paths (no production import of test
+  helpers, no `if (import.meta.env.MODE === 'test')` behavior branches in shipped logic).
+
+## 11. Node Script And Build Runner Resilience
 
 Node scripts under `scripts/` that orchestrate builds, dev servers, or dependency preparation must follow `CODE_STYLE_SPEC.md` §7 (Build Source Integrity And Self-Healing).
 
@@ -175,7 +310,62 @@ Rules:
 - Node runners `MUST` place PID/heartbeat state and disposable generated config outside the source tree by using the shared SDKWork runtime-state resolver or `os.tmpdir()` plus a unique `mkdtemp` directory. Repository/application `.runtime/` is forbidden.
 - Temporary files and decoded signing material `MUST` use restrictive permissions where supported and `finally`/signal-safe cleanup. A fixed shared temp filename is forbidden when concurrent runs can collide.
 
-## 6. Verification
+## 12. Toolchain And Linting
+
+Rules:
+
+- `tsconfig` baseline: `strict: true`, `target`/`module` per repository baseline, `moduleResolution:
+  bundler` (Vite) or `node16`/`nodenext` (Node packages), `verbatimModuleSyntax: true` (use
+  `import type` for type-only imports), `isolatedModules: true`, `noUncheckedIndexedAccess: true`,
+  `skipLibCheck: false` for authored dependencies. Enable `noUnusedLocals`/`noUnusedParameters`.
+- Type-only imports `MUST` use `import type { ... }` so `isolatedModules`-safe transpilers never
+  emit runtime imports for types.
+- ESLint baseline: enable `@typescript-eslint` recommended + `no-explicit-any`,
+  `no-floating-promises`, `no-unused-vars`, `consistent-type-imports`, and `ban-ts-comment`.
+  Fix warnings; do not blanket-disable rules.
+- Path aliases: `@/*` or package-relative aliases are allowed only when declared in both
+  `tsconfig` paths and the bundler config; prefer relative imports inside a package and export
+  maps across packages.
+- No `require`/`module.exports` in ESM-authored packages; `"type": "module"` per repository
+  baseline. `__dirname` interop uses `import.meta.url` in ESM.
+- Node scripts `MUST` be deterministic: no reliance on ambient env beyond documented config, no
+  hidden global mutation, explicit failure on missing input.
+
+## 13. Dependencies
+
+Rules:
+
+- Third-party packages keep their upstream names and versions exactly as published; SDKWork
+  never renames or re-cases them (`NAMING_SPEC.md` section 3 rules apply to authored packages).
+- Dependencies `MUST` be declared per package (`pnpm-workspace` + `package.json`); the
+  application-root hoist is not a declaration point (see `DEPENDENCY_MANAGEMENT_SPEC.md`).
+- Versions `SHOULD` come from the workspace catalog (`catalog:` in `pnpm-workspace.yaml` synced
+  from `configs/dependency-catalog.yaml`); do not hand-edit divergent versions for governed
+  packages.
+- Prefer small, well-maintained packages; a new dependency `MUST` be justified in the change and
+  `MUST NOT` duplicate a capability an SDKWork sibling package already provides.
+- Lockfile (`pnpm-lock.yaml`) is generated output: commit it in the same change as any
+  dependency edit; do not hand-edit it.
+
+## 14. Anti-Patterns
+
+Forbidden:
+
+- `any` in public APIs and `as any` casts; `@ts-ignore`/`@ts-expect-error` without a documented
+  reason.
+- Implicit `any` from untyped parameters, catch variables, or untyped arrays.
+- `enum`/`const enum` where a string-literal union expresses the domain.
+- Throwing bare `Error('...')` or strings for business failures instead of typed errors.
+- Empty catch blocks and silently swallowed promise rejections.
+- Floating promises (`void someAsyncFn()` without a documented reason).
+- Unbounded `Promise.all` over user-controlled input; unbounded concurrency.
+- Shared mutable module-level state (`let` at module scope mutated across modules).
+- Public exports of internal/implementation types; barrel files containing logic.
+- Raw HTTP/auth header assembly in business modules where generated SDK methods exist.
+- Hand-editing generated TypeScript SDK output.
+- `require()` in ESM packages; `import type` violations under `isolatedModules`.
+
+## 15. Verification
 
 Rules:
 
@@ -185,16 +375,18 @@ Rules:
 - Static scans should fail on raw SDKWork HTTP calls, manual auth headers, and cross-package `/src/` imports when those boundaries are governed.
 - Build runner tests `SHOULD` verify that missing build-critical source files trigger self-healing, not an immediate crash.
 
-## 7. Acceptance Checklist
+## 16. Acceptance Checklist
 
-- [ ] Public TypeScript APIs are typed.
-- [ ] `src/index.ts` is a stable export boundary.
+- [ ] `tsconfig` uses `strict: true` and the strict family; public APIs are typed and `any`-free.
+- [ ] `src/index.ts` is a stable export boundary; `package.json#exports` declares `types` +
+      `import`/`require`.
 - [ ] Authored TypeScript i18n messages or key contracts, when present, use `src/i18n/<locale>/<domain>/<capability>/` or `src/i18n/keys/<domain>/<capability>`.
-- [ ] SDK clients are injected through typed ports.
+- [ ] SDK clients are injected through typed ports; raw HTTP did not replace generated SDK calls.
 - [ ] TypeScript UI/service/runtime boundaries follow `APPLICATION_LAYERED_ARCHITECTURE_SPEC.md` when the package is part of an application.
-- [ ] Raw HTTP did not replace generated SDK calls.
+- [ ] Discriminated unions model closed variant sets; no `as` bypasses without a guard or comment.
+- [ ] Errors are typed and mapped at boundaries; no swallowed rejections or empty catches.
+- [ ] Public API is documented (JSDoc), `@deprecated` where applicable, and semver-clean.
 - [ ] Generated TypeScript output was not hand-edited.
-- [ ] Typecheck/test/lint commands are documented.
+- [ ] Typecheck/test/lint commands are documented and pass.
 - [ ] Build runners verify build-critical source files and self-heal from git when missing.
 - [ ] `pnpm clean` does not delete git-tracked build-critical source files.
-

@@ -191,12 +191,20 @@ Rules:
 
 ## 3. Language Naming
 
+Scope: The kebab-case package and snake_case import conventions in this section apply **only to
+SDKWork-authored projects and modules** — repositories, crates, and packages created and maintained
+by SDKWork. Third-party dependencies (registry, git, or upstream trees such as `external/`,
+`third_party/`, and `vendor/`) keep their ecosystem-native names exactly as published. SDKWork
+conventions never rename, re-case, or re-derive a third-party name; section 3.1 rule 11 and
+section 3.2 rule 9 govern third-party handling.
+
 Rules:
 
 - Rust packages use kebab-case and Rust modules/imports use snake_case. Rust crate names must use
   the responsibility-specific families from `RUST_CODE_SPEC.md`, such as `service`,
   `repository-sqlx`, `standalone-gateway`, `cloud-gateway`, `service-host`, `native-host`, `worker`,
-  or platform `api-gateway`.
+  or platform `api-gateway`. The exact package/directory/lib/module mapping is normative in
+  section 3.1; dependency declaration integrity is normative in section 3.2.
 - Java packages use lowercase dotted names under an approved SDKWork root; Java classes use PascalCase.
 - TypeScript packages use kebab-case or approved scoped names; exported types/classes/components use PascalCase; functions and variables use camelCase.
 - Dart and Flutter package names use lowercase snake_case; SDKWork Flutter mobile packages use the `sdkwork_<application_code>_flutter_mobile_<capability>` family from `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`.
@@ -205,6 +213,172 @@ Rules:
 - Harmony native SDKWork package directories use kebab-case `sdkwork-<application-code>-harmony-mobile-*`; ohpm package ids or ArkTS aliases must preserve the SDKWork package identity.
 - React hooks start with `use`.
 - Database tables and columns use lowercase snake_case according to `DATABASE_SPEC.md`.
+
+### 3.1 Rust Package, Directory, Crate, And Module Naming
+
+Rust carries two identifier planes at the same time. They are not interchangeable: the
+**package plane** (Cargo, filesystem, lock file) uses kebab-case, and the **crate plane**
+(Rust lib target, modules, source imports) uses snake_case. Mixing them is the most common
+source of `unresolved import` build failures in SDKWork.
+
+These two planes are **SDKWork-authored crate conventions only**. They describe how SDKWork names
+its own crates; they do not describe third-party crates. A third-party crate keeps its upstream
+name verbatim in every plane and is not part of this mapping (see rule 11).
+
+| Plane | Identifier | Required case | Declared in | Example |
+| --- | --- | --- | --- | --- |
+| Package | `[package].name` | kebab-case | `Cargo.toml` | `sdkwork-community-storage-sqlx-rust` |
+| Crate directory | directory name | kebab-case, equal to `[package].name` | filesystem | `crates/sdkwork-community-storage-sqlx-rust/` |
+| Crate lib target | `[lib].name` | snake_case | `Cargo.toml` | `sdkwork_community_storage_sqlx` |
+| Rust module | `mod` name / `.rs` file stem | snake_case | `src/**` | `src/payment_settlement.rs` |
+| Source import | `use <lib_name>::` | snake_case | `src/**/*.rs` | `use sdkwork_community_storage_sqlx::CommunityFeedQuery;` |
+| Dependency key | table key in `[dependencies]` | equals the dependency `[package].name` | `Cargo.toml` | `sdkwork-community-storage-sqlx-rust.workspace = true` |
+| Workspace dependency key | `[workspace.dependencies]` key | equals the dependency `[package].name` | workspace root `Cargo.toml` | `sdkwork-community-storage-sqlx-rust = { path = ... }` |
+| Lock entry | `dependencies` item | equals the dependency `[package].name` | `Cargo.lock` | `"sdkwork-community-storage-sqlx-rust"` |
+| Feature | `[features]` key | kebab-case | `Cargo.toml` | `test-support` |
+| Binary | `[[bin]].name` | kebab-case | `Cargo.toml` | `sdkwork-api-drive-standalone-gateway` |
+
+Rules:
+
+1. `[package].name` `MUST` match `^[a-z0-9]+(-[a-z0-9]+)*$`. Underscores are forbidden.
+2. The crate directory name `MUST` equal `[package].name`. Host-embedded roots are the only
+   exceptions: `src-tauri`, `src-host`, and generated output under a `generated/` directory.
+3. `[lib].name` `MUST` match `^[a-z0-9]+(_[a-z0-9]+)*$`. Hyphens are forbidden.
+4. `[lib].name` defaults to the package name with every `-` replaced by `_` (Cargo derives it
+   automatically, e.g. `sdkwork-routes-order-app-api` → `sdkwork_routes_order_app_api`). A crate
+   that intentionally uses a shorter lib name `MUST` declare `[lib].name` explicitly and that
+   declared name `MUST` be used consistently by every consumer, for example
+   `sdkwork-community-storage-sqlx-rust` → `sdkwork_community_storage_sqlx`. Declaring
+   `[lib].name` explicitly is recommended (not required) when it equals the derived name, so the
+   import name is reviewable in the manifest.
+5. Rust source `MUST` import the lib name (snake_case). It `MUST NOT` import the package name
+   (kebab-case); `use sdkwork-routes-order-app-api::...` is invalid Rust.
+6. A Cargo dependency key `MUST` equal the dependency's `[package].name`. When a shorter or
+   different key is needed, the crate `MUST` resolve it explicitly with
+   `alias = { workspace = true, package = "real-package-name" }`.
+7. `[workspace.dependencies]` keys, `Cargo.lock` `dependencies` entries, and `cargo <name>`
+   command arguments use package names, never lib names.
+8. Rust module file names, module directory names, and `mod` names `MUST` use snake_case.
+   `mod.rs`, `lib.rs`, `main.rs`, and `build.rs` keep their conventional names.
+9. Cargo feature names and `[[bin]].name` values `MUST` use kebab-case.
+10. A dependency key `MUST NOT` be an identifier that matches neither a real package name nor an
+    explicit `package = "..."` alias.
+11. Third-party dependencies `MUST` keep their upstream package name, crate (lib) name, and version
+    exactly as published. SDKWork `MUST NOT` rename, re-case, or re-derive them to fit the kebab or
+    snake planes. The package/crate plane rules in this section govern SDKWork-authored crates only;
+    they never imply renaming a third-party crate or forcing its directory, `[package].name`, or
+    import name into an SDKWork shape. Upstream names may be single-segment (`tokio`), kebab-case
+    (`tokio-util`), or snake_case (`serde_json`); all are used verbatim.
+
+Correct example:
+
+```toml
+# crates/sdkwork-community-storage-sqlx-rust/Cargo.toml
+[package]
+name = "sdkwork-community-storage-sqlx-rust"
+
+[lib]
+name = "sdkwork_community_storage_sqlx"
+path = "src/lib.rs"
+```
+
+```rust
+// crates/sdkwork-routes-community-app-api/src/routes.rs
+use sdkwork_community_storage_sqlx::CommunityFeedQuery;
+```
+
+```toml
+# crates/sdkwork-routes-community-app-api/Cargo.toml
+[dependencies]
+sdkwork-community-storage-sqlx-rust.workspace = true
+```
+
+Forbidden examples:
+
+```toml
+[package]
+name = "sdkwork_video_core"          # forbidden: underscores in [package].name
+```
+
+```toml
+[lib]
+name = "sdkwork-api-appstore-standalone-gateway"   # forbidden: hyphens in [lib].name
+```
+
+```rust
+use sdkwork-routes-community-app-api::routes;      // forbidden: kebab-case Rust import
+```
+
+```toml
+[dependencies]
+sdkwork_community_storage_sqlx.workspace = true    # forbidden when no package uses that name
+                                                   # and no package = "..." alias resolves it
+```
+
+Third-party dependencies keep their native names in every plane:
+
+```toml
+# crates/sdkwork-<...>/Cargo.toml   (third-party entries are verbatim, never converted)
+[dependencies]
+tokio.workspace = true                  # single-segment upstream name, unchanged
+tokio-util.workspace = true             # upstream kebab-case name, unchanged
+serde_json.workspace = true             # upstream snake_case name, unchanged
+```
+
+```rust
+use tokio_util::sync::CancellationToken;   // upstream lib name, unchanged
+use serde_json::Value;                     // upstream lib name == package name
+```
+
+A third-party crate is never renamed to an SDKWork name, never aliased to a "corrected" case, and
+never re-derived from an SDKWork formula. If a consumer needs a different local dependency key, it
+uses `alias = { workspace = true, package = "<upstream-name>" }` (rule 6), not a rename.
+
+Verification:
+
+```bash
+node ../sdkwork-specs/tools/check-rust-crate-naming-standard.mjs --root .
+```
+
+### 3.2 Rust Dependency Declaration Integrity
+
+A dependency table is part of the crate contract. Cargo resolves imports only through declared
+dependencies, so a missing declaration is a build failure, not a style issue.
+
+Rules:
+
+1. Every external crate referenced by `src/` `MUST` be declared in `[dependencies]`.
+2. A crate referenced only by `tests/`, `examples/`, or `benches/` `MAY` stay in
+   `[dev-dependencies]`.
+3. A crate referenced by `build.rs` `MUST` be declared in `[build-dependencies]`.
+4. A dependency `MUST NOT` be moved from `[dependencies]` to `[dev-dependencies]`, and `MUST NOT`
+   be deleted, while `src/` still references it. A `[dev-dependencies]` entry does not satisfy a
+   `src/` import.
+5. Batch dependency pruning, "unused dependency" cleanup, or manifest reformatting `MUST` be
+   verified with the section 3.1 verification command before it is committed. Removing a
+   dependency line without that verification is forbidden.
+6. A dependency key that resolves through `workspace = true` `MUST` also be declared in the
+   workspace root `[workspace.dependencies]` table.
+7. `Cargo.lock` is generated output owned by the repository. After any dependency table change,
+   regenerate it and commit it in the same change:
+
+   ```bash
+   cargo metadata --format-version 1 > /dev/null   # or: pnpm build / pnpm dev
+   ```
+
+   A committed manifest change without the matching `Cargo.lock` entry is an incomplete change.
+8. When a package declares a shorter lib name than its package name, reviewers and tooling
+   `MUST` match imports against the lib name, not the package name.
+9. Third-party dependency entries use the upstream package name and version exactly as published
+   (section 3.1 rule 11). Do not rename, re-case, or re-derive a registry, git, or vendored
+   upstream dependency to fit SDKWork package or crate conventions. SDKWork-authored crates are
+   the only entries the two-plane mapping applies to.
+
+Verification:
+
+```bash
+node ../sdkwork-specs/tools/check-rust-crate-naming-standard.mjs --root .
+```
 
 ## 4. API And SDK Naming
 
@@ -495,6 +669,22 @@ Rules:
 - [ ] Platform gateway uses `sdkwork-api-cloud-gateway` for the `platform.api-gateway` role.
 - [ ] Rust crate names use responsibility-specific families and do not use forbidden generic
       `product`, bare `runtime`, `backend`, `core`, `common`, or `manager` suffixes on application-code crates.
+- [ ] Rust `[package].name`, crate directory, feature names, and `[[bin]].name` use kebab-case
+      (section 3.1 rules 1, 2, 9).
+- [ ] Rust `[lib].name`, module files, module directories, and source imports use snake_case;
+      `[lib].name` is declared explicitly whenever it is shorter than the package-derived name
+      (section 3.1 rules 3, 4, 5, 8).
+- [ ] Cargo dependency keys, `[workspace.dependencies]` keys, and `Cargo.lock` entries use the
+      dependency package name, with `package = "..."` when an alias is required
+      (section 3.1 rules 6, 7, 10).
+- [ ] Every external crate referenced by `src/` is declared in `[dependencies]`; test-only and
+      build-script-only crates use `[dev-dependencies]` or `[build-dependencies]`
+      (section 3.2 rules 1, 2, 3, 4).
+- [ ] Manifest dependency changes are committed together with the regenerated `Cargo.lock`
+      (section 3.2 rule 7).
+- [ ] Third-party dependencies keep their upstream names verbatim; the kebab/snake planes apply
+      only to SDKWork-authored crates (section 3.1 rule 11, section 3.2 rule 9).
+- [ ] `node ../sdkwork-specs/tools/check-rust-crate-naming-standard.mjs --root .` reports no errors.
 - [ ] Edge protocol processes use `sdkwork-<application-code>-<edge-capability>-edge-runtime`,
       declare topology role `edge-runtime`, live under `crates/`, and own no application HTTP API surface.
 - [ ] Commerce sellable-item capabilities use `merchandise`, not retired capability token `product`.

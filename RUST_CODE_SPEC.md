@@ -1,10 +1,12 @@
 # Rust Code Standard
 
-- Version: 1.1
+- Version: 2.0
 - Scope: Rust crates, workspaces, route crates, Tauri/native Rust, Rust services, Rust SDK facades, and Rust tests
-- Related: `CODE_STYLE_SPEC.md`, `NAMING_SPEC.md`, `APPLICATION_LAYERED_ARCHITECTURE_SPEC.md`, `APPLICATION_GATEWAY_SPEC.md`, `API_SPEC.md`, `WEB_FRAMEWORK_SPEC.md`, `WEB_BACKEND_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `COMPONENT_SPEC.md`, `I18N_SPEC.md`, `RUST_RPC_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `TEST_SPEC.md`
+- Related: `CODE_STYLE_SPEC.md`, `NAMING_SPEC.md`, `APPLICATION_LAYERED_ARCHITECTURE_SPEC.md`, `APPLICATION_GATEWAY_SPEC.md`, `API_SPEC.md`, `WEB_FRAMEWORK_SPEC.md`, `WEB_BACKEND_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `COMPONENT_SPEC.md`, `I18N_SPEC.md`, `RUST_RPC_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `TEST_SPEC.md`, `DEPENDENCY_MANAGEMENT_SPEC.md`, `OBSERVABILITY_SPEC.md`, `SECURITY_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`
 
 This standard applies only when Rust source, Cargo manifests, Rust route crates, Tauri Rust code, or Rust RPC code is touched. Rust crate responsibilities implement the L0-L6 profile from `APPLICATION_LAYERED_ARCHITECTURE_SPEC.md`; cross-stack Rust composition and layer roles follow `COMPOSABLE_ARCHITECTURE_SPEC.md`.
+
+This standard targets industry-best Rust practice as published by the Rust API Guidelines, the Rust Reference, Clippy, the Rust Book, and the Google Rust Style Guide, narrowed to SDKWork's multi-repository, multi-crate workspace. Where a rule is not machine-checkable, the standard states the review evidence required.
 
 ## 1. Crate And Module Shape
 
@@ -26,6 +28,7 @@ Rules:
 | Mixes different concerns | High coupling risk | Split by responsibility domain |
 | Different teams modify separately | Needs separation | Create new module per team |
 | Testing requires mocking unrelated code | Tight coupling | Separate into independent modules |
+| Public type leaks an implementation detail | Encapsulation break | Introduce a private module or sealed interface |
 
 When in doubt, prefer splitting over accumulating complexity. A well-structured codebase with many small files is better than a few monolithic ones that are hard to maintain.
 
@@ -465,54 +468,450 @@ Rules:
 
 Rules:
 
+- Scope: these package/import naming rules apply only to SDKWork-authored crates. Third-party
+  crates (registry, git, or upstream trees such as `external/`, `third_party/`, and `vendor/`) keep
+  their upstream package and crate names unchanged; do not rename, re-case, or re-derive them.
 - Cargo package names use lowercase kebab-case, for example `sdkwork-routes-merchandise-app-api`.
 - Rust import names use snake_case, for example `sdkwork_routes_merchandise_app_api`.
+- The full package, directory, `[lib].name`, module, and dependency-key mapping is normative in
+  `NAMING_SPEC.md` section 3.1. A crate whose `[package].name` contains a hyphen `MUST` declare
+  `[lib].name` explicitly as the package name with every `-` replaced by `_`.
+- Every external crate referenced by `src/` `MUST` be declared in that crate's `[dependencies]`
+  table. Dependency declaration integrity is normative in `NAMING_SPEC.md` section 3.2.
 - Runnable crate names must use a specific suffix such as `service-host`, `native-host`,
   `tauri-host`, `worker`, `standalone-gateway`, `cloud-gateway`, or platform
   `api-cloud-gateway`; `api-server` is migration-only and generic `product` and
   `runtime` suffixes are forbidden.
 - Modules use snake_case.
-- Types and traits use PascalCase.
-- Constants use SCREAMING_SNAKE_CASE only for true constants.
-- Keep items private by default. Export only stable integration surfaces.
+- Types, traits, and enum variants use PascalCase. Functions, methods, and variables use
+  snake_case. Fields use snake_case. Const generics and type parameters use single uppercase
+  letters or short descriptive PascalCase (`T`, `E`, `Item`, `State`).
+- Constants use SCREAMING_SNAKE_CASE only for true compile-time constants; runtime-fixed values
+  that are not `const` expressions use `static` with SCREAMING_SNAKE_CASE or an accessor.
+- Acronyms in identifiers are title-cased as normal words in PascalCase (`HttpClient`, not
+  `HTTPClient`) and lowercased in snake_case (`http_client`, not `HTTP_client`).
+- Keep items private by default. Export only stable integration surfaces. Public API is a
+  semver contract (see section 10).
 
 ## 5. Errors And Results
 
-Rules:
-
-- Libraries expose typed errors where callers can take meaningful action.
-- `anyhow` is allowed at binary, CLI, test, and one-off tooling boundaries.
-- Service/domain crates should prefer typed errors or error enums.
-- HTTP boundary code maps domain errors to Problem Details according to `API_SPEC.md`.
-
-## 6. Async, State, And Persistence
+Rust reports failure with `Result<T, E>`, not with panics or sentinel values. Library code
+returns errors; binaries and process boundaries are where errors become logs, metrics, and exit
+codes.
 
 Rules:
 
-- Do not hold locks across `.await`.
-- Shared mutable state must be explicit in state structs or service ports.
-- SQLx queries belong in repository modules, not handlers or route manifests.
-- Tenant, organization, user, request id, trace, and permission context must come from typed request context, not raw headers.
-- IAM session/token lookup for open-api `MUST` live in `sdkwork-iam-web-adapter` or application-line adapters implementing framework traits; route handlers `MUST NOT` duplicate credential resolution SQL.
-- Queries comparing logical `instant` columns physically stored as TEXT `MUST` use explicit PostgreSQL casts such as `expires_at::timestamptz > $1::timestamptz` per `DATABASE_SPEC.md` section 8.1.1. `MUST NOT` bind `chrono::DateTime<Utc>` directly against TEXT `instant` columns without cast.
-- Provider SDK calls belong in adapters behind traits or service ports.
+- Libraries expose typed errors where callers can take meaningful action. Prefer a dedicated
+  `Error` enum per crate (typically in `src/error.rs`) implementing `std::error::Error`,
+  `Display`, and `std::fmt::Debug`.
+- Derive `thiserror::Error` for error enums in service, repository, route, and SDK crates.
+  `thiserror` `MUST NOT` be used in hot paths where a hand-written `From`/`Display` is trivial.
+- Error enums `MUST` implement `std::error::Error::source()` for wrapped causes so the full chain
+  is reachable through `anyhow::Error::chain()` and `tracing` spans.
+- Provide `From<E>` conversions so `?` works across crate boundaries. Conversion `MUST` preserve
+  the original cause in the `source` chain and `MUST NOT` swallow context.
+- Name the crate error type `Error` with a crate-level `pub type Result<T> = std::result::Result<T, Error>;`
+  alias; specific `Result` aliases may be added for submodules when the error type is narrower.
+- Encode remediation in the variant: `NotFound`, `Conflict`, `Unauthorized`,
+  `Validation { field, reason }`, `External { source, retryable }` are better than
+  `GenericFailure(String)`.
+- Variants `MUST NOT` carry raw SQL, secrets, credentials, or PII in their `Display`
+  implementation. Logging and error responses must use the redacted form.
+- `anyhow` is allowed at binary, CLI, test, and one-off tooling boundaries only. It `MUST NOT`
+  appear in `[dependencies]` of service, repository, route, or SDK lib crates; those crates use
+  typed errors. `anyhow` `MUST NOT` be re-exported from a library.
+- Service/domain crates should prefer typed errors or error enums. Repository errors are mapped to
+  domain errors at the port boundary, never leaked as SQLx errors into services.
+- HTTP boundary code maps domain errors to Problem Details according to `API_SPEC.md`. The mapping
+  lives in `mapper/problem.rs`; a single `IntoResponse`/`ToProblem` impl per error type, not ad-hoc
+  `match` arms scattered across handlers.
+- Do not add a `String`/`anyhow::Error` catch-all variant to "simplify" a crate error enum. Add
+  the concrete source variant or wrap a documented external error.
+- Functions that cannot fail `MUST NOT` return `Result`; functions that can fail `MUST NOT`
+  swallow the error with `let _ =` unless the failure is intentionally ignored and documented.
 
-## 7. Formatting And Verification
+## 6. Safety And Unsafe
+
+Safety is a design property, not a code review checkbox. Unsafe code is the exception; SDKWork
+crates `MUST` default to safe Rust and keep every `unsafe` block small, local, and reviewable.
 
 Rules:
 
-- Run `cargo fmt` or the repository wrapper before completion.
-- Run `cargo clippy` when the repository requires it or when shared Rust code changes.
-- Run the narrowest `cargo test -p <crate>` first, then `cargo test --workspace` when shared contracts are touched.
-- Run `node ../sdkwork-specs/tools/check-application-layering.mjs --root .` when Rust route/service/repository/runtime boundaries are touched in an application repository.
-- Run `node ../sdkwork-specs/tools/check-rust-backend-composition.mjs --root .` when Rust service,
-  repository, route, migration-only API server, service host, native host, worker, or gateway crates are added or
-  their Cargo dependencies change.
-- Route crates must pass route manifest, prefix, authority, and SDK family checks from `TEST_SPEC.md`.
+- Crate default: declare `unsafe_code = "forbid"` in `[lints.rust]` (or the workspace lint
+  baseline, see section 13). A crate that genuinely needs `unsafe` changes it to `deny` at the
+  crate level with a documented justification in the crate `README.md`; `allow` is forbidden.
+- `unsafe` blocks `MUST` be as small as possible: a few lines, never spanning a function body or
+  a loop. Do not wrap safe operations in an `unsafe` block to "silence" a lint.
+- Every `unsafe` block `MUST` carry a `// SAFETY:` comment immediately above it stating the
+  preconditions that make the operation sound, and why the compiler cannot prove them.
+  Preconditions reference the invariant source (documented type invariant, caller contract,
+  checked bound). A `SAFETY` comment that restates the code is not acceptable.
+- `unsafe fn` `MUST` declare its safety contract in `# Safety` documentation, `MUST` name
+  `unsafe_op_in_unsafe_fn = "deny"` (default in edition 2024) so every unsafe operation inside is
+  an explicit `unsafe` block, and `MUST` be reviewed by a second reviewer.
+- `unsafe impl Send`/`unsafe impl Sync` are forbidden unless the type is a documented FFI
+  handle or a performance-critical zero-copy wrapper, and the soundness argument is written in
+  the `// SAFETY:` comment (which fields make it safe, and what would break it).
+- Raw pointer dereference, `std::mem::transmute`, `MaybeUninit::assume_init`,
+  `std::hint::unreachable_unchecked`, and `std::ptr::read/write` are forbidden outside a
+  reviewed `unsafe` module with a written soundness argument.
+- FFI boundaries (`extern "C"` blocks, `#[link]`, `libloading`) `MUST` declare the ABI contract,
+  validate pointers/lengths at the boundary, and map foreign failures to typed errors. In edition
+  2024, `extern` blocks are `unsafe extern` and `MUST` say so.
+- `unsafe` code `MUST NOT` be introduced to work around a borrow-checker limitation that a safe
+  redesign (ownership restructuring, `Arc`, interior mutability with a documented invariant)
+  solves.
+- A crate that contains `unsafe` code `MUST` list the exact `unsafe` sites and their invariants in
+  its `README.md`, and its tests `MUST` include at least one test that would break if an
+  invariant is violated (e.g., a debug-assertion test).
+- Third-party crates that wrap unsafe primitives are preferred over hand-written unsafe
+  (`bytes`, `parking_lot`). Do not reimplement a vetted abstraction.
+
+## 7. Panic And Fallibility
+
+Panics are bugs unless they are the documented reaction to a programming error at a process
+boundary. Library code must not panic on external input.
+
+Rules:
+
+- Library crates `MUST NOT` panic on user input, malformed data, or unavailable resources.
+  Recoverable failures are `Result`/`Option`; invariant violations that indicate a bug may use
+  `panic!`/`assert!` only when the caller cannot recover and the invariant is documented.
+- `unwrap`, `expect`, `panic!`, `todo!`, `unimplemented!`, `unreachable!`, and `dbg!` are
+  forbidden in library code (declare `clippy::unwrap_used`, `clippy::expect_used`,
+  `clippy::panic`, `clippy::todo`, `clippy::unimplemented`, `clippy::unreachable`,
+  `clippy::dbg_macro` in the workspace lint baseline; binaries may relax them locally with a
+  comment).
+- `expect` is preferred over `unwrap` only when the message documents the invariant
+  (`arr.first().expect("pipeline always pushes a header")`). `unwrap` in non-test code is
+  forbidden.
+- Prefer checked indexing (`get`, `get_mut`, `split_first`) over `[i]` in library code; use
+  iterator combinators (`nth`, `find`) instead of index loops where the index is data-driven.
+- Integer arithmetic that can overflow `MUST` use checked/saturating/wrapping operations
+  (`checked_add`, `saturating_mul`) or explicitly documented `wrapping_*`. Enable
+  `overflow-checks = true` in dev/release profiles except for measured hot paths.
+- `expect`/`unwrap` inside `async` tasks and worker jobs is forbidden: a panic in a spawned task
+  aborts the task and can corrupt shared state. Failures `MUST` be propagated as `Result` and
+  logged by the task supervisor.
+- Division by a non-constant divisor `MUST` be guarded (`checked_div`, `!= 0` check) unless the
+  divisor is an enforced non-zero type (`NonZeroU64`, `NonZeroUsize`).
+- The only allowed panic boundary is process/thread/task supervision: a top-level binary `main`
+  or a task supervisor may `panic!`/return `Err` and let the runtime restart the unit. Such
+  boundaries `MUST` be documented.
+- Do not use `catch_unwind` to implement control flow or to "rescue" logic errors. If
+  `catch_unwind` is needed at a plugin/FFI boundary, the caught block `MUST` not touch shared
+  state after the panic.
+
+## 8. Async, State, And Concurrency
+
+Rust async is a first-class runtime concern in SDKWork services and gateways. Concurrency bugs
+are state bugs; the standard below keeps shared state explicit and task isolation strong.
+
+Rules:
+
+- Do not hold `MutexGuard`/`RwLockGuard`/`RefCell` borrows across `.await`. If a lock must span
+  an await point, restructure: compute under the lock, drop it, then await; or use
+  `tokio::sync::Mutex` with the critical section documented and minimized.
+- Shared mutable state `MUST` be explicit in state structs or service ports. Prefer
+  `Arc<T>` + `tokio::sync::RwLock`/`Mutex` over global `static mut` or `lazy_static` maps;
+  `static` mutable state is forbidden.
+- Prefer `std::sync::Arc` over `Rc` in any crate compiled for multi-threaded runtimes. `Rc` and
+  `RefCell` are permitted only in single-threaded Tauri command contexts and test fixtures, and
+  `MUST` be documented as such.
+- `Send`/`Sync` hygiene: public types that participate in runtime composition should be
+  `Send + Sync` unless documented. Do not silently make a type `!Send`; if a type cannot be
+  `Send`, document why and keep it out of `tokio::spawn` closures.
+- Every `tokio::spawn`/`tokio::task::spawn_blocking`/`JoinHandle` `MUST` be awaited, aborted, or
+  detached with a documented owner. Spawned futures `MUST` be `Send`; use `spawn_blocking` for
+  CPU-bound or blocking-IO work with a documented thread-pool budget.
+- Task shutdown `MUST` be cooperative: use `CancellationToken` or `watch` channels, check
+  cancellation at await points, and give tasks a bounded drain time. `abort` is the last resort
+  and `MUST` be logged.
+- Prefer `tokio::sync` primitives (mpsc, oneshot, watch, broadcast) over hand-rolled
+  condition-variable/queue loops. Channel capacity and backpressure `MUST` be bounded and
+  documented (`mpsc::channel(n)` with a named buffer size).
+- Timeouts `MUST` wrap every external await (HTTP call, SQL query, provider call, lock acquire):
+  `tokio::time::timeout` or a framework equivalent. No unbounded external await is allowed.
+- Retry loops `MUST` be bounded (max attempts), jittered, and backed off; they `MUST` respect
+  cancellation and `MUST NOT` retry non-idempotent side effects without an idempotency key.
+- Prefer immutable domain models and interior mutability only where the invariant is documented.
+  A `Mutex<Vec<T>>` exposed publicly is a design smell; expose a service method instead.
+- Do not use `async` for CPU-bound work; CPU-bound work belongs in `spawn_blocking` or a worker
+  with a documented concurrency limit.
+- `Send + 'static` bounds on task-spawned closures are required; capture `Arc` state by clone
+  inside the task, never a borrow of stack state.
+
+## 9. Ownership, Memory, And Performance
+
+Rust's value semantics are a feature, not a tax. The rules below keep allocation behavior
+predictable and avoid both premature optimization and careless cloning.
+
+Rules:
+
+- Function parameters: prefer `&str`/`&[T]`/`&T` for read-only access; take `String`/`Vec<T>`/
+  `T` by value only when ownership transfer is intended; return `Cow<'_, str>`/`Cow<'_, [T]>`
+  from functions that may borrow or allocate.
+- Use `impl Trait` for read-only generic parameters and `&dyn Trait`/`Box<dyn Trait>` only when
+  dynamic dispatch is required (trait objects, pluggable providers). Prefer generics
+  (monomorphized) for sealed, crate-internal polymorphism.
+- Do not clone large structures defensively. If a clone is required for ownership, `MUST`
+  document why (`Arc` would preserve identity / the value is mutated by the consumer).
+- Prefer `Arc<T>` for shared immutable data and `Arc<Mutex<T>>` only at the mutation point.
+  `Mutex<Arc<T>>` (lock to swap the pointer) is preferred over `Arc<Mutex<T>>` for read-heavy
+  config state.
+- Use iterators and combinators (`map`, `filter`, `collect`) over imperative loops where
+  readability is preserved; they enable fused, allocation-free pipelines.
+- Avoid `.clone()` inside hot loops; hoist clones out of the loop or restructure with references.
+- Prefer `Option<T>`/`Result<T, E>` and pattern matching over boolean flags and sentinel values
+  (`-1`, empty string) — the type system is the documentation.
+- Zero-cost abstraction is the default: prefer enums over trait objects when the variant set is
+  closed (`enum Event { ... }` over `Box<dyn Handler>`), and `match` over `dyn` dispatch in
+  hot paths.
+- Measure before optimizing. `MUST NOT` add `unsafe`, exotic allocation tricks, or `Box::leak`
+  for performance without a benchmark proving the bottleneck. Optimizations that trade safety or
+  clarity for speed require a code review note.
+- Prefer `#[inline]` only on tiny, stable, cross-crate hot functions; do not sprinkle `#[inline]`
+  over the codebase.
+- Memory: avoid unbounded growth in caches and channels. Bounded caches `MUST` have eviction
+  policy and `MUST` be sized from config, not hardcoded large constants.
+
+## 10. API Design And Semver
+
+Public API is a semver contract. SDKWork crates are consumed across sibling repositories, so a
+public API change can break the workspace at build time.
+
+Rules:
+
+- Public API `MUST` follow the Rust API Guidelines: item naming, documentation, and ergonomics
+  (https://rust-lang.github.io/api-guidelines/). At minimum: every public item has a doc
+  comment, public functions have doc examples, and `Result` is used for fallible operations.
+- Public items `MUST` be documented (`#![warn(missing_docs)]` in library crates or the
+  workspace lint baseline). Undocumented public items are a review failure.
+- `#[must_use]` `MUST` be applied to functions returning `Result`, `Option`, `Iterator`, and
+  guard types. `MUST NOT` ignore an error return value silently.
+- Keep the public surface minimal: `pub` only what other crates consume; re-export through the
+  crate root; prefer `pub(crate)` for internal plumbing.
+- Prefer typed newtypes (`struct TenantId(Uuid)`) over bare primitives for domain identities and
+  units; implement `Deref`/`Display`/`From` only when the semantic is preserved.
+- Sealed traits: a trait that must not be implemented outside the crate `MUST` be sealed with a
+  `pub(crate)` supertrait or the "sealed" module pattern.
+- Semver discipline:
+  - Breaking changes (remove/rename public item, change signature, tighten bounds, change
+    behavior) `MUST` bump the major version or the minor per the repository release policy and
+    `MUST` follow `MIGRATION_SPEC.md`.
+  - Adding a public item or implementing a trait for a public type is non-breaking.
+  - `MUST NOT` change a public type's `Send`/`Sync`/`'static` bounds in a patch release.
+  - `MUST NOT` rely on `#[doc(hidden)]` to hide a de-facto public item; remove it or make it
+    `pub(crate)`.
+- Prefer builder patterns for types with many optional fields; builders `MUST` validate in
+  `build()` and return `Result`, not panic.
+- Do not expose internal types through public signatures: a public function `MUST NOT` leak
+  `sqlx::Row`, `axum` extractors, or provider SDK types. Return domain/API types.
+- Default trait implementations `MUST` be documented; `MUST NOT` provide "empty" defaults that
+  silently change behavior.
+- Generic bounds: prefer the minimum bounds required; add `where` clauses at the implementation
+  site rather than the trait definition when possible.
+
+## 11. Documentation Discipline
+
+Documentation is part of the build. `cargo doc` warnings are build warnings.
+
+Rules:
+
+- Every public item `MUST` have a doc comment (`///` or `//!`). Doc comments `MUST` describe the
+  contract (what, when it fails, invariants), not restate the code.
+- Use `//!` for module-level and crate-level docs (`//!` at the top of `lib.rs` and each
+  `mod.rs`).
+- Public functions `MUST` document: parameters, return values, and error conditions
+  (`# Errors` section). Fallible functions `MUST` explain when each error variant is returned.
+- Public APIs `MUST` include at least one runnable doctest example (`/// ``` ``...`), and the
+  example `MUST` compile under `cargo test --doc`.
+- Use `# Panics`, `# Errors`, `# Safety`, `# Examples`, and `# Returns` section headings
+  consistently.
+- Internal comments (`//`) explain *why*, not *what*. Restating the code in a comment is noise.
+  A comment that explains an invariant, a trade-off, or a historical constraint is valuable.
+- `TODO`/`FIXME` markers `MUST` reference a tracking issue or task id; a bare `TODO` is
+  forbidden. `dbg!`/`todo!`/`unimplemented!` in committed code are forbidden (see section 7).
+- Crate `README.md` `MUST` document: purpose, public surface, usage example, configuration, and
+  — when the crate contains `unsafe` or non-obvious invariants — the invariant catalog.
+- Generated or boilerplate code `MUST NOT` suppress docs with `#[allow(missing_docs)]` unless
+  the generator owns the item and the suppression is documented at the crate root.
+
+## 12. Testing And Verification
+
+Tests are the executable specification. The test pyramid is: unit tests in modules, integration
+tests in `tests/`, doctests in public docs, and property tests for invariants.
+
+Rules:
+
+- Every crate `MUST` have unit tests (`#[cfg(test)] mod tests`) covering its non-trivial
+  functions, and integration tests in `tests/` covering public behavior through the public API.
+- Doctests are mandatory for public APIs (see section 11) and run in `cargo test`.
+- Name tests in `given_condition_when_action_then_expectation` or
+  `verb_expected_outcome` form (`rejects_negative_amount`, `returns_conflict_on_duplicate_key`).
+  Test names `MUST NOT` contain `test_` prefixes and `MUST` read as behavior sentences.
+- Each test `MUST` be isolated: no shared mutable global state, no dependence on test order,
+  no reliance on wall-clock timing without an explicit tolerance. Parallel-safe by default.
+- Database/async tests `MUST` use a dedicated test database or transactional rollback; `MUST NOT`
+  point at dev/prod instances. Test data is created and cleaned by the test itself.
+- Property-based tests (`proptest` or `quickcheck`) `MUST` cover: round-trips (encode/decode),
+  idempotency, ordering invariants, and state-machine transitions where they exist.
+- Async tests: use `#[tokio::test]` with an explicit flavor; `MUST NOT` block the executor with
+  `block_on` inside a running runtime.
+- Mocking: prefer trait fakes (hand-written test doubles in `test_support/`) over deep mock
+  frameworks; `MUST NOT` mock what a real, cheap implementation provides.
+- Coverage: the changed code path `MUST` be exercised. Coverage tooling (`cargo llvm-cov`,
+  tarpaulin) is advisory; a test that does not assert is a liability.
+- Test-only code `MUST NOT` be compiled into release binaries: test utilities live in
+  `test_support/` behind a feature or in `#[cfg(test)]`, and `MUST NOT` be reachable from
+  production paths.
+- Regression tests `MUST` accompany every bug fix: first reproduce the failure, then fix, then
+  lock the behavior with a test that fails on the old code.
+- Run the narrowest `cargo test -p <crate>` first, then `cargo test --workspace` when shared
+  contracts are touched (see section 16).
+
+## 13. Manifest And Toolchain Configuration
+
+The workspace manifest is the shared compile-time contract. A uniform baseline makes every crate
+predictable and every review cheaper.
+
+Rules:
+
+- Every workspace root `MUST` define `[workspace.package]` with `edition` and `rust-version`, and
+  every member `MUST` inherit them (`edition.workspace = true`, `rust-version.workspace = true`).
+  New crates `MUST` use edition 2024 when the workspace MSRV allows it; edition 2021 is accepted
+  for migration-only crates but `MUST` be listed in a migration note.
+- `rust-version` `MUST` be declared and match the CI toolchain. Do not raise MSRV without
+  `MIGRATION_SPEC.md` and a CI matrix update.
+- Every workspace root `MUST` define a `[workspace.lints]` baseline (see the recommended block
+  below), and every member `MUST` inherit it with `[lints] workspace = true`. A member `MAY`
+  narrow a lint locally only with a comment; a member `MUST NOT` globally `allow` a baseline
+  `deny` without review.
+- Recommended baseline:
+
+```toml
+[workspace.lints.rust]
+unsafe_code = "forbid"                 # reviewed crates change this to "deny" at crate level
+unsafe_op_in_unsafe_fn = "deny"        # explicit unsafe blocks in unsafe fn (edition 2024 default)
+missing_docs = "warn"                  # library crates: every public item documented
+rust_2018_idioms = { level = "warn", priority = -1 }
+rust_2024_compatibility = "warn"
+single_use_lifetimes = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unused_qualifications = "warn"
+variant_size_differences = "warn"
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"                      # optional; fix or allow individually
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+panic = "deny"                         # library crates; binaries relax locally
+unwrap_used = "deny"                   # library crates; tests and binaries relax locally
+expect_used = "deny"                   # library crates; tests and binaries relax locally
+exit = "deny"
+print_stdout = "deny"                  # libraries; CLIs/bins relax locally
+print_stderr = "deny"
+large_enum_variant = "warn"
+needless_pass_by_value = "warn"
+must_use_candidate = "warn"
+module_name_repetitions = "allow"
+cast_possible_truncation = "warn"
+cast_lossless = "warn"
+```
+
+- `[profile.release]` `MUST` enable `overflow-checks = true` unless a measured hot path requires
+  disabling it with a comment; `debug-assertions` and `lto` follow the repository release
+  profile policy.
+- Features:
+  - Feature names use kebab-case (see `NAMING_SPEC.md`).
+  - Feature definitions `MUST NOT` enable features of other crates implicitly without declaring
+    the dependency; keep feature graphs acyclic and additive.
+  - Default features `MUST` be minimal and documented; `MUST NOT` silently change runtime
+    behavior between feature sets.
+  - A `test-support` feature that exposes test utilities `MUST NOT` be a default feature.
+- `[workspace.dependencies]` is the single declaration point for sibling SDKWork crates and
+  shared third-party versions (see `DEPENDENCY_MANAGEMENT_SPEC.md`). Member crates consume them
+  with `{ workspace = true }`.
+- `build.rs` `MUST` be deterministic, `MUST NOT` modify source files, and `MUST NOT` download
+  artifacts at build time (see `SUPPLY_CHAIN_SECURITY_SPEC.md`).
+- `Cargo.lock` is generated output owned by the repository: regenerate and commit it in the same
+  change as any dependency edit (see `NAMING_SPEC.md` section 3.2).
+
+## 14. Dependencies And Supply Chain
+
+Rules:
+
+- Third-party dependencies keep their upstream package, crate, and version names exactly as
+  published; SDKWork never renames or re-cases them (`NAMING_SPEC.md` section 3.1 rule 11).
+- Dependencies `MUST` be declared at the workspace root (`[workspace.dependencies]`) and
+  inherited; member crates `MUST NOT` invent divergent third-party versions.
+- Pin meaningful bounds: `cargo update` is deliberate; do not leave wildcard (`*`) or
+  floating-major version requirements. Use the governance catalog
+  (`configs/dependency-catalog.yaml`) as the version authority (see
+  `DEPENDENCY_MANAGEMENT_SPEC.md`).
+- Prefer small, well-maintained, audited crates over "kitchen sink" utilities. A new dependency
+  `MUST` be justified in the change description; prefer std or a sibling SDKWork crate when
+  equivalent.
+- `MUST NOT` add a dependency that duplicates a capability already provided by an SDKWork
+  sibling crate (see `DEPENDENCY_MANAGEMENT_SPEC.md` and `COMPOSABLE_ARCHITECTURE_SPEC.md`).
+- Vendored upstream source under `external/`, `third_party/`, or `vendor/` is read-only, pinned
+  to a recorded upstream revision, and never modified (see `DEPENDENCY_MANAGEMENT_SPEC.md`
+  section on upstream trees).
+- License, audit, and vulnerability checks (`cargo audit`, `cargo deny`) `MUST` run in CI when
+  the repository consumes registry dependencies (see `SUPPLY_CHAIN_SECURITY_SPEC.md`).
+- Dependency graph hygiene: `MUST NOT` add cyclic path dependencies between sibling crates; the
+  layer matrix (section 1.1) is the allowed direction.
+
+## 15. Observability And Logging
+
+Rules:
+
+- Use `tracing` (or `log` behind a documented adapter) consistently. Direct `println!`/
+  `eprintln!` in library code is forbidden (baseline `clippy::print_stdout`/`print_stderr`).
+- Log at the right level: `error` for failures that need attention, `warn` for recoverable
+  anomalies, `info` for lifecycle events, `debug`/`trace` for detail. Do not log secrets,
+  tokens, credentials, or PII at any level.
+- Every public entrypoint (handler, service method, job, command) `MUST` have a `tracing::span`
+  or structured event carrying request/trace/tenant/user context propagated from
+  `WebRequestContext` (see `OBSERVABILITY_SPEC.md`).
+- Errors logged at the boundary `MUST` include the error chain and the context that identifies
+  the failing operation; never log a bare "operation failed".
+- `MUST NOT` log full SQL, connection strings, or provider request bodies unless explicitly
+  enabled by a debug configuration that is off in production.
+
+## 16. Formatting And Verification
+
+Rules:
+
+- Run `cargo fmt --check` or the repository wrapper before completion. Formatting is not
+  optional: rustfmt is the only accepted style.
+- Run `cargo clippy --all-targets -- -D warnings` (or the workspace baseline) when the
+  repository requires it or when shared Rust code changes. Fix warnings; do not blanket
+  `#[allow]` them.
+- Run the narrowest `cargo test -p <crate>` first, then `cargo test --workspace` when shared
+  contracts are touched. Run `cargo test --doc` when public docs change.
+- Run `node ../sdkwork-specs/tools/check-application-layering.mjs --root .` when Rust
+  route/service/repository/runtime boundaries are touched in an application repository.
+- Run `node ../sdkwork-specs/tools/check-rust-backend-composition.mjs --root .` when Rust
+  service, repository, route, migration-only API server, service host, native host, worker, or
+  gateway crates are added or their Cargo dependencies change.
+- Run `node ../sdkwork-specs/tools/check-rust-crate-naming-standard.mjs --root .` whenever a
+  `Cargo.toml` is added or its `[package]`, `[lib]`, `[features]`, `[[bin]]`, or dependency
+  tables change. It fails on kebab-case/snake-case violations and on `src/` imports that have
+  no declared dependency.
+- Run `node ../sdkwork-specs/tools/check-rust-manifest-standard.mjs --root .` to verify the
+  workspace lint baseline, `edition`/`rust-version` inheritance, and member `[lints]` wiring
+  when manifests are touched.
+- Regenerate and commit `Cargo.lock` in the same change as any dependency table edit.
+- Route crates must pass route manifest, prefix, authority, and SDK family checks from
+  `TEST_SPEC.md`.
 - Same-origin dependency surface crates must pass executable mount coverage checks from
   `APP_SDK_INTEGRATION_SPEC.md`, `COMPONENT_SPEC.md`, and `TEST_SPEC.md`.
 
-## 8. Anti-Patterns
+## 17. Anti-Patterns
 
 Forbidden:
 
@@ -531,12 +930,24 @@ Forbidden:
   mounted in the current Rust runtime.
 - Deep-importing private dependency source files instead of using the dependency's package-root
   surface integration entrypoint.
+- `unwrap`/`expect` on user input, on `Result` from external crates, or in async tasks.
+- `panic!`/`unimplemented!`/`todo!` in library code paths reachable from public API.
+- Raw `unsafe` without a `// SAFETY:` comment; `unsafe` blocks larger than a few lines.
+- `transmute`, `assume_init`, or raw pointer arithmetic outside a reviewed unsafe module.
+- Holding a `std::sync::MutexGuard` across `.await`.
+- `Rc`/`RefCell` in multi-threaded runtime paths.
+- Spawned tasks that are neither awaited nor detached with a documented owner.
+- Unbounded channels, unbounded caches, or unbounded retry loops.
+- `String`/`anyhow::Error` catch-all error variants instead of typed error enums.
+- `Box<dyn Trait>` where a closed enum or a generic would preserve the contract.
+- `#[allow(missing_docs)]` on public API without generator ownership.
+- Global `static mut` state, `lazy_static` maps used as process-wide mutable globals.
+- Logging secrets, tokens, PII, or full SQL payloads.
 
-## 9. Acceptance Checklist
+## 18. Acceptance Checklist
 
 - [ ] `lib.rs` serves as a module assembly file with clear, focused responsibility (module declarations, re-exports, lightweight wiring).
-- [ ] Rust crate names use an allowed responsibility-specific family and avoid forbidden generic
-      suffixes.
+- [ ] Rust crate names use an allowed responsibility-specific family and avoid forbidden generic suffixes.
 - [ ] Business logic is in focused modules.
 - [ ] Business service, repository implementation, route adapter, migration-only API server, service host,
       native host, worker, and gateway responsibilities are split into their standard directories
@@ -544,6 +955,15 @@ Forbidden:
 - [ ] Route crates use `paths.rs`, `routes.rs`, `handlers.rs`, and `manifest.rs` when they own HTTP routes.
 - [ ] Authored Rust backend message resources, when present, live under `resources/i18n/<locale>/<domain>/<capability>/` and not in `src/i18n.rs` monoliths.
 - [ ] Mountable dependency surfaces expose stable public router/controller/service builders and
-  declare them in component specs.
-- [ ] Errors are typed or mapped at the boundary.
-- [ ] `cargo fmt` and relevant tests/checks are documented.
+      declare them in component specs.
+- [ ] Errors are typed or mapped at the boundary; error enums implement `std::error::Error` with a
+      `source` chain; no `String` catch-all variants.
+- [ ] No `unsafe` in crates that declare `unsafe_code = "forbid"`; reviewed `unsafe` sites carry
+      `// SAFETY:` comments and are listed in the crate README.
+- [ ] No `unwrap`/`expect`/`panic!`/`todo!`/`dbg!` in library code reachable from public API.
+- [ ] No lock held across `.await`; all external awaits have timeouts; retries are bounded and jittered.
+- [ ] Public API is minimal, documented, `#[must_use]` where applicable, and semver-clean.
+- [ ] Workspace manifest declares `[workspace.package]` (`edition`, `rust-version`),
+      `[workspace.lints]`, and every member inherits both.
+- [ ] `cargo fmt --check` and relevant `cargo clippy`/`cargo test`/checks are documented and pass.
+- [ ] `Cargo.lock` is committed in the same change as any dependency table edit.
