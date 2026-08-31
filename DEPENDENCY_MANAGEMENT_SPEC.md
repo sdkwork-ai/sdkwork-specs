@@ -2,9 +2,9 @@
 
 - Version: 1.3
 - Scope: native build-tool dependency management, cross-repository source paths, read-only upstream source dependencies, release dependency refs, supply-chain evidence, and dependency-owned SDK/API boundaries
-- Related: `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `API_ASSEMBLY_SPEC.md`, `APPLICATION_GATEWAY_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `INTEGRATION_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `WEB_FRAMEWORK_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `TEST_SPEC.md`, `DOCUMENTATION_SPEC.md`
+- Related: `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `API_ASSEMBLY_SPEC.md`, `APPLICATION_GATEWAY_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `INTEGRATION_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `WEB_FRAMEWORK_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `TEST_SPEC.md`, `DOCUMENTATION_SPEC.md`, `PNPM_WORKSPACE_DEPENDENCY_SPEC.md`
 
-This standard defines how SDKWork repositories depend on other SDKWork repositories without creating a second SDKWork-specific dependency system. SDKWork dependency management is build-tool-first: pnpm, Cargo, Flutter/Dart, Gradle, Maven, Python, and other package managers remain the dependency authorities for their language and runtime. SDKWork standards add cross-repository consistency, SDK/API ownership, release refs, and supply-chain evidence only where native tools do not cover SDKWork semantics.
+This standard defines how SDKWork repositories depend on other SDKWork repositories without creating a second SDKWork-specific dependency system. SDKWork dependency management is build-tool-first: pnpm, Cargo, Flutter/Dart, Gradle, Maven, Python, and other package managers remain the dependency authorities for their language and runtime. SDKWork standards add cross-repository consistency, SDK/API ownership, release refs, and supply-chain evidence only where native tools do not cover SDKWork semantics. The pnpm-specific companion (workspace protocol, import rules, Vite alias boundaries) is `PNPM_WORKSPACE_DEPENDENCY_SPEC.md`.
 
 Rules:
 
