@@ -593,6 +593,34 @@ Rules:
   `env/<environment>.i<index>.env` is layered on top of the base environment
   env file (later `--env-file` wins), so each instance can carry its own
   primary domain, clone URL, TLS/ACME profile, or any other deployment input.
+- Bundle deploy port-key contract (normative; all four lifecycle environments
+  including staging): the generic deploy script resolves per-environment host
+  ports from the env file through these keys, each with a safe fallback so a
+  missing key can never leave the variable unset under `set -u`:
+  - development: `SDKWORK_WEBSERVER_DEV_HOST_PORT` (fallback `13800`),
+    `SDKWORK_WEBSERVER_DEV_IMPORT_HTTP_HOST_PORT` (`80`),
+    `SDKWORK_WEBSERVER_DEV_HTTPS_HOST_PORT` (`443`).
+  - test: `SDKWORK_WEBSERVER_TEST_HOST_PORT` (`18888`),
+    `SDKWORK_WEBSERVER_TEST_IMPORT_HTTP_HOST_PORT` (`18898`),
+    `SDKWORK_WEBSERVER_TEST_HTTPS_HOST_PORT` (`28430`).
+  - staging: `SDKWORK_WEBSERVER_STAGING_HOST_PORT` (`18081`),
+    `SDKWORK_WEBSERVER_STAGING_IMPORT_HTTP_HOST_PORT` (`18099`),
+    `SDKWORK_WEBSERVER_STAGING_HTTPS_HOST_PORT` (`38431`).
+  - production: `SDKWORK_WEBSERVER_PROD_HOST_PORT` (`18080`),
+    `SDKWORK_WEBSERVER_PROD_IMPORT_HTTP_HOST_PORT` (`18098`),
+    `SDKWORK_WEBSERVER_PROD_HTTPS_HOST_PORT` (`38430`).
+  Adding a lifecycle environment without extending this case matrix is a
+  specification violation: any environment accepted by the `--environment`
+  validator `MUST` have a port-resolution branch (regression guard: deploy
+  with `--dry-run` for every supported environment in CI).
+- Environment env-file parity (normative): every lifecycle env file
+  `env/<environment>.env` shipped with the container bundle `MUST` define the
+  complete drive delivery cache variables (`SDKWORK_DRIVE_WEBSITE_CACHE_*`,
+  `DRIVE_SPEC.md` §17.5) and the space variables (`SDKWORK_SPACE_*`), even
+  when the values are identical to the image defaults. Silent reliance on
+  image-level fallbacks for one environment while others declare the
+  variables explicitly is a drift bug and `MUST` fail the deployment contract
+  review checklist.
 - See `PNPM_SCRIPT_SPEC.md` section 4.4 for the owning commands
   (`build:container:install`, `deploy:apply:standalone:docker`).
 
