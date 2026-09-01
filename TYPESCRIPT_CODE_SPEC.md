@@ -331,7 +331,73 @@ Rules:
 - Node scripts `MUST` be deterministic: no reliance on ambient env beyond documented config, no
   hidden global mutation, explicit failure on missing input.
 
-## 13. Dependencies
+## 13. Cross-Repository Source Federation Strictness
+
+When a repository resolves a sibling repository's package to its `src/index.ts` — through a
+`pnpm-workspace.yaml` `packages:` entry, a `tsconfig` `compilerOptions.paths` mapping, or a package
+`exports` map that points `types` at source — the sibling's TypeScript **source** joins the
+consumer's `tsc` program and is compiled with the **consumer's** flags, not the supplier's. A
+supplier that is lax under its own `tsconfig` therefore fails only inside a build its owners never
+run, and the consumer's team inherits defects it cannot fix at the source.
+
+Rules:
+
+- The strictness floor is `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`,
+  `noUnusedLocals`, `noUnusedParameters`, `noImplicitOverride`, and `noFallthroughCasesInSwitch`.
+  Every federated repository `MUST` enable all seven in the tsconfig that governs each federated
+  directory.
+- `verbatimModuleSyntax`, `isolatedModules`, and `skipLibCheck` are `NOT` part of the floor: they
+  are emit, module, and declaration-file decisions that repositories may legitimately differ on.
+- A consumer `MUST NOT` relax a floor flag to accommodate a supplier. The fix belongs in the
+  supplier's source or its tsconfig, never in the consumer's compiler options.
+- Every federated repository `MUST` expose a `typecheck` script so it detects its own drift instead
+  of waiting for a stricter consumer. It `SHOULD` run
+  `node ../sdkwork-specs/tools/typecheck-strict.mjs --root .`, which forces the floor regardless of
+  what the local tsconfig declares and separates `own` errors from `external` errors contributed by
+  that repository's own suppliers.
+- A repository `MAY` declare a wider strictness set than the floor. The consumer baseline is a
+  minimum for suppliers, never a maximum.
+- `extends` chains `MUST` be honoured: a leaf project that inherits the floor from a shared base
+  satisfies this section, and a base that declares the floor does not excuse a leaf that turns a
+  flag back off.
+- Newly federated repositories `MUST` comply before the federation entry is added. There is no grace
+  period for new coupling.
+- Pre-existing non-compliant suppliers `MAY` be recorded in
+  `specs/typescript-federation-migration.json` with a reason, an owner, and an `expires` date; the
+  gate then reports them as warnings instead of failures until that date. Entries whose repository
+  becomes compliant or stops being federated `MUST` be removed, and the gate fails on stale or
+  expired entries, so the list can only shrink. The file `MUST` live under version control: a list
+  stored in a gitignored state directory such as `.sdkwork/` silently turns every warning back into
+  a failure on another machine.
+- Fix the supplier at its source: widen authored optional members to `?: T | undefined`; express
+  invariants in the type, such as a non-empty tuple `readonly [T, ...T[]]` instead of
+  `readonly T[]` plus a non-null assertion; destructure instead of indexing
+  (`const [first] = items; if (!first) return ...`); and bridge generated SDK types with a
+  runtime-guarded mapping or a conditional spread (`...(value === undefined ? {} : { value })`)
+  rather than an `as` cast or a hand-edit of generated output (section 15).
+- Federation is transitive: a repository that federates others inherits their defects in its own
+  `own`-scope gate. Fix the layer you own and record the rest.
+- Read-only upstream trees — `vendor/`, `third_party/`, and `external/` (AGENTS_SPEC) — are
+  upstream source boundaries, not SDKWork-authored modules, and agents `MUST NOT` modify them
+  (DEPENDENCY_MANAGEMENT_SPEC). The floor therefore does not apply inside them: their diagnostics
+  are upstream debt whose only legal remedy is a vendored-sync. `typecheck-strict.mjs` excludes
+  those trees by default and reports them under a separate `vendored` counter with
+  `--include-vendored`; vendored diagnostics never fail a run. Only root-level trees qualify — a
+  nested `packages/<pkg>/vendor/` directory is authored code and stays inside the contract.
+
+Verification:
+
+- `node ../sdkwork-specs/tools/check-typescript-federation-strictness.mjs --root .` fails when the
+  consumer relaxes the floor, when a federated supplier's governing tsconfig is below the consumer
+  baseline, when a supplier has no `typecheck` script, or when a migration entry is stale or
+  expired.
+- `--write-migration-list` regenerates the migration list from the current scan; `--expires-days`
+  sets the grace period; `--strict` treats migration warnings as failures.
+- `node ../sdkwork-specs/tools/typecheck-strict.mjs --root .` fails only on `own` errors. Use
+  `--scope all` to surface federated sibling errors and `--include-vendored` to survey read-only
+  upstream trees without failing on them.
+
+## 14. Dependencies
 
 Rules:
 
@@ -347,7 +413,7 @@ Rules:
 - Lockfile (`pnpm-lock.yaml`) is generated output: commit it in the same change as any
   dependency edit; do not hand-edit it.
 
-## 14. Anti-Patterns
+## 15. Anti-Patterns
 
 Forbidden:
 
@@ -365,17 +431,18 @@ Forbidden:
 - Hand-editing generated TypeScript SDK output.
 - `require()` in ESM packages; `import type` violations under `isolatedModules`.
 
-## 15. Verification
+## 16. Verification
 
 Rules:
 
 - Run `pnpm typecheck`, `pnpm test`, `pnpm lint`, or the package-specific wrapper when present.
 - Run narrow package tests first, then workspace verification for shared package exports, SDK facades, or codegen changes.
+- Run `node ../sdkwork-specs/tools/check-typescript-federation-strictness.mjs --root .` when a sibling repository is federated, un-federated, or changes its `tsconfig`, so strictness drift is caught at the boundary (section 13).
 - Run `node ../sdkwork-specs/tools/check-application-layering.mjs --root .` when TypeScript UI, service, SDK injection, or runtime/bootstrap boundaries are touched in an application repository.
 - Static scans should fail on raw SDKWork HTTP calls, manual auth headers, and cross-package `/src/` imports when those boundaries are governed.
 - Build runner tests `SHOULD` verify that missing build-critical source files trigger self-healing, not an immediate crash.
 
-## 16. Acceptance Checklist
+## 17. Acceptance Checklist
 
 - [ ] `tsconfig` uses `strict: true` and the strict family; public APIs are typed and `any`-free.
 - [ ] `src/index.ts` is a stable export boundary; `package.json#exports` declares `types` +
@@ -388,5 +455,6 @@ Rules:
 - [ ] Public API is documented (JSDoc), `@deprecated` where applicable, and semver-clean.
 - [ ] Generated TypeScript output was not hand-edited.
 - [ ] Typecheck/test/lint commands are documented and pass.
+- [ ] Federated sibling sources compile under this repository's strictness: no consumer flag was relaxed to accommodate a supplier, and every federated supplier declares the floor and exposes `typecheck` (section 13).
 - [ ] Build runners verify build-critical source files and self-heal from git when missing.
 - [ ] `pnpm clean` does not delete git-tracked build-critical source files.

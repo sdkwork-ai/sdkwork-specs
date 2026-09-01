@@ -41,6 +41,18 @@ Rules:
 - `AGENTS.md` follows `AGENTS_SPEC.md`.
 - `CLAUDE.md`, `GEMINI.md`, and `CODEX.md` are compatibility shims that point to `AGENTS.md`; they must not duplicate standards.
 - Root `.gitignore` `MUST` ignore build artifacts, local env files, and ignored `.sdkwork/` local state.
+- A repository `MUST NOT` track compiler emit that sits beside its source. Running `tsc` without
+  `--noEmit` or an `outDir` drops `.js`, `.d.ts`, `.js.map`, and `.d.ts.map` next to every `.ts`
+  input, and those stale copies then shadow the source in two distinct ways: bundlers resolve `.js`
+  before `.ts` (Vite's default `resolve.extensions`), so the application silently runs pre-rename
+  code; and `tsc` treats a `.d.ts` inside an `include`d directory as a program input, so a
+  declaration left behind after a rename reports symbols that no longer exist anywhere in the
+  source tree. Root `.gitignore` `MUST` therefore ignore `*.js.map` and `*.d.ts.map`, plus
+  `*.js` and `*.d.ts` under source directories, with negations for authored ambient declarations
+  (`vite-env.d.ts`, `global.d.ts`, and similar). Because emit and source share a filename, cleanup
+  `MUST` delete only files that are untracked, carry an emit extension, and have a sibling source
+  of the same name: `git clean` without `-X` also removes untracked source files, including
+  in-progress work that was never committed.
 - `.sdkwork/` follows `SDKWORK_WORKSPACE_SPEC.md`.
 - `.sdkwork/.gitignore` `MUST` ignore `local/`, `tmp/`, `cache/`, `secrets/`, and `manual-backups/`.
 
@@ -77,6 +89,10 @@ Rules:
 
 - Run `node tools/audit-repository-baseline.mjs --root <repo>` from `sdkwork-specs/` before claiming repository baseline completion.
 - Baseline audits `MUST` report branch name, L1 file presence, and forbidden tracked paths such as `node_modules/`, `target/`, `dist/`, and `.env`.
+- Baseline audits `MUST` report tracked compiler emit beside source (section 2). A repository that
+  has not adopted the whole L1 baseline `MAY` enforce that rule alone with
+  `--only tracked-compiler-emit`, which accepts a repeatable or comma-separated list of check names;
+  this lets an unrelated repository adopt one rule without first satisfying the rest.
 - Repositories with corrupt git objects `MUST` stop baseline migration until the repository is restored from a healthy remote clone.
 
 ## 6. Acceptance Checklist
@@ -84,6 +100,7 @@ Rules:
 - [ ] Default branch is `main` locally and on GitHub.
 - [ ] L1 baseline files exist and shims point to `AGENTS.md`.
 - [ ] Root `.gitignore` and `.sdkwork/.gitignore` ignore local-only state.
+- [ ] No compiler emit is tracked beside source files, and root `.gitignore` ignores it.
 - [ ] L2 docs exist or an explicit exception is recorded for narrow utility repositories.
 - [ ] L3 release surfaces exist for publishable application roots when packaging is in scope.
 - [ ] `audit-repository-baseline.mjs` passes for the repository root.
