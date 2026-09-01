@@ -111,6 +111,17 @@ Rules:
   SDKWork standards.
 - Every authored module `MUST` maintain its own `specs/` directory. Do not centralize module contracts in repository `AGENTS.md` or README prose when `COMPONENT_SPEC.md` applies.
 
+### 4.1 Managed Sync Blocks
+
+Some cross-repository disciplines are propagated into every repository `AGENTS.md` as managed sync blocks. A managed block:
+
+- is wrapped in paired HTML-comment markers of the form `<!-- SDKWORK-<NAME>-STANDARD: vN -->` and `<!-- /SDKWORK-<NAME>-STANDARD: vN -->`,
+- is written and refreshed only by its owning sync tool under `sdkwork-specs/tools/sync-agent-<name>-standard.mjs` with `--check` or `--apply`,
+- is idempotent: re-running the sync tool replaces the previous copy instead of duplicating it,
+- must not be hand-edited between markers; edit the owning sync tool (and its authority spec) and re-run the tool instead.
+
+Existing managed blocks include `SDKWORK-NAMING-STANDARD` (Rust naming and dependency declaration) and `SDKWORK-SDK-GENERATION-STANDARD` (generated SDK output is generator-owned; never hand-edit `sdks/` generated output). Validators and agents may rely on these markers to detect stale or missing disciplines.
+
 ## 5. Required Specs By Task Type
 
 `AGENTS.md` must map common task types to the minimum specs agents read before editing.
@@ -149,7 +160,7 @@ Language specs are on-demand. Do not require agents to load Rust, Java, TypeScri
 - `.sdkwork/`: local skills, plugins, manifests, and repository/application AI workspace metadata.
 - `specs/`: module-local spec systems (`README.md`, `component.spec.json`, optional narrowing extensions) for authored apps, packages, crates, services, and SDK families; repository/application root `specs/` for cross-module machine contracts such as topology manifests.
 - `docs/`: repository/application documentation layout; Canon entrypoints are `docs/product/prd/PRD.md` and `docs/architecture/tech/TECH_ARCHITECTURE.md`.
-- `sdks/`: SDK families, family manifests, OpenAPI authorities, derived generator inputs, route manifests, and generated outputs.
+- `sdks/`: SDK families, family manifests, OpenAPI authorities, derived generator inputs, route manifests, and generated outputs. Generated SDK output is produced by `../sdkwork-sdk-generator/bin/sdkgen.js` (`@sdkwork/sdk-generator`) and `MUST NOT` be hand-edited; fix the generation chain and regenerate instead.
 - `external/`, `third_party/`, `vendor/`: optional read-only upstream source dependencies; native build tools may consume them, but agents and SDKWork tooling must never modify them.
 - language manifests such as `package.json`, `Cargo.toml`, `pom.xml`, `pyproject.toml`, or `pubspec.yaml`.
 
@@ -178,7 +189,7 @@ Read `sdkwork.app.config.json` for application identity, registration, SDK/API i
 - `.sdkwork/`: local skills, plugins, and manifests.
 - `specs/`: module-local spec systems for authored packages, crates, services, and SDK families; repository/application root `specs/` for cross-module machine contracts.
 - `docs/`: Canon documentation at `docs/product/prd/PRD.md` and `docs/architecture/tech/TECH_ARCHITECTURE.md`.
-- `sdks/`: OpenAPI authorities and SDK generation artifacts.
+- `sdks/`: OpenAPI authorities and SDK generation artifacts. Generated output is generator-owned (`../sdkwork-sdk-generator`); never hand-edit it.
 - `external/`, `third_party/`, `vendor/`: optional read-only upstream source dependencies; consume through native build tools and never modify their contents.
 - `etc/`: deployable-root source configuration; required only for independently deployable applications and process hosts.
 

@@ -47,7 +47,8 @@ Rules:
   family stem: `sdkwork-<sdk-family-stem>-sdk`,
   `sdkwork-<sdk-family-stem>-app-sdk`, `sdkwork-<sdk-family-stem>-backend-sdk`, and
   `sdkwork-<sdk-family-stem>-rpc-sdk`.
-- Generated SDK output `MUST NOT` be hand-edited.
+- Generated SDK output `MUST NOT` be hand-edited. This includes generated source trees, generated type definitions, `dist/` build output, generated package metadata, and standardizer-synced OpenAPI snapshots. Manual edits are overwritten by the next generation run and break reproducibility and contract audits.
+- When generated or compiled SDK output does not meet a contract or standard, fix the upstream generation chain — authored API contract, route manifest, OpenAPI authority, derived `*.sdkgen.*` input, generator profile, or `custom/` runtime build scripts — then regenerate through the standard generation command. Patching generated output in place is a spec violation, not a fix.
 - Generated HTTP SDK output `MUST` retain the generator control plane written by `sdkgen`: `sdkwork-sdk.json`, `.sdkwork/sdkwork-generator-manifest.json`, `.sdkwork/sdkwork-generator-changes.json`, `.sdkwork/sdkwork-generator-report.json`, and `custom/` for handwritten extensions.
 - Generated RPC SDK source workspaces use convention-first evidence. They `MUST` retain the RPC SDK family root, `rpc/*.manifest.json`, proto source references, generated language package manifests, and generated client source; they `MUST NOT` require committed `.sdkwork/sdkwork-generator-*` files for normal source-control use.
 - RPC release, CI, audit, or migration workflows `MAY` request generated SDK control-plane evidence with `sdkgen --protocol rpc --emit-control-plane`. When emitted, the standard file names are `.sdkwork/sdkwork-generator-manifest.json`, `.sdkwork/sdkwork-generator-changes.json`, and `.sdkwork/sdkwork-generator-report.json`, and SDK metadata `MUST` declare `protocol: "rpc"`.
