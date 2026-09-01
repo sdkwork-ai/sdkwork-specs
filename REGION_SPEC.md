@@ -209,6 +209,7 @@ Tenant default `sdkworkRegion` may be added in IAM or tenant policy in a future 
 
 ```text
 SDKWORK_<APPLICATION_CODE>_REGION_CODE
+SDKWORK_REGION_CODE              (shared fallback key, framework bootstraps)
 SDKWORK_<APPLICATION_CODE>_PROVIDER_REGION
 SDKWORK_<APPLICATION_CODE>_CLOUD_PROVIDER
 ```
@@ -217,11 +218,42 @@ Rules:
 
 - Follow `ENVIRONMENT_SPEC.md` naming. These are private process variables and must not appear under `VITE_*` or `PORTAL_PUBLIC_*`.
 - Public runtime config for catalog default pricing region must be served through controlled runtime config, not raw cloud account region details.
+- Every installable application `SHOULD` declare `SDKWORK_<APPLICATION_CODE>_REGION_CODE` in its deployment environment; framework bootstraps fall back to the shared `SDKWORK_REGION_CODE` key, then to `global` (§8.4).
 
 ### 8.3 Discovery And RPC
 
 - Discovery `namespace` and `environment` are unchanged. `regionCode` `MAY` be registered as instance metadata key `sdkwork_region`.
 - Cross-`regionCode` RPC calls `MUST` use explicit resolver policy. Production must not silently fall back to `global` instances.
+
+### 8.4 Startup Default Region (Normative)
+
+Every installable/startable SDKWork application `MUST` be able to resolve its
+deployment default region during startup, before serving traffic:
+
+- The startup default region `MUST` resolve from, in order: the
+  `SDKWORK_<APPLICATION_CODE>_REGION_CODE` environment key, the shared
+  `SDKWORK_REGION_CODE` key, then the `global` default (§4.1).
+- A set-but-invalid value (failing the §4.1 format) `MUST` fail startup with a
+  diagnosable error rather than silently continuing.
+- The resolved region `MUST` be validated against the active region registry;
+  codes outside the registry `MUST` be rejected or downgraded to `global` with
+  an emitted observability event.
+- Each process `MUST` publish the resolved region as a process-wide runtime
+  accessor so any module can read the startup default region identifier
+  without threading configuration through call sites. Reference
+  implementation: `sdkwork-web-framework` `RuntimeRegion`
+  (`runtime_region_code()`), integrated through the `WebFrameworkBuilder`
+  (framework bootstraps probe application keys plus `SDKWORK_REGION_CODE`).
+- The resolved region `MUST` be recorded in startup logs/banners and `MAY` be
+  attached to request traces (for example cloudrouter's
+  `gateway_region_code_snapshot`).
+- Installers and deployment manifests `SHOULD` persist `SDKWORK_<APPLICATION_CODE>_REGION_CODE`
+  into the deployment environment (see `ENVIRONMENT_SPEC.md` §5 and the
+  `ensure-region-keys` tooling); existing deployments without the key keep the
+  `global` default.
+- Runtime consumers (pricing, routing, locale, compliance) `SHOULD` follow the
+  §9 resolution order and use the startup default region as the deployment
+  step of that chain.
 
 ## 9. Region Resolution
 
@@ -236,6 +268,7 @@ Rules:
 
 - Resolved `regionCode` `MUST` be in the active registry set or return a diagnosable error.
 - Pricing lookup `MAY` fall back to the same model's `global` regional price when the target region price is missing, but must not mix currencies silently. Fallback should emit an observability event.
+- A billing-required invocation `MUST NOT` be recorded or settled as zero-priced usage when no billable rate resolves for its meters (fail-closed): the deployment region `MUST NOT` be forced onto a model that has no price or upstream route in that region, and resolution failures for required meters `MUST` fail the invocation with a diagnosable error instead of silently unbilling. Free endpoints are the only zero-charge path, and they `MUST` be declared `FreeEndpoint` rather than priced at zero.
 
 ## 10. Data Residency And Cross-Region
 
@@ -286,5 +319,6 @@ Rules:
 - [ ] `regionCode` passes format validation and exists in the registry (or documented reserved value).
 - [ ] Billing currency is ISO 4217; cross-border prices do not mix currencies.
 - [ ] Deployment manifests declare `sdkworkRegion`; cloud deployments declare `providerRegion`.
+- [ ] Every installable application resolves its startup default region (§8.4) and publishes a process-wide accessor; invalid configured values fail startup.
 - [ ] Cross-region sync and residency behavior are documented and auditable.
 - [ ] Default and fallback region behavior has tests or validator coverage.

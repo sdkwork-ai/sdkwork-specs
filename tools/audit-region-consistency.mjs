@@ -21,7 +21,11 @@ import process from 'node:process';
 
 const DEFAULT_WORKSPACE_ROOT = path.resolve(import.meta.dirname, '..', '..');
 const EXPECTED_SUPPORTED_LOCALES = ['zh-CN', 'en-US', 'ja-JP', 'de-DE', 'fr-FR', 'ru-RU', 'ko-KR'];
-const EXPECTED_REGION_CODE = 'cn';
+// REGION_SPEC §4: `global` is the standard default and `cn` is the China
+// mainland market partition; both are active registry codes. The audit
+// requires every profile env to declare the key with an active code, not a
+// specific market.
+const ACTIVE_REGION_CODES = ['global', 'cn'];
 const EXPECTED_SEED_LOCALE = 'zh-CN';
 
 function parseArgs(argv) {
@@ -64,8 +68,10 @@ function profileDirsFor(repoRoot, spec = null) {
     .filter((dir) => fs.existsSync(dir) && fs.statSync(dir).isDirectory());
 }
 
+// Env var names must not contain hyphens; application codes normalize like
+// `api-gateway` → `API_GATEWAY` for the `SDKWORK_<APPLICATION_CODE>_REGION_CODE` key.
 function regionKeyFor(applicationCode) {
-  return `SDKWORK_${applicationCode.toUpperCase()}_REGION_CODE`;
+  return `SDKWORK_${applicationCode.toUpperCase().replaceAll('-', '_')}_REGION_CODE`;
 }
 
 function audit() {
@@ -106,12 +112,12 @@ function audit() {
       for (const file of files) {
         const content = fs.readFileSync(path.join(dir, file), 'utf8');
         const lines = content.split('\n');
-        const regionLine = lines.find((line) => /^SDKWORK_[A-Z_]+_REGION_CODE=/.test(line));
+        const regionLine = lines.find((line) => /^SDKWORK_[A-Z0-9_]+_REGION_CODE=/.test(line));
         const seedLine = lines.find((line) => line.startsWith('SDKWORK_DATABASE_SEED_LOCALE='));
         if (!regionLine) {
           issues.push(`[${name}/${file}] missing ${regionKey}`);
-        } else if (regionLine.split('=')[1].trim() !== EXPECTED_REGION_CODE) {
-          issues.push(`[${name}/${file}] ${regionLine.split('=')[0]}=${regionLine.split('=')[1]} (expected ${EXPECTED_REGION_CODE})`);
+        } else if (!ACTIVE_REGION_CODES.includes(regionLine.split('=')[1].trim())) {
+          issues.push(`[${name}/${file}] ${regionLine.split('=')[0]}=${regionLine.split('=')[1]} (expected an active REGION_SPEC code: ${ACTIVE_REGION_CODES.join(' or ')})`);
         }
         if (!seedLine) {
           issues.push(`[${name}/${file}] missing SDKWORK_DATABASE_SEED_LOCALE`);

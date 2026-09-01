@@ -51,9 +51,16 @@ function applicationCode(spec) {
   return String(spec?.applicationCode ?? spec?.appId ?? 'APP').toUpperCase();
 }
 
+// Env variable names must not contain hyphens (ENVIRONMENT_SPEC naming), so
+// application codes such as `api-gateway` normalize to `API_GATEWAY` for the
+// `SDKWORK_<APPLICATION_CODE>_REGION_CODE` key.
+function envKeyCode(applicationCode) {
+  return applicationCode.replaceAll('-', '_');
+}
+
 function regionKeys(applicationCode) {
   return [
-    `SDKWORK_${applicationCode}_REGION_CODE=global`,
+    `SDKWORK_${envKeyCode(applicationCode)}_REGION_CODE=global`,
     'SDKWORK_DATABASE_SEED_LOCALE=zh-CN',
   ];
 }
@@ -65,9 +72,24 @@ function profileRootsFor(repoRoot) {
     .filter((dir) => fs.existsSync(dir) && fs.statSync(dir).isDirectory());
 }
 
+// Any valid `SDKWORK_*_REGION_CODE=` line counts as the region dimension
+// (applications may declare an application-specific key such as
+// `SDKWORK_CLOUDROUTER_ROUTER_REGION_CODE`), so the injector never duplicates
+// an existing region declaration.
+function hasRegionKey(lines) {
+  return lines.some((line) => /^SDKWORK_[A-Z0-9_]+_REGION_CODE=/.test(line));
+}
+
 function injectRegionKeys(envFilePath, keys, dryRun) {
   let content = fs.readFileSync(envFilePath, 'utf8');
-  const missing = keys.filter((key) => !content.split('\n').some((line) => line.startsWith(key.split('=')[0])));
+  const lines = content.split('\n');
+  const missing = keys.filter((key) => {
+    const name = key.split('=')[0];
+    if (name.endsWith('_REGION_CODE')) {
+      return !hasRegionKey(lines);
+    }
+    return !lines.some((line) => line.startsWith(name));
+  });
   if (missing.length === 0) {
     return 0;
   }
@@ -77,7 +99,6 @@ function injectRegionKeys(envFilePath, keys, dryRun) {
     ...keys,
     '',
   ].join('\n');
-  const lines = content.split('\n');
   // Insert after the identity header block (first blank line).
   let insertAt = lines.length;
   for (let index = 1; index < lines.length; index += 1) {
@@ -86,8 +107,13 @@ function injectRegionKeys(envFilePath, keys, dryRun) {
       break;
     }
   }
-  lines.splice(insertAt, 0, block);
-  const updated = lines.join('\n');
+  // Drop stale hyphenated region keys (`SDKWORK_API-GATEWAY_REGION_CODE`) so a
+  // repaired file keeps exactly one valid env-var region key.
+  const cleaned = lines.filter(
+    (line) => !/^SDKWORK_[A-Za-z0-9-]+_REGION_CODE=/.test(line) || /^SDKWORK_[A-Z0-9_]+_REGION_CODE=/.test(line),
+  );
+  cleaned.splice(insertAt, 0, block);
+  const updated = cleaned.join('\n');
   if (!dryRun) {
     fs.writeFileSync(envFilePath, updated);
   }

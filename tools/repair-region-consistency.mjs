@@ -43,7 +43,7 @@ for (const root of repos()) {
       const lines = fs.readFileSync(p, 'utf8').split('\n');
       const out = [];
       for (const line of lines) {
-        const m = /^SDKWORK_([A-Z_]+)_REGION_CODE=(global|cn|us|eu|asia)$/.exec(line.trim());
+        const m = /^SDKWORK_([A-Z0-9_]+)_REGION_CODE=(global|cn|us|eu|asia)$/.exec(line.trim());
         if (m) {
           const key = m[1];
           const hasCanonical =
@@ -55,7 +55,9 @@ for (const root of repos()) {
             continue;
           }
           if (m[2] !== 'cn') {
-            out.push(line.replace(/=global$|=us$|=eu$|=asia$/, '=cn'));
+            // Preserve the line terminator (CRLF checkouts must not be
+            // rewritten to LF mid-line).
+            out.push(line.replace(/(=global|=us|=eu|=asia)(\r?)$/, '=cn$2'));
             summary.regionKeysUpdated += 1;
             continue;
           }
