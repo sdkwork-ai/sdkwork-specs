@@ -92,7 +92,10 @@ Rules:
 - CORS `MUST` be explicit and environment-specific. SDKWork development/test runtimes `MAY`
   enable the shared Web Framework private-network origin policy for dynamic LAN addresses;
   application-local subnet matchers and copied CORS middleware are forbidden. Production
-  runtimes `MUST` reject that development policy and use exact origin allowlists.
+  runtimes `MUST` reject that development policy and use exact origin allowlists. Registered
+  first-party client origins (`WEB_FRAMEWORK_SPEC.md` §12) are merged by runtime assembly in
+  every environment, and the `open-api` surface is exempt from CORS and cross-site validation
+  because it serves non-browser SDK and server-to-server callers.
 - CSRF protection is required for cookie-authenticated browser flows.
 - UI permission checks do not replace backend authorization.
 

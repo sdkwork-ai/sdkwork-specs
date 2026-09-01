@@ -344,6 +344,24 @@ The framework enforces secure defaults without per-route business configuration:
   desktop custom-scheme origin such as `app://dsh` or `tauri://localhost`. Browser and desktop
   WebView callers use the same allowlist, including OAuth authorization and callback completion
   requests. Unregistered schemes (`javascript:`, `data:`, `file:`) remain forbidden.
+- Registered first-party client origins (desktop WebView custom schemes `app://dsh`, `app://birdcoder`,
+  `app://sdkwork`, `app://dtupay`, `tauri://localhost`, and the mini program runtime
+  `https://servicewechat.com`) `MUST` be merged into the effective CORS policy in every lifecycle
+  environment, production included. Deployments `MAY` repeat them in `SDKWORK_CORS_ALLOWED_ORIGINS`
+  but `MUST NOT` need to; runtime assembly owns the merge.
+- The default CORS request-header allowlist `MUST` cover the SDKWork credential and protocol headers
+  (`Authorization`, `Access-Token`, `Content-Type`, `Idempotency-Key`, `X-Content-SHA256`,
+  `X-Idempotency-Fingerprint`, `X-API-Key`, `X-SDKWork-Access-Token`) plus industry-common headers
+  (`Accept`, `Accept-Language`, `Content-Language`, `X-Requested-With`, `X-Request-Id`,
+  `X-Correlation-ID`, `X-Tenant-ID`, `X-Device-ID`, `X-Client-Version`, `X-App-Version`,
+  `X-Platform`, `Traceparent`, `Tracestate`), and `MUST` expose infrastructure response headers
+  (`X-Request-Id`, `X-SDKWork-Trace-Id`) via `Access-Control-Expose-Headers`. Development/test
+  policies `MAY` widen the preflight header gate to `*` so local surfaces never fail preflight when
+  the SDK grows a new request header; production validation `MUST` keep rejecting `*` headers.
+- The `open-api` surface is a server-to-server / generated-SDK surface: CORS origin and preflight
+  validation, and the cross-site request guard, `MUST NOT` apply to it. Calls without a browser
+  `Origin` are the normal case; requests that do carry an `Origin` `MUST NOT` be CORS-denied on
+  open-api routes. App-api, backend-api, and gateway surfaces keep full CORS enforcement.
 - The source deployment profile is the origin-set authority under `SOURCE_CONFIG_SPEC.md`. Client
   SDK base URL selection, OAuth redirect URI construction, gateway routing, and CORS configuration
   `MUST` resolve from the same selected environment/profile; SDK consumers `MUST NOT` repair a 403
