@@ -648,3 +648,102 @@ Legacy compatibility is allowed only for already published external contracts wi
 - [ ] Security review covers tenant isolation, authorization, MIME/size/checksum validation, scanning, retention, signed URL expiry, and logging.
 - [ ] Observability records provider and upload lifecycle metrics without exposing secrets or high-cardinality signed URLs.
 - [ ] Missing Drive capabilities are fixed in Drive contracts and generated SDKs, not patched with app-local storage code.
+
+## 17. Website Content Local Delivery Cache
+
+Drive-backed published websites (drive website roots) are served by
+`sdkwork-webserver` from storage-provider objects. Because published node
+content is **immutable per version**, the webserver `MAY` keep a local disk
+cache of the byte payloads so repeat requests avoid provider round trips.
+
+### 17.1 Cache Identity And Immutability
+
+- The cache key `MUST` be `SHA-256(tenant_scope_hash ‖ website_root_uuid ‖ logical_node_version_id)`.
+  The key binds the logical content identity, so a new published version is a
+  new key and stale entries become unreachable garbage, not a correctness risk.
+- Cached entries `MUST` be treated as immutable. Writers `MUST NOT` modify an
+  already-published entry in place; conflicting publishes of the same key are
+  dropped (first writer wins).
+- Authorization, conditional requests, and version pinning remain the
+  responsibility of metadata resolution (`resolve_resource`), which runs on
+  every request. Only the byte payload is cached.
+
+### 17.2 Storage Layout And Atomic Publish
+
+- Entries live under the environment-segmented root
+  `<cache_root>/<environment>/<2-hex-shard>/<key>` where `<cache_root>`
+  defaults to `/opt/deploy/drive/website-cache` (see
+  `SDKWORK_WEBSERVER_SPEC.md` §17.5 for the host mount).
+- The environment path segment `MUST` be sanitized to `[a-z0-9_-]+` to prevent
+  path traversal from environment-derived configuration.
+- Writes go to a process-unique staging path and publish by atomic rename.
+  On Windows (developer environments) a rename onto an existing path fails;
+  the implementation `MUST` treat that as first-writer-wins and discard its
+  staging file.
+- Content is addressed by the key above; deduplication across tenants is not
+  required and `MUST NOT` be assumed when the cache root is shared.
+
+### 17.3 LRU Bounds And Multi-Instance Races
+
+- The cache `MUST` enforce a total-byte budget and an entry-count budget
+  (defaults are deployment inputs, see §17.5 configuration variables).
+- An in-process index of live entries is `MUST`; it is rebuilt from the disk
+  layout at startup, so caches survive restarts and instances see each
+  other's published entries on the shared mount.
+- Eviction removes least-recently-touched entries until both budgets hold.
+  Access-time tracking is in-process best effort; cross-instance access does
+  not refresh another instance's recency. This is acceptable: eviction only
+  affects hit rate, never correctness.
+- Multi-instance races on a shared host mount `MUST` be benign:
+  - concurrent publishes of the same key → one file wins, the loser discards;
+  - an entry evicted between index hit and file open → the open `MUST` be
+    treated as a miss and the request re-fetched from upstream.
+
+### 17.4 Failure-Safe Degradation
+
+- Cache open/write failures `MUST NOT` fail the request: staging write
+  failures downgrade to pass-through streaming, open failures are misses.
+- Only full (non-Range) requests `MUST` populate the cache. Range requests
+  are served by slicing an already-cached full object; a Range miss streams
+  upstream without backfilling.
+- Upstream stream failure after staging started `MUST` discard the staging
+  file and never publish a partial entry.
+
+### 17.5 Configuration And Deployment Inputs
+
+- `SDKWORK_DRIVE_WEBSITE_CACHE_ENABLED` (default `true` in the container image).
+- `SDKWORK_DRIVE_WEBSITE_CACHE_ROOT` (default `/opt/deploy/drive/website-cache`).
+- `SDKWORK_DRIVE_WEBSITE_CACHE_ENVIRONMENT` (deployment environment segment; defaults from the lifecycle environment).
+- `SDKWORK_DRIVE_WEBSITE_CACHE_MAX_TOTAL_BYTES` (default `8589934592` = 8 GiB).
+- `SDKWORK_DRIVE_WEBSITE_CACHE_MAX_ENTRIES` (default `100000`).
+
+### 17.6 Open-Source Alternatives Evaluation (Normative Rationale)
+
+Implementations `MUST` evaluate existing open-source local-cache libraries
+before extending the in-process cache. The evaluation below is the recorded
+baseline (2026-09) and `MUST` be re-run if the delivery requirements change.
+
+| Candidate | Fit assessment |
+| --- | --- |
+| `cacache` (Rust) | Content-addressable store with atomic writes, integrity verification, dedup, and multi-process safety. **Not adopted**: no size-budget LRU eviction, and its public `Reader` has no seek, so HTTP Range serving of large files would require undocumented content-path derivation or O(offset) skip reads. |
+| `foyer` (RisingWave) | Hybrid memory+disk block cache. **Not adopted**: entries are serialized into its own block-file format and read back into memory — no file-handle serving, no Range slicing, not multi-process. |
+| `lru-disk-cache` (sccache lineage) | Size-budget LRU. **Not adopted**: unmaintained, no integrity guarantees, no entry-count budget, no multi-instance story. |
+| `nginx proxy_cache` / Varnish / ATS | Industry-standard HTTP cache proxies. **Not applicable**: the standalone profile forbids stock nginx on the public edge (`NGINX_SPEC.md` §0, `SDKWORK_WEBSERVER_SPEC.md` §17.4) and drive content requires per-request authorization and version pinning inside the Rust data plane. |
+| `moka` / `stretto` / `cached` | In-memory caches (the `cached` disk store wraps `cacache`). **Not adopted** for the disk layer. |
+
+Decision: the standard implementation is the thin in-process adapter in
+`sdkwork-webserver-drive-provider` (`DriveContentCache`). Its public API is
+the replacement seam: `open_cached` / `open_cached_range` / `fill_stream`
+hide the storage engine, so adopting a library later (for example `cacache`
+for on-read integrity verification, accepting content-path derivation for
+Range) is a contained change that does not touch routing or the provider
+adapter.
+
+### 17.7 Review Checklist
+
+- [ ] Cache keys bind the logical node version identity, never a mutable path.
+- [ ] The environment path segment is sanitized; no traversal from config.
+- [ ] Publish is atomic; partial upstream streams never become cache entries.
+- [ ] Both budgets (bytes and entries) are enforced and survive restarts.
+- [ ] Multi-instance races degrade to misses, never to errors or torn reads.
+- [ ] Cache failures downgrade to upstream streaming; logs do not spam.

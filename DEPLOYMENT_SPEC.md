@@ -579,6 +579,16 @@ Rules:
   (`SDKWORK_WEBSERVER_IMPORT_PROFILE`), and every container listens on
   gateway port 3800 internally so module `server.standalone.toml` upstreams
   stay uniform across instances and hosts.
+- Drive delivery cache mount (sdkwork-webserver only): the host directory
+  `/opt/deploy/drive` is bind-mounted read-write at the same container path
+  and is shared by every instance of an environment. The webserver uses the
+  `website-cache` subtree as the Drive website content local delivery cache
+  root (`SDKWORK_DRIVE_WEBSITE_CACHE_ROOT`, default
+  `/opt/deploy/drive/website-cache`) so multi-instance deployments share one
+  disk LRU cache; races are made safe by content-addressed immutable entries
+  (`DRIVE_SPEC.md` §17.3). The rest of `/opt/deploy/drive` is reserved for
+  drive-owned local file storage and `MUST NOT` be used for container-ephemeral
+  state.
 - Multiple independently configurable instances: a per-instance override file
   `env/<environment>.i<index>.env` is layered on top of the base environment
   env file (later `--env-file` wins), so each instance can carry its own

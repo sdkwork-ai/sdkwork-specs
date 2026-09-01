@@ -1239,7 +1239,37 @@ the CDN artifacts that talk to the unified `api-*` edge (§17.1,
 the manifest, and `check-browser-build-scripts.mjs` reads that declaration to
 skip cloud command requirements for this repository.
 
-## 16. Acceptance Checklist
+### 17.5 Host Shared Directories (`/opt/deploy/sdkwork-space`, `/opt/deploy/drive`)
+
+The standalone container image declares exactly two host shared directories.
+Both are same-path bind mounts (`/opt/deploy/...` on the host to the same
+container path) so absolute references stay identical inside and outside the
+container:
+
+| Host directory | Mode | Purpose | Rules |
+| --- | --- | --- | --- |
+| `/opt/deploy` (space root) | `:ro` | Official application repository resources: the `sdkwork-space` checkout and sibling-module deployment sidecars | The `sdkwork-space` subtree overlay is re-mounted `:rw` as the clone/pull target (`SDKWORK_SPACE_CHECKOUT_HOST_PATH`). Mount contract: `SDKWORK_SPACE_HOST_PATH` (default `/opt/deploy`), compose fragment `${SDKWORK_SPACE_HOST_PATH:-/opt/deploy}:/opt/deploy:ro`. |
+| `/opt/deploy/drive` | `:rw` | Drive-owned local storage and the Drive website content local delivery cache | The `website-cache` subtree is the delivery cache root (`SDKWORK_DRIVE_WEBSITE_CACHE_ROOT`, default `/opt/deploy/drive/website-cache`); `SDKWORK_DRIVE_CACHE_HOST_PATH` (default `/opt/deploy/drive`) drives the compose fragment `${SDKWORK_DRIVE_CACHE_HOST_PATH:-/opt/deploy/drive}:/opt/deploy/drive:rw`. Every instance of an environment shares this mount, so the cache is disk-shared across instances (`DRIVE_SPEC.md` §17). |
+
+Rules:
+
+- Both mounts `MUST` be environment-neutral: the directory name carries no
+  environment suffix. The delivery cache segments entries by lifecycle
+  environment internally (`<root>/<environment>/entries|staging`), never by
+  host path.
+- The entrypoint `MUST` ensure `/opt/deploy/drive/website-cache` exists at
+  startup and `MUST` only warn (never fail startup) when the host directory
+  is not writable; the cache then disables itself.
+- Cache bounds are deployment inputs:
+  `SDKWORK_DRIVE_WEBSITE_CACHE_ENABLED`,
+  `SDKWORK_DRIVE_WEBSITE_CACHE_ROOT`,
+  `SDKWORK_DRIVE_WEBSITE_CACHE_ENVIRONMENT`,
+  `SDKWORK_DRIVE_WEBSITE_CACHE_MAX_TOTAL_BYTES` (default `8589934592`),
+  `SDKWORK_DRIVE_WEBSITE_CACHE_MAX_ENTRIES` (default `100000`).
+- `/opt/deploy/drive` `MUST NOT` be used for container-ephemeral state
+  (locks, sockets, PID files) and `MUST NOT` overlap the space root.
+
+## 18. Acceptance Checklist
 
 - [ ] All **seven** layout v3 files exist under `deployments/webserver/`.
 - [ ] `server.common.toml` has identity and globals only — **no** `[[http.server]]`.
@@ -1253,3 +1283,7 @@ skip cloud command requirements for this repository.
 - [ ] Sidecars `nginx.<profile>.<environment>.conf` exist and match effective renders (W16).
 - [ ] Public edge is `sdkwork-webserver` only — no stock nginx / `/etc/nginx` live sites
       (`NGINX_SPEC.md` §0).
+- [ ] Host shared directories follow §17.5: `/opt/deploy` read-only with the
+      `sdkwork-space` checkout overlay `rw`, `/opt/deploy/drive` `rw` and shared
+      by every instance, with the drive delivery cache variables declared in
+      compose and env examples.
