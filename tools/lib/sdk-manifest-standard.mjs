@@ -167,7 +167,7 @@ export function loadSdkFamilyManifestForWorkspaceConsumer(repoRoot, workspace) {
       }
     }
     // Naming-derived ownership can differ from the owning repository name
-    // (for example sdkwork-web-internal-sdk lives in sdkwork-webserver).
+    // (for example sdkwork-base-data-backend-sdk lives in sdkwork-appbase).
     // Fall back to a workspace scan for the repository that actually ships
     // this SDK family before giving up.
     const ownerRoot = findSdkFamilyOwnerRepo(repoRoot, workspace);

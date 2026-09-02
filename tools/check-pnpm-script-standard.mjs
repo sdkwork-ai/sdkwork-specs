@@ -40,6 +40,8 @@ const ALLOWED_FIRST_SEGMENTS = new Set([
   'format',
   'release',
   'deploy',
+  'up',
+  'down',
   'desktop',
   'db',
   'api',
@@ -674,6 +676,28 @@ function workflowReleaseProfiles(root) {
   return profiles.size > 0 ? profiles : new Set(['standalone', 'cloud']);
 }
 
+function supportedDeploymentProfiles(root) {
+  const profiles = workflowReleaseProfiles(root);
+  const appConfigPath = path.join(root, 'sdkwork.app.config.json');
+  if (fs.existsSync(appConfigPath)) {
+    const appConfig = readJson(appConfigPath);
+    const declared = appConfig?.runtime?.supportedDeploymentProfiles;
+    if (Array.isArray(declared) && declared.length > 0) {
+      for (const profile of declared) {
+        if (profile === 'standalone' || profile === 'cloud') profiles.add(profile);
+      }
+      // A repository that explicitly declares its supported deployment
+      // profiles owns the authority: do not union with workflow-derived
+      // defaults that would resurrect a retired profile.
+      const declaredProfiles = new Set(
+        declared.filter((profile) => profile === 'standalone' || profile === 'cloud'),
+      );
+      if (declaredProfiles.size > 0) return declaredProfiles;
+    }
+  }
+  return profiles;
+}
+
 function pushPairedLifecycleProfileIssues(root, scripts, issues) {
   const names = Object.keys(scripts);
   for (const [namespace, phases] of [
@@ -690,9 +714,7 @@ function pushPairedLifecycleProfileIssues(root, scripts, issues) {
       const hasRuntimeConfigurable = namespace === 'release'
         && exposed.some((name) => scriptNameHasSegment(name, 'runtime-configurable'));
       if (hasRuntimeConfigurable) continue;
-      const requiredProfiles = namespace === 'release'
-        ? workflowReleaseProfiles(root)
-        : new Set(['standalone', 'cloud']);
+      const requiredProfiles = supportedDeploymentProfiles(root);
       if (requiredProfiles.has('standalone') && !hasStandalone) {
         issues.push(`${phasePrefix}: exposed lifecycle phase must provide a standalone profile variant`);
       }
@@ -794,7 +816,11 @@ function validateRootScripts(root, productPrefixes) {
   const independentApplicationRoot = applicationRepository && !delegatedSurface;
 
   if (independentApplicationRoot) {
+    const profiles = supportedDeploymentProfiles(root);
     for (const required of REQUIRED_ROOT_SCRIPTS) {
+      // Standalone-only repositories retired the cloud dev entrypoint; the
+      // dev:cloud requirement follows each repository's declared profiles.
+      if (required === 'dev:cloud' && !profiles.has('cloud')) continue;
       if (!scripts[required]) {
         issues.push(`missing required root script "${required}"`);
       }
@@ -804,7 +830,9 @@ function validateRootScripts(root, productPrefixes) {
       issues.push('stop: repository roots with dev must expose a scoped stop command');
     }
   } else if (delegatedSurface) {
+    const profiles = supportedDeploymentProfiles(root);
     for (const required of ['dev', 'dev:standalone', 'dev:cloud', 'stop']) {
+      if (required === 'dev:cloud' && !profiles.has('cloud')) continue;
       if (!scripts[required]) {
         issues.push(`missing required delegated surface script "${required}"`);
       }

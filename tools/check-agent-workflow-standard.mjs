@@ -153,7 +153,11 @@ function walkFiles(root, predicate) {
 function collectApplicationRoots(root) {
   const roots = new Set([root]);
   for (const manifestPath of walkFiles(root, (_file, name) => name === 'sdkwork.app.config.json')) {
-    if (toPosix(manifestPath).includes('/generated/')) continue;
+    const posixPath = toPosix(manifestPath);
+    // Generated SDK output and ephemeral build staging (e.g. docker
+    // build-context staging under .sdkwork/runtime/) are not application roots.
+    if (posixPath.includes('/generated/')) continue;
+    if (posixPath.includes('/.sdkwork/runtime/')) continue;
     roots.add(path.dirname(manifestPath));
   }
   return [...roots].sort();

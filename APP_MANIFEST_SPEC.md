@@ -109,6 +109,48 @@ Identifiers:
 | `desktopAppId` | Desktop runtime identifier |
 | `containerImage` | Server image repository name without mutable secret data |
 
+### 4.1 Publishing Console Link (`metadata.publishing`)
+
+The publishing PC console persists the platform-side application id per
+deployment profile inside the manifest's free-form `metadata` object so a
+later session can re-associate the local app root with its published app
+without re-entry. This is a platform-identity binding, not a runtime value
+mapping: the prohibition in section 2 targets `environments.*` runtime URL
+values and does not apply here.
+
+Shape:
+
+```json
+{
+  "schemaVersion": 3,
+  "kind": "sdkwork.app",
+  "metadata": {
+    "publishing": {
+      "appIdByTarget": {
+        "standalone.test": "app-123",
+        "cloud.production": "app-456"
+      }
+    }
+  }
+}
+```
+
+Rules:
+
+| Rule | Requirement |
+| --- | --- |
+| Target keys | `<mode>.<environment>` where `mode` is `standalone` or `cloud` and `environment` is one of `development`, `test`, `staging`, `demo`, `production`. The key equals the deployment profile id (`deployProfileId`). |
+| Values | Platform application id strings only. Never store secrets, tokens, or connection strings in `metadata.publishing`. |
+| Write discipline | Writers MUST read the file fresh, merge the single new target key, and write back (read-modify-write). All other top-level fields (`app`, `runtime`, `environments`, unrelated `metadata` subtrees) MUST be preserved. |
+| Stub manifests | When the file does not exist, the console MAY create a minimal `schemaVersion: 3` / `kind: "sdkwork.app"` stub containing only `metadata.publishing.appIdByTarget`. The stub is not a complete manifest; the next full authoring pass must fill the required sections. |
+| Corrupted files | A file that fails JSON parsing or schema sanity is rebuilt as a stub rather than blocking publishing: the console never blocks a successful publish on manifest bookkeeping. |
+| Read degradation | Any read failure (missing file, unreadable, oversized) degrades to "no linked app id" and never blocks the dialog flow. |
+| Text bound | The manifest is a governed config text file with a 1 MiB upper bound; larger files are rejected by the host file capability. |
+
+The console behavior lives in `sdkwork-deployments-pc-console-publishing`
+(`app-manifest.ts`: `resolveConfiguredAppId`, `upsertSdkworkAppConfigAppId`,
+`readLinkedAppId`, `writeLinkedAppId`).
+
 ## 5. Platform Taxonomy
 
 The standard uses backend `PlusPlatform` values exactly:

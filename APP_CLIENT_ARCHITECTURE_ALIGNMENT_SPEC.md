@@ -46,6 +46,7 @@ SDKWork client roots use stable architecture identifiers.
 | Native Android mobile app | `apps/sdkwork-<application-code>-android-mobile` | `android-mobile` | `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md` |
 | Native iOS mobile app | `apps/sdkwork-<application-code>-ios-mobile` | `ios-mobile` | `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md` |
 | Native HarmonyOS mobile app | `apps/sdkwork-<application-code>-harmony-mobile` | `harmony-mobile` | `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md` |
+| Pad tablet app | `apps/sdkwork-<application-code>-pad` | `pad` | per-target mobile standard (see `APPLICATION_SPEC.md` UI selection table) |
 
 Rules:
 
@@ -77,6 +78,18 @@ dist or profile segment left). The profile subtrees keep standalone
 environment coexisting.
 `<share>` OS paths: `RUNTIME_DIRECTORY_SPEC.md` §4.1.1.
 Helper / check: `tools/browser-dist-layout.mjs`, `tools/check-browser-dist-layout.mjs`.
+
+PC desktop application roots (`apps/sdkwork-<code>-desktop/`) `MUST` follow
+the same `dist/<profile>/<envAlias>/` build-output layout: desktop apps
+distinguish `standalone` and `cloud` deployment profiles exactly like browser
+surfaces, and the profile subtrees keep both builds for the same environment
+coexisting. Electron/Vite renderer output and Tauri web assets build directly
+into the selected subtree; Qt/Flutter framework default build directories
+(`build/` etc.) are superseded by the spec path before packaging. A bare
+`dist/` is never a valid desktop publish target. Device-class surfaces
+(mini program, Android/iOS/Harmony mobile, pad) are exempt: their packaging
+consumes platform stores/installers and keeps framework-default output
+directories.
 
 | Client | Prefer | If missing |
 | --- | --- | --- |

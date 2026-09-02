@@ -589,6 +589,12 @@ Rules:
   (`DRIVE_SPEC.md` §17.3). The rest of `/opt/deploy/drive` is reserved for
   drive-owned local file storage and `MUST NOT` be used for container-ephemeral
   state.
+- Runtime hardening (normative): every service in every compose file shipped
+  for deployment `MUST` declare bounded log rotation (`json-file` driver
+  with explicit `max-size` and `max-file`, reference values `50m`/`3`) in
+  addition to a `restart` policy and a healthcheck. Unbounded container logs
+  eventually fill the host disk on long-lived commercial deployments, and
+  this is enforced by the deployment contract test suite.
 - Multiple independently configurable instances: a per-instance override file
   `env/<environment>.i<index>.env` is layered on top of the base environment
   env file (later `--env-file` wins), so each instance can carry its own

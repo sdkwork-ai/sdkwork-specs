@@ -680,6 +680,14 @@ cache of the byte payloads so repeat requests avoid provider round trips.
   On Windows (developer environments) a rename onto an existing path fails;
   the implementation `MUST` treat that as first-writer-wins and discard its
   staging file.
+- Orphaned staging fills (writer process died mid-fill) `MUST` be swept by
+  age at cache open: `*.part` files last modified before a generous TTL (the
+  reference implementation uses 6 hours) are removed from the staging
+  directory. A crash loop or forced container recycle on a shared host mount
+  must never leak staging disk indefinitely. Age is the only
+  cross-instance-safe staleness signal (writer PIDs are not comparable
+  across containers); a TTL long enough to outlive any live fill keeps the
+  sweep safe for concurrent instances.
 - Content is addressed by the key above; deduplication across tenants is not
   required and `MUST NOT` be assumed when the cache root is shared.
 
@@ -691,9 +699,12 @@ cache of the byte payloads so repeat requests avoid provider round trips.
   layout at startup, so caches survive restarts and instances see each
   other's published entries on the shared mount.
 - Eviction removes least-recently-touched entries until both budgets hold.
-  Access-time tracking is in-process best effort; cross-instance access does
-  not refresh another instance's recency. This is acceptable: eviction only
-  affects hit rate, never correctness.
+  Eviction `MUST NOT` scan the whole index per victim: the reference
+  implementation keeps a stamp-ordered map (`last_access stamp -> key`) and
+  pops the minimum in O(log n), so the publish hot path stays cheap at the
+  configured 100k-entry bound. Access-time tracking is in-process best
+  effort; cross-instance access does not refresh another instance's recency.
+  This is acceptable: eviction only affects hit rate, never correctness.
 - Multi-instance races on a shared host mount `MUST` be benign:
   - concurrent publishes of the same key → one file wins, the loser discards;
   - an entry evicted between index hit and file open → the open `MUST` be
