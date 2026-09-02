@@ -253,6 +253,38 @@ test('standalone gateway accepts the complete hosted assembly contract', () => {
   );
 });
 
+test('standalone gateway accepts the ApiModuleRegistry add_module front door', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-standalone-closure-'));
+  write(
+    path.join(root, 'crates/sdkwork-api-demo-standalone-gateway/Cargo.toml'),
+    '[package]\nname = "sdkwork-api-demo-standalone-gateway"\nversion = "0.0.0"\n\n[dependencies]\nsdkwork-api-demo-assembly = "0"\n',
+  );
+  write(
+    path.join(root, 'crates/sdkwork-api-demo-standalone-gateway/src/main.rs'),
+    'fn main() { let module = sdkwork_api_demo_assembly::assemble_api_router(); let mut registry = ApiModuleRegistry::new(); registry.add_module(module); registry.try_compose("SDKWork").into_hosted(); }\n',
+  );
+  write(
+    path.join(root, 'crates/sdkwork-api-demo-standalone-gateway/specs/component.spec.json'),
+    JSON.stringify({
+      component: {
+        name: 'sdkwork-api-demo-standalone-gateway',
+        type: 'rust-api-standalone-gateway',
+      },
+      contracts: {
+        requiredPorts: [{
+          name: 'applicationApiAssembly',
+          export: 'sdkwork_api_demo_assembly::assemble_api_router',
+        }],
+        runtimeEntrypoints: ['src/main.rs'],
+      },
+    }),
+  );
+  assert.deepEqual(
+    validateApiAssemblyIntegrationClosure(root, { strictStandaloneHosting: true }),
+    [],
+  );
+});
+
 test('strict standalone hosting rejects Web Framework installation inside owner assembly', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-standalone-closure-'));
   write(

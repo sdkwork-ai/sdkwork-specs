@@ -393,8 +393,12 @@ function validateStandaloneGatewayContract(root, manifest, assemblyDependencies)
       issues.push(`standalone gateway must call owner assembly ${dependency}`);
     }
   }
-  if (!source.includes('ComposedApiAssembly::try_compose')) {
-    issues.push('standalone gateway must validate the complete owner contribution with ComposedApiAssembly::try_compose');
+  const usesModuleRegistry = source.includes('ApiModuleRegistry')
+    && source.includes('.add_module')
+    && source.includes('.try_compose(');
+  const usesDirectCompose = source.includes('ComposedApiAssembly::try_compose');
+  if (!usesModuleRegistry && !usesDirectCompose) {
+    issues.push('standalone gateway must validate the complete owner contribution with ApiModuleRegistry add_module/try_compose or ComposedApiAssembly::try_compose');
   }
   if (!source.includes('.into_hosted(')) {
     issues.push('standalone gateway must retain manifest, OpenAPI, permissions, injectors, and readiness through into_hosted');

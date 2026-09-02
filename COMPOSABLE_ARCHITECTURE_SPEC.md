@@ -1,6 +1,6 @@
 # Composable Architecture Standard
 
-- Version: 1.0
+- Version: 1.1
 - Scope: cross-stack frontend/backend module composition, component port contracts, Rust crate dependency boundaries, route ownership, permission inheritance, and resolved architecture graphs
 - Related: `APPLICATION_LAYERED_ARCHITECTURE_SPEC.md`, `APPLICATION_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `FRONTEND_SPEC.md`, `RUST_CODE_SPEC.md`, `WEB_BACKEND_SPEC.md`, `DEPENDENCY_MANAGEMENT_SPEC.md`, `APP_PERMISSION_COMPOSITION_SPEC.md`, `TEST_SPEC.md`
 
@@ -14,6 +14,7 @@ Rules:
 - `specs/component.spec.json` owns integration meaning: public exports, layer role, ports, SDK dependencies, route manifests, permission composition, dependency API exports, dependency API surfaces, and runtime entrypoints.
 - A module is a building block only when it can be installed, understood, tested, and replaced through public exports and declared ports without reading private source files.
 - Composition roots wire modules together; feature packages, service crates, route crates, repository crates, and host adapters do not discover each other through globals, copied DTOs, copied routes, hard-coded URLs, or private source imports.
+- Within one gateway process, embedded dependency capabilities are consumed through declared in-process ports wired by the composition root. Consumers `MUST NOT` loop back HTTP requests to the process's own listener, and same-process consumption `MUST NOT` require dependency base URL variables or IAM service credentials that exist only to authenticate that loopback (`APPLICATION_GATEWAY_SPEC.md` section 2.3).
 - Generated SDKs, route manifests, OpenAPI authority documents, IAM catalogs, and topology specs are owned artifacts. Consumers reference them by contract and must not fork them locally.
 - Missing SDK/API behavior is fixed at the owner contract and generator input. Consumers must not add raw HTTP fallbacks, local DTO forks, hidden proxy routes, or ad hoc route constants.
 

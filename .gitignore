@@ -22,6 +22,9 @@ node_modules/
 # Local tooling and workspace state
 .mimocode/
 **/.mimocode/
+# Agent working-memory scratch files (never commit)
+.wm-*
+/.wm-*
 .sdkwork/local/
 .sdkwork/tmp/
 .sdkwork/cache/

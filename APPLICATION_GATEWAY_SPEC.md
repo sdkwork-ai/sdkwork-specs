@@ -1,6 +1,6 @@
 # Application Gateway Standard
 
-- Version: 2.4
+- Version: 2.5
 - Scope: application standalone and platform cloud HTTP gateway hosts, listener ownership, naming, topology binding, thin-host boundaries, pnpm commands, migration, and verification
 - Related: `API_ASSEMBLY_SPEC.md`, `NAMING_SPEC.md` section 4.3.1, `APP_RUNTIME_TOPOLOGY_SPEC.md`, `APP_RUNTIME_TOPOLOGY_NAMING.md`, `WEB_FRAMEWORK_SPEC.md`, `WEB_BACKEND_SPEC.md`, `COMPONENT_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `MIGRATION_SPEC.md`, `TEST_SPEC.md`
 
@@ -128,6 +128,82 @@ Rules:
   router that is mounted but unreachable because its canonical prefix is absent
   from registry selection is a startup or test failure, not a request-time
   `502`.
+
+### 2.3 Embedded Dependency Consumption Is In-Process
+
+A gateway process that embeds a dependency API assembly owns that dependency's
+capabilities in-process. Embedded selection is a direct backend integration,
+not an HTTP forwarding relationship.
+
+Rules:
+
+- A module running inside a gateway process `MUST` consume the capabilities of
+  an assembly mounted in the same process through a declared in-process port
+  (service, provider, or host adapter port) wired by the composition root per
+  `COMPOSABLE_ARCHITECTURE_SPEC.md` section 3. The consumer `MUST NOT` reach
+  the embedded capability by issuing HTTP requests to the gateway's own
+  listener (loopback self-forwarding).
+- A gateway process `MUST NOT` require per-dependency base URL variables such
+  as `SDKWORK_<APPLICATION_CODE>_<DEPENDENCY>_BACKEND_API_BASE_URL` for
+  embedded consumption, and `MUST NOT` default them to the gateway's own
+  origin. That env family applies only when the selected deployment profile
+  places the dependency in a separate process: standalone external mode, or a
+  cloud `platform.api-gateway` upstream.
+- Same-process consumption `MUST NOT` require IAM service credentials whose
+  only purpose is to authenticate a loopback request to the gateway's own
+  protected surface. Authorization for in-process consumption is enforced by
+  the port contract and the composition root, not by re-entering the HTTP
+  authentication stack.
+- A retry loop that waits for the gateway's own listener to become ready
+  before an embedded consumer can invoke a mounted dependency is a violation
+  symptom: it proves the consumer is using loopback HTTP instead of an
+  in-process port. Startup order between the listener and embedded capability
+  wiring `MUST NOT` be a functional dependency.
+- Dual-token backend surfaces remain the contract for every real HTTP client
+  (browser, app SDK, backend-admin SDK, external service). In-process ports do
+  not replace the HTTP surface; they are the internal consumer path that keeps
+  the surface free of self-originated traffic.
+- `component.spec.json` dependency surfaces keep declaring in-process
+  integration coverage with the existing `coverage` field. A deployment that
+  runs the dependency in a separate process switches the consumer to the
+  generated dependency SDK / declared base URL contract and `MUST` provide
+  that base URL; a deployment that embeds the assembly `MUST` wire the
+  declared port.
+
+Verification: gateway repositories `SHOULD` fail static checks when a consumer
+of an embedded dependency surface constructs an HTTP client whose resolved
+base URL is the gateway's own bind/origin, and runtime smoke checks `MUST`
+start the gateway without any retry-on-own-listener log pattern.
+
+`tools/check-embedded-self-loop.mjs --workspace <root>` is the workspace gate
+for this section. It reads every repository's deployment profiles and Cargo
+manifests and fails on three conditions:
+
+- `SELF-LOOP` — a deployment profile declares a dependency base URL whose
+  authority resolves to this application's own ingress.
+- `EMBEDDED-LOCAL-DEP` — a dependency base URL resolves to another SDKWork
+  module's ingress while this repository already compiles that module's API
+  assembly in-process.
+- `EMBEDDED-DECLARED-URL` — the repository compiles module `M` in-process and
+  still declares a loopback base URL naming `M`. A routable external origin is
+  allowed: that is the documented escape hatch for a dependency deployed as a
+  separate process.
+
+Browser-facing variables (`VITE_*`, `*_BROWSER_*`, `*_DEV_PROXY_*`, desktop app
+origins) are out of scope: a browser talking to a server is a real network hop.
+The validation logic lives in `tools/lib/embedded-self-loop.mjs` so it can be
+unit tested and reused by other gates.
+
+The gate reads every deployment profile it can find, because a loopback
+default hides in whichever file a profile happens to use:
+
+- `etc/`, `docker/`, `deployments/`, `container/` dotenv files and `demo.env`;
+- `docker-compose*.yml` `environment:` blocks — including `${VAR:-default}`
+  compose interpolation, since the default is what runs when an operator sets
+  nothing;
+- runtime TOML `bind = "host:port"` declarations, because the platform gateway
+  declares its ingress there rather than as an environment variable, so an
+  env-only scan sees no owner and silently skips the repository.
 
 ## 3. Standalone Application Gateway
 
@@ -356,3 +432,4 @@ node ../sdkwork-specs/tools/check-api-runtime-parity.mjs --root .
 - [ ] Browser SDK URLs use the browser-visible origin; internal development API
       targets remain private to the dev-server process.
 - [ ] Cloud development starts no local API-plane process.
+- [ ] Embedded dependency capabilities are consumed in-process through declared ports; no embedded consumer loop-calls the gateway's own listener, and no per-dependency base URL is required or defaulted to the gateway origin for embedded selection (`APPLICATION_GATEWAY_SPEC.md` section 2.3).

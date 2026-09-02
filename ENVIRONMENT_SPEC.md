@@ -1,6 +1,6 @@
 # Environment Variable And Runtime Configuration Standard
 
-- Version: 1.2
+- Version: 1.3
 - Scope: environment variables, runtime config files, public browser runtime config, secrets, database selection, standalone/cloud deployment profiles, desktop/server/container/H5/Flutter/mini-program/native Android/native iOS/native Harmony runtime targets, SDK base URLs, locale strategy, Access-Token and TokenManager credential config rules, RPC endpoints
 - Related: `CONFIG_SPEC.md`, `SOURCE_CONFIG_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `DEPLOYMENT_SPEC.md`, `REGION_SPEC.md`, `DATABASE_SPEC.md`, `DATABASE_FRAMEWORK_SPEC.md`, `SECURITY_SPEC.md`, `SDK_SPEC.md`, `RPC_SPEC.md`, `RPC_FRAMEWORK_SPEC.md`, `DISCOVERY_SPEC.md`, `RUST_RPC_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `I18N_SPEC.md`, `TEST_SPEC.md`
 
@@ -157,7 +157,7 @@ These variables form the baseline for SDKWork applications.
 | `SDKWORK_<APPLICATION_CODE>_BACKEND_API_BASE_URL` | private | SHOULD when backend SDK is consumed | Server/runtime backend-api SDK base URL, normally ending in `/backend/v3/api` for SDKWork v3 backend-api. |
 | `SDKWORK_<APPLICATION_CODE>_<DEPENDENCY>_OPEN_API_BASE_URL` | private | MAY | Dependency open-api SDK base URL keyed by dependency SDK family/app code. |
 | `SDKWORK_<APPLICATION_CODE>_<DEPENDENCY>_APP_API_BASE_URL` | private | MAY | Dependency app-api SDK base URL keyed by dependency SDK family/app code, for example appbase or Drive. |
-| `SDKWORK_<APPLICATION_CODE>_<DEPENDENCY>_BACKEND_API_BASE_URL` | private | MAY | Dependency backend-api SDK base URL keyed by dependency SDK family/app code. |
+| `SDKWORK_<APPLICATION_CODE>_<DEPENDENCY>_BACKEND_API_BASE_URL` | private | MAY when the dependency runs in a separate process | Dependency backend-api SDK base URL keyed by dependency SDK family/app code. External-deployment only: when the dependency assembly is embedded in the same gateway process, consumers `MUST NOT` use or require this variable and deployments `MUST NOT` default it to the gateway's own origin (`APPLICATION_GATEWAY_SPEC.md` section 2.3). |
 | `SDKWORK_<APPLICATION_CODE>_TOKEN_MANAGER_MODE` | private | MAY | Credential strategy: `appbase-global`, `service-context`, or `test`. It configures behavior only; it must not contain token values. |
 | `SDKWORK_<APPLICATION_CODE>_TOKEN_STORAGE` | private | MAY | Token storage strategy: `memory`, `browser-session`, `browser-local`, `os-secure-storage`, or `server-context`. Browser strategies must pass security review. |
 | `SDKWORK_ACCESS_TOKEN` | secret | SHOULD when protected app-api/backend-api is called before interactive login | Unified private bootstrap `access_token` used to seed the global TokenManager or service-context credential provider for SaaS deployment tenant isolation. It `MUST` be a signed SDKWork access token whose claims carry current `tenant_id`, `organization_id`, `app_id`, environment, deployment profile, runtime target, and scope metadata. It `MUST NOT` use an app-prefixed env name. It `MUST NOT` be exposed to browser public runtime config. After login/session bootstrap, runtime session `accessToken` replaces this value. |
@@ -704,9 +704,9 @@ otherwise application and platform surfaces resolve independently.
 | SDKWork business open-api SDK or vendor compatibility open-api surface | `SDKWORK_<APPLICATION_CODE>_OPEN_API_BASE_URL` | `PORTAL_PUBLIC_OPEN_API_BASE_URL` | `VITE_<APP_CODE>_OPEN_API_BASE_URL` | Resolved from its declared application/platform surface or a proven common API edge origin. |
 | App/user SDK | `SDKWORK_<APPLICATION_CODE>_APP_API_BASE_URL` | `PORTAL_PUBLIC_APP_API_BASE_URL` | `VITE_<APP_CODE>_APP_API_BASE_URL` | Resolved from `application.public-ingress`, optionally through a proven common API edge origin. |
 | `backend-admin` SDK | `SDKWORK_<APPLICATION_CODE>_BACKEND_API_BASE_URL` | `PORTAL_PUBLIC_BACKEND_API_BASE_URL` | `VITE_<APP_CODE>_BACKEND_API_BASE_URL` | Resolved from the owning application/platform surface; browser exposure still requires `backend-admin`. |
-| Dependency open-api SDK | `SDKWORK_<APPLICATION_CODE>_<DEPENDENCY>_OPEN_API_BASE_URL` | `PORTAL_PUBLIC_<DEPENDENCY>_OPEN_API_BASE_URL` | `VITE_<APP_CODE>_<DEPENDENCY>_OPEN_API_BASE_URL` | Cloud: resolved from `platform.api-gateway` unless an explicit dependency surface override applies. Standalone same-origin: resolved from `application.public-ingress` with verified assembly mount coverage. |
-| Dependency app-api SDK | `SDKWORK_<APPLICATION_CODE>_<DEPENDENCY>_APP_API_BASE_URL` | `PORTAL_PUBLIC_<DEPENDENCY>_APP_API_BASE_URL` | `VITE_<APP_CODE>_<DEPENDENCY>_APP_API_BASE_URL` | Cloud: resolved from `platform.api-gateway`. Standalone same-origin: resolved from `application.public-ingress` with verified assembly mount coverage. |
-| Dependency backend-api SDK | `SDKWORK_<APPLICATION_CODE>_<DEPENDENCY>_BACKEND_API_BASE_URL` | `PORTAL_PUBLIC_<DEPENDENCY>_BACKEND_API_BASE_URL` | `VITE_<APP_CODE>_<DEPENDENCY>_BACKEND_API_BASE_URL` | Cloud: resolved from `platform.api-gateway`. Standalone same-origin: resolved from `application.public-ingress` with verified backend assembly mount coverage. |
+| Dependency open-api SDK | `SDKWORK_<APPLICATION_CODE>_<DEPENDENCY>_OPEN_API_BASE_URL` | `PORTAL_PUBLIC_<DEPENDENCY>_OPEN_API_BASE_URL` | `VITE_<APP_CODE>_<DEPENDENCY>_OPEN_API_BASE_URL` | Cloud: resolved from `platform.api-gateway` unless an explicit dependency surface override applies. Separate-process standalone deployment: resolved from the dependency's own public ingress. Same-process embedded consumption `MUST NOT` use this variable (section 2.3 of `APPLICATION_GATEWAY_SPEC.md`). |
+| Dependency app-api SDK | `SDKWORK_<APPLICATION_CODE>_<DEPENDENCY>_APP_API_BASE_URL` | `PORTAL_PUBLIC_<DEPENDENCY>_APP_API_BASE_URL` | `VITE_<APP_CODE>_<DEPENDENCY>_APP_API_BASE_URL` | Cloud: resolved from `platform.api-gateway`. Separate-process standalone deployment: resolved from the dependency's own public ingress. Same-process embedded consumption `MUST NOT` use this variable (section 2.3 of `APPLICATION_GATEWAY_SPEC.md`). |
+| Dependency backend-api SDK | `SDKWORK_<APPLICATION_CODE>_<DEPENDENCY>_BACKEND_API_BASE_URL` | `PORTAL_PUBLIC_<DEPENDENCY>_BACKEND_API_BASE_URL` | `VITE_<APP_CODE>_<DEPENDENCY>_BACKEND_API_BASE_URL` | Cloud: resolved from `platform.api-gateway`. Separate-process standalone deployment: resolved from the dependency's own public ingress. Same-process embedded consumption `MUST NOT` use this variable (section 2.3 of `APPLICATION_GATEWAY_SPEC.md`). |
 
 Rules:
 
@@ -727,6 +727,11 @@ Rules:
   Dependency SDK same-origin defaults are allowed only when
   `dependencyApiSurfaces` records verified mount coverage for that dependency
   surface.
+- Server-side consumers running inside a gateway process `MUST NOT` resolve a
+  dependency base URL to the gateway's own listener origin. When the dependency
+  surface is embedded in the same process, consumption is in-process through
+  declared ports (`APPLICATION_GATEWAY_SPEC.md` section 2.3); the dependency
+  base URL family applies only when the dependency runs in a separate process.
 - Dependency backend-api SDK override variables such as
   `SDKWORK_<APPLICATION_CODE>_APPBASE_BACKEND_API_BASE_URL`,
   `PORTAL_PUBLIC_APPBASE_BACKEND_API_BASE_URL`, and

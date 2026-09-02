@@ -254,6 +254,218 @@ workspace selected by the cloud gateway component contract, requires that worksp
 gateway, and applies the same complete-hosting checks. Unrelated workspace applications do not
 block that application-scoped release gate.
 
+### 4.1.1 Module Registry Composition (`addModule` / `addModules`)
+
+The canonical host-side integration front door is the Web Framework module
+registry `ApiModuleRegistry` (`sdkwork_web_bootstrap::ApiModuleRegistry`). It is
+the framework-level equivalent of FastAPI `include_router` / NestJS
+`addModule`: every served module contributes one indivisible
+`ApiAssemblyContribution` (router + route manifest + OpenAPI + permission
+catalog + domain injectors + readiness) and the host registers those
+contributions by owner.
+
+#### Module Definition (`WebModule`)
+
+A module is one application's complete, independently installable HTTP
+definition — the SDKWork equivalent of a FastAPI `APIRouter` bundle or a NestJS
+module. `WebModule` (`sdkwork_web_bootstrap::WebModule`) bundles an owner
+identity, a title, and every surface contribution the module serves:
+
+- **One contribution per served owner.** A module's app-api, backend-api and
+  other business surfaces owned by the same application belong to a single
+  indivisible `ApiAssemblyContribution`; a separately served owner (for example
+  an anonymous open surface contributed as `sdkwork-<code>-open`) is a second
+  contribution inside the same module.
+- **The module owns its surfaces; the host installs the module.** Hosts never
+  assemble a module's routes surface by surface — they call
+  `add_module(WebModule)` once per module.
+- Each served owner assembly `MUST` export the canonical module factory
+  `web_module()` next to its contribution factories, plus the composition
+  variant its host profiles require:
+
+  ```rust
+  // Canonical: bootstraps the module's own dependencies from the process
+  // environment and returns its complete surface set. Always required.
+  pub async fn web_module() -> Result<WebModule, String>;
+
+  // Platform cloud gateway profile: composes on the process-shared pool.
+  // Required whenever `assemble_api_router_with_pool` is exported.
+  pub async fn web_module_with_pool(pool: DatabasePool) -> Result<WebModule, String>;
+
+  // Host-supplied state profiles. Used when the module cannot bootstrap itself
+  // from the environment alone; `web_module()` delegates to these.
+  pub async fn web_module_with_context(context: ApiAssemblyContext) -> Result<WebModule, String>;
+  pub fn web_module_with_state(state: Arc<…State>) -> Result<WebModule, String>;
+  pub async fn web_module_with_config(config: &…Config) -> Result<WebModule, String>;
+  ```
+
+  The factory returns a `WebModule` built from the owner's complete
+  contribution set (every selected surface). Existing per-surface contribution
+  factories stay available for federated hosts; new host integrations `MUST`
+  install the module.
+
+- `web_module()` `MUST NOT` reach another process over HTTP to obtain its own
+  routes (§2.3 of `APPLICATION_GATEWAY_SPEC.md`). A module that needs runtime
+  state opens it in-process — from the environment, from the process-shared
+  pool, or from caller-supplied state — and never forwards to its own listener.
+- An assembly that owns no HTTP surface of its own (a pure dependency
+  composition such as `sdkwork-games`) `MUST` still export `web_module()`; the
+  module is then the set of dependency-owned contributions it composes, and its
+  documentation `MUST` state that the owner contributes no routes itself.
+- An application declared with `"apiMode": "none"` and an empty `routeCrates`
+  list (`sdkwork-audio`, `sdkwork-video`, `sdkwork-tts`, `sdkwork-terminal`,
+  `sdkwork-codebox`, …) still `MUST` export `web_module()`. Such a module serves
+  an empty router, but it is not an empty *object*: it carries the owner
+  identity, the title, an empty route manifest, an OpenAPI document, a
+  permission catalog and a readiness check, so every host publishes the same
+  contract. `ApiAssembly` `MUST` be a type alias for `ApiAssemblyContribution`
+  and the assembly `MUST` be built through `ApiAssemblyContribution::from_manifest`
+  (the `sdkwork-birdcoder2` shape):
+
+  ```rust
+  pub type ApiAssembly = ApiAssemblyContribution;
+
+  pub fn assemble_api_router() -> ApiAssembly {
+      ApiAssemblyContribution::from_manifest(
+          "sdkwork-<code>",
+          "SDKWork <Title> API",
+          Router::new(),
+          HttpRouteManifest::from_owned_routes(Vec::new()),
+          Vec::new(),
+          std::sync::Arc::new(sdkwork_web_bootstrap::AlwaysReady),
+      )
+      .unwrap_or_else(|error| panic!("sdkwork-<code> API assembly failed: {error}"))
+  }
+
+  pub fn web_module() -> Result<WebModule, String> {
+      Ok(WebModule::from_contribution(assemble_api_router()))
+  }
+  ```
+
+  Declaring `pub struct ApiAssembly { pub router: Router }` and feeding that
+  struct to `WebModule::from_contribution` is a contract violation: the struct
+  carries no manifest, OpenAPI document, permission catalog or readiness check.
+  `tools/check-web-module-contribution-projection.mjs` fails both shapes.
+
+#### Export Completeness
+
+The assembly crate is the module's public contract, so `lib.rs` `MUST`
+re-export every factory the module's own hosts import. Generated `lib.rs`
+templates start from the canonical name list only, and hand-written standalone
+gateways routinely import additional factories
+(`assemble_api_router_from_env`, `assemble_api_router_runtime`,
+`build_router_from_business`, …). A missing re-export is an E0432/E0425 at the
+host and a broken module contract, not a host bug:
+
+- Every `pub` factory in `bootstrap.rs` that a host inside the same repository
+  references `MUST` appear in the `pub use bootstrap::{…};` list.
+- Hosts `MUST NOT` import a module-private path to work around a missing
+  re-export.
+- `tools/repair-missing-assembly-exports.mjs` reconstructs the list from
+  compiler output when a template drops names.
+
+#### Host Integration Form
+
+Hosts install modules on one registry and then compose:
+
+```rust
+let mut module_registry = ApiModuleRegistry::new();
+module_registry.add_modules(vec![web_module().await?]);
+// …or add_module(web_module().await?) one module at a time
+let app = module_registry
+    .try_compose("SDKWork <App> API")?
+    .into_hosted(framework)
+    .router;
+```
+
+`ApiModuleRegistry::with_module` / `with_modules` are consuming builders for
+the same registration, for hosts that compose in a single expression.
+
+`try_compose` returns `Result<ComposedApiAssembly, String>`, so the composition
+expression `MUST` carry exactly one error handler, and it `MUST` match the
+enclosing function:
+
+- In a function returning `Result` whose error converts from `String`
+  (`Box<dyn Error>`, `anyhow::Error`, `String`, …): a trailing `?`, optionally
+  preceded by one `.map_err(…)`.
+
+  ```rust
+  let composed = module_registry.try_compose("SDKWork <App> API")?;
+  // or
+  let composed = module_registry
+      .try_compose("SDKWork <App> API")
+      .map_err(std::io::Error::other)?;
+  ```
+
+- In a function returning `()` (for example `#[tokio::main] async fn main()`):
+  `.expect(…)` / `.unwrap_or_else(…)` instead of `?`.
+
+  ```rust
+  let composed = module_registry
+      .try_compose("SDKWork <App> API")
+      .expect("<app> API composition failed");
+  ```
+
+Common violations, all rejected by the compiler and by review:
+
+- `?` followed by another `Result` combinator
+  (`try_compose(…)?.expect(…)` / `try_compose(…)?.map_err(…)?`) — `?` already
+  unwraps, so `expect`/`map_err` resolve against `ComposedApiAssembly` (E0599).
+- No handler at all, leaving a bare `Result` that the following code
+  dereferences (`composed.route_manifest` → E0609).
+- `?` inside a function that returns `()` (E0277).
+- Dropping `let mut` from a binding whose field the host assigns afterwards
+  (`composed.readiness_check = …` → E0594).
+
+`tools/repair-try-compose-question-mark.mjs`,
+`tools/repair-try-compose-propagation.mjs`,
+`tools/repair-dropped-try-compose-result.mjs` and
+`tools/repair-missing-mut.mjs` repair each of these from compiler output.
+
+#### Verification
+
+`tools/check-web-module-adoption.mjs --workspace <root> --strict` fails when any
+served owner assembly is missing `web_module` (or `web_module_with_pool` while
+exporting `assemble_api_router_with_pool`), or when any standalone gateway that
+serves routes does not install them through
+`ApiModuleRegistry::add_module`. `tools/migrate-web-modules.mjs` performs the
+corresponding mechanical migration.
+
+#### Registration Semantics
+
+Rules:
+
+- Standalone gateways and the platform cloud gateway `MUST` assemble served
+  routes through one `ApiModuleRegistry`: `add_module` (or `add_modules`) for
+  every selected module, then `try_compose(title)` (or
+  `into_hosted(title, framework)`) to validate and bind. A bare
+  `ApiAssemblyContribution` converts into a single-surface `WebModule`, so
+  contribution-only dependencies keep working during migration. Direct
+  `ComposedApiAssembly::try_compose` remains permitted for hosts that already
+  validate contributions themselves, but new integration work `MUST` prefer the
+  registry.
+- **Duplicate registration is ignored, not fatal.** Registering the same owner
+  more than once is tolerated: the first registration wins, later duplicates
+  are skipped with a `tracing` warning and recorded in
+  `ApiModuleRegistry::ignored_duplicates()`. This makes free composition of
+  route modules idempotent — an application may be listed by two integration
+  paths (for example as a direct host dependency and again through an
+  aggregation module) without breaking composition.
+- Module-level duplicate tolerance never relaxes §4.2.1 route-level
+  uniqueness. Two *different* owners claiming the same normalized
+  `(surface, method, path)` still fail `try_compose` closed.
+- Registration order is composition order: the host `SHOULD` register its own
+  contribution first, then dependency modules, so ownership tie-breaks and
+  manifest ordering stay deterministic.
+- The registry is host-side only. Owner assembly bootstrap paths `MUST NOT`
+  construct or compose a registry (§4.1); they return host-neutral
+  contributions.
+
+The static closure gate accepts either composition front door:
+`ApiModuleRegistry` with `add_module`/`try_compose`, or
+`ComposedApiAssembly::try_compose` — both followed by `.into_hosted(...)`
+(see `tools/check-api-assembly-integration-closure.mjs`).
+
 ## 4.2 Cross-Module Composition Dedup And Collision Resolution
 
 Any host that composes multiple assemblies (the platform cloud gateway and any
@@ -511,6 +723,38 @@ Only the `sdkwork-api-cloud-gateway` repository owns the platform cloud gateway
 process. It selects and consumes approved application assemblies, validates
 cross-assembly route collisions, and mounts process infrastructure once.
 
+#### 6.2.1 Cloud Gateway Installs Modules, Not Contributions
+
+The platform cloud gateway is the integration of every dependency module's API
+routes, so it `MUST` install each embedded dependency through that dependency's
+own `WebModule` factory (`§4.1.1`) rather than reaching into the dependency's
+assembly internals:
+
+- Every `#[cfg(feature = "foundation-*")]` selection block `MUST` obtain a
+  `WebModule` from the dependency crate (`web_module`, `web_module_with_pool`,
+  `web_module_with_context`, `web_module_with_pool_for_environment`, or a
+  declared variant) and collect it into `Vec<WebModule>`.
+- The gateway `MUST NOT` project dependency fields into a hand-written
+  `ApiAssemblyContribution { .. }` literal. A contribution is the dependency's
+  own definition; rebuilding it in the host re-couples the host to dependency
+  internals and silently drops surfaces the dependency later adds.
+- Dependency-owned concerns `MUST` move into the dependency module. OpenAPI
+  enrichment in particular belongs to the module that authors the document, so
+  every host publishes the same contract instead of restamping it per host.
+- Runtime artefacts that are a *host* concern (background `JoinHandle`s, IM
+  runtime handles, realtime planes) `MAY` be handed back to the host by a
+  paired factory (`web_module_with_pool_retaining_background`,
+  `web_module_with_realtime_bootstrap`). The module still owns the complete
+  route definition; only task shutdown moves to the host.
+- The collected modules `MUST` be installed through
+  `ApiModuleRegistry::add_modules` so duplicate registrations are ignored
+  (`§4.1.1`) and cross-owner route collisions still fail closed. Ignored
+  duplicates `MUST` be logged.
+- A host-specific context (for example
+  `ApiAssemblyContext::cloud_gateway()`) `MUST` be passed through the
+  `web_module_with_context` variant instead of calling a context-taking
+  assembly entrypoint directly.
+
 Application repositories may publish assembly source or artifacts for platform
 composition, but they `MUST NOT` declare the cloud gateway as a Cargo, pnpm,
 topology, source-config, build, test, or release dependency.
@@ -650,6 +894,10 @@ node ../sdkwork-specs/tools/audit-api-assembly-workspace.mjs --workspace ..
 node ../sdkwork-specs/tools/check-application-cloud-gateway-boundary.mjs --workspace ..
 node ../sdkwork-specs/tools/check-api-assembly-integration-closure.mjs --workspace .. --strict-standalone-hosting
 node ../sdkwork-specs/tools/check-cross-module-api-collisions.mjs --workspace ..
+node ../sdkwork-specs/tools/check-web-module-adoption.mjs --workspace .. --strict
+node ../sdkwork-specs/tools/check-web-module-exports.mjs ..
+node ../sdkwork-specs/tools/check-web-module-contribution-projection.mjs --workspace ..
+node ../sdkwork-specs/tools/check-embedded-self-loop.mjs --workspace ..
 ```
 
 Gateway hosts additionally run the gateway-view dedup gate:
