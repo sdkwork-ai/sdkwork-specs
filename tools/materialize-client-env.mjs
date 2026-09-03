@@ -232,12 +232,46 @@ export function applyViteSurfaceCloudValues(values, sourceValues, profile) {
       }
     }
   }
+  if (isDevelopment && localGatewayUrl) {
+    // Browser-visible anchor (APP_RUNTIME_TOPOLOGY_SPEC section 4.2, SDK_SPEC
+    // section 5.1 step 2): frontend SDK integrations read the local gateway
+    // from import.meta.env before any checked-in environment domain fallback.
+    projected.VITE_SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL = localGatewayUrl;
+  }
   return projected;
 }
 
-function applyCloudGatewayProjection(values, deploymentIndex, profile, repositoryRoot) {
+function applyCloudGatewayProjection(values, deploymentIndex, profile, repositoryRoot, sourceValues = {}) {
   if (profile.deploymentProfile !== 'cloud') {
     return values;
+  }
+  // APP_RUNTIME_TOPOLOGY_SPEC section 4.2: dev:cloud binds local for every
+  // surface, including non-vite JSON runtime env (flutter, mini-program).
+  // The registered domain families stay available for builds through
+  // cloudApiBaseUrls and the deployment index, not through dev runtime keys.
+  const localGatewayUrl = String(sourceValues.SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL ?? values.SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL ?? '').trim();
+  if (profile.environment === 'development' && REWRITABLE_URL_VALUE_PATTERN.test(localGatewayUrl)) {
+    const projected = { ...values };
+    for (const key of Object.keys(projected)) {
+      if (!shouldExpandCloudGatewayKey(key)) {
+        continue;
+      }
+      const value = String(projected[key] ?? '').trim();
+      if (!REWRITABLE_URL_VALUE_PATTERN.test(value)) {
+        continue;
+      }
+      const primaryOrigin = value.includes(';') ? value.split(';')[0].trim() : value;
+      let parsed;
+      try {
+        parsed = new URL(primaryOrigin);
+      } catch {
+        continue;
+      }
+      const localParsed = new URL(localGatewayUrl);
+      const scheme = /^wss?:\/\//iu.test(value) ? (localGatewayUrl.startsWith('https') ? 'wss' : 'ws') : localParsed.protocol.replace(':', '');
+      projected[key] = `${scheme}://${localParsed.host}${parsed.pathname === '/' ? '' : parsed.pathname}${parsed.search}`;
+    }
+    return projected;
   }
   const materialized = cloudSdkBaseUrlMaterializationValue(
     resolveCloudApiOriginListForRepository({
@@ -506,6 +540,7 @@ export function materializeClientEnv({
             deploymentIndex,
             sourceProfile.profile,
             normalizedRoot,
+            sourceProfile.values,
           );
       const content = surface.format === 'vite'
         ? serializeDotenv({

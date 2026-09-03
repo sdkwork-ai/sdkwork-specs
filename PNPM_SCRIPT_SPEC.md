@@ -161,7 +161,8 @@ Development profile rules:
 - `stop` after `dev:cloud` stops only processes created by the local
   development session and never operates on deployed cloud services.
 
-Cloud-mode development domain access:
+Cloud-mode development domain access (normative body and SDK base URL
+resolution: `APP_RUNTIME_TOPOLOGY_SPEC.md` §4.2, `SDK_SPEC.md` §5.1):
 
 - `dev:cloud` in every repository `MUST` bind its client base URLs to the
   locally started platform gateway development process (the base URL exposed

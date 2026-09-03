@@ -234,6 +234,72 @@ Resolution rules:
   `cloud.development` profile does not fall back to the production host or to a
   loopback URL.
 
+### 4.2 Runtime Binding Versus Build Binding
+
+Every client-facing base URL (SDK clients, browser runtime env, mini-program and
+mobile runtime env, dev proxy targets) is bound in exactly one mode. The mode
+follows the consuming lifecycle step, never the file that declares it.
+
+| Lifecycle step | Bound target | Source of the value |
+| --- | --- | --- |
+| `dev:cloud` runtime | Local platform gateway `ip:port` | `SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL` (normally `http://127.0.0.1:3900`) |
+| Cloud-mode build (`build:<client>:<env>:cloud`) | Environment cloud API edge | `cloudApiBaseUrl` host family for that environment |
+| Deployed runtime | The deployed edge that owns the profile | `cloudPublicHosts` / `public/runtime-env.js` deployment anchor |
+
+Environment cloud API edge host family (`platform.api-gateway`, one registered
+`<base-domain>` family per environment):
+
+| Environment | Host family | Example |
+| --- | --- | --- |
+| `development` | `api-dev.<base-domain>` | `https://api-dev.sdkwork.com` |
+| `test` | `api-test.<base-domain>` | `https://api-test.sdkwork.com` |
+| `staging` | `api-staging.<base-domain>` | `https://api-staging.sdkwork.com` |
+| `demo` | `api-demo.<base-domain>` | `https://api-demo.sdkwork.com` |
+| `production` | `api.<base-domain>` | `https://api.sdkwork.com` |
+
+Rules:
+
+- **`dev:cloud` binds local.** Every `cloud.development` artifact that a
+  development process or a browser dev surface consumes `MUST` resolve
+  platform-gateway-attached base URLs to the local gateway `ip:port`. This
+  covers topology profile env, vite dotenv surfaces (`.env.cloud.development`),
+  browser/mini-program/mobile runtime env
+  (`runtime-env.cloud.development.json`, `sdkwork.cloud.development.json`),
+  `public/runtime-env.json` materializations, and generated SDK client
+  construction. No `api-<suffix>.<base-domain>` value `MAY` appear in a
+  `cloud.development` artifact.
+- **Cloud-mode builds bind the environment domain family.** `build:*` for a
+  cloud profile `MUST` use the environment host family of the table above
+  (`development` → `api-dev.`, `test` → `api-test.`, `staging` →
+  `api-staging.`, `demo` → `api-demo.`, `production` → `api.`) and `MUST NOT`
+  introduce loopback or `127.0.0.1` values.
+- **Never cross the boundary.** A value bound for dev runtime is not a build
+  input and vice versa. A repository that materializes the same source into
+  both surfaces `MUST` select the binding by profile id and lifecycle step.
+- **Standalone is unaffected.** Standalone profiles resolve loopback/same-origin
+  values through their own rules; they never consume `cloudPublicHosts`.
+- **WebSocket edges follow their HTTP origin.** A `ws(s)://` edge attached to
+  the platform gateway is rewritten together with its HTTP counterpart
+  (`https` → `wss`, `http` → `ws`).
+- **Paths are preserved.** Rebinding replaces origin only; declared API
+  prefixes such as `/backend/v3/api` survive the rewrite.
+- **Separate service edges stay remote.** Dependency-owned hosts that are not
+  the platform gateway (agents, voice, drive application hosts, ...) keep their
+  registered values even under `dev:cloud`, `PNPM_SCRIPT_SPEC.md` §3.
+
+SDK base URL resolution chain (`SDK_SPEC.md` §5). Every SDK integration
+`MUST` resolve its base URL in this order; the first hit wins:
+
+1. Explicit process or dotenv override for the running profile.
+2. `dev:cloud` local gateway anchor, only when the active profile is
+   `cloud.development` and the anchor is declared.
+3. The materialized artifact value for the active profile.
+4. The environment host family of the table above for build/deploy targets.
+
+Hardcoding an `api-<suffix>.<base-domain>` value as a client default or fallback
+is forbidden: a default that a `dev:cloud` session can reach is a dev-runtime
+leak, whether or not an env key would normally override it.
+
 ## 5. Archetypes
 
 Applications declare `archetype` in `specs/topology.spec.json`. Definitions

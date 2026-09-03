@@ -642,6 +642,40 @@ Rules:
 - Runtime/bootstrap configuration follows `CONFIG_SPEC.md`.
 - SDK clients must remain stateless with respect to login orchestration except for holding the provided `TokenManager` or open-api credential provider reference. They must not cache auth/access/refresh token values independently of those providers.
 
+#### 5.1 SDK Base URL Resolution
+
+Every generated SDK client, generated SDK factory, and hand-written SDK
+integration resolves its base URL through the chain in
+`APP_RUNTIME_TOPOLOGY_SPEC.md` §4.2, in order:
+
+1. Explicit process or dotenv override for the running profile
+   (`*_PLATFORM_API_GATEWAY_HTTP_URL`, client env keys, or the runtime env
+   `api.baseUrl` / `appApiBaseUrl` / `backendApiBaseUrl` fields).
+2. The `dev:cloud` local gateway anchor
+   `SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL`, only when the active profile
+   is `cloud.development` and the anchor is declared.
+3. The materialized artifact value for the active profile (`.env.<profileId>`,
+   `runtime-env.<profileId>.json`, `sdkwork.<profileId>.json`).
+4. The environment host family (`api-dev.` / `api-test.` / `api-staging.` /
+   `api-demo.` / `api.`) for build and deploy targets.
+
+Rules:
+
+- An SDK integration `MUST NOT` hardcode an `api-<suffix>.<base-domain>` value
+  as its default or environment-switch fallback. A `switch (environment)`
+  ladder whose `development` branch returns `https://api-dev.<base-domain>` is
+  a dev-runtime leak even when an env key usually overrides it.
+- OpenAPI `servers` entries are contract metadata for build-time consumption.
+  Generated clients `MUST` accept an explicit base URL from the integration
+  layer and `MUST NOT` fall back to an OpenAPI `servers` host at runtime for
+  `cloud.development`.
+- The same chain applies to browser, mini-program, and mobile runtime env
+  readers: the reader resolves step 2 for `cloud.development` before it uses
+  any checked-in artifact value.
+- Tests that assert a remote `api-<suffix>.<base-domain>` default `MUST` be
+  updated to the chain; asserting a domain default under `cloud.development`
+  is a contract violation.
+
 ## 6. Generated Package Quality
 
 Rules:
