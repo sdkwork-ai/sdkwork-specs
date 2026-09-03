@@ -325,7 +325,10 @@ Rules:
   routes the canonical prefixes (`/app/v3/api`, `/backend/v3/api`, dependency
   prefixes) to the owning services. Per-service browser-facing hostnames
   (`server-app-dev.*`, `server-admin-*`) `MUST NOT` be used as browser SDK
-  base URLs in cloud profiles.
+  base URLs in cloud profiles. This full-family requirement governs build and
+  deploy runtime documents; development dotenv surfaces (`dev:cloud`) are
+  excluded — they bind single-origin base URLs to the locally started gateway
+  (PNPM_SCRIPT_SPEC §3, cloud-mode development domain access).
 - Navigation-only URLs (messaging, portal, docs) that are not SDK API bases
   may remain explicit per-service hostnames and are validated as absolute
   HTTP(S) URLs only.

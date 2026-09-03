@@ -154,6 +154,46 @@ function assertCloudClientUrls(values, profile) {
   }
 }
 
+/**
+ * Vite dotenv surfaces are dev/runtime conveniences consumed by `vite dev`
+ * (`loadEnv` + dev proxy) and by `vite build --mode <profile>`. They must carry
+ * single-origin URL values: the ';'-joined multi-origin cloud API materialization
+ * is a build/deploy runtime document concern (ENVIRONMENT_SPEC §5.1.0.1) and is
+ * not parseable by URL-consuming dev surfaces (vite proxy targets, SDK base URL
+ * readers).
+ *
+ * Cloud profiles therefore keep their topology source values (single origins)
+ * except:
+ * - cloud.development binds every platform gateway / router application base
+ *   URL to the locally started sdkwork-api-cloud-gateway (`pnpm dev`, bind
+ *   127.0.0.1:3900) declared via SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL,
+ *   so `pnpm dev:cloud` quick-starts and debugs against the local gateway.
+ * - higher cloud environments fold the primary (first) registered origin so
+ *   stale multi-origin values never leak into dotenv surfaces.
+ */
+export function applyViteSurfaceCloudValues(values, sourceValues, profile) {
+  if (profile.deploymentProfile !== 'cloud') {
+    return values;
+  }
+  const localGatewayUrl = String(sourceValues.SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL ?? '').trim();
+  const projected = { ...values };
+  for (const [key, value] of Object.entries(projected)) {
+    const isGatewayOrApplicationUrl = /PLATFORM_API_GATEWAY_HTTP_URL$|ROUTER_APPLICATION_(?:PUBLIC|OPEN|BACKEND)_HTTP_URL$/u.test(key);
+    if (isGatewayOrApplicationUrl && profile.environment === 'development' && localGatewayUrl) {
+      projected[key] = localGatewayUrl;
+      continue;
+    }
+    const raw = String(value ?? '');
+    if (raw.includes(';')) {
+      const primaryOrigin = raw.split(';')[0]?.trim();
+      if (primaryOrigin) {
+        projected[key] = primaryOrigin;
+      }
+    }
+  }
+  return projected;
+}
+
 function applyCloudGatewayProjection(values, deploymentIndex, profile, repositoryRoot) {
   if (profile.deploymentProfile !== 'cloud') {
     return values;
@@ -400,16 +440,26 @@ export function materializeClientEnv({
     );
     for (const surface of config.surfaces) {
       const outputPath = resolveSurfaceOutputPath(normalizedRoot, surface, profileId);
-      const values = applyCloudGatewayProjection(
-        createClientSurfaceValues({
-          surface,
-          sourceValues,
-          profile: sourceProfile.profile,
-        }),
-        deploymentIndex,
-        sourceProfile.profile,
-        normalizedRoot,
-      );
+      // Vite dotenv surfaces consume raw single-origin topology values plus the
+      // cloud dev-local gateway override; non-vite (build runtime document)
+      // surfaces keep the full ';'-joined cloud API origin materialization.
+      const isViteSurface = surface.format === 'vite';
+      const surfaceSourceValues = isViteSurface
+        ? sourceProfile.values
+        : expandCloudGatewayUrls(sourceValues, deploymentIndex, sourceProfile.profile, normalizedRoot);
+      const surfaceValues = createClientSurfaceValues({
+        surface,
+        sourceValues: surfaceSourceValues,
+        profile: sourceProfile.profile,
+      });
+      const values = isViteSurface
+        ? applyViteSurfaceCloudValues(surfaceValues, sourceProfile.values, sourceProfile.profile)
+        : applyCloudGatewayProjection(
+            surfaceValues,
+            deploymentIndex,
+            sourceProfile.profile,
+            normalizedRoot,
+          );
       const content = surface.format === 'vite'
         ? serializeDotenv({
             values,

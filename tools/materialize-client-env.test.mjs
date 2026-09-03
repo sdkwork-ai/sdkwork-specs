@@ -3,21 +3,66 @@ import test from 'node:test';
 
 import {
   CLIENT_ENV_PROFILE_IDS,
+  applyViteSurfaceCloudValues,
   createClientSurfaceValues,
   parseClientEnvDotenv,
 } from './materialize-client-env.mjs';
 
-test('canonical client profile matrix contains both deployment profiles and four environments', () => {
+test('canonical client profile matrix contains both deployment profiles and five environments', () => {
   assert.deepEqual(CLIENT_ENV_PROFILE_IDS, [
     'standalone.development',
     'standalone.test',
     'standalone.staging',
+    'standalone.demo',
     'standalone.production',
     'cloud.development',
     'cloud.test',
     'cloud.staging',
+    'cloud.demo',
     'cloud.production',
   ]);
+});
+
+test('vite cloud dev surface binds gateway and application URLs to the local gateway', () => {
+  const sourceValues = {
+    SDKWORK_CLOUDROUTER_ROUTER_PLATFORM_API_GATEWAY_HTTP_URL: 'https://api-dev.sdkwork.com',
+    SDKWORK_CLOUDROUTER_ROUTER_APPLICATION_PUBLIC_HTTP_URL: 'http://router-dev.sdkwork.com:3905',
+    SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL: 'http://127.0.0.1:3900',
+  };
+  const values = applyViteSurfaceCloudValues(
+    {
+      VITE_SDKWORK_CLOUDROUTER_ROUTER_PLATFORM_API_GATEWAY_HTTP_URL: 'https://api-dev.sdkwork.com;https://api-dev.birdcoder.com',
+      VITE_SDKWORK_CLOUDROUTER_ROUTER_APPLICATION_PUBLIC_HTTP_URL: 'http://router-dev.sdkwork.com:3905',
+      VITE_SDKWORK_DRIVE_BACKEND_API_BASE_URL: 'https://api-dev.sdkwork.com;https://api-dev.birdcoder.com',
+    },
+    sourceValues,
+    { deploymentProfile: 'cloud', environment: 'development', profileId: 'cloud.development' },
+  );
+  assert.equal(values.VITE_SDKWORK_CLOUDROUTER_ROUTER_PLATFORM_API_GATEWAY_HTTP_URL, 'http://127.0.0.1:3900');
+  assert.equal(values.VITE_SDKWORK_CLOUDROUTER_ROUTER_APPLICATION_PUBLIC_HTTP_URL, 'http://127.0.0.1:3900');
+  // Dependency surface (drive) is not the platform gateway: it keeps a
+  // single-origin value and must never receive the ';'-joined family.
+  assert.equal(values.VITE_SDKWORK_DRIVE_BACKEND_API_BASE_URL, 'https://api-dev.sdkwork.com');
+});
+
+test('vite cloud higher-environment surface folds to the primary single origin', () => {
+  const values = applyViteSurfaceCloudValues(
+    {
+      VITE_SDKWORK_CLOUDROUTER_ROUTER_PLATFORM_API_GATEWAY_HTTP_URL: 'https://api-test.sdkwork.com;https://api-test.birdcoder.com',
+    },
+    {},
+    { deploymentProfile: 'cloud', environment: 'test', profileId: 'cloud.test' },
+  );
+  assert.equal(values.VITE_SDKWORK_CLOUDROUTER_ROUTER_PLATFORM_API_GATEWAY_HTTP_URL, 'https://api-test.sdkwork.com');
+});
+
+test('vite standalone surface is untouched by cloud value projection', () => {
+  const values = applyViteSurfaceCloudValues(
+    { VITE_SDKWORK_CLOUDROUTER_ROUTER_APPLICATION_PUBLIC_HTTP_URL: 'http://127.0.0.1:3905' },
+    {},
+    { deploymentProfile: 'standalone', environment: 'development', profileId: 'standalone.development' },
+  );
+  assert.equal(values.VITE_SDKWORK_CLOUDROUTER_ROUTER_APPLICATION_PUBLIC_HTTP_URL, 'http://127.0.0.1:3905');
 });
 
 test('vite projection emits generic and application-scoped identity', () => {

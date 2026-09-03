@@ -163,11 +163,20 @@ Development profile rules:
 
 Cloud-mode development domain access:
 
-- `dev:cloud` `MUST` target the environment cloud API edge origins declared in
-  `cloudApiBaseUrl` (`https://api-dev.<base-domain>`,
-  `ENVIRONMENT_SPEC.md` §5.1.0.1). It `MUST NOT` substitute loopback origins,
-  per-service hostnames (`server-app-dev.*`), or hardcode a single
-  `<base-domain>` when the deployment config registers several.
+- `dev:cloud` `MUST` bind its client base URLs to the locally started platform
+  gateway development process (the base URL exposed by the platform API
+  gateway repository's `dev` command, for example `http://127.0.0.1:3900`), so
+  a developer can quick-start, deploy, and debug against one local edge
+  process. It `MUST NOT` hardcode remote `api-dev.<base-domain>` domains into
+  the dev surface: domain-based access is a cloud-mode build concern, not a
+  dev concern.
+- Cloud-mode **builds** are the domain-based surfaces: `build:<client>:<env>:cloud`
+  (§4.2) `MUST` consume the environment cloud API edge origins declared in
+  `cloudApiBaseUrl` (`https://api-dev.<base-domain>` … `https://api.<base-domain>`,
+  `ENVIRONMENT_SPEC.md` §5.1.0.1). Build/deploy runtime documents keep the full
+  registered `<base-domain>` family; dev dotenv surfaces keep single-origin
+  values that URL-consuming dev tooling (dev proxy targets, SDK base URL
+  readers) can parse.
 - Higher environments are consumed in cloud mode through the build families of
   §4.2 (`build:<client>:test:cloud`, `build:<client>:staging:cloud`,
   `build:<client>:prod:cloud`) against the deployed
