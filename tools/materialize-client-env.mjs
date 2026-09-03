@@ -26,6 +26,15 @@ export const CLIENT_ENV_PROFILE_IDS = CLIENT_ENV_DEPLOYMENT_PROFILES.flatMap(
 const SECRET_KEY_PATTERN = /(?:ACCESS|AUTH|REFRESH|INGRESS|UPLOAD|API)_TOKEN(?:_|$)|PASSWORD|SECRET|PRIVATE_KEY|DATABASE_URL|REDIS_URL|CREDENTIAL/u;
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1']);
 const DEFAULT_CONFIG_PATH = 'etc/client-env.materialization.json';
+const REWRITABLE_URL_VALUE_PATTERN = /^(?:https?|wss?):\/\//iu;
+
+function parseUrlHost(value) {
+  try {
+    return new URL(String(value ?? '').trim()).host;
+  } catch {
+    return '';
+  }
+}
 
 function parseArgs(argv) {
   const options = {
@@ -164,10 +173,16 @@ function assertCloudClientUrls(values, profile) {
  *
  * Cloud profiles therefore keep their topology source values (single origins)
  * except:
- * - cloud.development binds every platform gateway / router application base
- *   URL to the locally started sdkwork-api-cloud-gateway (`pnpm dev`, bind
- *   127.0.0.1:3900) declared via SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL,
- *   so `pnpm dev:cloud` quick-starts and debugs against the local gateway.
+ * - cloud.development binds every gateway-attached base URL to the locally
+ *   started sdkwork-api-cloud-gateway (its own dev command, bind 127.0.0.1:3900)
+ *   declared via SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL, so `dev:cloud`
+ *   quick-starts and debugs against the local gateway. Gateway-attached means
+ *   the platform gateway key itself (the SDKWORK or VITE PLATFORM_API_GATEWAY_HTTP_URL
+ *   forms),
+ *   router application edges (cloudrouter), and any key whose host matches the
+ *   deployed platform gateway host (SDK/open-API/base URLs anchored to the
+ *   gateway edge). Separate service edges (agents, voice, drive app hosts, ...)
+ *   keep their remote values.
  * - higher cloud environments fold the primary (first) registered origin so
  *   stale multi-origin values never leak into dotenv surfaces.
  */
@@ -175,19 +190,45 @@ export function applyViteSurfaceCloudValues(values, sourceValues, profile) {
   if (profile.deploymentProfile !== 'cloud') {
     return values;
   }
+  const isDevelopment = profile.environment === 'development';
   const localGatewayUrl = String(sourceValues.SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL ?? '').trim();
-  const projected = { ...values };
-  for (const [key, value] of Object.entries(projected)) {
-    const isGatewayOrApplicationUrl = /PLATFORM_API_GATEWAY_HTTP_URL$|ROUTER_APPLICATION_(?:PUBLIC|OPEN|BACKEND)_HTTP_URL$/u.test(key);
-    if (isGatewayOrApplicationUrl && profile.environment === 'development' && localGatewayUrl) {
-      projected[key] = localGatewayUrl;
-      continue;
+  const localHost = isDevelopment && REWRITABLE_URL_VALUE_PATTERN.test(localGatewayUrl)
+    ? parseUrlHost(localGatewayUrl)
+    : '';
+  let gatewayHost = '';
+  if (localHost) {
+    for (const [key, value] of Object.entries(sourceValues)) {
+      if (!/(?:^|_)PLATFORM_API_GATEWAY_HTTP_URL$/u.test(key)) {
+        continue;
+      }
+      const host = parseUrlHost(value);
+      if (host && host !== localHost) {
+        gatewayHost = host;
+        break;
+      }
     }
-    const raw = String(value ?? '');
+  }
+  const projected = { ...values };
+  for (const [key, rawValue] of Object.entries(projected)) {
+    let raw = String(rawValue ?? '').trim();
     if (raw.includes(';')) {
+      // Fold stale multi-origin lists to the primary registered origin first:
+      // URL-consuming dev surfaces cannot parse ';'-joined origin lists.
       const primaryOrigin = raw.split(';')[0]?.trim();
       if (primaryOrigin) {
         projected[key] = primaryOrigin;
+        raw = primaryOrigin;
+      }
+    }
+    if (localHost && REWRITABLE_URL_VALUE_PATTERN.test(raw)) {
+      const host = parseUrlHost(raw);
+      const isGatewayKey = /PLATFORM_API_GATEWAY_HTTP_URL$|ROUTER_APPLICATION_(?:PUBLIC|OPEN|BACKEND)_HTTP_URL$/u.test(key);
+      if (host && host !== localHost && (isGatewayKey || (gatewayHost && host === gatewayHost))) {
+        const parsedUrl = new URL(raw);
+        const localBase = localGatewayUrl.replace(/\/+$/u, '');
+        projected[key] = /^wss?:\/\//iu.test(raw)
+          ? `${localGatewayUrl.startsWith('https') ? 'wss' : 'ws'}://${localHost}${parsedUrl.pathname === '/' ? '' : parsedUrl.pathname}${parsedUrl.search}`
+          : `${localBase}${parsedUrl.pathname === '/' ? '' : parsedUrl.pathname}${parsedUrl.search}`;
       }
     }
   }
@@ -439,6 +480,12 @@ export function materializeClientEnv({
       normalizedRoot,
     );
     for (const surface of config.surfaces) {
+      // Server-only repositories declare a "none" surface: they keep the
+      // profile vocabulary validated by loadSourceProfile but materialize no
+      // client artifacts.
+      if (surface.format === 'none') {
+        continue;
+      }
       const outputPath = resolveSurfaceOutputPath(normalizedRoot, surface, profileId);
       // Vite dotenv surfaces consume raw single-origin topology values plus the
       // cloud dev-local gateway override; non-vite (build runtime document)

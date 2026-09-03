@@ -33,16 +33,36 @@ test('vite cloud dev surface binds gateway and application URLs to the local gat
     {
       VITE_SDKWORK_CLOUDROUTER_ROUTER_PLATFORM_API_GATEWAY_HTTP_URL: 'https://api-dev.sdkwork.com;https://api-dev.birdcoder.com',
       VITE_SDKWORK_CLOUDROUTER_ROUTER_APPLICATION_PUBLIC_HTTP_URL: 'http://router-dev.sdkwork.com:3905',
-      VITE_SDKWORK_DRIVE_BACKEND_API_BASE_URL: 'https://api-dev.sdkwork.com;https://api-dev.birdcoder.com',
+      VITE_SDKWORK_DRIVE_BACKEND_API_BASE_URL: 'https://drive-dev.sdkwork.com;https://drive-dev.birdcoder.com',
     },
     sourceValues,
     { deploymentProfile: 'cloud', environment: 'development', profileId: 'cloud.development' },
   );
   assert.equal(values.VITE_SDKWORK_CLOUDROUTER_ROUTER_PLATFORM_API_GATEWAY_HTTP_URL, 'http://127.0.0.1:3900');
   assert.equal(values.VITE_SDKWORK_CLOUDROUTER_ROUTER_APPLICATION_PUBLIC_HTTP_URL, 'http://127.0.0.1:3900');
-  // Dependency surface (drive) is not the platform gateway: it keeps a
-  // single-origin value and must never receive the ';'-joined family.
-  assert.equal(values.VITE_SDKWORK_DRIVE_BACKEND_API_BASE_URL, 'https://api-dev.sdkwork.com');
+  // Dependency surface (drive) has its own edge host: it is not gateway-attached,
+  // so it keeps a single-origin remote value and never receives the local bind.
+  assert.equal(values.VITE_SDKWORK_DRIVE_BACKEND_API_BASE_URL, 'https://drive-dev.sdkwork.com');
+});
+
+test('vite cloud dev surface rewrites gateway-attached SDK base URLs on the gateway host', () => {
+  const values = applyViteSurfaceCloudValues(
+    {
+      VITE_SDKWORK_AIOT_PLATFORM_API_GATEWAY_HTTP_URL: 'https://api-dev.sdkwork.com',
+      VITE_SDKWORK_DRIVE_APP_API_BASE_URL: 'https://api-dev.sdkwork.com',
+      VITE_SDKWORK_AGENTS_APP_API_BASE_URL: 'https://agents-dev.sdkwork.com',
+    },
+    {
+      SDKWORK_AIOT_PLATFORM_API_GATEWAY_HTTP_URL: 'https://api-dev.sdkwork.com',
+      SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL: 'http://127.0.0.1:3900',
+    },
+    { deploymentProfile: 'cloud', environment: 'development', profileId: 'cloud.development' },
+  );
+  assert.equal(values.VITE_SDKWORK_AIOT_PLATFORM_API_GATEWAY_HTTP_URL, 'http://127.0.0.1:3900');
+  // Same-host as the deployed gateway: gateway-attached, binds local.
+  assert.equal(values.VITE_SDKWORK_DRIVE_APP_API_BASE_URL, 'http://127.0.0.1:3900');
+  // Separate service edge host: stays remote.
+  assert.equal(values.VITE_SDKWORK_AGENTS_APP_API_BASE_URL, 'https://agents-dev.sdkwork.com');
 });
 
 test('vite cloud higher-environment surface folds to the primary single origin', () => {

@@ -163,13 +163,28 @@ Development profile rules:
 
 Cloud-mode development domain access:
 
-- `dev:cloud` `MUST` bind its client base URLs to the locally started platform
-  gateway development process (the base URL exposed by the platform API
-  gateway repository's `dev` command, for example `http://127.0.0.1:3900`), so
-  a developer can quick-start, deploy, and debug against one local edge
-  process. It `MUST NOT` hardcode remote `api-dev.<base-domain>` domains into
-  the dev surface: domain-based access is a cloud-mode build concern, not a
-  dev concern.
+- `dev:cloud` in every repository `MUST` bind its client base URLs to the
+  locally started platform gateway development process (the base URL exposed
+  by the `sdkwork-api-cloud-gateway` repository's `dev` command, for example
+  `http://127.0.0.1:3900`), so a developer can quick-start, deploy, and debug
+  against one local edge process. It `MUST NOT` hardcode remote
+  `api-dev.<base-domain>` domains into the dev surface: domain-based access is
+  a cloud-mode build concern, not a dev concern.
+- The opt-in anchor is the `SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL`
+  variable declared in `etc/topology/cloud.development.env` (normally
+  `http://127.0.0.1:3900`). Two aligned consumers bind gateway-attached base
+  URLs to it for `cloud.development`:
+  - Runtime (`@sdkwork/app-topology`): `sdkwork-app dev` rewrites
+    `*_PLATFORM_API_GATEWAY_HTTP_URL` entries and any URL entry whose host
+    matches the deployed platform gateway host (scheme-insensitive, so
+    `ws(s)://` edges match too) to the local gateway origin before spawning
+    dev processes; URL paths and query strings are preserved. Separate service
+    edges (agents, voice, drive application hosts, ...) keep their remote
+    values.
+  - Materialization (`sdkwork-specs/tools/materialize-client-env.mjs`): vite
+    dotenv surfaces (`.env.<profileId>`) apply the same binding (plus folding
+    of stale `;`-joined multi-origin lists to the primary origin), so
+    `loadEnv`-based dev servers and dev proxy targets resolve the local edge.
 - Cloud-mode **builds** are the domain-based surfaces: `build:<client>:<env>:cloud`
   (§4.2) `MUST` consume the environment cloud API edge origins declared in
   `cloudApiBaseUrl` (`https://api-dev.<base-domain>` … `https://api.<base-domain>`,

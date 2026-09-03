@@ -328,7 +328,13 @@ Rules:
   base URLs in cloud profiles. This full-family requirement governs build and
   deploy runtime documents; development dotenv surfaces (`dev:cloud`) are
   excluded — they bind single-origin base URLs to the locally started gateway
-  (PNPM_SCRIPT_SPEC §3, cloud-mode development domain access).
+  (PNPM_SCRIPT_SPEC §3, cloud-mode development domain access). Every
+  repository that runs `dev:cloud` `MUST` declare the local gateway anchor
+  `SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL=http://127.0.0.1:3900` in
+  `etc/topology/cloud.development.env`; the `@sdkwork/app-topology` dev
+  runtime and the client-env materializer bind gateway-attached base URLs to
+  that anchor for `cloud.development` only, while domain edges above stay
+  authoritative for cloud-mode builds and deployed services.
 - Navigation-only URLs (messaging, portal, docs) that are not SDK API bases
   may remain explicit per-service hostnames and are validated as absolute
   HTTP(S) URLs only.
@@ -930,7 +936,7 @@ Rules:
   `im:dev` are retired. The PostgreSQL development profile belongs to dev
   orchestration and any launched service runtime; it must not be treated as the
   installed desktop-local data store.
-- New application server SQLite commands, including `pnpm dev:server:sqlite`,
+- New application server SQLite commands, including `dev:server:sqlite`,
   are forbidden. Existing commands are L0 migration aliases only and require a
   dated migration record; they must not satisfy server development, test, or
   release gates. Desktop client commands such as `pnpm dev:desktop:sqlite`
