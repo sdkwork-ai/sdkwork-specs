@@ -1174,7 +1174,7 @@ Rules:
   or root `pnpm verify` when gateway crates or route crates change.
 - Application cloud-gateway boundary checks `MUST` run
   `node ../sdkwork-specs/tools/check-application-cloud-gateway-boundary.mjs --root .` and fail
-  on application Cargo/pnpm dependencies, startup scripts, source config,
+  on application Cargo or package-manager dependencies, startup scripts, source config,
   topology ownership, deployment bundles, or release assets that identify or
   operate `sdkwork-api-cloud-gateway`. They also `MUST` fail on the retired
   component `integration.foundationApiGateway` parallel contract.

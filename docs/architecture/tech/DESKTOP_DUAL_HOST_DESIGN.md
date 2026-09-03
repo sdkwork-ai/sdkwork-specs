@@ -644,13 +644,13 @@ apps/sdkwork-<application-code>-pc/
 ### 7.4 命令（遵循 `PNPM_SCRIPT_SPEC.md` action-first）
 
 ```text
-pnpm dev:desktop                     # 默认宿主 = tauri（向后兼容）
-pnpm dev:desktop:electron            # 显式 Electron 宿主
-pnpm build:desktop:electron
-pnpm build:desktop:electron:staging
-pnpm build:desktop:electron:prod
-pnpm check:electron-config           # 对标 check:tauri-config
-pnpm test:desktop:electron
+dev:desktop                     # 默认宿主 = tauri（向后兼容）
+dev:desktop:electron            # 显式 Electron 宿主（宿主选择属于私有实现，不再作为公开命令别名）
+build:desktop:electron
+build:desktop:electron:staging
+build:desktop:electron:prod
+check:electron-config           # 对标 check:tauri-config
+test:desktop:electron
 ```
 
 - 渲染层 dev server host/port 与宿主 `devUrl`/`ELECTRON_START_URL` 一致，端口冲突即失败（对齐现有规则）。

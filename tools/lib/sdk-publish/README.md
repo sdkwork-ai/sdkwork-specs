@@ -13,16 +13,16 @@ From `sdkwork-specs/`:
 
 ```bash
 # Dry-run across the whole workspace (safe, no credentials needed)
-pnpm publish:sdk:dry-run
+pnpm release:sdk:publish:dry-run
 
 # Publish all TypeScript SDKs (requires NPM_TOKEN)
-NPM_TOKEN=xxxx pnpm publish:sdk -- --language typescript --allow-pre-release
+NPM_TOKEN=xxxx pnpm release:sdk:publish -- --language typescript --allow-pre-release
 
 # Publish one family, one language
-pnpm publish:sdk -- --family sdkwork-iam-app-sdk --language typescript
+pnpm release:sdk:publish -- --family sdkwork-iam-app-sdk --language typescript
 
 # Publish everything in one repository
-pnpm publish:sdk -- --repo sdkwork-iam --language all
+pnpm release:sdk:publish -- --repo sdkwork-iam --language all
 ```
 
 ## What it does
@@ -100,7 +100,7 @@ jobs:
 ```
 
 The workflow sets up Node, pnpm, and per-language toolchains, configures
-registry auth from secrets, runs `pnpm publish:sdk`, and uploads the JSON
+registry auth from secrets, runs `pnpm release:sdk:publish`, and uploads the JSON
 report as an artifact.
 
 ## Adding a new language

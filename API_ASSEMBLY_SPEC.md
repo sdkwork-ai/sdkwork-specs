@@ -73,7 +73,7 @@ Canonical identities:
 | Component type | `rust-api-assembly` |
 | Component layer role | `runtime-composition` |
 | Manifest kind | `sdkwork.api.assembly` |
-| Pnpm namespace | `api:assembly:*` |
+| Script namespace | `api:assembly:*` |
 
 The selected application root directory is the application-code authority for
 API assembly naming and `MUST` be `sdkwork-<application-code>`. An enclosing
@@ -761,7 +761,7 @@ topology, source-config, build, test, or release dependency.
 
 ## 7. Pnpm Commands
 
-Application roots that use pnpm expose:
+Application roots expose the following command families:
 
 ```text
 pnpm api:assembly:materialize

@@ -13,7 +13,7 @@
 #       secrets: inherit
 #
 # The workflow checks out sdkwork-specs and the workspace root, installs pnpm,
-# and invokes `pnpm publish:sdk`. Credentials are injected via environment
+# and invokes `pnpm release:sdk:publish`. Credentials are injected via environment
 # from repository secrets; only the languages you have tokens for will publish.
 name: publish-sdks
 

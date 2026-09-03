@@ -102,9 +102,10 @@ export function publish(pkgPath, { tag = 'latest', access = 'public', env = {} }
     '--no-git-checks',
   ];
 
-  // Write a temporary .npmrc in the package directory so pnpm picks up the
-  // correct token. This is necessary because ~/.npmrc may contain a stale
-  // token, and pnpm may stop searching for .npmrc at submodule boundaries.
+  // Write a temporary .npmrc in the package directory so the package manager
+  // picks up the correct token. This is necessary because ~/.npmrc may contain
+  // a stale token, and the package manager may stop searching for .npmrc at
+  // submodule boundaries.
   // The token comes from NPM_TOKEN env var or the workspace-level .npmrc.
   const token = env.NPM_TOKEN || process.env.NPM_TOKEN;
   const tempNpmrc = path.join(pkgPath, '.npmrc');

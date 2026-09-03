@@ -289,7 +289,7 @@ hvigor assembleApp
 hvigor test
 ```
 
-Application roots may expose stable aliases when pnpm or repository tooling orchestrates Harmony:
+Application roots may expose stable aliases when the package manager or repository tooling orchestrates Harmony:
 
 ```text
 pnpm install

@@ -69,7 +69,7 @@ release, and deployment-profile decisions remain active.
 - API assembly completeness and deterministic-manifest validation.
 - Application cloud-gateway boundary scan.
 - Thin-host dependency and direct-route-merge scan.
-- Single HTTP ingress and pnpm lifecycle checks.
+- Single HTTP ingress and package lifecycle checks.
 - Cross-assembly route collision audit in the platform gateway workspace.
 
 ## Supersedes / Superseded By

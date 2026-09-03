@@ -57,12 +57,12 @@ are identical.
 | 1 | Topology, workflow, and deploy declarations exist | Pilot the complete lifecycle |
 | 2 | Topology and workflow declarations exist | Add deployment contract and evidence |
 | 3 | Topology declaration exists | Add workflow, packaging, and deployment contracts |
-| 4 | Pnpm root exists without topology | Establish topology, then adopt the facade |
-| 5 | App manifest exists without a pnpm root | Classify native/non-pnpm lifecycle and add an approved adapter only where needed |
+| 4 | Package-manager root exists without topology | Establish topology, then adopt the facade |
+| 5 | App manifest exists without a package-manager root | Classify native/non-package-manager lifecycle and add an approved adapter only where needed |
 
 ## Migration Sequence
 
-1. Run the pnpm and topology checkers in audit/reporting context and record all
+1. Run the package-manager and topology checkers in audit/reporting context and record all
    missing scripts, profiles, URLs, local cloud autostarts, and lifecycle
    command-order debt.
 2. Add `dev:standalone` and `dev:cloud`; keep existing internal runners behind
@@ -139,7 +139,7 @@ continue to fail validation.
 
 ## Exit Evidence
 
-- Pnpm and topology validators pass for every migrated application.
+- Package-manager and topology validators pass for every migrated application.
 - `pnpm dev` and `pnpm dev:standalone` resolve identically.
 - `pnpm dev:cloud` starts no local API-plane dependency and reaches the declared
   cloud development surfaces.

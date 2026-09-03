@@ -91,13 +91,13 @@ When a host application scans sibling repositories through Tailwind `@source`, V
 - Scanned packages `MUST` self-declare other direct npm imports they use in source code per `DEPENDENCY_MANAGEMENT_SPEC.md` section 1.3.
 - Tailwind bootstrap is host-owned; it is not satisfied by transitive dependencies of `@tailwindcss/vite`.
 
-## 7. pnpm Install Boundary For Large Composite Apps
+## 7. Package Install Boundary For Large Composite Apps
 
 Some large PC application roots keep an app-local `.npmrc` and app-local `pnpm-lock.yaml` to isolate Windows reinstall behavior.
 
 Rules:
 
-- Install and release build steps for those apps `MUST` run with the app directory as cwd so pnpm honors the app-local `.npmrc`.
+- Install and release build steps for those apps `MUST` run with the app directory as cwd so the package manager honors the app-local `.npmrc`.
 - Repository-root lockfile authority remains the default for normal SDKWork repositories without an documented app-local install exception.
 - Tailwind dependency declarations remain in app `package.json`; install cwd does not change CSS bootstrap ownership.
 

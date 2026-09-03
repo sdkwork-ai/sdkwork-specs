@@ -145,7 +145,7 @@ function main() {
       // rehearsal step may not need node_modules at all. Treat a failed frozen
       // install as a warning here; the requested step still decides whether it
       // actually needs the node tree.
-      console.warn('[ci-sim] pnpm frozen install failed; continuing (step may not need node_modules)');
+      console.warn('[ci-sim] frozen package-manager install failed; continuing (step may not need node_modules)');
     }
 
     console.log(`[ci-sim] running: ${steps}`);

@@ -172,7 +172,7 @@ Rules:
 Application roots with IAM Module Federation enabled must run:
 
 ```bash
-pnpm run iam:modules:validate
+pnpm run admin:iam-modules:validate
 ```
 
 Materialization is performed by `sdkwork-iam-module-registry` during database bootstrap and `import_postgres_default_iam_seed`.

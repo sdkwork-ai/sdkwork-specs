@@ -28,7 +28,7 @@ Rules:
 - `app` in SDKWork already means application root, `app-api`, `app.key`, app/user surface, `apps/`, or platform_app registration. Do not use bare `<app>` as a naming placeholder.
 - `product` is retired as a naming placeholder. It remains valid only as L1 **product name** in prose, or in the forbidden generic suffix `sdkwork-<application-code>-product`.
 - Commerce sellable-item work uses capability token **`merchandise`**. Public catalog browsing uses **`catalog`**. Shop configuration uses **`shop`**. See `DOMAIN_SPEC.md`.
-- Retired synonyms: `<product>` -> `<application-code>`; use `application-specific` instead of retired `product-specific`; use `application-code-prefix` / `application-code-prefixed` instead of retired pnpm prefix terms.
+- Retired synonyms: `<product>` -> `<application-code>`; use `application-specific` instead of retired `product-specific`; use `application-code-prefix` / `application-code-prefixed` instead of retired package-manager prefix terms.
 
 ### 0.1 Naming Formula Summary
 
@@ -83,7 +83,7 @@ After `product`, these words are the most common sources of naming drift. Each r
 | `profile` | full topology profile id; **config profile alias** `dev`/`prod`; GitHub package **profile** segment | lifecycle environment alone; deployment profile alone | `environment`, `deploymentProfile`, `configProfile`, or full profile id |
 | `region` | SDKWork market/compliance partition `regionCode`; cloud `providerRegion`; Drive `storageRegion` | bare field `region`; cloud id in `regionCode`; AZ in `regionCode` | `regionCode`, `providerRegion`, `storageRegion` per `REGION_SPEC.md` |
 | `runtime` | `runtimeTarget`; responsibility-specific `*-edge-runtime` process defined by section 4.3 | bare or generic `sdkwork-*-runtime`; synonym for application or environment | `runtimeTarget`, `environment`, a responsibility-specific host/worker, or the canonical edge-runtime formula |
-| `gateway` | application `sdkwork-api-<application-code>-standalone-gateway`; platform `sdkwork-api-cloud-gateway`; `gateway:*` pnpm namespace | bare application gateway; application `*-cloud-gateway`; device/edge protocol process; retired `*-api-server`; SDK family name | `api-standalone-gateway`, platform `api-cloud-gateway`, or responsibility-specific `*-edge-runtime` |
+| `gateway` | application `sdkwork-api-<application-code>-standalone-gateway`; platform `sdkwork-api-cloud-gateway`; `gateway:*` script namespace | bare application gateway; application `*-cloud-gateway`; device/edge protocol process; retired `*-api-server`; SDK family name | `api-standalone-gateway`, platform `api-cloud-gateway`, or responsibility-specific `*-edge-runtime` |
 | `foundation` | shared foundation **domain/module** tier (L3); foundation dependency SDKs | package name `foundation` without domain | `sdkwork-<domain>-*` or `shared foundation module` |
 | `portal` | browser **portal** public config (`PORTAL_PUBLIC_*`, `[portal.public]`); static portal assets | application code; IAM domain | `PORTAL_PUBLIC_*`, `browser public runtime` |
 | `identity` | prose "identity projection" in HTTP headers | domain name instead of `iam` | domain `iam` |

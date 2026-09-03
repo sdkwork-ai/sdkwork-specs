@@ -13,9 +13,9 @@
  *  - RELEASE_SPEC.md §2 (SDK release type) §4 (release evidence)
  *
  * Usage:
- *   pnpm publish:sdk -- --dry-run
- *   pnpm publish:sdk -- --repo sdkwork-iam --language typescript
- *   pnpm publish:sdk -- --family sdkwork-im-app-sdk --language all
+ *   pnpm release:sdk:publish -- --dry-run
+ *   pnpm release:sdk:publish -- --repo sdkwork-iam --language typescript
+ *   pnpm release:sdk:publish -- --family sdkwork-im-app-sdk --language all
  *   node bin/publish-all-sdks.mjs --repo sdkwork-iam --dry-run
  *
  * Credentials are read from the environment, never from manifest or config:
@@ -168,7 +168,7 @@ function printHelp() {
 Usage:
   node tools/publish-sdk.mjs [options] [repo...]
   node bin/publish-all-sdks.mjs [options] [repo...]
-  pnpm publish:sdk -- [options]
+  pnpm release:sdk:publish -- [options]
 
 Options:
   --workspace <path>            workspace root (default: parent of sdkwork-specs)
@@ -198,11 +198,11 @@ Credentials (env):
   GITHUB_TOKEN                  Go (GitHub Release, optional)
 
 Examples:
-  pnpm publish:sdk -- --dry-run
-  pnpm publish:sdk -- --repo sdkwork-iam --language typescript
+  pnpm release:sdk:publish -- --dry-run
+  pnpm release:sdk:publish -- --repo sdkwork-iam --language typescript
   node bin/publish-all-sdks.mjs --repo sdkwork-order,sdkwork-membership --dry-run
   node bin/publish-all-sdks.mjs --filter sdkwork-knowledge --list
-  pnpm publish:sdk -- --family sdkwork-im-app-sdk --language all --report ./publish-report.json
+  pnpm release:sdk:publish -- --family sdkwork-im-app-sdk --language all --report ./publish-report.json
 `);
 }
 

@@ -249,7 +249,7 @@ Canonical owners:
 
 Rules:
 
-- Application repositories `SHOULD` expose `pnpm run env:token:ensure` when they do not route lifecycle commands through `sdkwork-app` but still own credential-entry surfaces.
+- Application repositories `SHOULD` expose an `env:token:ensure` script when they do not route lifecycle commands through `sdkwork-app` but still own credential-entry surfaces.
 - Workspace batch bootstrap `MUST` load tracked profile values from `configs/bootstrap/profiles/<profile>.env`; ignored overrides use `configs/bootstrap/profiles/<profile>.local.env`.
 - Browser/renderer runtimes `MUST NOT` execute bootstrap registration or token ensure directly; Node orchestrators and topology facades own lifecycle resolution.
 

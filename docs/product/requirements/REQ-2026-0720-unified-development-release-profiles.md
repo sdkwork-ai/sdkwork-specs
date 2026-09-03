@@ -41,7 +41,7 @@ rollback behavior.
 - The lifecycle is implemented as reusable framework components: topology and
   local development in `sdkwork-app-topology`, packaging and publication in
   `sdkwork-github-workflow`, and deployment apply/rollback in `deployctl`.
-- Application roots expose only thin public pnpm aliases; application-specific
+- Application roots expose only thin public script aliases; application-specific
   commands remain private `_sdkwork:*` hooks and are never a second public
   lifecycle vocabulary.
 
@@ -76,7 +76,7 @@ rollback behavior.
 - `RELEASE_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `APP_MANIFEST_SPEC.md`, and
   `SDKWORK_DEPLOY_SPEC.md` preserve phase gates, artifact identity, explicit
   deployment selection, and per-profile rollback evidence.
-- The pnpm checker rejects missing profile entrypoints, a non-standalone bare
+- The script-standard checker rejects missing profile entrypoints, a non-standalone bare
   `dev`, profile-first release/deploy command names, and incomplete profile
   variants for exposed lifecycle phases.
 - The topology checker rejects a `cloud.development` profile that autostarts
@@ -108,7 +108,7 @@ rollback behavior.
 
 ## Affected Surfaces
 
-- pnpm application root commands
+- application root script surfaces
 - runtime topology and source configuration
 - application manifests and workflow matrices
 - release, publication, deployment, and rollback automation

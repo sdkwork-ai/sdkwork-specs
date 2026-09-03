@@ -44,7 +44,7 @@
 - [x] Zero parallel composition manifests
 - [x] Zero nested app workspaces
 - [x] Central verify tooling only (legacy tools deleted)
-- [x] Consumer overlays generated for pnpm repos
+- [x] Consumer overlays generated for repos that use pnpm
 - [x] Legacy repos isolated with written decisions
 - [x] Plan evidence complete Steps 0–9
 

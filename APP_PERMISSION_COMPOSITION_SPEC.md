@@ -193,7 +193,7 @@ Application roots **must** verify:
 ```bash
 node tools/verify-repo.mjs --root <repo-root>
 node tools/check-permission-composition.mjs --root <repo-root>
-pnpm run iam:modules:validate   # when IMF enabled
+pnpm run admin:iam-modules:validate   # when IMF enabled
 ```
 
 Additional checks:

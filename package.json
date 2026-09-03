@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "stop": "node ../sdkwork-specs/tools/stop-sdkwork-workspace-processes.mjs --workspace .",
-    "audit:app-iam-integration": "node tools/audit-app-iam-integration.mjs --workspace .. --strict",
+    "check:app-iam-integration": "node tools/audit-app-iam-integration.mjs --workspace .. --strict",
     "check:auth-session-retention": "node tools/check-auth-session-retention.mjs --workspace ..",
     "test:postgres-tools": "node tools/postgres/postgres-tools.contract.test.mjs",
     "check:unified-postgres-profile": "node tools/check-unified-postgres-profile.mjs",
@@ -24,11 +24,11 @@
     "check:package-content-standard": "node tools/check-package-content-standard.mjs --workspace ..",
     "check:webserver-toml-standard": "node tools/check-webserver-toml-standard.mjs --workspace ..",
     "test:webserver-toml": "node --test tools/check-webserver-toml-standard.test.mjs tools/retired-nginx.test.mjs",
-    "publish:sdk": "node tools/publish-sdk.mjs --workspace ..",
-    "publish:sdk:dry-run": "node tools/publish-sdk.mjs --workspace .. --dry-run",
-    "publish:sdk:list": "node tools/publish-sdk.mjs --workspace .. --list",
-    "publish:app": "node tools/publish-app.mjs --workspace ..",
-    "publish:app:dry-run": "node tools/publish-app.mjs --workspace .. --dry-run"
+    "release:sdk:publish": "node tools/publish-sdk.mjs --workspace ..",
+    "release:sdk:publish:dry-run": "node tools/publish-sdk.mjs --workspace .. --dry-run",
+    "release:sdk:publish:list": "node tools/publish-sdk.mjs --workspace .. --list",
+    "release:app:publish": "node tools/publish-app.mjs --workspace ..",
+    "release:app:publish:dry-run": "node tools/publish-app.mjs --workspace .. --dry-run"
   },
   "dependencies": {
     "pg": "^8.16.3"

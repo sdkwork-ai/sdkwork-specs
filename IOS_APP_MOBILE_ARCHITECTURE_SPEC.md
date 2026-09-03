@@ -275,7 +275,7 @@ xcodebuild -scheme <Product> -configuration Release archive
 xcodebuild -exportArchive
 ```
 
-Application roots may expose stable aliases when pnpm or repository tooling orchestrates iOS:
+Application roots may expose stable aliases when the package manager or repository tooling orchestrates iOS:
 
 ```text
 pnpm install

@@ -177,7 +177,7 @@ Actions implementation for application release matrices. It is composed with
 application repository `MUST NOT` copy matrix, artifact publication, release
 notes, attestation, or deployment selection logic into its local workflow YAML.
 Application-specific build commands remain lifecycle steps or private
-`_sdkwork:*` pnpm hooks behind the public facade described by
+private `_sdkwork:*` hooks behind the public facade described by
 `PNPM_SCRIPT_SPEC.md`.
 
 Rules:

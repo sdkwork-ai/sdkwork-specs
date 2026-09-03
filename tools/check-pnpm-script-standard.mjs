@@ -1152,12 +1152,36 @@ function isRiskyRunnerScriptReference(scriptName, productPrefixes) {
   );
 }
 
+// File-level exemption marker for runner scripts whose content must quote
+// retired or non-standard script names (for example a one-shot migration tool
+// whose rename map IS the retired-name inventory). The marker must appear in
+// the file header as a comment with a short hyphenated reason token:
+//   // @sdkwork-script-standard-exempt retired-name-migration
+// Exempted files skip both the command-example scan and the quoted-script-name
+// inventory scan: a migration tool's rename map must quote the retired names
+// verbatim in both forms.
+const RUNNER_SCRIPT_EXEMPTION_MARKER_PATTERN =
+  /^\s*(?:\/\/|[*#]|<!--)*\s*@sdkwork-script-standard-exempt\s+([a-z0-9-]+)\s*$/iu;
+
+function getRunnerScriptExemption(text) {
+  for (const line of text.split(/\r?\n/).slice(0, 20)) {
+    const match = RUNNER_SCRIPT_EXEMPTION_MARKER_PATTERN.exec(line);
+    if (match) return match[1];
+  }
+  return null;
+}
+
 function validateRunnerScriptExamples(root, productPrefixes) {
   const runnerPaths = collectRunnerScriptFiles(root);
   const issues = [];
 
   for (const runnerPath of runnerPaths) {
     const text = fs.readFileSync(runnerPath, 'utf8');
+    const exemption = getRunnerScriptExemption(text);
+    if (exemption) {
+      console.log(`runner script standard exemption: ${path.relative(root, runnerPath)} (${exemption})`);
+      continue;
+    }
     const lines = text.split(/\r?\n/);
     for (const [index, line] of lines.entries()) {
       const prefix = `${path.relative(root, runnerPath)}:${index + 1}: pnpm `;

@@ -289,7 +289,7 @@ Android native roots should provide equivalents for:
 ./gradlew assembleRelease
 ```
 
-Application roots may expose stable aliases when pnpm or repository tooling orchestrates Android:
+Application roots may expose stable aliases when the package manager or repository tooling orchestrates Android:
 
 ```text
 pnpm install

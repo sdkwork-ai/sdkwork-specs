@@ -165,7 +165,7 @@ Rules:
 - `bootstrap-api-assembly-repo.mjs --root <application>` is the canonical
   one-time assembly onboarding command. It materializes served or `apiMode: none`
   assemblies, adds Cargo workspace membership, writes direct canonical
-  pnpm tool delegation, validates immediately, creates no wrapper scripts, and
+  script-tool delegation, validates immediately, creates no wrapper scripts, and
   is idempotent.
 - `materialize-route-component-specs.mjs (--root <application> | --workspace
   <workspace>) [--write]` plans missing ownership contracts for canonical Rust

@@ -273,7 +273,7 @@ flutter build appbundle --dart-define-from-file=env/sdkwork.cloud.production.jso
 flutter build ipa --dart-define-from-file=env/sdkwork.cloud.production.json
 ```
 
-Application roots should expose stable aliases when pnpm or repository tooling orchestrates Flutter:
+Application roots should expose stable aliases when the package manager or repository tooling orchestrates Flutter:
 
 ```text
 pnpm install

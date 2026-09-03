@@ -250,7 +250,7 @@ export function auditPnpmLifecycleWorkspace(workspace) {
 
 function printReport(report) {
   const summary = report.summary;
-  console.log(`SDKWork pnpm lifecycle audit: ${summary.applications} application roots`);
+  console.log(`SDKWork package lifecycle audit: ${summary.applications} application roots`);
   console.log(`package=${summary.packageManifests} pnpm-app=${summary.pnpmApplications} topology=${summary.topologyContracts} workflow=${summary.workflowContracts} deploy=${summary.deployManifests}`);
   console.log(`dev-pair=${summary.devProfilePairs} lifecycle-facade=${summary.lifecycleFacadeAdopters} debt-free=${summary.debtFree}`);
   for (let wave = 0; wave <= 5; wave += 1) {

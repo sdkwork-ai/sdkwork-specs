@@ -55,7 +55,7 @@ Lock file minimum shape:
 Application roots with IMF must run:
 
 ```bash
-pnpm run iam:modules:validate
+pnpm run admin:iam-modules:validate
 pnpm run test:iam-standard-governance
 ```
 

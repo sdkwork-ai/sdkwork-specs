@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// @sdkwork-script-standard-exempt retired-name-migration
+// This tool's rename map must quote the retired script names verbatim (that
+// inventory is the tool's input), so the runner-script name scan is waived.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

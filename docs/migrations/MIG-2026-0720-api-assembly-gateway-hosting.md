@@ -69,7 +69,7 @@ rollback: return validators to audit mode without restoring application cloud-ga
 
 - Canonical assembly and standalone gateway identities are active.
 - Assembly completeness, deterministic materialization, route collisions,
-  thin-host dependencies, single ingress, and pnpm lifecycle checks pass.
+  thin-host dependencies, single ingress, and package lifecycle checks pass.
 - Application cloud-gateway boundary scan reports zero findings.
 - Application component specs contain no `integration.foundationApiGateway`.
 - Platform cloud gateway composition consumes the assembly from the platform side.

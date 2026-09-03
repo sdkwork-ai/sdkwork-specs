@@ -75,7 +75,7 @@ function usage() {
 }
 
 /**
- * Locates the `tsc` entry point. pnpm installs dev tooling per workspace package, so a repository
+ * Locates the `tsc` entry point. The package manager installs dev tooling per workspace package, so a repository
  * root often has no hoisted `typescript`; nested installs are searched as a fallback.
  */
 function resolveTscBinary(root) {

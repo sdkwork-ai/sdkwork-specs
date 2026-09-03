@@ -83,7 +83,7 @@ Rules:
   persistence.
 - SQLite development entrypoints are allowed only as explicit client-local
   validation profiles such as `pnpm dev:desktop:sqlite`. New
-  `pnpm dev:server:sqlite` entrypoints are forbidden; existing aliases are L0
+  `dev:server:sqlite` entrypoints are forbidden; existing aliases are L0
   migration inputs and cannot satisfy service/runtime PostgreSQL gates.
 - Feature UI and host adapters `MUST NOT` access either SQLite or PostgreSQL
   directly. They call services, SDKs, or local runtime APIs.
@@ -155,7 +155,7 @@ Rules:
 - The root PC app package owns web bootstrap and web build scripts.
 - Repositories that include a desktop app `MUST` expose top-level launch commands that follow `PNPM_SCRIPT_SPEC.md`: `pnpm dev` starts the default PC renderer or documented default development workflow, and `pnpm dev:desktop` starts the default desktop shell. Tauri CLI commands remain implementation details behind action-first public scripts.
 - The PC renderer dev command `MUST` use the same host and port as the Tauri `devUrl`, and it `MUST` fail on port conflicts instead of silently falling back to another port.
-- Existing backend or application server development commands `MUST` remain available under explicit PostgreSQL names such as `pnpm dev:server` or `pnpm dev:postgres` when `pnpm dev` is assigned to the desktop renderer. `pnpm dev:sqlite` may name only a client-local desktop validation path, never a server database.
+- Existing backend or application server development commands `MUST` remain available under explicit PostgreSQL names such as `pnpm dev:server` or `pnpm dev:postgres` when `pnpm dev` is assigned to the desktop renderer. `dev:sqlite` may name only a client-local desktop validation path, never a server database.
 - The desktop package owns Tauri CLI, Tauri config, Rust shell code, icons, permissions, and native bundle scripts.
 - The desktop package also owns iPadOS and Android tablet Tauri target metadata, generated native project directories, signing/runbook references, and target-specific capabilities.
 - The Electron host package (`sdkwork-<application-code>-pc-electron`) owns Electron main/preload/shared source, `electron-builder.yml` (or `electron-forge.config.mjs`), icons, entitlements, signing references, asar policy, and native bundle scripts. It `MUST` consume the same renderer build output as the Tauri host and `MUST NOT` fork renderer code.
@@ -379,14 +379,11 @@ pnpm dev:desktop:electron
 pnpm dev:server:standalone
 pnpm dev:desktop:sqlite
 pnpm test:desktop
-pnpm test:desktop:electron
 pnpm check:tauri-config
 pnpm check:electron-config
 pnpm build:desktop
-pnpm build:desktop:electron
 pnpm build:desktop:staging
 pnpm build:desktop:prod
-pnpm build:desktop:electron:prod
 pnpm build:tablet-ipados:prod
 pnpm build:tablet-android:prod
 

@@ -78,10 +78,9 @@ Discovery sources, in priority order:
 Commands (application root):
 
 ```bash
-pnpm run iam:modules:discover
-pnpm run iam:modules:validate
-pnpm run iam:modules:plan
-pnpm run iam:modules:materialize
+pnpm run admin:iam-modules:reconcile
+pnpm run admin:iam-modules:validate
+pnpm run admin:iam-modules:materialize:manifests
 ```
 
 Materialization writes:
@@ -111,7 +110,7 @@ Materialization writes:
 
 - [x] Every bundled domain permission is declared in an `iam.module.manifest.json` owned by that domain.
 - [x] `sdkwork-iam-bootstrap` no longer owns non-`iam.*` permission seeds directly.
-- [x] `pnpm run iam:modules:validate` passes in CI.
+- [x] `pnpm run admin:iam-modules:validate` passes in CI.
 - [x] `import_postgres_default_iam_seed` delegates to the module registry orchestrator.
 - [x] OpenAPI protected operations reconcile to manifest permissions.
 - [x] Registry snapshots are written on every materialization.

@@ -17,10 +17,10 @@
  *  - GITHUB_WORKFLOW_SPEC.md (when wired into CI)
  *
  * Usage:
- *   pnpm publish:app -- --dry-run
- *   pnpm publish:app -- --repo sdkwork-im --architecture pc
- *   pnpm publish:app -- --app sdkwork-im-pc --platform web --registry local --out-dir ./releases
- *   pnpm publish:app -- --architecture h5 --registry github
+ *   pnpm release:app:publish -- --dry-run
+ *   pnpm release:app:publish -- --repo sdkwork-im --architecture pc
+ *   pnpm release:app:publish -- --app sdkwork-im-pc --platform web --registry local --out-dir ./releases
+ *   pnpm release:app:publish -- --architecture h5 --registry github
  *
  * Credentials are read from the environment, never from manifest or config:
  *   GITHUB_TOKEN            GitHub Release upload (gh CLI or token)
@@ -73,7 +73,7 @@ function printHelp() {
 
 Usage:
   node tools/publish-app.mjs [options]
-  pnpm publish:app -- [options]
+  pnpm release:app:publish -- [options]
 
 Options:
   --workspace <path>            workspace root (default: parent of sdkwork-specs)
@@ -103,12 +103,12 @@ npm registry:
   The private app source package is never published.
 
 Examples:
-  pnpm publish:app -- --dry-run
-  pnpm publish:app -- --architecture pc --platform web --registry local --out-dir ./releases
-  pnpm publish:app -- --app sdkwork-im-pc --platform web --registry github
-  pnpm publish:app -- --repo sdkwork-im --architecture all
-  pnpm publish:app -- --architecture pc --platform web --registry npm --tag latest
-  pnpm publish:app -- --architecture h5 --platform web --registry npm
+  pnpm release:app:publish -- --dry-run
+  pnpm release:app:publish -- --architecture pc --platform web --registry local --out-dir ./releases
+  pnpm release:app:publish -- --app sdkwork-im-pc --platform web --registry github
+  pnpm release:app:publish -- --repo sdkwork-im --architecture all
+  pnpm release:app:publish -- --architecture pc --platform web --registry npm --tag latest
+  pnpm release:app:publish -- --architecture h5 --platform web --registry npm
 `);
 }
 
