@@ -310,6 +310,14 @@ Rules:
   as the environment-level `cloudApiBaseUrl` key in
   `etc/sdkwork.deployment.config.json` and is the single authoritative value
   for every browser SDK API base URL.
+- The cloud API edge `MUST` serve every registered `<base-domain>` variant of
+  the environment subdomain in every lifecycle environment: nginx
+  `server_name` aliases, gateway `allowedHosts`, and CORS `allowedOrigins`
+  derive from the same registered base-domain list, and the environment-level
+  `publicHosts` array in `etc/sdkwork.deployment.config.json` `MUST` enumerate
+  the complete family. A deployment that serves only a subset of the
+  registered base domains (for example only `api-dev.sdkwork.com` while
+  `api-dev.birdcoder.com` is registered) is a configuration drift defect.
 - Every public SDK API base URL field in a cloud browser runtime source
   (`appApiBaseUrl`, `backendApiBaseUrl`, dependency SDK base URLs such as
   `driveAppApiBaseUrl`/`appbaseAppApiBaseUrl`, and deployment SDK base URLs)

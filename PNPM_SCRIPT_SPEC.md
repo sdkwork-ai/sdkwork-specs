@@ -161,6 +161,26 @@ Development profile rules:
 - `stop` after `dev:cloud` stops only processes created by the local
   development session and never operates on deployed cloud services.
 
+Cloud-mode development domain access:
+
+- `dev:cloud` `MUST` target the environment cloud API edge origins declared in
+  `cloudApiBaseUrl` (`https://api-dev.<base-domain>`,
+  `ENVIRONMENT_SPEC.md` §5.1.0.1). It `MUST NOT` substitute loopback origins,
+  per-service hostnames (`server-app-dev.*`), or hardcode a single
+  `<base-domain>` when the deployment config registers several.
+- Higher environments are consumed in cloud mode through the build families of
+  §4.2 (`build:<client>:test:cloud`, `build:<client>:staging:cloud`,
+  `build:<client>:prod:cloud`) against the deployed
+  `api-test`/`api-staging`/`api` edge. They `MUST NOT` become additional
+  `dev:<environment>:*` public entry points; `dev` and `dev:cloud` remain the
+  only development commands.
+- A repository that serves or exercises the API edge on a developer workstation
+  `MAY` expose an idempotent local DNS binding helper (for example
+  `install:hosts`) that maps the registered `api-<suffix>.<base-domain>` host
+  family to the loopback address. Such a helper `MUST` derive the host family
+  from the deployment source config, operate only inside a marker-scoped block,
+  and `MUST NOT` modify unrelated host entries or non-SDKWork domains.
+
 When the capability exists, the repository root `MUST` expose the matching command family:
 
 | Capability | Required commands |
