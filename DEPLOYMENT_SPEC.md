@@ -569,9 +569,11 @@ Rules:
   sdkwork-webserver deployment, which upstreams the per-instance gateway
   host ports.
 - The bundle deploy script is the single generic entrypoint:
-  `deploy.sh --environment <env> [--replicas N] [--down|--ps|--logs]`.
+  `deploy.sh --environment <env> [--replicas N] [--embedded] [--down|--ps|--logs]`.
   It `MUST` fail before side effects when the environment is missing or
   unknown, and `MUST` stay idempotent (re-running updates the existing stack).
+  Its default dependency mode is external host-system services (§6.1);
+  `--embedded` is the explicit opt-in for fully self-contained hosts.
 - Container space mounts follow `SDKWORK_WEBSERVER_SPEC.md` section 17
   (sdkwork-webserver only): the space root is read-only and the
   `sdkwork-space` checkout subtree is a read-write overlay (clone/pull
@@ -630,6 +632,77 @@ Rules:
 - See `PNPM_SCRIPT_SPEC.md` section 4.4 for the owning commands
   (`build:container:install`, `deploy:apply:standalone:docker`).
 
+### 6.1 External Host-System Dependency Standard (PostgreSQL/Redis, Normative)
+
+Container deployments `MUST` default to the **docker host's own** PostgreSQL
+and Redis — the host system services — instead of embedded dependency
+containers. Containers reach them through
+`extra_hosts: ["host.docker.internal:host-gateway"]`.
+
+| Dependency | Host-system endpoint from containers | Host-system form |
+| --- | --- | --- |
+| PostgreSQL | `host.docker.internal:5432` | Host-native PostgreSQL server (systemd service), port `5432` |
+| Redis | `host.docker.internal:6379` | Host-native Redis server (systemd service), port `6379`, `bind 0.0.0.0`, `protected-mode no`, no password |
+
+Rules:
+
+- **Default mode is external.** The bundle deploy script and the repository
+  compose layouts `MUST` default to the host-system endpoints above.
+  Embedded `postgres`/`redis` compose services are an explicit opt-in
+  (`deploy.sh --embedded` or equivalent) for hosts that cannot run
+  host-native services, and `MUST NOT` be the default on operator hosts.
+- **Port canon.** Host PostgreSQL is `5432`; host Redis is `6379`. The legacy
+  port `15432` (the retired `sdkwork-unified-postgres` dependency container)
+  is retired: checked-in env files, compose files, provisioning scripts, and
+  operator documentation `MUST NOT` reference it.
+- **Env key contract.** Every shipped lifecycle env file and env example
+  `MUST` declare the runtime connection keys explicitly —
+  `SDKWORK_DATABASE_HOST` / `SDKWORK_DATABASE_PORT` and the application's
+  Redis keys (`SDKWORK_WEBSERVER_REDIS_HOST` /
+  `SDKWORK_WEBSERVER_REDIS_PORT` for sdkwork-webserver) — and they `MUST`
+  agree with the provisioning identities (`WEBSERVER_POSTGRES_*` /
+  `WEBSERVER_REDIS_*`). Two checked-in declarations of the same connection
+  that diverge (host, port, database, schema, username, or password) are a
+  specification violation.
+- **Host provisioning is host-native and single-sourced.** PostgreSQL and
+  Redis `MUST` run as host system services, not as long-lived dependency
+  containers publishing host ports. The provisioning script (for example
+  `deployments/docker/scripts/setup-host-external-deps.sh`) `MUST` derive
+  every role/database/schema/password from the checked-in env files (single
+  source of truth) and `MUST` cover every declared lifecycle environment,
+  including staging. Duplicate hardcoded passwords inside provisioning
+  scripts that can drift from the env files are forbidden.
+- **WSL systemd note.** The Ubuntu `redis-server.service` unit is
+  `Type=notify`; on WSL hosts where the `READY=1` notification stalls,
+  systemd kills the healthy server in a restart loop. The sanctioned fix is a
+  drop-in override (`/etc/systemd/system/redis-server.service.d/override.conf`
+  with `Type=simple` and an explicit `TimeoutStartSec`), never a dependency
+  container substitution.
+- **Development parity (dev environment).** A `development` container
+  deployment `MUST` resolve the same physical host PostgreSQL instance and
+  the identical workspace identity (database, schema, username, password —
+  `ENVIRONMENT_SPEC.md` §7.1) as the checked-in `.env.postgres` profile used
+  by `pnpm dev`. Only the reachable host differs: `127.0.0.1` from host
+  processes, `host.docker.internal` from containers. Regression guard: after
+  packaging or installing, inspect the deployed container's resolved
+  `SDKWORK_DATABASE_*` / Redis env and assert equality with `.env.postgres`
+  on every field except host.
+- **Image tag provenance.** Env examples `MUST NOT` hardcode an image tag.
+  The bundle deploy script resolves the tag from the bundle's `image.env`
+  (the packaged image itself), so a bundle is always self-consistent; an env
+  file `MAY` override it explicitly for an operator-managed registry.
+- **Regression checklist (packaging → install → start).** After any change
+  to packaging, env files, or provisioning:
+  1. deploy every lifecycle environment and assert each container's resolved
+     `SDKWORK_DATABASE_HOST/PORT` equals `host.docker.internal:5432` and the
+     Redis host/port equals `host.docker.internal:6379`;
+  2. assert the host-system services answer (`pg_isready`, `redis-cli ping`);
+  3. assert a container→host connection probe succeeds on both ports;
+  4. assert every instance reaches `healthy` and `/healthz` returns `ok`;
+  5. for the bundle chain, run one real `deploy.sh --environment <env>`
+     install (not only `--dry-run`), verify instance 1 health, then
+     `--down` (optionally `--purge`) and restore the prior deployment.
+
 ## 7. Acceptance Checklist
 
 - [ ] Deployment profile is explicit and is either `standalone` or `cloud`.
@@ -648,3 +721,16 @@ Rules:
       lifecycle environment at deploy time.
 - [ ] Every environment can deploy N instances with unique node identities
       and shared per-environment state.
+- [ ] External host-system dependencies are the default (§6.1): containers
+      resolve PostgreSQL `host.docker.internal:5432` and Redis
+      `host.docker.internal:6379`; embedded dependency containers are an
+      explicit opt-in only.
+- [ ] No checked-in env file, compose file, provisioning script, or operator
+      doc references the retired `15432` dependency port.
+- [ ] Provisioning script identities are derived from the env files and cover
+      every declared lifecycle environment (including staging).
+- [ ] The `development` container deployment resolves the identical workspace
+      database identity as `.env.postgres` (§7.1 `ENVIRONMENT_SPEC.md`) —
+      same host instance, database, schema, username, password.
+- [ ] Env examples carry no hardcoded image tag; the bundle resolves the tag
+      from its `image.env`.

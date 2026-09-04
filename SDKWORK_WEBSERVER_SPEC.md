@@ -1217,6 +1217,19 @@ Rules:
   `deployments/webserver/` (`nginx.standalone.<env>.conf` +
   `nginx.cloud.<env>.conf`), so switching never requires rebuilding module
   configs.
+- **Adaptive Web root materialization is mandatory for every declared root
+  (normative).** The container entrypoint `MUST` materialize every Adaptive
+  Web root an imported sidecar declares — `@pc`/`@h5` named-location roots
+  and plain `root /usr/share/sdkwork/<module>/web/{pc,h5,static};`
+  declarations, sidecar body and `snippets/*.conf` alike. For each root it
+  `MUST` symlink the active static-source dist tree when a module build
+  exists (`apps/*-<surface>/dist/<profile>/<alias>`), and `MUST` seed a
+  readable placeholder shell (directory with a minimal `index.html`)
+  otherwise, so the merged data plane's fail-closed static-root validation
+  passes. A missing module dist degrades that one surface to a placeholder
+  page; it `MUST NOT` crash the whole data plane at startup. Existing
+  non-symlink content at a declared root `MUST NOT` be overwritten on
+  re-runs (idempotent materialization).
 
 ### 17.4 `sdkwork-webserver` Is Standalone-Only
 
