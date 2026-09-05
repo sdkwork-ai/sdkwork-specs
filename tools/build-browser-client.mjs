@@ -507,6 +507,7 @@ export async function buildBrowserClientFromAppSurface(options) {
     dryRun: options.dryRun,
     environment: options.environment,
     repositoryRoot: path.resolve(options.repositoryRoot ?? path.join(appRoot, '..', '..')),
+    skipTypecheck: options.skipTypecheck === true,
   });
 }
 
