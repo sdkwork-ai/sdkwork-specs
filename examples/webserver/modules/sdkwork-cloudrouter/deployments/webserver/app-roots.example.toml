@@ -5,13 +5,22 @@
 tablet_surface = "pc"
 
 [app_roots.pc_static_by_environment]
-development = "apps/sdkwork-cloudrouter-pc/dist/dev"
-test = "apps/sdkwork-cloudrouter-pc/dist/test"
-staging = "apps/sdkwork-cloudrouter-pc/dist/staging"
-production = "apps/sdkwork-cloudrouter-pc/dist/prod"
+development = "apps/sdkwork-cloudrouter-pc/dist/standalone/dev"
+test = "apps/sdkwork-cloudrouter-pc/dist/standalone/test"
+staging = "apps/sdkwork-cloudrouter-pc/dist/standalone/staging"
+demo = "apps/sdkwork-cloudrouter-pc/dist/standalone/demo"
+production = "apps/sdkwork-cloudrouter-pc/dist/standalone/prod"
+
+[app_roots.h5_static_by_environment]
+development = "apps/sdkwork-cloudrouter-h5/dist/standalone/dev"
+test = "apps/sdkwork-cloudrouter-h5/dist/standalone/test"
+staging = "apps/sdkwork-cloudrouter-h5/dist/standalone/staging"
+demo = "apps/sdkwork-cloudrouter-h5/dist/standalone/demo"
+production = "apps/sdkwork-cloudrouter-h5/dist/standalone/prod"
 
 [app_roots.static_fallback_by_environment]
 development = "deployments/webserver/static"
 test = "deployments/webserver/static"
 staging = "deployments/webserver/static"
+demo = "deployments/webserver/static"
 production = "deployments/webserver/static"

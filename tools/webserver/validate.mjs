@@ -31,6 +31,14 @@ try {
   yaml = null;
 }
 
+// Cross-environment Host dispatch edges (dev-instance-only): their development
+// tier carries every environment's dispatch vhosts while the other tiers keep
+// internal 404 vhosts, and their upstreams target per-env webservers instead of
+// a "gateway" upstream. W24/W26/W30 generic edge rules do not apply to them.
+const DISPATCH_EDGE_MODULES = new Set([
+  'sdkwork-env-dispatch',
+]);
+
 const ROOT_KEYS = new Set([
   'specVersion', 'kind', 'id', 'enabled', 'description', 'profile', 'environment', 'nginx', 'main', 'http', 'stream',
 ]);
@@ -880,7 +888,11 @@ export function validateWebserverDir(moduleRoot, options = {}) {
   }
 
   // W30: canonical primary API upstream is named "gateway" (§8.1).
-  if (common.enabled !== false) {
+  // Dispatch-edge modules (e.g. sdkwork-env-dispatch) proxy by environment Host
+  // to per-env webservers; their upstreams are env_* by design and their
+  // non-development tiers hold internal 404 vhosts, so W24/W26/W30 do not apply.
+  const moduleName = path.basename(path.resolve(moduleRoot));
+  if (common.enabled !== false && !DISPATCH_EDGE_MODULES.has(moduleName)) {
     for (const profileName of DEPLOYMENT_PROFILES) {
       for (const environment of LIFECYCLE_ENVIRONMENTS) {
         const effective = profiles[profileName][environment];
@@ -904,30 +916,31 @@ export function validateWebserverDir(moduleRoot, options = {}) {
   }
 
   // W24: public hostnames must follow APP_RUNTIME_TOPOLOGY_NAMING.md §9.
-  const moduleName = path.basename(path.resolve(moduleRoot));
-  for (const environment of LIFECYCLE_ENVIRONMENTS) {
-    const envDoc = environmentDocs[environment];
-    for (const server of envDoc?.http?.server ?? []) {
-      for (const host of server.serverName ?? []) {
-        if (!isPublicHostCompliant(host)) {
-          errors.push(
-            `server.${environment}.toml serverName "${host}": not a registered public host per APP_RUNTIME_TOPOLOGY_NAMING.md §9 (W24)`,
-          );
-        }
-        if (
-          moduleName !== 'sdkwork-api-cloud-gateway'
-          && normalizeHost(host).split('.')[0] === PLATFORM_GATEWAY_ROLE
-        ) {
-          errors.push(
-            `server.${environment}.toml serverName "${host}": platform gateway host belongs on sdkwork-api-cloud-gateway only (W24)`,
-          );
+  if (!DISPATCH_EDGE_MODULES.has(moduleName)) {
+    for (const environment of LIFECYCLE_ENVIRONMENTS) {
+      const envDoc = environmentDocs[environment];
+      for (const server of envDoc?.http?.server ?? []) {
+        for (const host of server.serverName ?? []) {
+          if (!isPublicHostCompliant(host)) {
+            errors.push(
+              `server.${environment}.toml serverName "${host}": not a registered public host per APP_RUNTIME_TOPOLOGY_NAMING.md §9 (W24)`,
+            );
+          }
+          if (
+            moduleName !== 'sdkwork-api-cloud-gateway'
+            && normalizeHost(host).split('.')[0] === PLATFORM_GATEWAY_ROLE
+          ) {
+            errors.push(
+              `server.${environment}.toml serverName "${host}": platform gateway host belongs on sdkwork-api-cloud-gateway only (W24)`,
+            );
+          }
         }
       }
     }
   }
 
   // W26: every lifecycle tier declares the same base-domain coverage as production.
-  if (common.enabled !== false) {
+  if (common.enabled !== false && !DISPATCH_EDGE_MODULES.has(moduleName)) {
     const productionHosts = (environmentDocs.production?.http?.server ?? [])
       .flatMap((server) => server.serverName ?? [])
       .map(normalizeHost)

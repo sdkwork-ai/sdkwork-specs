@@ -165,8 +165,8 @@ returnBody = "{\\"status\\":\\"ok\\"}"
 function writeLayoutV3Stubs(dir, { production = PRODUCTION_ENV_DOC } = {}) {
   const prodMatch = production.match(/serverName = (\[[^\]]+\])/);
   const prodNames = prodMatch ? JSON.parse(prodMatch[1].replace(/'/g, '"')) : ['im.sdkwork.com'];
-  for (const environment of ['development', 'test', 'staging']) {
-    const suffix = environment === 'development' ? '-dev' : environment === 'test' ? '-test' : '-staging';
+  for (const environment of ['development', 'test', 'staging', 'demo']) {
+    const suffix = environment === 'development' ? '-dev' : environment === 'test' ? '-test' : `-${environment}`;
     const serverName = JSON.stringify(
       prodNames.map((host) => {
         const parts = host.split('.');
