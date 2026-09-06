@@ -191,8 +191,8 @@ Rules:
 - Organization login scope (`loginScope = "ORGANIZATION"`) is required only for
   organization-shared resources and backend-api surfaces. A personal tenant session `MUST` be
   able to create and operate personal resources (for example personal knowledge spaces) on
-  deployments with a configured runtime organization; persistence layers resolve the effective
-  organization from the deployment-owned runtime scope so RLS/session scope stays consistent.
+  deployments with a configured runtime organization; persistence layers `MUST` accept the
+  normalized organization `0` for personal resources (see §Tenant-Default Organization Context).
 - Organization-scoped sessions that actively claim an organization context `MUST` still be
   validated against the deployment organization (fail-closed on mismatch).
 - Consumer operations that touch money, real-name/personal-data export beyond the actor's own
@@ -206,6 +206,39 @@ Migration rule: existing app-api operations that fail this classification (40301
 features) `MUST` be migrated to the tier model: remove the scope requirement (tier 0/1) or
 replace it with an ownership/ACL check (tier 2). Backend-api and open-api declarations are
 unchanged.
+
+### Tenant-Default Organization Context
+
+Tenant-level (personal) login is the default session model for all business surfaces.
+Organization context is optional enrichment, never a precondition.
+
+Normative rules (apply to app-api, backend-api, open-api, and embedded service surfaces):
+
+- **Normalization**: a session `organization_id` that is absent, `null`, blank, or `0`
+  `MUST` be normalized to `0` (tenant scope) at context resolution. `null` and `0` are
+  equivalent and both mean "no organization claimed".
+- **No missing-context rejection**: business operations `MUST NOT` fail because the session
+  lacks an organization context. Rejecting with 40304 `OrganizationAccessDenied`, a
+  `missing_organization_id` problem, or a validation error such as
+  `organizationId is required` derived from the *session context* is a contract violation.
+  Explicit request-body organization fields `MAY` still be validated as ordinary data, and
+  tier-3 permission/membership checks remain in force.
+- **40304 semantics**: `OrganizationAccessDenied` (40304) is reserved for a session that
+  actively claims organization `X` while the operation requires organization `Y`
+  (fail-closed mismatch). It `MUST NOT` be emitted for an absent organization context.
+- **Persistence**: resources created by a personal session are persisted with organization
+  `0` (tenant-scoped personal resources). Persistence layers `MUST NOT` rewrite the actor's
+  organization to a deployment runtime value.
+- **Scope helpers**: shared context/scope helpers (for example
+  `unwrap_or("0")` on `organization_id`) are the reference implementation pattern;
+  `ok_or_else(... "organization context is required" ...)` on session organization is the
+  forbidden anti-pattern.
+
+Forbidden examples (all observed in the wild and removed during the 2026-09 regression):
+`organization context is required for this operation` (40304 on `POST /app/v3/api/knowledge/spaces`),
+`organization_id is required` on app-api handlers,
+`organization scope is required in request context`.
+Required behavior: normalize to `0` and let ownership/ACL/permission layers decide.
 
 ## Consumer Permission Composition
 
