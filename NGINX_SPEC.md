@@ -215,7 +215,7 @@ Live reload / verification is webserver-owned:
 
 ```sh
 # container example (development owns host :80 / :443)
-bash scripts/docker/deploy-docker-environment.sh development
+bash bin/docker-deploy.sh install --environment development   # from the sdkwork-webserver checkout
 curl --noproxy '*' -H 'Host: api-dev.sdkwork.com' http://127.0.0.1/healthz
 curl --noproxy '*' -H 'Host: api-dev.birdcoder.cn' http://127.0.0.1/healthz
 ```

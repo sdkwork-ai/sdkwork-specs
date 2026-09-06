@@ -427,9 +427,18 @@ Rules:
 - `<clientArchitecture>` `MUST` be `pc` or `h5`. These identify Adaptive Web
   surface roots, not generic runtime targets.
 - `<environment>` `MUST` use lifecycle aliases from `ENVIRONMENT_SPEC.md`:
-  `dev`, `test`, `staging`, or `prod`. They normalize to
+  `dev`, `test`, `staging`, `prod` — plus `demo` (normalizing to the `demo`
+  lifecycle tier) for repositories that declare a `demo` environment in
+  `etc/sdkwork.deployment.config.json`. The base four aliases normalize to
   `development`, `test`, `staging`, and `production` before Vite mode and
-  runtime config selection.
+  runtime config selection; the canonical runner
+  (`tools/build-browser-client.mjs`) supports all five.
+- Demo-tier rule: a repository whose deployment config declares
+  `environments.demo` `MUST` expose the full demo build family
+  (`build:<client>:demo[:cloud]` at the root and `build:demo[:cloud]` at the
+  app surfaces; `check-browser-build-scripts.mjs` enforces it when declared).
+  Repositories without a declared demo tier `MAY` omit it. Docker install of
+  the demo tier is standardized in `DOCKER_SPEC.md` §3.
 - `<deploymentProfile>` `MAY` be omitted; omitted means `standalone`
   (the default profile). Explicit values are `standalone` or `cloud`.
 - Vite mode `MUST` be `<deploymentProfile>.<environment>` (for example

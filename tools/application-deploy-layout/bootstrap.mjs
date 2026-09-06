@@ -68,7 +68,7 @@ export function renderMinimalTopology(appId, runtimeCode) {
     profilePattern: '{deploymentProfile}.{environment}.env',
     vocabulary: {
       deploymentProfile: { allowed: ['standalone', 'cloud'] },
-      environment: { allowed: ['development', 'test', 'staging', 'production'] },
+      environment: { allowed: ['development', 'test', 'staging', 'demo', 'production'] },
     },
     defaults: {
       developmentProfileId: 'standalone.development',

@@ -447,6 +447,7 @@ const COMMAND_ACTIONS = new Set([
   'rollback',
   'submit',
   'sync',
+  'test',
   'transferOwner',
   'unpublish',
   'unpin',

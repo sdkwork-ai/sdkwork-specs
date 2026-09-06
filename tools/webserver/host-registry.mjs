@@ -2,7 +2,7 @@
 
 import { deriveEnvHosts, productionHostsForSurface, surfaceSupportsHttpWebserver } from './build-from-topology.mjs';
 
-export const LIFECYCLE_ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
+export const LIFECYCLE_ENVIRONMENTS = ['development', 'test', 'staging', 'demo', 'production'];
 
 /** Default base domain set for SDKWork-managed cloud products (§9.3). */
 export const DEFAULT_PRODUCT_BASE_DOMAINS = [

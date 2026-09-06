@@ -1079,7 +1079,7 @@ and import sibling modules into the gateway runtime config.
 | Materialized copies | Copied TOML at `/etc/sdkwork/webserver/modules/<module-id>/` (standalone upstream patched to the container gateway port) |
 | App-roots catalog | Generated `/etc/sdkwork/webserver/module-app-roots/<module-id>.toml` with discovered PC/H5 dist paths |
 | Docker defaults | `required = false`, `probe_upstreams = false` (sibling upstreams are not co-located in the webserver container) |
-| Multi-cluster | One host runs development/test/production containers on distinct **host** ports (`13800` / `18888` / `18080`); each container listens on gateway port **3800** internally so module `server.standalone.toml` upstreams stay uniform |
+| Multi-cluster | One host runs development/test/staging/demo/production containers on distinct **host** ports (`13800` / `18888` / `18081` / `19080` / `18080`; full port-key plan in `DOCKER_SPEC.md` §3.2); each container listens on gateway port **3800** internally so module `server.standalone.toml` upstreams stay uniform |
 | Adaptive Web static | Process `[app_roots]` maps `apps/*-{pc,h5}/dist/{standalone,cloud}/{dev,test,staging,prod}` from the checkout (default profile standalone); bundled image roots remain the fallback |
 | Multi-base-domain | Module environment TOML lists every registered host per `APP_RUNTIME_TOPOLOGY_NAMING.md` §9.1–§9.3 (`sdkwork.com`, `birdcoder.com`, `dtupay.com`, `sdkwork.cn`, `birdcoder.cn`, `dtupay.cn`, `skubc.com`, `skubc.cn`, `zowalk.com`, `zowalk.cn`, `offer86.com`, `offer86.cn`, `86offer.com`, `86offer.cn`, …) |
 | Module templates | Copy from `examples/webserver/modules/` in this standards repository |
@@ -1193,6 +1193,43 @@ declare container-resolvable upstreams (`sdkwork-api-cloud-gateway:8080`) and
 non-production hosts proxy through `gateway`; the webserver performs no
 sed-based configuration rewriting of module configs.
 
+#### 17.3.1 Startup Import-Mode Configuration (Normative)
+
+The active import mode is a **deployment input resolved at container start**,
+never an image property. Both sets are always materialized by the entrypoint;
+configuration only selects which set activates.
+
+| Configuration surface | Mechanism |
+| --- | --- |
+| Env file / compose | `SDKWORK_WEBSERVER_IMPORT_PROFILE=cloud\|standalone` declared in the lifecycle env file `env/<environment>.env`; the bundle compose forwards it into the container (`docker-compose.bundle.yml`: `SDKWORK_WEBSERVER_IMPORT_PROFILE: ${SDKWORK_WEBSERVER_IMPORT_PROFILE:-cloud}`) |
+| Entrypoint resolution | `SDKWORK_WEBSERVER_IMPORT_PROFILE` → default **`cloud`**. (The module sidecar *path probe* helper falls back further to `SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE` → `SDKWORK_DEPLOYMENT_PROFILE` → `standalone`; activation itself always defaults to `cloud`.) |
+| Startup activation | Entrypoint materializes `import.conf.standalone`, `import.conf.cloud`, and both layout siblings, then activates the selected profile by copying it onto the active `import.conf` / `layout-imports.toml` the runtime config includes |
+| Runtime switch (no recreate) | `pnpm import:switch:cloud` / `pnpm import:switch:standalone` (wrapping `node scripts/webserver-import-profile.mjs <profile>`) atomically re-copies the two active files; restart `serve-imports` afterwards. `pnpm import:status` prints the currently active set (or `default activation is cloud` when nothing is materialized yet) |
+
+What each mode imports — configuring `cloud` makes the webserver import every
+enabled sibling module's **cloud** sidecar, configuring `standalone` imports
+the **standalone** sidecar:
+
+| Mode | Imported per-module config | Edge semantics | Module PC/H5 assets served |
+| --- | --- | --- | --- |
+| `cloud` (default) | `<module>/deployments/webserver/nginx.cloud.<environment>.conf` | Module hosts proxy to the unified `api-*` cloud edge; upstreams resolve through the `gateway` upstream | cloud dist trees (`dist/cloud/<alias>`) |
+| `standalone` | `<module>/deployments/webserver/nginx.standalone.<environment>.conf` | Same-origin module edges (SDK API base URL `/`) | standalone dist trees (`dist/standalone/<alias>`) |
+
+Rules:
+
+- The module PC/H5 static source follows the active import set:
+  `SDKWORK_WEBSERVER_STATIC_SOURCE_PROFILE` defaults to
+  `SDKWORK_WEBSERVER_IMPORT_PROFILE`, so a cloud activation serves module
+  cloud builds and a standalone activation serves same-origin builds. The two
+  profiles `MUST NOT` be mixed within one activation.
+- `SDKWORK_WEBSERVER_IMPORT_PROFILE` `MUST` be declared in every shipped
+  lifecycle env file (env-file parity, `DOCKER_SPEC.md` §3.3) even when the
+  value is the `cloud` default.
+- Switching the import profile never rebuilds or rewrites module configs; if a
+  module lacks the sidecar for the selected profile
+  (`nginx.<profile>.<environment>.conf` missing), that module's include is
+  skipped and logged — the activation never fails the whole data plane.
+
 Rules:
 
 - Both sets are materialized on every entrypoint run; they are never
@@ -1244,6 +1281,7 @@ never use the `cloud` deployment profile:
 | Runtime env | Only `runtime-env.standalone.<environment>.json` sources exist; every SDK API base URL is the same-origin root `/` with `browserOriginMode = same-origin` |
 | Release | `scripts/webserver-release.mjs` and deb/rpm packaging accept `--deployment-profile standalone` only; no cloud server artifact exists |
 | Import plane | Unaffected — the `imports.d` dual configuration (§17.3) imports sibling modules and keeps both `standalone`/`cloud` sets (default `cloud`) |
+| Docker | Image naming, install bundle, five-environment install matrix, and host port plan follow `DOCKER_SPEC.md` (webserver row: `registry.sdkwork.com/apps/sdkwork-webserver-standalone:<version>`, port keys `SDKWORK_WEBSERVER_<ENV>_HOST_PORT` family) |
 
 Rationale: the webserver is the same-origin host application; its SPAs and API
 are served from one origin. Cloud-mode browser bundles of *other* modules are

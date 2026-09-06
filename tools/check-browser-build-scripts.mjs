@@ -12,7 +12,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 import {
-  STANDARD_ENVIRONMENT_ALIASES,
+  requiredEnvironmentAliases,
   canonicalAppSurfaceBuildCommand,
   canonicalRootBuildCommand,
   discoverBrowserAppRoots,
@@ -63,12 +63,13 @@ export function checkBrowserBuildScripts(root) {
   }
 
   const declaredProfiles = declaredDeploymentProfiles(root);
+  const environmentAliases = requiredEnvironmentAliases(root);
   const manifest = readJson(packagePath);
   const scripts = manifest.scripts ?? {};
   const architectures = [...new Set(apps.map((app) => app.architecture))];
 
   for (const architecture of architectures) {
-    for (const environmentAlias of STANDARD_ENVIRONMENT_ALIASES) {
+    for (const environmentAlias of environmentAliases) {
       for (const deploymentProfile of declaredProfiles) {
         const scriptName = standardRootBuildScript(architecture, environmentAlias, deploymentProfile);
         const expected = canonicalRootBuildCommand(root, architecture, environmentAlias, deploymentProfile);
@@ -92,7 +93,7 @@ export function checkBrowserBuildScripts(root) {
     const appPackagePath = path.join(app.root, 'package.json');
     const appManifest = readJson(appPackagePath);
     const appScripts = appManifest.scripts ?? {};
-    for (const environmentAlias of STANDARD_ENVIRONMENT_ALIASES) {
+    for (const environmentAlias of environmentAliases) {
       for (const deploymentProfile of declaredProfiles) {
         const scriptName = deploymentProfile === 'standalone'
           ? `build:${environmentAlias}`

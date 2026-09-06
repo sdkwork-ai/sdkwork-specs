@@ -9,6 +9,7 @@ export const LIFECYCLE_ENVIRONMENTS = Object.freeze([
   'development',
   'test',
   'staging',
+  'demo',
   'production',
 ]);
 
@@ -17,6 +18,7 @@ export const BROWSER_DIST_ENV_ALIASES = Object.freeze({
   development: 'dev',
   test: 'test',
   staging: 'staging',
+  demo: 'demo',
   production: 'prod',
 });
 

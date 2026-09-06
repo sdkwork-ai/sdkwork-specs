@@ -140,6 +140,48 @@ Default service bootstrap order:
 
 Applications with multiple bounded database modules `MAY` register multiple SPI modules. The orchestrator `MUST` execute them in manifest-declared order.
 
+### 4.4 Embedded Dependency Auto-Discovery (Federated Hosts)
+
+Applications that embed dependency surfaces (platform gateways, federated
+assemblies) `MUST NOT` require hand-run SQL or per-module manual bootstrap
+wiring to bring embedded database modules online. The host `MUST` implement
+startup-sequence steps 3-6 through framework-driven discovery:
+
+- Each enabled dependency surface declares its application root through
+  `SDKWORK_<MODULE>_APP_ROOT` (workspace `sdkwork-course` ->
+  `SDKWORK_COURSE_APP_ROOT`). Hosts resolve discovery inputs from these
+  variables, never from a hardcoded module list.
+- A surface root that ships no `database/database.manifest.json` is skipped
+  (API-only dependency). A root that *declares* database assets but fails to
+  load or parse `MUST` fail closed.
+- The host `MUST` run lifecycle through `sdkwork-database-lifecycle`
+  (`discover_database_modules` + `RegistryLifecycleOrchestrator` /
+  per-module `LifecycleOrchestrator`) on the process-shared pool. Hosts
+  `MUST NOT` import dependency-owned `*-database-host` crates to do this.
+- Lifecycle policy comes from each module manifest plus the
+  `SDKWORK_DATABASE_AUTO_MIGRATE` / `SDKWORK_DATABASE_SEED_ON_BOOT` /
+  `SDKWORK_DATABASE_SEED_LOCALE` / `SDKWORK_DATABASE_SEED_PROFILE` env keys.
+- Explicit migrate commands (e.g. `--migrate-databases` process mode,
+  installer orchestration, container migrate-on-start) `MUST` migrate every
+  discovered module regardless of `SDKWORK_DATABASE_AUTO_MIGRATE`: the
+  explicit command is the authorization, the env key governs only implicit
+  serve-time bootstrap.
+- Any discovery or bootstrap failure `MUST` fail closed: the process `MUST`
+  abort startup (serve mode) or exit non-zero (migrate mode) with a
+  structured `ERROR` event naming the workspace, module id, and failure
+  stage (`init` / `migrate` / `seed`). Silent continuation is forbidden.
+
+### 4.5 Embedded Dependency Server-Error Surfacing
+
+Hosts that proxy or compose embedded dependency routers `MUST` surface
+dependency 5xx failures in host logs. When an embedded dependency returns a
+server error, the host `MUST` emit a structured `ERROR` event containing at
+minimum: method, path, status, and the problem-details envelope fields
+(`code`, `detail`, `operationId`, `i18nKey`, `traceId`) when present. The
+gateway access log's `status`/`failure_class` alone is not sufficient for
+triage; failing to log the underlying cause defers incident triage to
+manual container log archaeology and is a spec violation.
+
 ## 5. Application Directory Dictionary
 
 ### 5.1 Authoritative Server Layout

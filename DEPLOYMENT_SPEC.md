@@ -537,11 +537,13 @@ start.
 Rules:
 
 - One image, every environment: all lifecycle environments of the
-  application (`development`, `test`, `staging`, and `production` where
-  declared) use the same image tag. Environment selection `MUST` happen at
-  deploy time through the deployment env file (for example
+  application (`development`, `test`, `staging`, `demo`, and `production`
+  where declared) use the same image tag. Environment selection `MUST` happen
+  at deploy time through the deployment env file (for example
   `SDKWORK_WEBSERVER_ENVIRONMENT` / `GATEWAY_ENVIRONMENT` and related
-  variables); image builds `MUST NOT` bake environment values.
+  variables); image builds `MUST NOT` bake environment values. Image naming,
+  tagging, bundle layout, and the per-environment install procedure are
+  standardized in `DOCKER_SPEC.md`.
 - Every environment supports multi-instance deployment. Each instance:
   - runs as its own compose project `<application>-<environment>-i<index>`
     (for example `sdkwork-webserver-production-i1` or
@@ -569,11 +571,33 @@ Rules:
   sdkwork-webserver deployment, which upstreams the per-instance gateway
   host ports.
 - The bundle deploy script is the single generic entrypoint:
-  `deploy.sh --environment <env> [--replicas N] [--embedded] [--down|--ps|--logs]`.
+  `deploy.sh --environment <env> [--replicas N] [--embedded] [--down|--ps|--logs|--stop|--start|--restart|--check-config]`.
   It `MUST` fail before side effects when the environment is missing or
   unknown, and `MUST` stay idempotent (re-running updates the existing stack).
   Its default dependency mode is external host-system services (§6.1);
   `--embedded` is the explicit opt-in for fully self-contained hosts.
+- Unified deployer capability matrix (normative for every bundle deployer —
+  api-gateway, cloudrouter, im, webserver):
+  - **fail-closed env preflight** before any side effect: every required key
+    is checked read-only (configured values are never rewritten), all gaps are
+    reported in ONE run with concrete fix instructions
+    (`deploy.sh --environment <env> --set KEY '<value>'` first, direct env-file
+    edit second), and `<CHANGE_ME>` placeholders fail the run.
+  - **`--check-config`** runs the preflight only (including live external
+    PostgreSQL/Redis connectivity probes in external mode) and deploys
+    nothing; the `bin/docker-deploy.sh check-config` entry forwards to it.
+  - **`--set KEY VALUE` / `--force-set KEY VALUE`** write one env-file value
+    (`--set` refuses to overwrite a configured value; secrets are logged
+    redacted).
+  - **`--env-file <path>`** targets an existing env file outside the bundle;
+    release.sh forwards it to deploy.sh verbatim.
+  - **lifecycle actions**: `--down` removes containers; `--stop` keeps them
+    for a fast `--start`; `--restart` bounces processes only (env/config
+    edits need a full apply). Instance projects beyond `--replicas` left by
+    earlier applies `MUST` be discovered and torn down by `--down`/`--stop`.
+  - **dependency mode resolution chain** (uniform): `--embedded`/`--external`
+    flag > `<APP>_DEPS_MODE` in the env file > external; an unknown value
+    fails closed.
 - Container space mounts follow `SDKWORK_WEBSERVER_SPEC.md` section 17
   (sdkwork-webserver only): the space root is read-only and the
   `sdkwork-space` checkout subtree is a read-write overlay (clone/pull
@@ -601,10 +625,11 @@ Rules:
   `env/<environment>.i<index>.env` is layered on top of the base environment
   env file (later `--env-file` wins), so each instance can carry its own
   primary domain, clone URL, TLS/ACME profile, or any other deployment input.
-- Bundle deploy port-key contract (normative; all four lifecycle environments
-  including staging): the generic deploy script resolves per-environment host
-  ports from the env file through these keys, each with a safe fallback so a
-  missing key can never leave the variable unset under `set -u`:
+- Bundle deploy port-key contract (normative; all five lifecycle environments
+  including staging and demo): the generic deploy script resolves
+  per-environment host ports from the env file through these keys, each with a
+  safe fallback so a missing key can never leave the variable unset under
+  `set -u`:
   - development: `SDKWORK_WEBSERVER_DEV_HOST_PORT` (fallback `13800`),
     `SDKWORK_WEBSERVER_DEV_IMPORT_HTTP_HOST_PORT` (`80`),
     `SDKWORK_WEBSERVER_DEV_HTTPS_HOST_PORT` (`443`).
@@ -614,6 +639,9 @@ Rules:
   - staging: `SDKWORK_WEBSERVER_STAGING_HOST_PORT` (`18081`),
     `SDKWORK_WEBSERVER_STAGING_IMPORT_HTTP_HOST_PORT` (`18099`),
     `SDKWORK_WEBSERVER_STAGING_HTTPS_HOST_PORT` (`38431`).
+  - demo: `SDKWORK_WEBSERVER_DEMO_HOST_PORT` (`19080`),
+    `SDKWORK_WEBSERVER_DEMO_IMPORT_HTTP_HOST_PORT` (`19098`),
+    `SDKWORK_WEBSERVER_DEMO_HTTPS_HOST_PORT` (`38432`).
   - production: `SDKWORK_WEBSERVER_PROD_HOST_PORT` (`18080`),
     `SDKWORK_WEBSERVER_PROD_IMPORT_HTTP_HOST_PORT` (`18098`),
     `SDKWORK_WEBSERVER_PROD_HTTPS_HOST_PORT` (`38430`).
@@ -670,7 +698,7 @@ Rules:
   `deployments/docker/scripts/setup-host-external-deps.sh`) `MUST` derive
   every role/database/schema/password from the checked-in env files (single
   source of truth) and `MUST` cover every declared lifecycle environment,
-  including staging. Duplicate hardcoded passwords inside provisioning
+  including staging and demo. Duplicate hardcoded passwords inside provisioning
   scripts that can drift from the env files are forbidden.
 - **WSL systemd note.** The Ubuntu `redis-server.service` unit is
   `Type=notify`; on WSL hosts where the `READY=1` notification stalls,
@@ -728,7 +756,7 @@ Rules:
 - [ ] No checked-in env file, compose file, provisioning script, or operator
       doc references the retired `15432` dependency port.
 - [ ] Provisioning script identities are derived from the env files and cover
-      every declared lifecycle environment (including staging).
+      every declared lifecycle environment (including staging and demo).
 - [ ] The `development` container deployment resolves the identical workspace
       database identity as `.env.postgres` (§7.1 `ENVIRONMENT_SPEC.md`) —
       same host instance, database, schema, username, password.

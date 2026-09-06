@@ -85,6 +85,41 @@ Rules:
   platform gateway declares the embedded realtime surface, and an ADR
   (`ADR-20260809-platform-gateway-realtime-hosting`) is recorded. The
   application standalone gateway remains the host for `standalone` profiles.
+- Client realtime WebSocket edge selection `MUST` match the deployment
+  profile. Browser and desktop client build surfaces (`VITE_*_WEBSOCKET_URL`
+  and runtime-env websocket keys) resolve the realtime WebSocket origin as
+  follows:
+  - `cloud` profile: the realtime WebSocket `MUST` ride the platform
+    `api-*` edge (the SDK base domain, e.g. `api-dev.<domain>`), never the
+    application web ingress edge (`im-*.<domain>`). The application web
+    ingress edge only proxies declared HTTP API paths and serves static
+    files; a WebSocket handshake sent there fails with an unexpected HTTP
+    response. The client scheme `MUST` match the platform edge scheme the
+    environment actually serves (plain-HTTP development edge → `ws://`,
+    TLS environments → `wss://`).
+  - `standalone` profile: the realtime WebSocket `MUST` ride the
+    `application.public-ingress` edge (single ingress), which collapses to
+    the browser same origin in same-origin browser deliveries.
+  Client SDKs `MUST` resolve the explicit websocket env key first, then
+  derive the WebSocket origin from the platform api-gateway HTTP key
+  (cloud) or the application public HTTP key / page origin (standalone).
+  A websocket base that resolves to the `im-*` web ingress host in a
+  `cloud` profile is a topology violation.
+- Client build surfaces `MUST NOT` carry dev-process bindings. Vite dotenv
+  surfaces (`.env.<profile>.<environment>`) and build-time `VITE_*` values
+  `MUST` resolve every URL key to the deployed domain edges (no `:port`,
+  no `SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL` override, no loopback
+  host). Local gateway/port binding for `pnpm dev` is a dev-process concern:
+  the dev command injects renderer env from the topology profile at process
+  level, and vite gives process env precedence over dotenv files. Client
+  bundles `MUST` therefore never embed a local gateway URL (embedding the
+  whole `import.meta.env` object is the leak vector to watch).
+- The api edge that terminates the application realtime plane `MUST`
+  declare the WebSocket upgrade as a rendered server location
+  (`match = "= /im/v3/api/realtime/ws"`, `proxyWebsocketUpgrade = true`,
+  long `proxyReadTimeout`/`proxySendTimeout`) sourced from the module's
+  server TOML — not only as a generated snippet include — so snippet
+  regeneration can never silently drop the Upgrade/Connection headers.
 - External platform APIs use `platform.api-gateway` URLs only in cloud client
   bootstrap. A standalone profile embeds every selected same-origin dependency
   as an owner assembly contribution behind `application.public-ingress` and

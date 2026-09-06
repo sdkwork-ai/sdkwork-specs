@@ -3,7 +3,7 @@
 import { mergeConfigs } from './merge.mjs';
 import { expandHttpDefaults } from './expand-defaults.mjs';
 
-export const LIFECYCLE_ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
+export const LIFECYCLE_ENVIRONMENTS = ['development', 'test', 'staging', 'demo', 'production'];
 export const DEPLOYMENT_PROFILES = ['standalone', 'cloud'];
 
 export const ENVIRONMENT_FILE_NAMES = Object.fromEntries(

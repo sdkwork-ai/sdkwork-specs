@@ -31,6 +31,7 @@ const ENVIRONMENT_ALIASES = Object.freeze({
   dev: 'development',
   test: 'test',
   staging: 'staging',
+  demo: 'demo',
   prod: 'production',
 });
 const CLIENT_ARCHITECTURES = new Set(['pc', 'h5']);
@@ -513,6 +514,27 @@ export async function buildBrowserClientFromAppSurface(options) {
 
 export const STANDARD_ENVIRONMENT_ALIASES = Object.freeze(Object.keys(ENVIRONMENT_ALIASES));
 
+/**
+ * Environment aliases a repository must expose build scripts for.
+ * The base four (`dev`, `test`, `staging`, `prod`) are always required.
+ * `demo` is required only when the repository declares a demo lifecycle
+ * environment in `etc/sdkwork.deployment.config.json` (`environments.demo`).
+ * Authority: PNPM_SCRIPT_SPEC.md §4.2, DOCKER_SPEC.md §3/§6.2.
+ */
+export function requiredEnvironmentAliases(root) {
+  const base = ['dev', 'test', 'staging', 'prod'];
+  try {
+    const configPath = path.join(path.resolve(root), 'etc', 'sdkwork.deployment.config.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (config?.environments && Object.prototype.hasOwnProperty.call(config.environments, 'demo')) {
+      return [...base, 'demo'];
+    }
+  } catch {
+    // No deployment config (or unreadable): base family only.
+  }
+  return base;
+}
+
 export function standardRootBuildScript(architecture, environmentAlias, deploymentProfile = 'standalone') {
   const suffix = deploymentProfile === 'standalone'
     ? environmentAlias
@@ -569,8 +591,8 @@ async function main() {
   });
 
   if (values.help) {
-    console.log('Usage: node tools/build-browser-client.mjs --root <repo> --architecture pc|h5 --environment dev|test|staging|prod [--deployment-profile standalone|cloud] [--skip-typecheck]');
-    console.log('       node tools/build-browser-client.mjs --app-root <apps/...> --environment dev|test|staging|prod [--deployment-profile standalone|cloud]');
+    console.log('Usage: node tools/build-browser-client.mjs --root <repo> --architecture pc|h5 --environment dev|test|staging|demo|prod [--deployment-profile standalone|cloud] [--skip-typecheck]');
+    console.log('       node tools/build-browser-client.mjs --app-root <apps/...> --environment dev|test|staging|demo|prod [--deployment-profile standalone|cloud]');
     return;
   }
 

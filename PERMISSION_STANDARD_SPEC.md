@@ -143,8 +143,9 @@ UI `can()` checks are hints only. Server enforcement is mandatory.
 
 | Extension | Meaning |
 | --- | --- |
-| `x-sdkwork-permission` | Required permission code |
+| `x-sdkwork-permission` | Required permission code (backend-api / open-api; app-api only with `x-sdkwork-auth-tier: 3`) |
 | `x-sdkwork-required-surface` | `organizationMember` for backend protected routes |
+| `x-sdkwork-auth-tier` | Surface authorization tier `0`–`3` (see §Surface Authorization Tiers). App-api default is `1` when absent. |
 
 ## Extension Rules
 
@@ -152,6 +153,59 @@ UI `can()` checks are hints only. Server enforcement is mandatory.
 - Custom role grants cannot exceed assigner's effective `permissionScope`
 - Product permissions register under `{product}.{resource}.{action}` through `IAM_MODULE_MANIFEST_SPEC.md` and IMF discovery
 - Platform kernel permissions remain in `iam-kernel`; product domains must not be seeded from `sdkwork-iam-bootstrap` monolith catalogs
+
+## Surface Authorization Tiers And Consumer Default-Open Policy
+
+> Motivation: consumer-facing (C-end) products `MUST` deliver a usable end-to-end experience
+> with **zero per-feature permission configuration**. OAuth-style per-route scopes are a
+> delegation mechanism for third-party open-api and service principals, not an access-control
+> model for first-party consumer features. Requiring `appstore.catalog.read`-style scopes on
+> consumer reads (or organization login scope on personal operations) forces every deployment
+> to seed, grant, and maintain large permission catalogs and produces systemic 40301/40304
+> failures. This section is normative for all app surfaces.
+
+### Authorization Tiers
+
+Every operation is classified into exactly one tier. The tier `MUST` be derived from the
+operation's exposure and data ownership, not from the domain's permission catalog.
+
+| Tier | Gate | Typical operations | Scope / permission requirement |
+| --- | --- | --- | --- |
+| 0 — public | none (principal optional) | store catalog browsing, charts, events, featured/recommendation content, public listings | `MUST NOT` require any scope or permission code |
+| 1 — consumer-authenticated | any authenticated principal (personal tenant session) | search suggestions/trending, personalized feeds, creating personal resources (personal knowledge spaces, drafts) | `MUST NOT` require per-route scopes; authentication only |
+| 2 — ownership / membership | authenticated + resource ownership or membership ACL (`app_user`) | reading/updating/deleting one's own history, spaces, drafts, memberships | `MUST` be enforced by ownership checks or resource ACLs, never by domain scopes |
+| 3 — role / scope gated | explicit permission code or OAuth scope | publisher listing writes, moderation decisions, market channel admin, analytics dashboards, enterprise backend-api, platform operations | `x-sdkwork-permission` / scope checks allowed and expected |
+
+Rules:
+
+- First-party app-api (`/app/v3/api/...`) consumer operations `MUST` default to tier 0–2.
+  Declaring `x-sdkwork-permission` on, or enforcing service-level scope checks for, tier 0–2
+  operations is a contract violation.
+- Per-route OAuth-style scopes (`{domain}.{resource}.{action}`) exist for third-party open-api
+  delegation, service accounts/API keys, and enterprise backend-api routes — not for first-party
+  C-end consumers. Open-api surfaces `MUST` still enforce their own authentication (API key,
+  service principal) independently of tier classification.
+- The standard `app_user` role `MUST` provide the full consumer experience out of the box: no
+  domain read scopes need to be seeded, granted, or toggled for tier 0–2 operations, and
+  applications `MUST NOT` require operators to enable per-feature scopes after deployment.
+- Organization login scope (`loginScope = "ORGANIZATION"`) is required only for
+  organization-shared resources and backend-api surfaces. A personal tenant session `MUST` be
+  able to create and operate personal resources (for example personal knowledge spaces) on
+  deployments with a configured runtime organization; persistence layers resolve the effective
+  organization from the deployment-owned runtime scope so RLS/session scope stays consistent.
+- Organization-scoped sessions that actively claim an organization context `MUST` still be
+  validated against the deployment organization (fail-closed on mismatch).
+- Consumer operations that touch money, real-name/personal-data export beyond the actor's own
+  data, or administrative capabilities remain tier 3 regardless of surface.
+- Service-layer scope helpers `SHOULD` distinguish these tiers; a shared service consumed by
+  both app-api and open-api `MUST NOT` apply tier-3 scope gating to tier 0–2 operations of the
+  consumer surface.
+
+Migration rule: existing app-api operations that fail this classification (40301
+`Missing required scope` / 40304 `organization context is required` on first-party consumer
+features) `MUST` be migrated to the tier model: remove the scope requirement (tier 0/1) or
+replace it with an ownership/ACL check (tier 2). Backend-api and open-api declarations are
+unchanged.
 
 ## Consumer Permission Composition
 
@@ -179,9 +233,26 @@ Materialization is performed by `sdkwork-iam-module-registry` during database bo
 
 Related: `IAM_RBAC_FEDERATION_SPEC.md`, `IAM_CATALOG_GOVERNANCE_SPEC.md`
 
+## Verification
+
+```bash
+node ../sdkwork-specs/tools/check-app-permission-tiers.mjs --workspace .
+```
+
+The gate fails when any `apis/app-api/**` operation declares `x-sdkwork-permission`
+without `x-sdkwork-auth-tier: 3`. Application roots with HTTP `sdkDependencies` must
+additionally run `check-permission-composition.mjs` (declared codes must resolve to a
+module catalog).
+
 ## Acceptance
 
 - [ ] All protected backend manifest routes declare `required_permission`
-- [ ] OpenAPI operations include matching `x-sdkwork-permission`
+- [ ] Backend-api and open-api OpenAPI operations include matching `x-sdkwork-permission`
+- [ ] `check-app-permission-tiers.mjs` passes: no app-api operation declares a
+      per-route scope without an explicit `x-sdkwork-auth-tier: 3` classification
+- [ ] App-api consumer operations are classified into surface authorization tiers and no
+      tier 0–2 operation declares or enforces a per-route scope
+- [ ] A freshly registered `app_user` can complete the core consumer journey with zero
+      additional permission configuration (no 40301/40304 on tier 0–2 operations)
 - [ ] Standard roles seeded with permission matrix
 - [ ] Frontend uses `@sdkwork/iam-contracts` permission helpers (no raw HTTP auth)

@@ -11,7 +11,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 import {
-  STANDARD_ENVIRONMENT_ALIASES,
+  requiredEnvironmentAliases,
   canonicalAppSurfaceBuildCommand,
   canonicalRootBuildCommand,
   discoverBrowserAppRoots,
@@ -122,8 +122,9 @@ export function alignBrowserBuildScripts(root, options = {}) {
 
   const architectures = [...new Set(apps.map((app) => app.architecture))];
   const profiles = declaredDeploymentProfiles(root);
+  const environmentAliases = requiredEnvironmentAliases(root);
   for (const architecture of architectures) {
-    for (const environmentAlias of STANDARD_ENVIRONMENT_ALIASES) {
+    for (const environmentAlias of environmentAliases) {
       for (const deploymentProfile of profiles) {
         const scriptName = standardRootBuildScript(architecture, environmentAlias, deploymentProfile);
         const command = canonicalRootBuildCommand(root, architecture, environmentAlias, deploymentProfile);
@@ -150,7 +151,7 @@ export function alignBrowserBuildScripts(root, options = {}) {
     const appManifest = readJson(appPackagePath);
     appManifest.scripts ??= {};
     let appChanged = false;
-    for (const environmentAlias of STANDARD_ENVIRONMENT_ALIASES) {
+    for (const environmentAlias of environmentAliases) {
       for (const deploymentProfile of profiles) {
         const scriptName = deploymentProfile === 'standalone'
           ? `build:${environmentAlias}`

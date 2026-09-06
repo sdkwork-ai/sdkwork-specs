@@ -99,7 +99,7 @@ function syncDeployExposeFromTopology(moduleRoot, topology, appId) {
   for (const [profileId, block] of Object.entries(parsed.profiles)) {
     if (!profileId.includes('.')) continue;
     const environment = profileId.split('.').pop();
-    if (!['development', 'test', 'staging', 'production'].includes(environment)) continue;
+    if (!['development', 'test', 'staging', 'demo', 'production'].includes(environment)) continue;
 
     const registeredHosts = [...new Set(
       surfaces.flatMap((surfaceId) => hostsForSurface(topology.cloudPublicHosts[surfaceId], environment)),

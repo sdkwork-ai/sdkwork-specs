@@ -124,7 +124,7 @@ const QUALITY_TIERS = new Set([
   'docker',
 ]);
 const BROWSER_CLIENT_ARCHITECTURES = new Set(['pc', 'h5']);
-const BROWSER_BUILD_ENV_ALIASES = new Set(['dev', 'test', 'staging', 'prod']);
+const BROWSER_BUILD_ENV_ALIASES = new Set(['dev', 'test', 'staging', 'demo', 'prod']);
 const DEV_AXIS_VALUES = new Set([
   ...RUNTIME_TARGETS,
   ...DATABASE_ALIASES,
@@ -433,7 +433,7 @@ function pushBrowserBuildIssues(scriptName, issues, prefix = '') {
   }
   if (parts.length > 4) {
     issues.push(
-      `${prefix}${scriptName}: browser build grammar is build:<pc|h5>:<dev|test|staging|prod>[:standalone|cloud]`,
+      `${prefix}${scriptName}: browser build grammar is build:<pc|h5>:<dev|test|staging|demo|prod>[:standalone|cloud]`,
     );
   }
 }
@@ -454,7 +454,7 @@ function pushAppSurfaceBrowserBuildIssues(scriptName, issues, prefix = '') {
   }
   if (parts.length > 3) {
     issues.push(
-      `${prefix}${scriptName}: app-surface browser build grammar is build:<dev|test|staging|prod>[:standalone|cloud]`,
+      `${prefix}${scriptName}: app-surface browser build grammar is build:<dev|test|staging|demo|prod>[:standalone|cloud]`,
     );
   }
 }

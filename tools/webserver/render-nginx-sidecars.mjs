@@ -47,11 +47,13 @@ function readLayoutV3(webserverDir) {
   return { common, environmentDocs, profileDocs };
 }
 
-function removeLegacySidecars(webserverDir) {
+function removeLegacySidecars(webserverDir, keepFiles = new Set()) {
   for (const entry of fs.readdirSync(webserverDir)) {
-    if (LEGACY_SIDECAR_PATTERN.test(entry)) {
-      fs.unlinkSync(path.join(webserverDir, entry));
-    }
+    if (!LEGACY_SIDECAR_PATTERN.test(entry)) continue;
+    // Sidecars that this render pass regenerates are overwritten in place;
+    // only remove legacy-named files that will not be rewritten.
+    if (keepFiles.has(entry)) continue;
+    fs.unlinkSync(path.join(webserverDir, entry));
   }
 }
 
@@ -83,7 +85,12 @@ export function renderModuleNginxSidecars(moduleRoot, options = {}) {
 
   const confBase = nginx.confFile ?? 'nginx.conf';
   const moduleCode = runtimeCode ?? common.id ?? path.basename(moduleRoot).replace(/^sdkwork-/u, '');
-  removeLegacySidecars(webserverDir);
+  const keepFiles = new Set(
+    DEPLOYMENT_PROFILES.flatMap((profile) =>
+      LIFECYCLE_ENVIRONMENTS.map((environment) => sidecarFileName(confBase, profile, environment)),
+    ),
+  );
+  removeLegacySidecars(webserverDir, keepFiles);
 
   const written = [];
   const warnings = [];

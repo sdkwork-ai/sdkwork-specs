@@ -91,3 +91,4 @@ etc/**/*.local.*
 
 
 .workbuddy/
+/bin/

@@ -164,79 +164,81 @@ function assertCloudClientUrls(values, profile) {
 }
 
 /**
- * Vite dotenv surfaces are dev/runtime conveniences consumed by `vite dev`
- * (`loadEnv` + dev proxy) and by `vite build --mode <profile>`. They must carry
- * single-origin URL values: the ';'-joined multi-origin cloud API materialization
- * is a build/deploy runtime document concern (ENVIRONMENT_SPEC §5.1.0.1) and is
- * not parseable by URL-consuming dev surfaces (vite proxy targets, SDK base URL
- * readers).
+ * Vite dotenv surfaces are shared by `vite build --mode <profile>` and
+ * `vite dev`. They MUST carry only the deployed domain edges (ENVIRONMENT_SPEC
+ * §5.1.0.1, APP_RUNTIME_TOPOLOGY_SPEC §3):
+ *   - gateway/SDK/API base URL keys -> the primary cloud `api-*` edge
+ *     (scheme-matched: plain-HTTP development edge -> `http://`, TLS
+ *     environments -> `https://`), single origin;
+ *   - realtime WebSocket keys -> the same api-* edge with `ws:`/`wss:`;
+ *   - application public HTTP keys -> the application web ingress edge
+ *     without any dev port;
+ *   - no local gateway override (`SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL`)
+ *     and no dev-process port (`:3801`/`:3900`) may leak into the surface.
+ * `pnpm dev` binds local ports through dev-process env injection instead
+ * (the `sdkwork-app dev` command derives renderer env from the topology
+ * profile; vite gives process env precedence over .env files), so the shared
+ * dotenv surface stays deploy-safe for every environment.
  *
- * Cloud profiles therefore keep their topology source values (single origins)
- * except:
- * - cloud.development binds every gateway-attached base URL to the locally
- *   started sdkwork-api-cloud-gateway (its own dev command, bind 127.0.0.1:3900)
- *   declared via SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL, so `dev:cloud`
- *   quick-starts and debugs against the local gateway. Gateway-attached means
- *   the platform gateway key itself (the SDKWORK or VITE PLATFORM_API_GATEWAY_HTTP_URL
- *   forms),
- *   router application edges (cloudrouter), and any key whose host matches the
- *   deployed platform gateway host (SDK/open-API/base URLs anchored to the
- *   gateway edge). Separate service edges (agents, voice, drive app hosts, ...)
- *   keep their remote values.
- * - higher cloud environments fold the primary (first) registered origin so
- *   stale multi-origin values never leak into dotenv surfaces.
+ * The ';'-joined multi-origin cloud API materialization is a build/deploy
+ * runtime document concern (ENVIRONMENT_SPEC §5.1.0.1) and is not parseable by
+ * URL-consuming dev surfaces; dotenv values fold to the primary registered
+ * origin.
  */
-export function applyViteSurfaceCloudValues(values, sourceValues, profile) {
+export function applyViteSurfaceCloudValues(values, sourceValues, profile, { repositoryRoot, deployment, origins } = {}) {
   if (profile.deploymentProfile !== 'cloud') {
     return values;
   }
-  const isDevelopment = profile.environment === 'development';
-  const localGatewayUrl = String(sourceValues.SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL ?? '').trim();
-  const localHost = isDevelopment && REWRITABLE_URL_VALUE_PATTERN.test(localGatewayUrl)
-    ? parseUrlHost(localGatewayUrl)
-    : '';
-  let gatewayHost = '';
-  if (localHost) {
-    for (const [key, value] of Object.entries(sourceValues)) {
-      if (!/(?:^|_)PLATFORM_API_GATEWAY_HTTP_URL$/u.test(key)) {
-        continue;
-      }
-      const host = parseUrlHost(value);
-      if (host && host !== localHost) {
-        gatewayHost = host;
-        break;
-      }
-    }
+  const resolvedOrigins = origins ?? resolveCloudApiOriginListForRepository({
+    repositoryRoot,
+    environment: profile.environment,
+    deployment,
+    preferTopology: true,
+  });
+  const primaryEdge = String(resolvedOrigins[0] ?? '').trim();
+  if (!primaryEdge) {
+    throw new Error(`${profile.profileId} has no registered cloud API origin for dotenv normalization.`);
   }
-  const projected = { ...values };
-  for (const [key, rawValue] of Object.entries(projected)) {
+  const development = profile.environment === 'development';
+  const apiEdge = development ? primaryEdge.replace(/^https:/u, 'http:') : primaryEdge;
+  const wsEdge = development ? apiEdge.replace(/^http:/u, 'ws:') : primaryEdge.replace(/^https:/u, 'wss:');
+  const gatewayAttachedKey = /(?:PLATFORM_API_GATEWAY_HTTP_URL|_API_BASE_URL|_SDK_BASE_URL)$/u;
+  const applicationPublicKey = /(?:^|_)APPLICATION_PUBLIC_HTTP_URL$/u;
+  const websocketKey = /WEBSOCKET_URL$/u;
+  const projected = {};
+  for (const [key, rawValue] of Object.entries(values)) {
+    // The local gateway override is a dev-process concern; it never appears in
+    // the shared dotenv build surface (SDK_SPEC §5.1, PNPM_SCRIPT_SPEC §3).
+    if (/(?:^|_)LOCAL_PLATFORM_API_GATEWAY_HTTP_URL$/u.test(key)) {
+      continue;
+    }
     let raw = String(rawValue ?? '').trim();
     if (raw.includes(';')) {
       // Fold stale multi-origin lists to the primary registered origin first:
       // URL-consuming dev surfaces cannot parse ';'-joined origin lists.
-      const primaryOrigin = raw.split(';')[0]?.trim();
-      if (primaryOrigin) {
-        projected[key] = primaryOrigin;
-        raw = primaryOrigin;
-      }
+      raw = raw.split(';')[0]?.trim() ?? '';
     }
-    if (localHost && REWRITABLE_URL_VALUE_PATTERN.test(raw)) {
-      const host = parseUrlHost(raw);
-      const isGatewayKey = /PLATFORM_API_GATEWAY_HTTP_URL$|ROUTER_APPLICATION_(?:PUBLIC|OPEN|BACKEND)_HTTP_URL$/u.test(key);
-      if (host && host !== localHost && (isGatewayKey || (gatewayHost && host === gatewayHost))) {
+    if (websocketKey.test(key) && REWRITABLE_URL_VALUE_PATTERN.test(raw)) {
+      projected[key] = wsEdge;
+      continue;
+    }
+    if (gatewayAttachedKey.test(key) && REWRITABLE_URL_VALUE_PATTERN.test(raw)) {
+      projected[key] = apiEdge;
+      continue;
+    }
+    if (applicationPublicKey.test(key) && REWRITABLE_URL_VALUE_PATTERN.test(raw)) {
+      // Application public HTTP keys carry no dev port: the :3801 web dev
+      // ingress binding is a dev-process concern (SDKWORK_IM_WEB_DEV_INGRESS_BIND).
+      try {
         const parsedUrl = new URL(raw);
-        const localBase = localGatewayUrl.replace(/\/+$/u, '');
-        projected[key] = /^wss?:\/\//iu.test(raw)
-          ? `${localGatewayUrl.startsWith('https') ? 'wss' : 'ws'}://${localHost}${parsedUrl.pathname === '/' ? '' : parsedUrl.pathname}${parsedUrl.search}`
-          : `${localBase}${parsedUrl.pathname === '/' ? '' : parsedUrl.pathname}${parsedUrl.search}`;
+        parsedUrl.port = '';
+        projected[key] = parsedUrl.toString().replace(/\/+$/u, '');
+      } catch {
+        projected[key] = raw;
       }
+      continue;
     }
-  }
-  if (isDevelopment && localGatewayUrl) {
-    // Browser-visible anchor (APP_RUNTIME_TOPOLOGY_SPEC section 4.2, SDK_SPEC
-    // section 5.1 step 2): frontend SDK integrations read the local gateway
-    // from import.meta.env before any checked-in environment domain fallback.
-    projected.VITE_SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL = localGatewayUrl;
+    projected[key] = raw;
   }
   return projected;
 }
@@ -534,7 +536,10 @@ export function materializeClientEnv({
         profile: sourceProfile.profile,
       });
       const values = isViteSurface
-        ? applyViteSurfaceCloudValues(surfaceValues, sourceProfile.values, sourceProfile.profile)
+        ? applyViteSurfaceCloudValues(surfaceValues, sourceProfile.values, sourceProfile.profile, {
+            repositoryRoot: normalizedRoot,
+            deployment: deploymentIndex,
+          })
         : applyCloudGatewayProjection(
             surfaceValues,
             deploymentIndex,
