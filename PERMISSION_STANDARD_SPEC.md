@@ -181,6 +181,15 @@ Rules:
 - First-party app-api (`/app/v3/api/...`) consumer operations `MUST` default to tier 0–2.
   Declaring `x-sdkwork-permission` on, or enforcing service-level scope checks for, tier 0–2
   operations is a contract violation.
+- **Zero-config consumer journeys (framework execution rule)**: route-manifest
+  `required_permission` gates `MUST NOT` block requests on app-api surfaces. The shared
+  web-framework `ManifestAuthorizationPolicy` enforces manifest permissions on backend-api
+  and open-api only; on app-api a signed-in principal without the declared code proceeds
+  and access is decided by service-layer ownership/ACL checks. A product feature is
+  considered done when it works for a freshly registered `app_user` with **zero** IAM
+  catalog seeding, role grants, or per-feature permission toggles — "implement the API,
+  then configure permissions before users can call it" is a delivery defect, not a
+  deployment step.
 - Per-route OAuth-style scopes (`{domain}.{resource}.{action}`) exist for third-party open-api
   delegation, service accounts/API keys, and enterprise backend-api routes — not for first-party
   C-end consumers. Open-api surfaces `MUST` still enforce their own authentication (API key,
