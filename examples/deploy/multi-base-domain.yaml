@@ -31,8 +31,8 @@ profiles:
         mode: web+api
         web: adaptive
         aliases:
-          - router-test.birdcoder.com
-          - router-test.dtupay.com
+          - router-test.birdcoder.com router-test.noaper.com
+          - router-test.dtupay.com router-test.noaper.com
     packages: []
     overrides: {}
 
@@ -56,7 +56,7 @@ profiles:
         mode: web+api
         web: adaptive
         aliases:
-          - router.birdcoder.com
-          - router.dtupay.com
+          - router.birdcoder.com router.noaper.com
+          - router.dtupay.com router.noaper.com
     packages: []
     overrides: {}

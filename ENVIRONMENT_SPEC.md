@@ -321,7 +321,21 @@ Rules:
 - Every public SDK API base URL field in a cloud browser runtime source
   (`appApiBaseUrl`, `backendApiBaseUrl`, dependency SDK base URLs such as
   `driveAppApiBaseUrl`/`appbaseAppApiBaseUrl`, and deployment SDK base URLs)
-  `MUST` equal that environment's `cloudApiBaseUrl` origin. The API edge
+  `MUST` resolve to the registered `api-<suffix>.<base-domain>` origin family
+  of that environment. Because a deployed edge must serve every registered
+  base domain (previous bullet), cloud runtime sources materialize the
+  **complete origin family** as a semicolon-joined list (`origin1;origin2;…`,
+  primary base domain first) — or the equivalent `cloudApiBaseUrls` array —
+  and browser SDK factories `MUST` select the member whose base domain
+  matches the page host at request time (same base-domain derivation as
+  `APP_RUNTIME_TOPOLOGY_NAMING.md` §9), falling back to the primary origin
+  when the page host is not a registered deployment host. A field carrying a
+  single `api-*` origin is valid only when the repository registers exactly
+  one base domain. A legacy single-primary-origin value is a drift defect:
+  the canonical materializer is
+  `sdkwork-specs/tools/browser-cloud-api-base.mjs`
+  (`cloudSdkBaseUrlMaterializationValue`) and the build-time validator is
+  `build-browser-client.mjs` (§5.1.4.2). The API edge
   routes the canonical prefixes (`/app/v3/api`, `/backend/v3/api`, dependency
   prefixes) to the owning services. Per-service browser-facing hostnames
   (`server-app-dev.*`, `server-admin-*`) `MUST NOT` be used as browser SDK
@@ -349,6 +363,53 @@ Rules:
   startup.
 - `cloud.development` never inherits `standalone.development`, loopback API
   endpoints, or `cloud.production`. Required remote surface URLs are explicit.
+
+### 5.1.0.2 Build-Serve Profile Coherence (Deployment Contract)
+
+The two `standalone`/`cloud` axes in this workspace are independent by design
+and `MUST` be understood — and documented in every deployment guide — as
+follows:
+
+| Axis | Owner | Default | Meaning |
+| --- | --- | --- | --- |
+| Build default profile | `sdkwork.app.config.json` `runtime.defaultDeploymentProfile`; canonical runner `build:<client>:<env>` without a `:cloud` suffix | `standalone` (same-origin `/`) | Which dist subtree a bare `pnpm build` / `build:<client>:<env>` produces (`dist/standalone/<alias>/`) |
+| Serve/import default profile | `SDKWORK_WEBSERVER_IMPORT_PROFILE` (data-plane import set, `SDKWORK_WEBSERVER_SPEC.md` §17.3.1) | `cloud` (unified `api-*` edge) | Which sibling-module edge set activates and which dist profile the Adaptive Web static roots serve (`SDKWORK_WEBSERVER_STATIC_SOURCE_PROFILE` follows it) |
+
+Normative rules:
+
+- **Coherence requirement.** A deployed edge that imports the `cloud` sidecar
+  set `MUST` serve module `dist/cloud/<alias>/` bundles; an edge importing the
+  `standalone` set `MUST` serve `dist/standalone/<alias>/` bundles. Serving a
+  cloud edge with standalone bundles (or the inverse) is a deployment defect:
+  the browser would resolve same-origin `/app/v3/api` paths against a host
+  that proxies them to the gateway under the wrong surface semantics, or ship
+  absolute `api-*` base URLs that duplicate the edge it is already on.
+- **Missing-dist degradation is explicit, never silent.** When the active
+  profile's dist tree is absent for a module, the edge serves the seeded
+  placeholder shell (`SDKWORK_WEBSERVER_SPEC.md` §17.3.1) — it `MUST NOT`
+  silently fall back to the other profile's dist tree. A placeholder page
+  therefore means "build + sync the active profile's dist", not "the other
+  profile is fine".
+- **Operator contract (the build→deploy loop).** After a browser code change:
+  1. build the profile the target deployment actually serves — for the
+     default cloud-mode edge: `pnpm --dir <module> build:<client>:<env>:cloud`
+     (or `build:container:module -- --deployment-profile cloud`); for a
+     standalone-mode edge: the bare `build:<client>:<env>`;
+  2. sync the produced `dist/<profile>/<envAlias>/` trees into the deployed
+     workspace checkout (`/opt/deploy/sdkwork-space/<module>/apps/…`) —
+     `build` outputs in a developer checkout are never served directly;
+  3. restart `serve-imports` (or the container) only when static-root
+     materialization must re-run; live dist trees are re-read on reload.
+  Skipping step 1 while the deployment serves `cloud` is the root cause of
+  "dev looks right, deployed app looks different/stale" defects; release
+  tooling and runbooks `MUST` repeat this contract.
+- **Dual-default rationale.** The build default stays `standalone` because the
+  webserver itself is standalone-only (`SDKWORK_WEBSERVER_SPEC.md` §17.4) and
+  same-origin is the closed-loop development experience; the import default is
+  `cloud` because production edges publish CDN artifacts against the unified
+  `api-*` edge. Both defaults are asserted by tooling
+  (`check-browser-build-scripts.mjs`, `audit-webserver-workspace.mjs`) and
+  `MUST NOT` be flipped independently of this spec.
 
 ### 5.1.1 Four Configuration Layers
 
@@ -479,6 +540,48 @@ Rules:
   The Node-side dev server reads that target from the parent topology profile;
   browser modules receive same-origin SDK paths only.
 
+#### 5.1.4.0 Shared Vite Runtime-Profile Module And Base-URL Matrix
+
+Every Adaptive Web PC/H5 application `vite.config.ts` `MUST` resolve the Vite
+mode through the shared module
+`sdkwork-specs/tools/vite-runtime-profile.mjs`
+(`resolveViteEnvironment`, `resolveViteRuntimeProfile`,
+`resolveLucideReactEntry`) instead of re-declaring a local mode parser. Local
+copies have drifted historically (the `demo` lifecycle environment was missing
+from 70+ applications, silently routing `cloud.demo` builds into
+`dist/cloud/prod`); this module is the single cohesion point for the profile
+vocabulary and dependency-entry probing. A repository `MUST NOT` re-inline the
+mode regex or the environment list. The alignment tool
+(`sdkwork-specs/tools/align-vite-runtime-profile.mjs`) rewrites drifted configs
+in place and `MUST` stay green workspace-wide.
+
+Base-URL contract by lifecycle stage — this matrix is normative and summarized
+in every application deployment runbook:
+
+| Stage / command | Profile | API base URL form | Example |
+| --- | --- | --- | --- |
+| `pnpm dev` / `dev:standalone` (local renderer dev server) | `standalone` | Same-origin `ip+port` of the local stack: the renderer origin proxies canonical API paths to the local standalone gateway listener | renderer `http://127.0.0.1:4178`, SDK base `/` (canonical paths proxied to `127.0.0.1:18089`) |
+| `dev:cloud` (local renderer dev server) | `cloud` | Absolute `ip+port` of the locally started `sdkwork-api-cloud-gateway` | `SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL=http://127.0.0.1:3900` |
+| Built static assets served from a deployed edge (`build:*`) | `standalone` | Same-origin **domain** of the application edge that serves the assets | page `https://im-dev.sdkwork.com`, SDK base `/` (APIs on `im-dev.sdkwork.com`) |
+| Built static assets served from a deployed edge (`build:*:cloud`) | `cloud` | Cross-origin **domain** of the unified `api-<suffix>.<base-domain>` edge (§5.1.0.1 origin family) | page `https://im-dev.sdkwork.com`, SDK base `https://api-dev.sdkwork.com` |
+
+Rules:
+
+- Development uses `ip+port` values only (loopback renderers/proxies); built
+  artifacts `MUST` carry domain values only. A built runtime document that
+  contains a loopback or port-bearing URL (except the loopback-only
+  `cloud.development` dotenv anchor) is a defect.
+- `standalone` build sources `MUST` keep `browserOriginMode = same-origin` and
+  root-relative `/` SDK paths (§5.1.0.1, §6); the domain identity comes from
+  the serving edge at request time, not from the artifact.
+- `cloud` build sources `MUST` materialize the full registered origin family
+  (§5.1.0.1) — domain URLs, never IP addresses.
+- `sdkwork-webserver` is the special shared factory: it is standalone-only
+  (`SDKWORK_WEBSERVER_SPEC.md` §17.4), serves every sibling module's static
+  roots, and its own browser artifacts are always same-origin `/`. It never
+  produces a `cloud` browser artifact and never points a browser at an
+  absolute `api-*` origin.
+
 #### 5.1.4.1 VITE And PORTAL_PUBLIC Lifecycle
 
 Rules:
@@ -493,6 +596,34 @@ Rules:
   3. topology-derived `PORTAL_PUBLIC_*` absolute URL in `cloud` or packaged runtime;
   4. fail closed when the resolved base URL is empty for a required SDK client.
 - SDK client factories `MUST NOT` pre-strip canonical API path prefixes before passing `config.baseUrl` to generated SDK clients when the authored value is a same-origin relative path such as `/app/v3/api`. Prefix normalization belongs to the generated SDK transport layer and must preserve non-empty relative origins.
+
+#### 5.1.4.2 Build-Time Runtime-Env Validation (Normative)
+
+The canonical browser build runner (`sdkwork-specs/tools/build-browser-client.mjs`)
+`MUST` validate every materialized `runtime-env.json` before bundling, and
+repositories `MUST NOT` bypass it with ad-hoc env injection:
+
+- **Standalone sources**: every SDK base URL key `MUST` equal `/` exactly;
+  any absolute origin fails the build (`browserOriginMode = same-origin`
+  contract, §5.1.0.1).
+- **Cloud sources**: `browserOriginMode` `MUST` equal `cross-origin`; every
+  SDK base URL key `MUST` equal the registered origin family materialization
+  of that environment (semicolon-joined list, primary base domain first,
+  §5.1.0.1). Single-origin values are accepted only for single-base-domain
+  repositories; foreign hosts, wrong environment suffixes, and mixed families
+  fail the build with a §5.1.0.1 citation.
+- **Identity keys**: `environment`, `deploymentProfile`, `profileId`,
+  `runtimeTarget`, `browserOriginMode` declared in the source `MUST` match the
+  selected `--environment`/`--deployment-profile` flags; a mismatch fails the
+  build before bundle evaluation.
+- **Typecheck gate**: runner typecheck `MAY` be skipped per invocation
+  (`--skip-typecheck`) for workspace-wide dependency debt, but the runtime-env
+  validation above is not skippable — it is the enforcement point for §5.1.0.1
+  and §5.1.0.2.
+- Runtime documents emitted at deploy time (`/runtime-env.json`,
+  `/runtime-env.js`) `MUST` re-declare the same identity keys and `MUST NOT`
+  diverge from the build-time source profile beyond the documented
+  deploy-time overrides (locale, messaging navigation URLs, node identity).
 
 ### 5.1.5 Flutter Dart-Define JSON Format
 
@@ -833,6 +964,60 @@ Rules:
 - Each application `MUST` be able to start its `sdkwork-api-<application-code>-standalone-gateway` independently and serve composed APIs on a declared listener without requiring sibling application repositories to be running, except for explicitly declared external upstream overrides in topology or dev profile.
 - Standalone gateway completeness `MUST` follow `API_ASSEMBLY_SPEC.md` §6.1.1: every `dependencyApiSurfaces` entry with `runtimeMode` `same-origin` or `same-origin-mounted` `MUST` be integrated into the application api-assembly with matching route manifests, OpenAPI inventories, and verification evidence.
 - Environment examples, dev launcher output, and HAR-visible browser requests `MUST` reflect the selected profile. A `standalone` example `MUST NOT` document absolute sibling-module ports as the default browser contract when same-origin federation is the declared integration mode.
+
+#### 6.2.1 Base-URL Lifecycle Matrix (dev ip+port, build domain)
+
+This subsection is the normative summary of §5.1.4.0; every factory module
+(`sdkwork-im`, `sdkwork-order`, `sdkwork-course`, …) and every deployment
+runbook `MUST` restate it.
+
+1. **Development (`pnpm dev`, `dev:standalone`, `dev:cloud`, and equivalents)**:
+   all base URLs are `ip+port` values bound to the local machine.
+   - `standalone`: one same-origin renderer origin (for example
+     `http://127.0.0.1:4178`); SDK base URLs stay root-relative `/` and the dev
+     server proxies canonical API paths to the local standalone gateway
+     listener (for example `127.0.0.1:18089`).
+   - `cloud`: the renderer resolves SDK surfaces against the locally started
+     `sdkwork-api-cloud-gateway` (`SDKWORK_LOCAL_PLATFORM_API_GATEWAY_HTTP_URL`,
+     default `http://127.0.0.1:3900`); no domain edges are contacted.
+2. **Built artifacts (`build:*` / `build:*:cloud`)**: all base URLs are
+   **domains**, never IPs or ports.
+   - `standalone`: same-origin with the serving application edge (page
+     `https://im-dev.sdkwork.com`, SDK base `/` — APIs resolve against
+     `im-dev.sdkwork.com`).
+   - `cloud`: cross-origin unified `api-<suffix>.<base-domain>` family
+     (§5.1.0.1) — page `https://im-dev.sdkwork.com`, SDK base
+     `https://api-dev.sdkwork.com` (primary origin first, full family
+     materialized in the runtime document).
+3. **Factory modules MUST NOT** hand-roll the mode parsing or the entry-probe
+   logic that feeds this matrix; §5.1.4.0's shared module is the single
+   implementation.
+
+#### 6.2.2 `sdkwork-webserver` Special-Factory Rules
+
+`sdkwork-webserver` is the shared edge factory for the whole workspace and is
+special in exactly two ways:
+
+- **Standalone-only, embedded same-origin.** Its own PC/H5 browser artifacts
+  are always `standalone` same-origin `/` (`SDKWORK_WEBSERVER_SPEC.md`
+  §17.4); it never emits a `cloud` browser artifact and never points a browser
+  at an absolute `api-*` origin. Sibling modules served through it keep their
+  own profile identity (§5.1.0.2 Build-Serve Profile Coherence).
+- **One instance, all lifecycle environments (universal import plane).** A
+  deployed webserver instance `MUST` import every sibling module's sidecar set
+  for **all** lifecycle environments the instance is commissioned to serve —
+  for example a Docker `development` stack must be able to route
+  development, test, staging, demo, and production domain edges of imported
+  modules through the same process, selecting the environment per
+  `server_name` (domain) rather than per deployment. Concretely:
+  the `imports.d` import plane (`SDKWORK_WEBSERVER_SPEC.md` §17.3) loads each
+  sibling module's `nginx.<profile>.<environment>.conf` sidecar set for every
+  commissioned environment, and `SDKWORK_WEBSERVER_ENVIRONMENT` selects the
+  instance's *default* environment only — module domains of other environments
+  stay routable as long as their sidecars are imported and their dist trees
+  are synced. An instance `MUST NOT` silently 404 an imported module's
+  commissioned domain; a domain without an imported sidecar is a configuration
+  defect, not a graceful fallback.
 
 ## 7. Database Selection Standard
 

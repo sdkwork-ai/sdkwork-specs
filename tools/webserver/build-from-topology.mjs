@@ -134,11 +134,21 @@ function buildServerBlock(serverName, environment, { tlsCert = null, adaptiveWeb
     serverName: [...serverName],
   };
 
-  if (adaptiveWeb && production) {
-    server.include = [
-      ADAPTIVE_SNIPPET_PATHS.namedLocations,
-      GATEWAY_SNIPPET_PATHS.apiProduction,
-    ];
+  if (adaptiveWeb) {
+    // Adaptive Web edge modules (deploy.yaml expose.mode web / web+api) serve
+    // `/` from the edge static roots in EVERY lifecycle environment
+    // (SDKWORK_WEBSERVER_SPEC.md §11.3): dev/test/staging previously proxied
+    // all of `/` to the gateway, which fail-closed 401s (40101 unclassified)
+    // for browser index/asset requests. `/api/` + health probes keep proxying.
+    server.include = production
+      ? [
+          ADAPTIVE_SNIPPET_PATHS.namedLocations,
+          GATEWAY_SNIPPET_PATHS.apiProduction,
+        ]
+      : [
+          ADAPTIVE_SNIPPET_PATHS.namedLocations,
+          GATEWAY_SNIPPET_PATHS.apiNonproduction,
+        ];
     server.location = [
       { match: '/', include: [ADAPTIVE_SNIPPET_PATHS.dispatch] },
     ];
@@ -170,7 +180,7 @@ function buildEnvironmentDoc(topology, surfaces, environment, { adaptiveWeb = fa
       servers.push(buildServerBlock(groupHosts, environment, { tlsCert: cert, adaptiveWeb }));
     }
   } else {
-    servers.push(buildServerBlock(hosts, environment, { adaptiveWeb: false }));
+    servers.push(buildServerBlock(hosts, environment, { adaptiveWeb }));
   }
 
   return {

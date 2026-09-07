@@ -6,6 +6,7 @@ import path from 'node:path';
 export const GATEWAY_SNIPPET_PATHS = {
   production: 'snippets/gateway-locations.production.conf',
   apiProduction: 'snippets/gateway-api-locations.production.conf',
+  apiNonproduction: 'snippets/gateway-api-locations.nonproduction.conf',
   nonproduction: 'snippets/gateway-locations.nonproduction.conf',
 };
 
@@ -74,9 +75,10 @@ export function gatewayLocationSnippetContent(tier) {
 }
 
 /** Production API + health probes only (Adaptive Web modules serve `/` on edge). */
-export function gatewayApiLocationSnippetContent() {
+export function gatewayApiLocationSnippetContent(tier = 'production') {
+  const production = tier === 'production';
   const lines = [
-    ...headerLines('api-production'),
+    ...headerLines(production ? 'api-production' : `api-${tier}`),
     '# Serves /healthz, /readyz, and /api/ only; location / uses Adaptive Web dispatch.',
     '',
   ];
@@ -94,14 +96,20 @@ export function gatewayApiLocationSnippetContent() {
     'proxy_http_version 1.1;',
     ...PROXY_HEADERS_LITE.map((header) => `proxy_set_header ${header};`),
     'proxy_buffering off;',
+    ...(production ? [] : ['proxy_read_timeout 300s;']),
   ]));
 
   return `${lines.join('\n').trimEnd()}\n`;
 }
 
-export function gatewaySnippetInclude(environment) {
-  return environment === 'production'
-    ? GATEWAY_SNIPPET_PATHS.production
+export function gatewaySnippetInclude(environment, { adaptiveWeb = false } = {}) {
+  if (environment === 'production') {
+    return adaptiveWeb
+      ? GATEWAY_SNIPPET_PATHS.apiProduction
+      : GATEWAY_SNIPPET_PATHS.production;
+  }
+  return adaptiveWeb
+    ? GATEWAY_SNIPPET_PATHS.apiNonproduction
     : GATEWAY_SNIPPET_PATHS.nonproduction;
 }
 
@@ -116,9 +124,22 @@ export function writeGatewaySnippets(webserverDir, { adaptiveWeb = false } = {})
     fs.writeFileSync(path.join(snippetsDir, name), gatewayLocationSnippetContent(tier));
   }
   const apiSnippetPath = path.join(snippetsDir, 'gateway-api-locations.production.conf');
+  const apiNonproductionSnippetPath = path.join(
+    snippetsDir,
+    'gateway-api-locations.nonproduction.conf',
+  );
   if (adaptiveWeb) {
     fs.writeFileSync(apiSnippetPath, gatewayApiLocationSnippetContent());
-  } else if (fs.existsSync(apiSnippetPath)) {
-    fs.rmSync(apiSnippetPath);
+    fs.writeFileSync(
+      apiNonproductionSnippetPath,
+      gatewayApiLocationSnippetContent('nonproduction'),
+    );
+  } else {
+    if (fs.existsSync(apiSnippetPath)) {
+      fs.rmSync(apiSnippetPath);
+    }
+    if (fs.existsSync(apiNonproductionSnippetPath)) {
+      fs.rmSync(apiNonproductionSnippetPath);
+    }
   }
 }

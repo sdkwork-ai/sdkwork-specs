@@ -120,8 +120,10 @@ test('buildWebserverDocs splits production TLS by base domain', () => {
   assert.deepEqual(production[0].serverName, ['im.sdkwork.com']);
   assert.equal(production[0].tls.cert, 'sdkwork.com');
   assert.deepEqual(production[1].serverName, ['im.birdcoder.com']);
-  assert.deepEqual(production[3].serverName, ['im.sdkwork.cn']);
-  assert.equal(production[3].tls.cert, 'sdkwork.cn');
+  assert.deepEqual(production[3].serverName, ['im.noaper.com']);
+  assert.equal(production[3].tls.cert, 'noaper.com');
+  assert.deepEqual(production[4].serverName, ['im.sdkwork.cn']);
+  assert.equal(production[4].tls.cert, 'sdkwork.cn');
   assert.equal(docs.common.http.server, undefined);
   assert.deepEqual(webserverSurfaces('sdkwork-api-cloud-gateway', {
     cloudPublicHosts: {

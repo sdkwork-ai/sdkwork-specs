@@ -185,3 +185,93 @@ node <sdkwork-specs>/tools/align-webserver-workspace.mjs --root .
 | `deployments/webserver/*.toml` merge rules | `SDKWORK_WEBSERVER_SPEC.md` |
 | Host registry and environment suffixes | `APP_RUNTIME_TOPOLOGY_NAMING.md` |
 | Env keys and materialization | `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md` |
+
+## 9. Host Deploy Root And Shared-Surface Contract (Docker Mode)
+
+Normative layout of the **host deploy root** (`SDKWORK_SPACE_ROOT`, default
+`/opt/deploy`) when applications ship as Docker bundles. Every module's
+bundle installer `MUST` materialize exactly this layout; paths are module
+namespaced so independent stacks cannot collide, and shared surfaces are
+bind-mounted — never copied per container.
+
+### 9.1 Host Deploy Root Layout
+
+```text
+/opt/deploy/                              # SDKWORK_SPACE_ROOT
+  sdkwork-space/                          # shared module checkout (single source of truth)
+    sdkwork-<module>/                     #   per-module repo checkout
+      deployments/webserver/              #     nginx sidecars + snippets (webserver imports)
+      apps/*-{pc,h5}/dist/<profile>/<envAlias>/   # Adaptive Web dist trees
+  sdkwork-<module>/                       # per-module install root (one per deployable module)
+    bundle/                               #   install bundle materialized by deploy.sh
+      compose/docker-compose.bundle.yml
+      env/<environment>.env
+      deploy.sh / release.sh
+      postgres/                           #   embedded deps init scripts (when bundled)
+    backups/                              #   module backups (ops-backup.sh)
+  deps/                                   # host-level shared dependency materials
+    postgres-tls/                         #   shared postgres server cert/key
+  drive/                                  # drive object/website cache (shared rw)
+  archives/                               # workspace/static backup archives (ops scripts)
+  logs/                                   # host-side operation logs (install/build/pack)
+```
+
+Rules:
+
+- **Module namespacing.** Every per-module artifact lives under
+  `/opt/deploy/sdkwork-<module>/`. Loose files at the deploy root
+  (`pack-run.log`, `standalone-build.log`, …) are drift: operation scripts
+  `MUST` write logs under `/opt/deploy/logs/<module>-<operation>.log` and
+  package archives under `/opt/deploy/archives/`.
+- **One checkout, all stacks.** `sdkwork-space/` is mounted read-only into
+  every container that needs module sources or Adaptive Web dist trees; the
+  webserver additionally mounts the checkout subtree read-write (clone/pull
+  overlay, `SDKWORK_WEBSERVER_SPEC.md` §17). Modules `MUST NOT` vendor
+  checkout copies into their images when the shared checkout is the declared
+  source.
+- **Bundle = single install unit.** `bundle/` is produced by packaging
+  (`bin/apps-package.sh`) and materialized by install (`deploy.sh`); operators
+  `MUST NOT` hand-edit files under `bundle/compose/` — install overwrites
+  them from the release artifact (`ENVIRONMENT_SPEC.md` §5.1.0.2 operator
+  contract governs browser dist sync, which is the one sanctioned
+  post-install overlay).
+
+### 9.2 Shared Surfaces (Bind-Mount, Never Per-Container Copies)
+
+Multiple Docker processes on one host `MUST` consume these surfaces through
+bind mounts of the same host path; duplicating them into images or per-process
+volumes is a drift defect:
+
+| Shared surface | Host path | Consumers | Mount mode |
+| --- | --- | --- | --- |
+| Module checkout (sidecars, topology, imports) | `/opt/deploy/sdkwork-space` | webserver (rw overlay), any module edge reading sidecars | ro (checkout subtree rw for webserver only) |
+| Adaptive Web dist trees | `/opt/deploy/sdkwork-space/<module>/apps/*-{pc,h5}/dist/` | webserver data plane (via `@pc`/`@h5` roots) | ro |
+| Deploy TLS/CA materials | `/opt/deploy/deps/postgres-tls/`, `<module>/bundle/compose/docker/ca/` | gateway + deps containers of that stack | ro |
+| Drive objects / website cache | `/opt/deploy/drive` | webserver, drive-enabled modules | rw |
+| Backup archives | `/opt/deploy/archives` | ops scripts | rw (host-side) |
+
+Anti-patterns observed and prohibited:
+
+- **Snapshot dist inside an image** (for example a module serving
+  `/opt/sdkwork/<code>/portal/dist` baked at build time) while the same
+  module's Adaptive Web dist lives in the shared checkout — the two diverge
+  after the first host-side rebuild. A module image `MAY` embed a dist
+  snapshot only as a **fallback root** declared in its catalog
+  (`static_fallback_root` semantics, `SDKWORK_WEBSERVER_SPEC.md` §13.6);
+  the active root `MUST` resolve through the shared checkout when present.
+- **Per-container certificates** generated independently by each process:
+  TLS/CA material `MUST` be provisioned once per stack at
+  `<module>/bundle/compose/docker/ca/` (or the shared `deps/` path for
+  host-wide dependencies like postgres) and bind-mounted read-only by every
+  process that trusts it.
+- **Per-container log/backup paths** that bypass the module install root.
+
+### 9.3 Conformance Checks
+
+- `doctor.sh` (module `bin/`) `MUST` verify: deploy root layout matches §9.1;
+  declared shared surfaces resolve to host paths (not image-internal
+  snapshots); TLS bind sources exist and are readable; no loose
+  operation logs at the deploy root.
+- `check-operations-conformance.mjs` `MAY` extend with a layout probe;
+  failures cite this section.
+

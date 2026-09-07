@@ -1221,7 +1221,10 @@ Rules:
   `SDKWORK_WEBSERVER_STATIC_SOURCE_PROFILE` defaults to
   `SDKWORK_WEBSERVER_IMPORT_PROFILE`, so a cloud activation serves module
   cloud builds and a standalone activation serves same-origin builds. The two
-  profiles `MUST NOT` be mixed within one activation.
+  profiles `MUST NOT` be mixed within one activation. The full build-serve
+  coherence contract (operator build→sync loop, missing-dist placeholder
+  semantics, dual-default rationale) is normative in
+  `ENVIRONMENT_SPEC.md` §5.1.0.2.
 - `SDKWORK_WEBSERVER_IMPORT_PROFILE` `MUST` be declared in every shipped
   lifecycle env file (env-file parity, `DOCKER_SPEC.md` §3.3) even when the
   value is the `cloud` default.
