@@ -50,7 +50,7 @@ export function resolveViteEnvironment(mode, processEnv = undefined) {
   if (LIFECYCLE_ENVIRONMENTS.includes(fromEnv)) {
     return fromEnv;
   }
-  if (LIFECYCLE_ENVIRONMENTS.has(String(mode ?? '').trim())) {
+  if (LIFECYCLE_ENVIRONMENTS.includes(String(mode ?? '').trim())) {
     return String(mode).trim();
   }
   return 'production';
