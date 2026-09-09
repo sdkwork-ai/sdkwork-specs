@@ -1037,6 +1037,14 @@ Single implementation:
   `getEnvironmentLabel`, `getApiHostForEnvironment`, `readRuntimeEnv`,
   `CLOUD_GATEWAY_DEV_PORT`, `DEPLOYMENT_MODE_ENV_KEYS`) exported from
   `@sdkwork/sdk-common` (source: `sdkwork-sdk-commons/sdkwork-sdk-common-typescript`).
+  Application composition roots `SHOULD` call
+  `resolveBaseUrlWithAlignProtocol(options)` — the same resolution with the
+  §6.3 protocol adaptation guaranteed on the final selection — passing an
+  explicit `VITE_*` override through `options.baseUrls` instead of branching
+  between `resolveBaseUrl` and `alignBaseUrlToPageProtocol` at the call site;
+  `alignBaseUrlToPageProtocol` remains the primitive for wrappers that
+  normalize explicit values outside the candidate-resolution flow (loopback
+  rewrites, non-gateway surface URLs).
 - Every browser surface — H5, PC web, desktop renderer, and mini-program
   runtime — `MUST` obtain SDK client base origins through `resolveBaseUrl`.
   Application, feature, shell, and service packages `MUST NOT` re-implement
