@@ -991,7 +991,10 @@ runbook `MUST` restate it.
      materialized in the runtime document).
 3. **Factory modules MUST NOT** hand-roll the mode parsing or the entry-probe
    logic that feeds this matrix; §5.1.4.0's shared module is the single
-   implementation.
+   implementation. Browser/runtime base-URL resolution itself `MUST` go
+   through `resolveBaseUrl` from `@sdkwork/sdk-common` (§6.3); local
+   env-fallback chains, host rewriting, or candidate splitting in application
+   code are technical debt.
 
 #### 6.2.2 `sdkwork-webserver` Special-Factory Rules
 
@@ -1018,6 +1021,124 @@ special in exactly two ways:
   are synced. An instance `MUST NOT` silently 404 an imported module's
   commissioned domain; a domain without an imported sidecar is a configuration
   defect, not a graceful fallback.
+
+### 6.3 Browser Base-URL Resolution Standard (`resolveBaseUrl`)
+
+This subsection is the normative browser runtime contract for SDK base-URL
+resolution. It implements the §5.1.4.0 / §6.2.1 lifecycle matrix with one
+shared implementation; authored `VITE_*` / `PORTAL_PUBLIC_*` / private env
+contracts from §4–§6 remain the deployment-time materialization of the same
+facts and `MUST NOT` be re-parsed by hand in application code.
+
+Single implementation:
+
+- The single browser/runtime implementation is `resolveBaseUrl` (with
+  `resolveApiHost`, `resolveApiPort`, `resolveDeploymentMode`, `splitBaseUrls`,
+  `getEnvironmentLabel`, `getApiHostForEnvironment`, `readRuntimeEnv`,
+  `CLOUD_GATEWAY_DEV_PORT`, `DEPLOYMENT_MODE_ENV_KEYS`) exported from
+  `@sdkwork/sdk-common` (source: `sdkwork-sdk-commons/sdkwork-sdk-common-typescript`).
+- Every browser surface — H5, PC web, desktop renderer, and mini-program
+  runtime — `MUST` obtain SDK client base origins through `resolveBaseUrl`.
+  Application, feature, shell, and service packages `MUST NOT` re-implement
+  candidate splitting, environment-suffix parsing, `im.`→`api.` style host
+  rewriting, or deployment-profile fallback chains for base URLs.
+- UI packages `MUST NOT` call `resolveBaseUrl` directly; resolution belongs to
+  the application composition root (bootstrap/`*-core` SDK client factories)
+  which passes resolved origins downward (§6, `APP_SDK_INTEGRATION_SPEC.md`).
+
+Unified key and candidate list:
+
+- The unified runtime key is `SDKWORK_API_BASE_URL`. Its value is one or more
+  candidate base origins separated by commas or semicolons, for example
+  `https://api.sdkwork.com,https://api-dev.sdkwork.com;https://api-test.sdkwork.com`.
+- `resolveBaseUrl` selects the candidate matching the current page's
+  environment + brand + deployment mode (preferring the same protocol as the
+  page); when no candidate matches it derives the base URL from the current
+  host, and only as a last resort returns the first candidate.
+- Deployment mode comes from `SDKWORK_DEPLOYMENT_PROFILE` or
+  `VITE_SDKWORK_DEPLOYMENT_PROFILE` (see `DEPLOYMENT_MODE_ENV_KEYS`),
+  normalized to `cloud` | `standalone`; default is `cloud`.
+- Per-surface canonical paths (`/app/v3/api`, `/im/v3/api`, …) are appended by
+  each SDK client factory after `resolveBaseUrl` returns the base origin.
+  `resolveBaseUrl` returns origins, not surface paths.
+
+Resolution matrix (normative; restates §6.2.1 for `resolveBaseUrl`):
+
+| Context | Page host | Mode | Resolved API base |
+| --- | --- | --- | --- |
+| Built artifact, cloud, production | `im.sdkwork.com` | `cloud` | `https://api.sdkwork.com` |
+| Built artifact, cloud, env-prefixed | `im-dev.sdkwork.com` | `cloud` | `https://api-dev.sdkwork.com` |
+| Built artifact, standalone (any env) | `im-dev.sdkwork.com` | `standalone` | `https://im-dev.sdkwork.com` (same origin) |
+| `pnpm dev`, standalone | `http://127.0.0.1:4178` | `standalone` | `http://127.0.0.1:4178` (same-origin ip+port of the dev server) |
+| `pnpm dev`, cloud | `http://127.0.0.1:4178` | `cloud` | `http://127.0.0.1:3910` (host-mapped `sdkwork-api-cloud-gateway` dev port) |
+
+Rules:
+
+- The cloud development port is the browser-visible host-mapped
+  `sdkwork-api-cloud-gateway` dev port (`GATEWAY_DEV_HOST_PORT`, default
+  `3910` — `DOCKER_SPEC.md`, `NGINX_SPEC.md`), not the container-internal
+  `3900` listener. It is exposed as `CLOUD_GATEWAY_DEV_PORT` and overridable
+  through `SDKWORK_API_DEV_PORT`.
+- **Protocol adaptation (http ↔ https, normative).** The serving edge
+  terminates HTTP and HTTPS for the same API host (§5.1.0.1), so a resolved
+  base origin `MUST` always use the same scheme as the page it is resolved
+  from:
+  - `resolveBaseUrl` `MUST` align the protocol of a matched candidate
+    (`current-host-match`) to the current page protocol whenever both schemes
+    are http/https. A page served over `http://` `MUST` target the
+    `http://` origin (a TLS-less dev edge closes `https://` connections with
+    `ERR_CONNECTION_CLOSED`), and a page served over `https://` `MUST` target
+    the `https://` origin (mixed-content blocks). Host, port, and
+    `preservePath` results are preserved by the rewrite.
+  - Explicitly configured candidates keep their literal scheme only when
+    protocol adaptation cannot apply: non-http(s) schemes (`ws://`, custom
+    app schemes), the `development-local-candidate` pass (local dev servers
+    with explicit ip+port), `fallback-first`, and contexts without a page
+    protocol (mini-program/SSR runtimes defaulting to `https`).
+  - Application-level browser wrappers that normalize explicit env values
+    (`VITE_*` base URLs materialized at build time, per-surface overrides,
+    loopback-host rewrites) `MUST` apply the same page-protocol alignment to
+    any absolute http(s) value they return. A wrapper that rewrites a parsed
+    URL's host components without handling `location.protocol` is a §6.3
+    violation (`protocol-alignment-missing`, checked by the compliance tool).
+  - Build-time materialization owns the API *host*; the browser owns the
+    *scheme*. Materialized values (topology env, `runtime-env.json`,
+    `cloudApiBaseUrls`) remain authoritative for host selection and `MUST`
+    not be forked per scheme.
+- Mini-program runtimes without `window.location` `MUST` pass their declared
+  page/API host explicitly through `resolveBaseUrl({ hostname, protocol, port })`
+  options; the matrix and mode rules are identical.
+- Desktop renderers follow the PC web rules; a desktop profile may pass
+  `hostname`/`port` from its local runtime config the same way as
+  mini-programs when no browser location exists.
+- Failure behavior is derive-then-fallback, never throw: when nothing can be
+  derived and no candidate exists, `resolveBaseUrl` returns an empty URL with
+  `reason: 'empty'` and the SDK client factory `MUST` fail bootstrap with a
+  redacted diagnostic (§6, fail-closed rule) instead of silently using `/`.
+- The `BaseUrlResolution.reason` discriminators (`current-host-match`,
+  `development-local-candidate`, `derived-from-host`, `fallback-first`,
+  `empty`) are the only sanctioned selection telemetry; factories `MAY` log
+  them, `MUST NOT` branch business logic on them.
+- Absolute resolved origins must be allowed by the production CSP
+  `connect-src` (§6) and the serving edge's CORS policy.
+- Language ports (Flutter/Dart, Kotlin, Java, Swift, Go, Python, C#) of the
+  same resolution contract live in `sdkwork-sdk-commons/sdkwork-sdk-common-*`;
+  non-TypeScript clients `MUST` use the matching port instead of local
+  re-implementations.
+
+Compliance check (must be green before completing frontend, SDK integration,
+or release work):
+
+```bash
+node <sdkwork-specs>/tools/check-base-url-resolution.mjs --workspace <workspace-root>
+```
+
+The checker flags `protocol-alignment-missing` for browser-reachable wrappers
+that rewrite parsed URL host components without page-protocol handling, in
+addition to the §6.3 resolution-debt findings above.
+
+Authority: this section, `ENVIRONMENT_SPEC.md` §5.1.4.0 and §6.2.1,
+`APP_SDK_INTEGRATION_SPEC.md` §9, `SDK_SPEC.md`, `FRONTEND_SPEC.md`.
 
 ## 7. Database Selection Standard
 
