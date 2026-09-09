@@ -1046,7 +1046,9 @@ Single implementation:
   normalize explicit values outside the candidate-resolution flow (loopback
   rewrites, non-gateway surface URLs).
 - Every browser surface — H5, PC web, desktop renderer, and mini-program
-  runtime — `MUST` obtain SDK client base origins through `resolveBaseUrl`.
+  runtime — `MUST` obtain SDK client base origins through
+  `resolveBaseUrlWithAlignProtocol` (the composition-root entry; it delegates
+  to `resolveBaseUrl` internally and is a no-op aligner outside a browser).
   Application, feature, shell, and service packages `MUST NOT` re-implement
   candidate splitting, environment-suffix parsing, `im.`→`api.` style host
   rewriting, or deployment-profile fallback chains for base URLs.

@@ -136,9 +136,11 @@ function walkSourceFiles(rootDir, repoDir, out) {
 // resolution wrapper (ENVIRONMENT_SPEC.md §6.3 single-implementation family).
 const SDK_COMMON_RESOLUTION_IMPORT = /from\s+['"]@sdkwork\/sdk-common['"]/u;
 const SDK_COMMON_RESOLUTION_FNS = [
-  'resolveBaseUrl', 'resolveApiHost', 'resolveApiPort',
+  'resolveBaseUrl', 'resolveBaseUrlWithAlignProtocol', 'resolveApiHost', 'resolveApiPort',
   'getApiHostForEnvironment', 'getEnvironmentLabel', 'splitBaseUrls',
 ];
+// §6.3 resolver family: the core resolver and the composition-root combo entry.
+const RESOLVER_USE = /\bresolveBaseUrl(?:WithAlignProtocol)?\b/u;
 
 function collectCompliantWrapperNames(repoDir, files) {
   const fileContents = new Map();
@@ -164,7 +166,7 @@ function collectCompliantWrapperNames(repoDir, files) {
   // Seed: modules that directly use the @sdkwork/sdk-common resolution family.
   const compliantFiles = new Set();
   for (const [file, content] of fileContents) {
-    const isWrapperSource = /\bresolveBaseUrl\b/u.test(content)
+    const isWrapperSource = RESOLVER_USE.test(content)
       || (SDK_COMMON_RESOLUTION_IMPORT.test(content)
         && SDK_COMMON_RESOLUTION_FNS.some((fn) => new RegExp(`\\b${fn}\\b`, 'u').test(content)));
     if (isWrapperSource) {
@@ -238,7 +240,7 @@ function findDebtInFile(content, wrapperNames) {
   const delegates = [...wrapperNames].some((name) =>
     new RegExp(`\\b${name}\\s*\\(`, 'u').test(content),
   );
-  if (/\bresolveBaseUrl\b/u.test(content) || delegates) {
+  if (RESOLVER_USE.test(content) || delegates) {
     return debt;
   }
   const envMatches = [];
