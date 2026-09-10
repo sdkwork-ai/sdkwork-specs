@@ -91,4 +91,10 @@ etc/**/*.local.*
 
 
 .workbuddy/
-/bin/
+# Local scratch under bin/ stays ignored, but the normative shared library
+# (MODULE_BIN_SPEC.md §3: bin/lib/sdkwork-*.sh) MUST be version-controlled.
+/bin/*
+!/bin/lib/
+
+# Local scratch and audit output
+.tmp/

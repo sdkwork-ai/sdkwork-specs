@@ -1,8 +1,8 @@
 ﻿# App Client Architecture Alignment Standard
 
 - Version: 1.0
-- Scope: cross-client application architecture alignment for SDKWork PC, H5/mobile React, Flutter, mini program, native Android, native iOS, native HarmonyOS, backend/admin UI, and future client roots
-- Related: `COMPOSABLE_ARCHITECTURE_SPEC.md`, `APPLICATION_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `BACKEND_UI_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `I18N_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
+- Scope: cross-client application architecture alignment for SDKWork PC, H5/mobile React, Flutter, mini program, uni-app, Unity, static web (pure HTML), native Android, native iOS, native HarmonyOS, backend/admin UI, and future client roots
+- Related: `COMPOSABLE_ARCHITECTURE_SPEC.md`, `APPLICATION_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `UNIAPP_APP_ARCHITECTURE_SPEC.md`, `UNITY_APP_ARCHITECTURE_SPEC.md`, `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `BACKEND_UI_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `I18N_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines the common client architecture contract that keeps SDKWork application roots readable, composable, and aligned across PC, H5/Capacitor, Flutter, mini program, native Android, native iOS, native HarmonyOS, and future client surfaces. Cross-stack layer roles, component ports, and package composition closure follow `COMPOSABLE_ARCHITECTURE_SPEC.md`.
 
@@ -46,6 +46,9 @@ SDKWork client roots use stable architecture identifiers.
 | Native Android mobile app | `apps/sdkwork-<application-code>-android-mobile` | `android-mobile` | `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md` |
 | Native iOS mobile app | `apps/sdkwork-<application-code>-ios-mobile` | `ios-mobile` | `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md` |
 | Native HarmonyOS mobile app | `apps/sdkwork-<application-code>-harmony-mobile` | `harmony-mobile` | `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md` |
+| uni-app cross-platform app (H5/`MP_*`/App) | `apps/sdkwork-<application-code>-uniapp` | `uniapp` | `UNIAPP_APP_ARCHITECTURE_SPEC.md` |
+| Unity game/3D app | `apps/sdkwork-<application-code>-unity` | `unity` UPM id segment (`com.sdkwork.<application-code>-unity-*`) | `UNITY_APP_ARCHITECTURE_SPEC.md` |
+| Static web (pure HTML) app | `apps/sdkwork-<application-code>-static-web` | `static-web` | `APP_STATIC_WEB_ARCHITECTURE_SPEC.md` |
 | Pad tablet app | `apps/sdkwork-<application-code>-pad` | `pad` | per-target mobile standard (see `APPLICATION_SPEC.md` UI selection table) |
 
 Rules:
@@ -114,6 +117,44 @@ process `[app_roots]` owns roots (`SDKWORK_WEBSERVER_SPEC.md` §13.6).
    `standalone` is the default.
 
 Native / mini-program roots are additive and do not replace the PC/H5 pair.
+
+### 2.3 Industry Pattern Coverage Registry
+
+The client roots in section 2 are the closed set of SDKWork-owned client architectures. This registry maps industry architecture patterns onto that set so teams neither invent ad-hoc roots nor fork standards for deferred patterns.
+
+| Industry pattern | Representative stacks | SDKWork stance | Adoption path |
+| --- | --- | --- | --- |
+| Browser SPA PC + phone pair | React/Vite | covered: PC root + H5 root (§2.1 Adaptive Web) | — |
+| Pure static web / content sites | HTML/CSS/vanilla ES modules, SSG output | covered: static web root | — |
+| Hybrid native mobile shell | Capacitor | covered: H5 root Capacitor host adapters | — |
+| Desktop native shell | Tauri (default), Electron | covered: PC root plus `DESKTOP_APP_ARCHITECTURE_SPEC.md` host profiles | — |
+| Cross-platform Dart | Flutter | covered: Flutter mobile root | — |
+| Cross-platform Vue | uni-app | covered: uni-app root | — |
+| Mini programs and mini games | WeChat/Alipay/DingTalk/Lark, `MP_*_GAME` | covered: mini program root platform rules, plus Unity root mini-game delivery | — |
+| Native phone | Kotlin/Swift/ArkTS | covered: Android/iOS/Harmony mobile roots | — |
+| Game engine 3D/2D client | Unity | covered: Unity root | — |
+| Tablet | iPadOS/Android tablet/HarmonyOS tablet | covered: pad root per-target standards | — |
+| PWA installability | Web app manifests, service workers | alias: delivery attribute of PC/H5 roots, not a separate root | declare through webserver/manifest configuration; no new root |
+| Reactive-native cross-platform | React Native (Expo) | deferred | ADR + governance review, new root standard, `clientArchitectures` registration |
+| Kotlin/C# cross-platform | Kotlin Multiplatform, Compose Multiplatform, .NET MAUI | deferred | same adoption path as React Native |
+| Alternate mobile web stack | Ionic/Angular/Vue on Capacitor | deferred | H5-root extension ADR; must keep the `h5` root family and host adapter boundary |
+| Tauri mobile / Qt | Tauri 2 iOS/Android, Qt | deferred | desktop host profile extension ADR |
+| SSR/RSC meta-framework app | Next.js, Nuxt, SvelteKit | deferred | requires server-owned delivery topology ADR; content-only output may ship through the static web root |
+| Micro-frontend runtime splitting | Module federation, qiankun | deferred | SDKWork composition prefers `-common` package composition; runtime splitting requires an ADR proving package composition is insufficient |
+| Islands / Web Components | Astro islands, framework-less custom elements | deferred | static-web root extension ADR |
+| Server-driven UI | JSON/schema-driven native rendering | deferred | ADR plus SDK/API surface standard extension |
+| Other game engines | Unreal, Godot, Cocos | deferred | Unity-root analog ADR; Cocos mini-game output still follows mini program platform packaging rules |
+| XR / spatial computing | visionOS, Android XR, Quest, WebXR, Unity XR | deferred | Unity-root target extension or new root ADR |
+| TV / set-top | tvOS, Android TV, Fire OS, HarmonyOS TV | deferred | per-target standard analog of the pad root |
+| Wearables | watchOS, Wear OS, HarmonyOS wearable | deferred | companion-root ADR tied to the owning phone root |
+| Automotive | CarPlay, Android Auto/Automotive OS | deferred | companion or standalone root ADR |
+| Quick apps | `QUICKAPP*` platforms | deferred | platform values exist in `APP_MANIFEST_SPEC.md` §5; a root standard is required before delivery |
+
+Rules:
+
+- A deferred pattern `MUST NOT` be implemented as an unregistered application root or an ad-hoc `clientArchitectures` value (`APP_MANIFEST_SPEC.md` section 6).
+- Adopting a deferred pattern requires an ADR (`ARCHITECTURE_DECISION_SPEC.md`), a new root standard through `GOVERNANCE_SPEC.md`, `TEST_SPEC.md` validation rows, and registration in section 2 and `UI_ARCHITECTURE_SPEC.md`.
+- When a deferred pattern matches an existing root's delivery channel (for example mini-game output), the existing platform packaging rules apply even before a dedicated root standard exists.
 
 ## 3. Standard Client Root Shape
 
@@ -305,13 +346,16 @@ export interface SdkworkUiRouteContribution {
     androidNative?: "route" | "tab" | "dialog" | "bottomSheet";
     iosNative?: "route" | "tab" | "sheet" | "fullScreenCover";
     harmonyNative?: "page" | "tab" | "dialog" | "sheet";
+    uniapp?: "page" | "tab" | "subpackagePage";
+    unity?: "scene" | "overlay" | "addressable";
+    staticWeb?: "page";
   };
 }
 ```
 
 Rules:
 
-- Route `id`, `surface`, `domain`, `capability`, `screen`, `titleKey`, and `permissionHint` should be consistent across PC, H5, Flutter, mini program, Android, iOS, and Harmony implementations of the same product workflow.
+- Route `id`, `surface`, `domain`, `capability`, `screen`, `titleKey`, and `permissionHint` should be consistent across PC, H5, Flutter, mini program, uni-app, Unity, static web, Android, iOS, and Harmony implementations of the same product workflow.
 - Physical paths may differ by platform. For example, PC may use `/app/orders/:orderId`, H5 may use `/orders/:orderId`, Flutter may use a named route, mini program may use a subpackage page path, Android may use a navigation destination, iOS may use a navigation route, and Harmony may use a page path.
 - Route metadata `MUST NOT` declare HTTP API paths, SDK methods, raw URL constants, or transport details.
 - Route guards are shell/runtime responsibilities. Capability packages declare auth and permission hints only.
@@ -386,7 +430,9 @@ Rules:
   `env/sdkwork.<profile-id>.json`; native WeChat mini programs use
   `config/mini-program/runtime-env.<profile-id>.json`; uni-app uses the Vite
   `.env.<profile-id>` contract; native mobile roots use
-  `config/app/runtime-env.<profile-id>.json`.
+  `config/app/runtime-env.<profile-id>.json`; Unity projects project the
+  selected profile into `StreamingAssets/RuntimeConfig/`; static web roots
+  materialize `config/browser/runtime.config.<profile-id>.json`.
 - Every materialized client env repeats matching `environment`,
   `deploymentProfile`, `profileId`, and exact `runtimeTarget`. Build mode,
   native platform, device, signing identity, and store channel remain separate

@@ -132,6 +132,14 @@ Rules:
   placement. It skips vendored or third-party source trees such as `external/`,
   `third_party/`, and `vendor/`. Use `--root` for one repository or `--workspace`
   for all child `sdkwork-*` repositories.
+- `check-base-url-resolution.mjs` enforces the browser base-URL resolution
+  standard of `ENVIRONMENT_SPEC.md` §6.3: every H5/PC/mini-program surface must
+  resolve SDK base origins through `resolveBaseUrl` from `@sdkwork/sdk-common`.
+  It flags hand-rolled env chains, `window.location` host rewriting, hardcoded
+  api/im edge domains, and manual candidate splitting; files that import the
+  sdk-common resolution family or delegate to compliant wrappers are exempt,
+  as are lines carrying a `base-url-check: exempt (reason)` comment. Use
+  `--workspace` for all child `sdkwork-*` repositories or `--repo <name>` for one.
 - `check-pagination.mjs` heuristically scans for in-process pagination smells,
   OpenAPI wire alias debt (`pageSize`, `limit`, `page_no`, `pageNo`,
   `per_page`, `size`), missing `page_size.maximum`, missing `PageInfo.mode`,

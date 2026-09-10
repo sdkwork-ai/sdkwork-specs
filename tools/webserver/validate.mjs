@@ -31,13 +31,17 @@ try {
   yaml = null;
 }
 
+// Optional secondary webserver surfaces: extra nginx units that live inside a
+// module as `deployments/<surface>/` instead of a standalone module root.
+// Entries are surface paths relative to the module's `deployments/` directory.
+// Each one is validated with the same layout v3 + W-rules as the main surface.
+const SECONDARY_WEBSERVER_SURFACES = ['env-dispatch/webserver'];
+
 // Cross-environment Host dispatch edges (dev-instance-only): their development
 // tier carries every environment's dispatch vhosts while the other tiers keep
 // internal 404 vhosts, and their upstreams target per-env webservers instead of
 // a "gateway" upstream. W24/W26/W30 generic edge rules do not apply to them.
-const DISPATCH_EDGE_MODULES = new Set([
-  'sdkwork-env-dispatch',
-]);
+const DISPATCH_EDGE_SURFACES = new Set(['env-dispatch/webserver']);
 
 const ROOT_KEYS = new Set([
   'specVersion', 'kind', 'id', 'enabled', 'description', 'profile', 'environment', 'nginx', 'main', 'http', 'stream',
@@ -765,17 +769,36 @@ function normalizeConfLines(confText) {
 }
 
 /**
- * Validate a module's deployments/webserver directory (layout v3: W1, W2,
- * W16, W18-W25). Each effective(profile, environment) is validated after merge (W21).
+ * Validate a module's webserver surfaces (layout v3: W1, W2, W16, W18-W25).
+ * Each effective(profile, environment) is validated after merge (W21).
+ * Besides the main `deployments/webserver/` surface, optional secondary
+ * surfaces from SECONDARY_WEBSERVER_SURFACES (`deployments/<name>/webserver/`)
+ * are validated and their diagnostics prefixed with the surface path.
  * @param {string} moduleRoot module repository root
- * @param {{isWorkspaceRoot?: boolean}} [options]
+ * @param {{isWorkspaceRoot?: boolean, surface?: string}} [options]
  * @returns {{missing: boolean, ok: boolean, errors: string[], warnings: string[], profiles: object}}
  */
 export function validateWebserverDir(moduleRoot, options = {}) {
-  const { isWorkspaceRoot = false } = options;
+  const surfaceName = options.surface ?? 'webserver';
+  const result = validateWebserverSurface(moduleRoot, options);
+  if (surfaceName !== 'webserver') return result;
+  for (const name of SECONDARY_WEBSERVER_SURFACES) {
+    const secondaryDir = path.join(moduleRoot, 'deployments', name);
+    if (!fs.existsSync(path.join(secondaryDir, 'server.common.toml'))) continue;
+    const sub = validateWebserverSurface(moduleRoot, { ...options, surface: name });
+    const prefix = `deployments/${name}`;
+    for (const e of sub.errors) result.errors.push(`${prefix}: ${e}`);
+    for (const w of sub.warnings) result.warnings.push(`${prefix}: ${w}`);
+    result.ok = result.errors.length === 0;
+  }
+  return result;
+}
+
+function validateWebserverSurface(moduleRoot, options) {
+  const { isWorkspaceRoot = false, surface: surfaceName = 'webserver' } = options;
   const errors = [];
   const warnings = [];
-  const dir = path.join(moduleRoot, 'deployments', 'webserver');
+  const dir = path.join(moduleRoot, 'deployments', surfaceName);
   const layoutFiles = LAYOUT_V3_FILES;
   const retiredPath = path.join(dir, 'server.toml');
 
@@ -888,11 +911,11 @@ export function validateWebserverDir(moduleRoot, options = {}) {
   }
 
   // W30: canonical primary API upstream is named "gateway" (§8.1).
-  // Dispatch-edge modules (e.g. sdkwork-env-dispatch) proxy by environment Host
+  // Dispatch-edge surfaces (e.g. env-dispatch) proxy by environment Host
   // to per-env webservers; their upstreams are env_* by design and their
   // non-development tiers hold internal 404 vhosts, so W24/W26/W30 do not apply.
   const moduleName = path.basename(path.resolve(moduleRoot));
-  if (common.enabled !== false && !DISPATCH_EDGE_MODULES.has(moduleName)) {
+  if (common.enabled !== false && !DISPATCH_EDGE_SURFACES.has(surfaceName)) {
     for (const profileName of DEPLOYMENT_PROFILES) {
       for (const environment of LIFECYCLE_ENVIRONMENTS) {
         const effective = profiles[profileName][environment];
@@ -916,7 +939,7 @@ export function validateWebserverDir(moduleRoot, options = {}) {
   }
 
   // W24: public hostnames must follow APP_RUNTIME_TOPOLOGY_NAMING.md §9.
-  if (!DISPATCH_EDGE_MODULES.has(moduleName)) {
+  if (!DISPATCH_EDGE_SURFACES.has(surfaceName)) {
     for (const environment of LIFECYCLE_ENVIRONMENTS) {
       const envDoc = environmentDocs[environment];
       for (const server of envDoc?.http?.server ?? []) {
@@ -940,7 +963,7 @@ export function validateWebserverDir(moduleRoot, options = {}) {
   }
 
   // W26: every lifecycle tier declares the same base-domain coverage as production.
-  if (common.enabled !== false && !DISPATCH_EDGE_MODULES.has(moduleName)) {
+  if (common.enabled !== false && !DISPATCH_EDGE_SURFACES.has(surfaceName)) {
     const productionHosts = (environmentDocs.production?.http?.server ?? [])
       .flatMap((server) => server.serverName ?? [])
       .map(normalizeHost)
@@ -1076,36 +1099,40 @@ export function validateWebserverDir(moduleRoot, options = {}) {
   }
 
   // W18: deploy.yaml expose domains must match effective(profile.environment).
-  const deployYaml = path.join(moduleRoot, 'deployments', 'deploy.yaml');
-  if (yaml && fs.existsSync(deployYaml)) {
-    try {
-      const parsed = yaml.load(fs.readFileSync(deployYaml, 'utf8'));
-      const profileBlocks = parsed?.profiles && typeof parsed.profiles === 'object'
-        ? Object.entries(parsed.profiles)
-        : parsed?.expose
-          ? [['default', parsed]]
-          : [];
-      for (const [profileId, block] of profileBlocks) {
-        if (!block || !Array.isArray(block.expose)) continue;
-        const environment = profileId.includes('.') ? profileId.split('.').pop() : 'production';
-        const deploymentProfile = profileId.includes('.') ? profileId.split('.')[0] : 'standalone';
-        if (!DEPLOYMENT_PROFILES.includes(deploymentProfile)) continue;
-        if (!LIFECYCLE_ENVIRONMENTS.includes(environment)) continue;
-        const effective = profiles[deploymentProfile]?.[environment];
-        if (!effective) continue;
-        const serverNames = new Set(
-          (effective.http?.server ?? []).flatMap((server) => server.serverName ?? []),
-        );
-        for (const item of block.expose) {
-          const domain = typeof item === 'string' ? item : item?.domain;
-          if (!domain || serverNames.has(domain)) continue;
-          warnings.push(
-            `deployments/deploy.yaml profile "${profileId}": expose domain "${domain}" is not covered by effective(${deploymentProfile}.${environment}) serverName (W18)`,
+  // Module deploy.yaml is a contract with the main surface only; secondary
+  // surfaces (dispatch edges) intentionally serve hosts outside deploy.yaml.
+  if (surfaceName === 'webserver') {
+    const deployYaml = path.join(moduleRoot, 'deployments', 'deploy.yaml');
+    if (yaml && fs.existsSync(deployYaml)) {
+      try {
+        const parsed = yaml.load(fs.readFileSync(deployYaml, 'utf8'));
+        const profileBlocks = parsed?.profiles && typeof parsed.profiles === 'object'
+          ? Object.entries(parsed.profiles)
+          : parsed?.expose
+            ? [['default', parsed]]
+            : [];
+        for (const [profileId, block] of profileBlocks) {
+          if (!block || !Array.isArray(block.expose)) continue;
+          const environment = profileId.includes('.') ? profileId.split('.').pop() : 'production';
+          const deploymentProfile = profileId.includes('.') ? profileId.split('.')[0] : 'standalone';
+          if (!DEPLOYMENT_PROFILES.includes(deploymentProfile)) continue;
+          if (!LIFECYCLE_ENVIRONMENTS.includes(environment)) continue;
+          const effective = profiles[deploymentProfile]?.[environment];
+          if (!effective) continue;
+          const serverNames = new Set(
+            (effective.http?.server ?? []).flatMap((server) => server.serverName ?? []),
           );
+          for (const item of block.expose) {
+            const domain = typeof item === 'string' ? item : item?.domain;
+            if (!domain || serverNames.has(domain)) continue;
+            warnings.push(
+              `deployments/deploy.yaml profile "${profileId}": expose domain "${domain}" is not covered by effective(${deploymentProfile}.${environment}) serverName (W18)`,
+            );
+          }
         }
+      } catch {
+        // unparseable deploy.yaml is reported by check-deploy-standard
       }
-    } catch {
-      // unparseable deploy.yaml is reported by check-deploy-standard
     }
   }
 

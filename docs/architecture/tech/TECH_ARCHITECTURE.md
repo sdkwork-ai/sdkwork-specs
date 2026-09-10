@@ -73,6 +73,7 @@ Inactive reserved directories may remain absent because this repository is a nar
 - [ADR-20260724 PostgreSQL Authority And SQLite Client-Local Storage](../decisions/ADR-20260724-postgresql-authority-sqlite-client-local.md)
 - [ADR-20260730 Repository Generated-State Boundary](../decisions/ADR-20260730-repository-generated-state-boundary.md)
 - Record future standards architecture changes under [../decisions/](../decisions/) as `ADR-*` documents.
+- Design shard: [TECH-desktop-dual-host-design.md](TECH-desktop-dual-host-design.md) — desktop dual-host (Tauri/Electron) design detail supporting `DESKTOP_APP_ARCHITECTURE_SPEC.md`.
 
 ## 9. Verification
 

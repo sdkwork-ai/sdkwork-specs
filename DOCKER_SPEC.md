@@ -95,6 +95,14 @@ Rules:
 - `SDKWORK_WEBSERVER_IMPORT_PROFILE` `MUST` be declared in every shipped
   lifecycle env file even when equal to the `cloud` default (env-file parity,
   §3.3).
+- This section covers only the **profile axis**. Each activated profile still
+  imports sidecars for **every commissioned lifecycle environment** by default
+  (all five) — a deployed `development` webserver routes `server-test.*` etc.
+  too. The orthogonal **environment axis** and its
+  `SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS` default are normative in
+  `SDKWORK_WEBSERVER_SPEC.md` §17.3.2 / `ENVIRONMENT_SPEC.md` §6.2.2; the two
+  axes compose independently (`import.conf.standalone` and
+  `import.conf.cloud` each include all commissioned environments).
 
 ## 2. Image Standard (Normative)
 

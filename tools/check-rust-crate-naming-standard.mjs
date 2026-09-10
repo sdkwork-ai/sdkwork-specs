@@ -406,7 +406,9 @@ for (const summary of summaries) {
         summary.file,
       );
     }
-  } else if (pkg.includes('-')) {
+  } else if (pkg.includes('-') && existsSync(join(crateDir, 'src', 'lib.rs'))) {
+    // Binary-only crates (no src/lib.rs) have no import name to review, so
+    // the declaration requirement applies only to crates that ship a lib.
     add(
       repo,
       'warn',
@@ -432,6 +434,10 @@ for (const summary of summaries) {
   const srcDir = join(crateDir, 'src');
   if (existsSync(srcDir)) {
     for (const file of collectRs(srcDir)) {
+      // Files under `src/bin/` name binary artifacts, not modules; §3.1
+      // mandates kebab-case for `[[bin]].name`, so their kebab stems are
+      // canonical and exempt from the module snake_case rule.
+      if (file.replaceAll('\\', '/').includes('/src/bin/')) continue;
       const stem = basename(file).replace(/\.rs$/, '');
       if (['lib', 'main', 'mod', 'build'].includes(stem)) continue;
       if (!SNAKE.test(stem)) {

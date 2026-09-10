@@ -48,7 +48,9 @@ SDKWork uses a two-layer source layout:
   under `apps/` represents one selected application language/architecture root, such as
   `apps/sdkwork-<application-code>-pc/`, `apps/sdkwork-<application-code>-h5/`,
   `apps/sdkwork-<application-code>-flutter-mobile/`, `apps/sdkwork-<application-code>-mini-program/`,
-  `apps/sdkwork-<application-code>-android-mobile/`, `apps/sdkwork-<application-code>-ios-mobile/`, or
+  `apps/sdkwork-<application-code>-android-mobile/`, `apps/sdkwork-<application-code>-ios-mobile/`,
+  `apps/sdkwork-<application-code>-uniapp/`, `apps/sdkwork-<application-code>-unity/`,
+  `apps/sdkwork-<application-code>-static-web/`, or
   `apps/sdkwork-<application-code>-harmony-mobile/`. Cross-architecture TypeScript contracts, service
   ports, runtime, bootstrap, and domain RPC proto packages belong in
   `apps/sdkwork-<application-code>-common/packages/` when the repository owns multiple client surfaces.

@@ -45,6 +45,9 @@ No standard is complete until it is executable.
 | Android native mobile architecture | Validate `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`: `sdkwork-<application-code>-android-mobile-*`, `sdkwork-<application-code>-android-mobile-console-*`, and `sdkwork-<application-code>-android-mobile-admin-*` package names, thin root `app/`, generated Kotlin/Java app/backend SDK boundary, Android host adapters, route identity, Android config, and release metadata |
 | iOS native mobile architecture | Validate `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`: `sdkwork-<application-code>-ios-mobile-*`, `sdkwork-<application-code>-ios-mobile-console-*`, and `sdkwork-<application-code>-ios-mobile-admin-*` package names, thin root `App/`, generated Swift app/backend SDK boundary, iOS host adapters, route identity, iOS config, and release metadata |
 | Harmony native mobile architecture | Validate `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`: `sdkwork-<application-code>-harmony-mobile-*`, `sdkwork-<application-code>-harmony-mobile-console-*`, and `sdkwork-<application-code>-harmony-mobile-admin-*` package names, thin root `entry/`, generated ArkTS/TypeScript app/backend SDK boundary, HarmonyOS host adapters, route identity, Harmony config, and release metadata |
+| uni-app architecture | Validate `UNIAPP_APP_ARCHITECTURE_SPEC.md`: `sdkwork-<application-code>-uniapp-*`, `sdkwork-<application-code>-uniapp-console-*`, and `sdkwork-<application-code>-uniapp-admin-*` package names, thin root `src/` bootstrap, `pages.json`/subPackage projection, conditional compilation boundary, generated TypeScript app/backend SDK boundary, `uni.*` host adapters, route identity, and multi-target config/release metadata |
+| Unity architecture | Validate `UNITY_APP_ARCHITECTURE_SPEC.md`: `com.sdkwork.<application-code>-unity-*` UPM package names with Assembly-Definition-enforced dependency direction, thin bootstrap scene and `Assets/Scripts/Bootstrap/`, generated C# app/backend SDK boundary, secure-storage token persistence, Unity host adapters, scene/route identity, and build/release preflight |
+| Static web architecture | Validate `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`: `sdkwork-<application-code>-static-web-*` page-group packages, content-only boundary (no login/session/admin), public data boundary, secret-free `dist/<profile>/<envAlias>/` output, route/sitemap/i18n alignment, and `<share>/web/static/` delivery |
 | Native mobile UI | Validate `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, or `APP_HARMONY_NATIVE_UI_SPEC.md`: package-local screens/pages/components/services/state/i18n/routes, host adapter contracts, app/user-console SDK boundary, UI states, and lifecycle/security checks |
 | Internationalization | Validate `I18N_SPEC.md`: language/framework i18n directory layouts through `tools/check-i18n-standard.mjs`, package-local **message catalog** fragments, backend message bundles, framework `WebLocaleContext`, locale fallback, API `ProblemDetail` i18n metadata, SDK locale providers, database seed i18n versions, duplicate-key checks, missing-key checks, commerce `catalog` vs i18n catalog disambiguation, and no authored app/root/backend/admin/package locale monoliths |
 | Source/environment config | Validate `SOURCE_CONFIG_SPEC.md`, `CONFIG_SPEC.md`, and `ENVIRONMENT_SPEC.md`: deployable-root `etc/`, app manifest boundary, lifecycle environment, deployment profile, runtime target, dev/test/staging/prod profiles, browser/desktop/mobile/server/container separation, retired `configs/`, and public/private/secret boundaries |
@@ -52,9 +55,10 @@ No standard is complete until it is executable.
 | Drive | Drive API/SDK contract tests, Drive Uploader App SDK tests, Rust `DriveUploaderService` tests, upload-session idempotency, resumable part tests, attribution/statistic tests, retention cleanup tests, provider capability tests, business-module scans for forbidden app-local storage lifecycle |
 | IAM/security | Token validation, permission denial, tenant isolation, audit event, appbase login integration, logout clearing, Rust AppContext guard |
 | Frontend | Service tests with injected SDK client, UI integration tests |
-| UI architecture | Static/package scan that the package family matches `UI_ARCHITECTURE_SPEC.md` plus the relevant root architecture spec and exactly one detailed UI/package spec such as `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, or `BACKEND_UI_SPEC.md` |
+| UI architecture | Static/package scan that the package family matches `UI_ARCHITECTURE_SPEC.md` plus the relevant root architecture spec and exactly one detailed UI/package spec such as `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, or `BACKEND_UI_SPEC.md`; uni-app, Unity, and static web surfaces validate their root architecture spec's package-local UI rules |
 | Deployment | Standalone/cloud parity tests, topology profile validation, deployment profile and runtime target separation |
 | Runtime/test port isolation | Validate `APP_RUNTIME_TOPOLOGY_SPEC.md` §8.3: automated test runs that boot the application configure dedicated test ports through topology bind overrides (`--*-bind` / `SDKWORK_*_BIND`), never the manual dev default ports; tests release ports and terminate spawned runtime processes on completion; no automated run kills, restarts, or port-shares with a manually started dev instance |
+| Shell portability | Validate `PORTABILITY_SPEC.md` with `tools/check-shell-portability.mjs` (static lint + `bash -n` over every governed `.sh`, zero findings) and `tools/check-module-bin.mjs`: operator-side scripts stay bash 3.2/any-Linux portable, bash-4-only and GNU-only tokens are absent or exemption-marked (`PORTABILITY:target-linux`/`PORTABILITY:allow`), and checksum sidecars use the portable two-space format |
 | GitHub workflow | `GITHUB_WORKFLOW_SPEC.md` checks for `sdkwork.workflow.json`, thin reusable workflow entrypoint, planner/schema alignment, dependency `refInput` dispatch inputs and `dependency_refs_json` passthrough, deploymentProfile/runtimeTarget target metadata, safe refs and paths, lifecycle env, release policy, publication policy gates, supply-chain policy, attestation policy, deployment environment binding, and repository validation |
 | Events | Schema compatibility, idempotent consumer, replay behavior |
 | Performance | Pagination, latency budget, retry, rate-limit behavior |
@@ -1100,6 +1104,54 @@ Rules:
 - Host adapter tests `MUST` prove feature UI and view models do not call platform APIs directly for host capabilities.
 - State clearing tests `MUST` prove logout, refresh failure, account switch, and tenant switch clear token storage, context state, sensitive package state, caches, and realtime/session bridges.
 - UI state tests `SHOULD` cover loading, empty, validation-error, permission-denied, offline/unavailable, and unknown-error states for representative screens/pages.
+
+## 2.4.10 uni-app Architecture Tests
+
+uni-app architecture tests make `UNIAPP_APP_ARCHITECTURE_SPEC.md` executable.
+
+Rules:
+
+- uni-app root tests `MUST` verify `.sdkwork/`, the enabled `config/browser|mini-program|app` directories, `config/host`, `src/bootstrap`, `packages/`, route projection targets, `sdks/`, scripts, and tests exist.
+- Package naming tests `MUST` prove SDKWork source packages use `sdkwork-<application-code>-uniapp-*` and reserved `core`, `commons`, `shell`, `console-*`, `admin-*`, and `host` roles.
+- uni-app surface tests `MUST` prove `sdkwork-<application-code>-uniapp-<capability>` packages are default app/user packages, `sdkwork-<application-code>-uniapp-console-<capability>` packages are user-facing management console packages, and `sdkwork-<application-code>-uniapp-admin-<capability>` packages are `backend-admin` packages.
+- uni-app SDK boundary tests `MUST` prove app and console packages use generated TypeScript app SDK clients or approved uni-app wrappers through the core transport adapter, admin packages use generated backend SDK clients or approved backend wrappers, and no raw `uni.request` business calls, manual auth headers, or generated SDK edits are introduced.
+- Conditional compilation tests `MUST` fail when `#ifdef`/`#ifndef` platform conditions (`MP-WEIXIN`, `H5`, `APP-PLUS`, and equivalents) appear in capability pages, components, or services outside the host package and bootstrap.
+- Route projection tests `MUST` prove route contributions generate or assemble `pages.json` pages, `subPackages`, and tabBar entries deterministically.
+- Platform host tests `MUST` fail when feature packages call `uni.*` or platform globals (`wx.*`, `plus.*`) directly for host capabilities.
+- uni-app IAM tests `MUST` prove platform login codes, phone-number grants, scene/query inputs, and provider-specific auth facts are exchanged through approved app-api/appbase flows, and storage/token/context state clears on logout, refresh failure, and account/tenant switch.
+- uni-app config tests `MUST` prove `.env.<profile-id>` files use `VITE_SDKWORK_*` keys with matching identity fields, the `-p` target platform stays a separate axis, and host config separates platform app ids from private keys, tokens, API keys, and private endpoints.
+
+## 2.4.11 Unity Architecture Tests
+
+Unity architecture tests make `UNITY_APP_ARCHITECTURE_SPEC.md` executable.
+
+Rules:
+
+- Unity root tests `MUST` verify `.sdkwork/`, `config/app`, `config/host`, `Assets/Scenes/Bootstrap.unity`, `Assets/Scripts/Bootstrap/`, `Packages/` UPM packages, `sdks/`, scripts, and tests exist.
+- Package naming tests `MUST` prove UPM ids use `com.sdkwork.<application-code>-unity-<role>` with reserved `core`, `commons`, `shell`, `console`, `admin`, and `host` roles and matching Assembly Definition names `Sdkwork.<ApplicationCode>.Unity.<Role>`.
+- Unity dependency direction tests `MUST` prove core/commons asmdefs never reference capability asmdefs, capability asmdefs never reference generated SDK assemblies directly, and no asmdef cycles exist.
+- Unity root thinness tests `MUST` fail when root `Assets/` owns business scenes, prefabs, gameplay systems, feature services, or concrete SDK orchestration outside the bootstrap scene and `Assets/Scripts/Bootstrap/`.
+- Unity SDK boundary tests `MUST` prove services receive generated C# app SDK clients or approved wrappers through `unity-core` injection, admin surfaces use backend SDK clients or approved backend wrappers, and no raw `UnityWebRequest` business calls, manual auth headers, foreign-architecture wrappers, or generated SDK edits are introduced.
+- Secure storage tests `MUST` prove tokens and refresh tokens persist only through the `secureStorage` host adapter and never through `PlayerPrefs`, plaintext files, or `StreamingAssets`.
+- Unity host adapter tests `MUST` prove feature scenes/services do not call engine/platform globals, static manager singletons, or third-party plugin APIs directly for host capabilities.
+- Unity route tests `MUST` prove scene/address keys map to SDKWork route ids and align with cross-client route metadata when the workflow exists elsewhere.
+- Unity config tests `MUST` prove exactly one validated `config/app/runtime-env.<profile-id>.json` is projected into `StreamingAssets/RuntimeConfig/` per build while Unity build target, scripting backend, and signing remain separate axes.
+- Unity release preflight tests `MUST` validate signing references, store/mini-game package metadata, icons, screenshots, checksums/SBOM/provenance, and secret absence in build evidence.
+
+## 2.4.12 Static Web Architecture Tests
+
+Static web architecture tests make `APP_STATIC_WEB_ARCHITECTURE_SPEC.md` executable.
+
+Rules:
+
+- Static web root tests `MUST` verify `.sdkwork/`, `config/browser`, `src/pages` or page-group packages, shared scripts, and tests exist, and that package names use `sdkwork-<application-code>-static-web-*` with reserved `core`/`<page-group>` roles.
+- Content-only boundary tests `MUST` fail when a static web root implements login, registration, token storage, refresh, admin workflows, or imports authenticated app/backend SDK families.
+- Secret-free output tests `MUST` scan `dist/` build output and fail on API keys, tokens, private endpoints, database URLs, or undeclared third-party scripts.
+- Data boundary tests `MUST` prove page groups fetch only through `core` runtime-config-resolved public/open-api clients or build-time content, with no inline hardcoded API origins and no protected surface calls.
+- Route alignment tests `MUST` prove route metadata follows `<surface>.<domain>.<capability>.<screen>`, generates sitemap/canonical/`hreflang` entries deterministically, and aligns with other client roots where page identities match.
+- i18n tests `MUST` prove locale fragments split by page and locale-prefixed output is generated rather than hand-duplicated per locale.
+- Progressive function tests `MUST` prove representative pages render primary content without JavaScript.
+- Output layout tests `MUST` prove `dist/<profile>/<envAlias>/` output and the documented mapping to `<share>/web/static/` install delivery.
 
 ## 2.5 Drive Uploader Tests
 

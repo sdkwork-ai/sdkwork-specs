@@ -224,7 +224,9 @@ kilobytes instead of gigabytes.
 
 
 docker-deploy.sh install  --environment <env> [--replicas N] [--host <target>] [--image-tag <v>] [--deps external|embedded]
+                           [--host-port <BASE>] [--edge-http <P>] [--edge-https <P>] [--domain <HOST>]
 docker-deploy.sh upgrade  --environment <env> [--image-tag <v>] [--host <target>] [--deps external|embedded]
+                           [--host-port <BASE>] [--edge-http <P>] [--edge-https <P>] [--domain <HOST>]
 docker-deploy.sh rollback --environment <env> [--host <target>] [--to <version>]
 docker-deploy.sh status   --environment <env> [--host <target>]
 docker-deploy.sh logs     --environment <env> [--host <target>]
@@ -286,6 +288,22 @@ Rules:
 - `install`/`upgrade`/`rollback`/`start`/`stop`/`restart` against `production`
   require `--yes` (`sdkwork_confirm_production`); `--purge` requires `--yes`
   in **every** environment (`sdkwork_confirm_destructive`).
+
+**Runtime port/domain overrides** (`--host-port/--edge-http/--edge-https/
+--domain`, webserver install/upgrade; §4.2 grammar above): these let an
+operator bind an application at arbitrary host ports or domains at deploy time,
+decoupled from the environment's port template. Precedence is
+**CLI > env-file > built-in fallback**. The entrypoint forwards the four flags
+verbatim to the bundle `deploy.sh`, which validates them, composes on the
+override for the current run, and **persists them into the env file on apply**
+so the deployed state stays the single source of truth (`doctor`/`config`/
+`status` read the same published port on later runs). A bundle whose
+`deploy.sh` does not accept a forwarded flag `MUST` fail fast rather than
+silently ignore it. `doctor.sh`'s HTTP probe resolves the live host port from
+the pulled deployment env via `sdkwork_module_health_port <env> <instance>`,
+so an override is honoured (not a stale built-in default). Different
+applications on the same environment are just deploys with different
+`--host-port` bases / edge ports.
 
 ### 4.3 `bin/apps-build.sh` — Application Build
 
@@ -398,7 +416,12 @@ bin/doctor.sh --environment <env> [--instance N] [--json] [--export <dir>]
 Implements the §4.2 check set (toolchain, bundle, compose, container health,
 HTTP probe, image drift, configuration drift, log errors, disk). Module
 hooks: `SDKWORK_PRIMARY_SERVICE`, `SDKWORK_HEALTH_PATH`,
-`sdkwork_module_health_port`, `sdkwork_module_extra_doctor`.
+`sdkwork_module_health_port <env> <instance>` (optional; resolves the live host
+port for the probe — doctor pulls the deployed env first so a module hook may
+return the real published port including the instance-stride offset, instead of
+a hardcoded default), `sdkwork_module_expected_image_tag` (optional;
+the image tag the deployed bundle considers authoritative, consulted by the
+image-drift check before the environment chain), `sdkwork_module_extra_doctor`.
 `bin/docker-deploy.sh doctor` remains the *local* self-check; only
 `bin/doctor.sh` inspects a deployed environment.
 

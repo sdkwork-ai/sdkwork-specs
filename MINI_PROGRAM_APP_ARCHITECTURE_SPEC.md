@@ -10,7 +10,11 @@ The framework authority is explicit. `weixin-mini-program` means a native
 WeChat Mini Program source tree. A declared `uni-app` or equivalent
 multi-platform framework may project one source tree to multiple `MP_*`
 platforms. A root does not keep native WeChat and uni-app as competing business
-source authorities.
+source authorities. A uni-app source root follows `UNIAPP_APP_ARCHITECTURE_SPEC.md`
+as its root architecture authority; this standard governs native mini program
+source roots and the platform pages/subpackage packaging rules that uni-app
+`MP_*` delivery must also satisfy (package-size budgets, host config, platform
+review metadata).
 
 SDKWork source packages and mini program platform subpackages are different concepts. SDKWork packages are source, dependency, component, and composition boundaries. Platform `pages` and `subpackages` are runtime packaging and loading boundaries. Business architecture must be expressed through SDKWork packages first, then projected into platform pages/subpackages through route metadata and build tooling.
 

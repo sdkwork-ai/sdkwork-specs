@@ -129,6 +129,30 @@ Rules:
   the directory `MUST` pass `tools/check-webserver-toml-standard.mjs` before
   merge.
 
+A module `MAY` host additional nginx units as **secondary webserver surfaces**
+alongside the main surface:
+
+```text
+<module-root>/deployments/
+  env-dispatch/
+    webserver/
+      server.common.toml           # same layout v3 file set as the main surface
+      server.<environment>.toml
+      server.standalone.toml / server.cloud.toml
+      nginx.<profile>.<environment>.conf
+```
+
+- Each secondary surface `MUST` satisfy the same layout v3 and validation rules
+  as the main surface; diagnostics are reported with the
+  `deployments/<surface>/webserver` prefix.
+- `deployments/deploy.yaml` (`expose`, W18) is a contract with the main surface
+  only; secondary surfaces are not covered by it.
+- A surface named `env-dispatch` is a cross-environment Host **dispatch edge**
+  (dev-instance-only): its development tier carries every environment's
+  dispatch vhosts while the other tiers keep internal 404 vhosts, and its
+  upstreams target per-environment webservers (`env_*`) instead of a `gateway`
+  upstream. W24/W26/W30 therefore do not apply to it.
+
 ### 2.2 Effective Configuration And Inheritance
 
 Each runtime activation has one **effective configuration**:
@@ -1034,19 +1058,19 @@ The validator `tools/check-webserver-toml-standard.mjs` enforces:
 | W15 | Workspace root has no `deployments/webserver/` |
 | W16 | When `nginx.enabled = true` (default) and the module is enabled, every `nginx.<profile>.<environment>.conf` sidecar must exist and match the effective render under `strict`; when `nginx.enabled = false`, sidecars are ignored with a warning |
 | W17 | `enabled = false` effective configurations have no `[[http.server]]`/`[[stream.server]]` |
-| W18 | `deploy.yaml` `expose` domains are covered by `serverName` across the effective configurations (warning when `deploy.yaml` is present) |
+| W18 | `deploy.yaml` `expose` domains are covered by `serverName` across the effective configurations (warning when `deploy.yaml` is present); main surface only |
 | W19 | Layout v2 only: `server.toml` is retired and fails validation when present; v2 files exist (see W1) |
 | W20 | `server.common.toml` has no `profile`/`environment` and no `[[http.server]]` when enabled; each `server.<environment>.toml` declares matching `environment`; profile files declare `profile` only |
 | W21 | Each `effective(<profile>.<environment>)` passes rules W2–W26 after three-layer merge |
 | W22 | Identity keys are unique in each effective configuration: one location `match` per server, one upstream `name`, one `serverName` across servers |
 | W23 | Public ingress servers expose `location /` as gateway `proxy_pass` only; forbidden snippet paths on product trees |
-| W24 | `serverName` hosts are registered public hosts per `APP_RUNTIME_TOPOLOGY_NAMING.md` §9; platform gateway hosts belong on `sdkwork-api-cloud-gateway` only |
+| W24 | `serverName` hosts are registered public hosts per `APP_RUNTIME_TOPOLOGY_NAMING.md` §9; platform gateway hosts belong on `sdkwork-api-cloud-gateway` only; dispatch-edge surfaces are exempt |
 | W25 | Certificate paths use `/etc/sdkwork/certs/letsencrypt/<cert-name>/`; `/opt/certs/letsencrypt/live/` is retired and fails validation |
-| W26 | When production declares hosts, development/test/staging `MUST` declare `[[http.server]]` with the same base-domain count |
+| W26 | When production declares hosts, development/test/staging `MUST` declare `[[http.server]]` with the same base-domain count; dispatch-edge surfaces are exempt |
 | W27 | `[http.certificates]` `MUST` live in `server.common.toml` only; environment files `MUST NOT` repeat certificate blocks |
 | W28 | `server.include` snippet paths `MUST` exist under `deployments/webserver/` |
 | W29 | Modules with `expose.mode` `web` / `web+api` (except edge proxy-only products) `MUST` declare Adaptive Web maps in common, production `location /` dispatch, and gateway `/api/` proxy snippets |
-| W30 | Enabled modules `MUST` declare exactly one primary API upstream named `gateway`; shared gateway snippets `MUST` reference `http://gateway`; upstream names are unique per effective configuration / nginx process, not globally across modules; multi-module composers `MUST` deduplicate upstream blocks by name (§8.1) |
+| W30 | Enabled modules `MUST` declare exactly one primary API upstream named `gateway`; shared gateway snippets `MUST` reference `http://gateway`; upstream names are unique per effective configuration / nginx process, not globally across modules; multi-module composers `MUST` deduplicate upstream blocks by name (§8.1); dispatch-edge surfaces are exempt |
 
 Workspace mode (`--workspace <root>`) scans every sibling module with a
 `deployments/` directory and reports missing layout v3 files as compliance
@@ -1197,7 +1221,10 @@ sed-based configuration rewriting of module configs.
 
 The active import mode is a **deployment input resolved at container start**,
 never an image property. Both sets are always materialized by the entrypoint;
-configuration only selects which set activates.
+configuration only selects which set activates. This subsection selects the
+**profile** (`standalone`/`cloud`); the orthogonal **environment axis** —
+which lifecycle environments' sidecars the selected profile imports (default:
+all five) — is normative in §17.3.2 below.
 
 | Configuration surface | Mechanism |
 | --- | --- |
@@ -1270,6 +1297,46 @@ Rules:
   page; it `MUST NOT` crash the whole data plane at startup. Existing
   non-symlink content at a declared root `MUST NOT` be overwritten on
   re-runs (idempotent materialization).
+
+#### 17.3.2 Universal Environment Set (Environment Axis, Normative)
+
+§17.3.1 governs the **profile axis** (which `nginx.<profile>.*` set activates:
+`standalone` or `cloud`). This subsection governs the independent
+**environment axis** — the set of lifecycle environments whose sidecars each
+aggregator (`import.conf.<profile>`) includes. The two axes are orthogonal:
+`import.conf.standalone` and `import.conf.cloud` each `include` the
+`nginx.<profile>.<environment>.conf` sidecar of every sibling module for
+**every commissioned environment**. Normative terms are defined in
+`ENVIRONMENT_SPEC.md` §6.2.2 (universal import plane); in short: the default
+commission is all five lifecycle environments, a comma-separated
+`SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS` narrows it, and
+`SDKWORK_WEBSERVER_ENVIRONMENT` selects only the default routing environment.
+A single instance is the shared edge for every lifecycle domain it is
+commissioned to serve; it routes per `server_name` (domain), not per
+deployment.
+
+| Configuration surface | Mechanism |
+| --- | --- |
+| Env file / compose | `SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS` — comma-separated lifecycle environments whose module sidecars this instance imports. Declared in `env/<environment>.env`; the bundle compose forwards it into the container (`docker-compose.bundle.yml`: `SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS: ${SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS:-}`) |
+| Entrypoint resolution | Empty/unset `SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS` ⇒ **all five** lifecycle environments (`development,test,staging,demo,production`) — the default commission. It `MUST NOT` default to the instance's own environment. `SDKWORK_WEBSERVER_ENVIRONMENT` only selects the instance's default routing environment; it never narrows the imported environment set. Unknown names are dropped; an explicit subset like `development,test,production` is a narrow commission and is honoured |
+| Aggregation | `materialize_module_import_files` iterates the **commissioned** environment set (default all five) and `include`s each sibling module's `nginx.<profile>.<environment>.conf` sidecar for every commissioned environment whose file exists; a module missing a sidecar for one environment is skipped and logged — never a data-plane failure |
+
+Rules:
+
+- A deployed instance `MUST` route every imported module's commissioned domain
+  edge. Defaulting to all five is what makes a `development` Docker stack able
+  to serve `server-test.*`, `api-staging.*`, … from the same process; an
+  instance `MUST NOT` silently 404 an imported module's commissioned domain
+  (`ENVIRONMENT_SPEC.md` §6.2.2). A domain whose sidecar is absent is a
+  configuration defect, not a graceful fallback.
+- Narrowing `SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS` is an explicit operator
+  commission (e.g. an isolated tier that intentionally serves a subset);
+  `IMPORT_REQUIRED`/probe behaviour is unchanged.
+- The per-module Adaptive Web static roots and the module app-roots catalog
+  already carry a per-environment dimension
+  (`pc_static_by_environment` / `h5_static_by_environment`), so each routed
+  environment's PC/H5 assets resolve from that environment's dist tree when it
+  is built and synced (build-serve coherence, `ENVIRONMENT_SPEC.md` §5.1.0.2).
 
 ### 17.4 `sdkwork-webserver` Is Standalone-Only
 

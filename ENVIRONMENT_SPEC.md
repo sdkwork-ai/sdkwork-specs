@@ -1007,20 +1007,39 @@ special in exactly two ways:
   at an absolute `api-*` origin. Sibling modules served through it keep their
   own profile identity (§5.1.0.2 Build-Serve Profile Coherence).
 - **One instance, all lifecycle environments (universal import plane).** A
-  deployed webserver instance `MUST` import every sibling module's sidecar set
-  for **all** lifecycle environments the instance is commissioned to serve —
-  for example a Docker `development` stack must be able to route
-  development, test, staging, demo, and production domain edges of imported
-  modules through the same process, selecting the environment per
-  `server_name` (domain) rather than per deployment. Concretely:
-  the `imports.d` import plane (`SDKWORK_WEBSERVER_SPEC.md` §17.3) loads each
-  sibling module's `nginx.<profile>.<environment>.conf` sidecar set for every
-  commissioned environment, and `SDKWORK_WEBSERVER_ENVIRONMENT` selects the
-  instance's *default* environment only — module domains of other environments
-  stay routable as long as their sidecars are imported and their dist trees
-  are synced. An instance `MUST NOT` silently 404 an imported module's
-  commissioned domain; a domain without an imported sidecar is a configuration
-  defect, not a graceful fallback.
+  deployed webserver instance is the shared edge for the whole workspace and
+  routes imported modules' domains by `server_name` (domain), never by its own
+  deployment environment. Normative terms, used consistently across this
+  standard, `SDKWORK_WEBSERVER_SPEC.md` §17.3.2, and the entrypoint:
+
+  - **profile axis** (`SDKWORK_WEBSERVER_IMPORT_PROFILE`, default `cloud`):
+    which sidecar set per module is loaded, `standalone` or `cloud`.
+  - **environment axis** (`SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS`): the
+    comma-separated set of lifecycle environments whose module sidecars are
+    imported. **Unset/empty ⇒ all five** (`development,test,staging,
+    demo,production`) — this is the *default commission*. It `MUST NOT`
+    default to the instance's own environment.
+  - **`SDKWORK_WEBSERVER_ENVIRONMENT`**: the instance's *default routing*
+    environment only. It selects which environment a request without an
+    explicit domain match routes to; it `MUST NOT` narrow the imported
+    environment set.
+  - **commissioned**: the resolved environment set of
+    `SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS` (default all five). A
+    comma-separated subset is an explicit narrow commission.
+
+  Therefore a deployed webserver instance `MUST` import every sibling module's
+  `nginx.<profile>.<environment>.conf` sidecar for **every** commissioned
+  environment — a Docker `development` stack must route the development, test,
+  staging, demo, and production domain edges of imported modules through the
+  same process. Concretely: the `imports.d` import plane
+  (`SDKWORK_WEBSERVER_SPEC.md` §17.3 / §17.3.2) loads each sibling module's
+  sidecar set for every commissioned environment, and
+  `SDKWORK_WEBSERVER_ENVIRONMENT` selects the instance's *default* environment
+  only — module domains of other commissioned environments stay routable as
+  long as their sidecars are imported and their dist trees are synced. An
+  instance `MUST NOT` silently 404 an imported module's commissioned domain; a
+  domain without an imported sidecar is a configuration defect, not a graceful
+  fallback.
 
 ### 6.3 Browser Base-URL Resolution Standard (`resolveBaseUrl`)
 

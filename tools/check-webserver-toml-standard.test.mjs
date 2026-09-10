@@ -810,3 +810,114 @@ protocols = ["TLSv1.2", "TLSv1.3"]
   assert.ok(result.errors.some((e) => e.includes('W26')));
   fs.rmSync(tmp, { recursive: true, force: true });
 });
+
+const DISPATCH_COMMON_DOC = `
+specVersion = 1
+kind = "sdkwork.webserver.server"
+id = "env-dispatch"
+description = "Cross-environment Host dispatch edge"
+
+[nginx]
+profile = "http-core-v1"
+
+[main]
+user = "sdkwork"
+workerProcesses = "auto"
+pid = "/run/sdkwork/env-dispatch/webserver.pid"
+errorLog = "/var/log/sdkwork/env-dispatch/webserver/error.log warn"
+
+[main.events]
+workerConnections = 1024
+
+[http]
+sendfile = true
+keepaliveTimeout = 75
+clientMaxBodySize = "1100m"
+serverTokens = "off"
+
+[[http.upstream]]
+name = "env_test"
+loadBalancing = "least-connections"
+keepalive = 32
+[[http.upstream.target]]
+address = "host.docker.internal:18898"
+
+[[http.upstream]]
+name = "env_production"
+loadBalancing = "least-connections"
+keepalive = 32
+[[http.upstream.target]]
+address = "host.docker.internal:18098"
+`;
+
+test('file validation: secondary dispatch-edge surface validates with W24/W26/W30 exemptions', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-webserver-dispatch-'));
+
+  // Main surface: standard module shape with a gateway upstream.
+  const mainDir = path.join(tmp, 'deployments', 'webserver');
+  fs.mkdirSync(mainDir, { recursive: true });
+  fs.writeFileSync(path.join(mainDir, 'server.common.toml'), COMMON_ONLY_DOC);
+  writeLayoutV3Stubs(mainDir);
+  writeAllSidecars(mainDir, validateWebserverDir(tmp).profiles);
+
+  // Secondary dispatch-edge surface: env_* upstreams, no gateway upstream,
+  // development tier carries cross-environment dispatch vhosts while the
+  // other tiers keep internal 404 vhosts.
+  const dispatchDir = path.join(tmp, 'deployments', 'env-dispatch', 'webserver');
+  fs.mkdirSync(dispatchDir, { recursive: true });
+  fs.writeFileSync(path.join(dispatchDir, 'server.common.toml'), DISPATCH_COMMON_DOC);
+  fs.writeFileSync(
+    path.join(dispatchDir, 'server.development.toml'),
+    `environment = "development"
+
+[[http.server]]
+listen = ["80"]
+serverName = ["im-test.sdkwork.com", "im.sdkwork.com"]
+
+[[http.server.location]]
+match = "/"
+proxyPass = "http://env_test"
+proxyHttpVersion = "1.1"
+proxyWebsocketUpgrade = true
+`,
+  );
+  for (const environment of ['test', 'staging', 'demo', 'production']) {
+    fs.writeFileSync(
+      path.join(dispatchDir, `server.${environment}.toml`),
+      `environment = "${environment}"
+
+[[http.server]]
+listen = ["80"]
+serverName = ["env-dispatch-${environment}.sdkwork-internal"]
+
+[[http.server.location]]
+match = "/"
+returnStatus = 404
+returnBody = "env-dispatch is not active on this instance\\n"
+`,
+    );
+  }
+  fs.writeFileSync(path.join(dispatchDir, 'server.standalone.toml'), 'profile = "standalone"\n');
+  fs.writeFileSync(path.join(dispatchDir, 'server.cloud.toml'), 'profile = "cloud"\n');
+
+  const sub = validateWebserverDir(tmp, { surface: 'env-dispatch/webserver' });
+  assert.equal(sub.missing, false);
+  writeAllSidecars(dispatchDir, sub.profiles);
+
+  const result = validateWebserverDir(tmp);
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  assert.ok(result.errors.every((e) => !e.includes('W30')), 'dispatch edge must not require a gateway upstream');
+  assert.ok(result.errors.every((e) => !e.includes('W24')), 'dispatch edge Hosts are exempt from W24');
+  assert.ok(result.errors.every((e) => !e.includes('W26')), 'dispatch edge tiers are exempt from W26');
+
+  // A divergent secondary sidecar is reported with the surface path prefix.
+  fs.writeFileSync(path.join(dispatchDir, 'nginx.cloud.production.conf'), 'http {\n    sendfile off;\n}\n');
+  const broken = validateWebserverDir(tmp);
+  assert.equal(broken.ok, false);
+  assert.ok(
+    broken.errors.some((e) => e.startsWith('deployments/env-dispatch/webserver') && e.includes('W16')),
+    JSON.stringify(broken.errors),
+  );
+
+  fs.rmSync(tmp, { recursive: true, force: true });
+});

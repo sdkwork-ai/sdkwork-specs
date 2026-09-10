@@ -188,7 +188,7 @@ Ubuntu is represented as:
 web, mobile, desktop, server, cli, mini-program, library, plugin
 ```
 
-`runtime.framework` is descriptive and should be specific, for example `react`, `react-tauri`, `react-h5`, `react-capacitor`, `flutter`, `android-native`, `ios-native`, `harmony-native`, `weixin-mini-program`, `multi-mini-program`, `electron`, `spring-boot`, `node-service`, `go-service`, or `rust-service`.
+`runtime.framework` is descriptive and should be specific, for example `react`, `react-tauri`, `react-h5`, `react-capacitor`, `flutter`, `android-native`, `ios-native`, `harmony-native`, `weixin-mini-program`, `multi-mini-program`, `uni-app`, `unity`, `static-html`, `electron`, `spring-boot`, `node-service`, `go-service`, or `rust-service`.
 
 `runtime.defaultPlatform` and `runtime.defaultArchitecture` drive default latest download resolution and `platform_app.downloadUrl` projection.
 
@@ -219,7 +219,8 @@ profile or a replacement for exact package `runtimeTarget` metadata.
 
 Canonical client architecture values are `pc-web`, `h5`, `capacitor`,
 `flutter`, `tauri`, `electron`, `android-native`, `ios-native`,
-`harmony-native`, and `mini-program`. Target platform values follow the
+`harmony-native`, `mini-program`, `uniapp`, `unity`, and `static-web`. Target
+platform values follow the
 lower-kebab workflow platform registry, including `web`, `h5`, `windows`,
 `macos`, `linux`, `ios`, `ipados`, `android`, `android-tablet`, `harmony`, and
 approved `mp-*` platforms. New architectures require an architecture standard
@@ -258,6 +259,9 @@ Client roots must keep manifest runtime metadata aligned with their root archite
 | Native Android mobile root | `mobile` | `android-native` | `APP_ANDROID` |
 | Native iOS mobile root | `mobile` | `ios-native` | `APP_IOS` |
 | Native HarmonyOS mobile root | `mobile` | `harmony-native` | `APP_HARMONY` |
+| uni-app root | `mini-program`, `mobile`, or `web` following delivery | `uni-app` | `MP_WEIXIN`, `MP_ALIPAY`, `MP_DINGTALK`, `MP_LARK`, `APP_ANDROID`, `APP_IOS`, `H5` |
+| Unity root | `mobile`, `desktop`, `web`, or `mini-program` following delivery | `unity` | `APP_ANDROID`, `APP_IOS`, `DESKTOP_WINDOWS`, `DESKTOP_MACOS`, `DESKTOP_LINUX`, `WEB`, `MP_WEIXIN_GAME` |
+| Static web root | `web` | `static-html` | `WEB` |
 
 Rules:
 
@@ -268,6 +272,9 @@ Rules:
 - Native Android apps should use `runtime.family = "mobile"` and `runtime.framework = "android-native"`.
 - Native iOS apps should use `runtime.family = "mobile"` and `runtime.framework = "ios-native"`.
 - Native HarmonyOS apps should use `runtime.family = "mobile"` and `runtime.framework = "harmony-native"`.
+- uni-app roots should use `runtime.framework = "uni-app"` with the family of their primary delivery: `"mini-program"` for `MP_*`-only delivery, `"mobile"` when App packages are delivered, and `"web"` for H5-only roots. Package `runtimeTarget` records the delivery runtime (`mini-program`, `android-native`/`ios-native`, or `browser`), never the authoring framework.
+- Unity roots should use `runtime.framework = "unity"` with `runtime.family` per delivery lane: `"mobile"` for app-store builds, `"desktop"` for standalone builds, `"web"` for WebGL, and `"mini-program"` for mini-game delivery (`MP_*_GAME` platforms with `runtimeTarget = "mini-program"`).
+- Static web roots should use `runtime.family = "web"`, `runtime.framework = "static-html"`, and `clientArchitectures = ["static-web"]`.
 - Package ids and artifact names in the manifest follow `NAMING_SPEC.md`; source package names follow the matching architecture standard and are not copied into release package ids unless they are also the release artifact identity.
 - PC desktop hosts map `clientArchitecture` values to host packages: `tauri` -> `sdkwork-<application-code>-pc-desktop`, `electron` -> `sdkwork-<application-code>-pc-electron`. A desktop package entry `MUST` declare exactly one `clientArchitecture` value and `MUST` agree with the host package that produced the artifact.
 - When an application ships both desktop hosts, its manifest `clientArchitectures` `MUST` include both `tauri` and `electron`, and each `artifacts.installConfig.packages[]` entry `MUST` pin its own `clientArchitecture` so release lookup and artifact collection stay deterministic.
