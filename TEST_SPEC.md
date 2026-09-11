@@ -923,7 +923,7 @@ Rules:
 - Route identity tests `MUST` prove route ids follow `<surface>.<domain>.<capability>.<screen>` and route metadata does not declare API URLs, SDK methods, or HTTP path constants.
 - Cross-client alignment tests `SHOULD` prove workflows implemented in multiple client roots share route id, title key, permission hint, SDK surface, service contract, and i18n key.
 - I18n alignment tests `SHOULD` prove shared workflows use stable key prefixes while each client architecture keeps authored locale resources in its own package-local fragments and language/framework layout from `I18N_SPEC.md` section 6.1.
-- SDK locale provider tests `SHOULD` prove generated SDK clients receive locale providers from runtime/bootstrap and feature services do not set `Accept-Language` or `X-SdkWork-Locale` manually.
+- SDK locale provider tests `SHOULD` prove generated SDK clients receive locale providers from runtime/bootstrap, that locale reaches the wire as the standard `Accept-Language` header, and that feature services do not assemble locale request headers manually.
 - Host adapter tests `MUST` prove feature packages depend on adapter contracts instead of platform globals or native plugin APIs.
 - SDK/IAM tests `MUST` prove bootstrap/core constructs SDK clients, binds the authenticated token manager, and injects SDK/service ports into feature packages.
 

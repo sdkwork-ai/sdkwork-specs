@@ -46,8 +46,11 @@ the module `bin/` entrypoints without reading module-specific scripts.
 ### 1.2 Release Channel Standard (bundle `release.sh`)
 
 Every deployable module `MUST` ship a bundle-owned `release.sh` next to
-`deploy.sh`. It is the commercial release train contract and wraps `deploy.sh`
-with a versioned lifecycle:
+`deploy.sh`. Both are authored flat in `bin/` as
+`bin/docker-bundle-release.sh` / `bin/docker-bundle-deploy.sh`
+(`MODULE_BIN_SPEC.md` §2.2) and copied into the bundle root by the module's
+bundle packager. `release.sh` is the commercial release train contract and
+wraps `deploy.sh` with a versioned lifecycle:
 
 | Action | Semantics |
 |--------|-----------|
@@ -327,7 +330,9 @@ whether the bundle container-install path applies. Generated runbooks `MUST`
 state the posture:
 
 - standalone delivery `container-image` → the bundle path in §1/§2 is
-  executable, and a missing `deployments/docker/bundle/` is a real gap;
+  executable, and a missing `bin/docker-bundle-deploy.sh` (the executor
+  source, `MODULE_BIN_SPEC.md` §2.2) or a missing packaged
+  `dist/docker-install/*` bundle is a real gap;
 - standalone delivery `host-package` → §1/§2 describe the container path as
   applicable only when the module opts into a standalone container install;
   the host-package path is `bin/apps-package.sh` + `bin/apps-pkg-installer.sh`,

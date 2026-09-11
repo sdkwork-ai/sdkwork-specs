@@ -153,6 +153,12 @@ The audit is read-only and exits `0` only when no forbidden pattern is found. It
 
 The audit intentionally does not flag literal exact-path artifact removal. A clean run therefore means "no pattern-driven deletion", not "no deletion at all"; variable-trust questions (`rm -rf "$SOME_VAR"`) are the reviewer's responsibility under sections 3 and 5.
 
+### 9.1 Wiring requirement
+
+An audit that nothing runs is not a control. The pattern audit `MUST` be reachable from the workspace gate registry: it is registered as `check:destructive-operation-patterns` and is executed by `pnpm run check:guardrails` / `pnpm run check:matrix` from the workspace root. Its finding count is baselined in `sdkwork-specs/gates.manifest.json`; a count above the baseline fails the matrix, so the debt can only shrink without an explicit decision.
+
+Gap found 2026-09-11: this section mandated the audit and section 10 required it as an acceptance item, yet **no repository and no workspace script invoked it**. The first fleet run reported 3 violations that had been present unobserved — see `sdkwork-cloudrouter/docs/audit/WORKSPACE-ALIGNMENT-REGRESSION-2026-09-11.md` section 5. A spec that requires a verification step `MUST` name the wiring entry point that executes it, or the requirement decays into prose.
+
 Additional evidence for a change that touches deletion behavior:
 
 - A read-only audit listing every remaining destructive pattern in the touched `bin/`, `scripts/`, `tools/`, or `package.json` scripts.
@@ -170,4 +176,5 @@ Additional evidence for a change that touches deletion behavior:
 - [ ] Human confirmation was obtained for tracked paths, directory trees, out-of-root paths, or lists longer than 20 entries.
 - [ ] Every deleted path resolved inside the active repository or module root.
 - [ ] `node ../sdkwork-specs/tools/sync-agent-destructive-operation-standard.mjs --root . --check` passes.
+- [ ] `node ../sdkwork-specs/tools/check-destructive-operation-patterns.mjs --workspace ..` reports no new violation beyond the recorded baseline (section 9.1).
 - [ ] The task result states the removed paths and the authorizing decision.

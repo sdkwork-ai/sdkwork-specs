@@ -3,9 +3,10 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
-const CHECKER = path.resolve('tools/check-pagination.mjs');
+const CHECKER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'check-pagination.mjs');
 
 function write(root, relativePath, text) {
   const filePath = path.join(root, relativePath);

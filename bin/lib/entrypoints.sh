@@ -75,14 +75,20 @@ sdkwork_split_env_profile() {
   fi
 }
 
+# The packaged install bundle the install path consumes (OPERATIONS_SPEC.md
+# §1.1, MODULE_BIN_SPEC.md §3). There is deliberately NO source-tree fallback:
+# the bundle executors are authored flat in bin/ (docker-bundle-deploy.sh …)
+# while the compose/env inputs are repository data, and only the module's own
+# bundle packager combines them into something that can run on the target. An
+# un-packaged module therefore resolves to the empty string, and
+# install/upgrade fails fast with packaging guidance instead of pushing a
+# half-assembled directory.
 sdkwork_bundle_dir() {
-  # The install path consumes a packaged stage-2 artifact (OPERATIONS_SPEC.md
-  # §1.1): the module hook resolves the newest self-contained install bundle.
   if declare -F sdkwork_module_install_bundle_dir >/dev/null 2>&1; then
     sdkwork_module_install_bundle_dir
     return
   fi
-  printf '%s/deployments/docker/bundle' "${SDKWORK_MODULE_ROOT}"
+  sdkwork_newest_install_bundle "${SDKWORK_MODULE_ROOT}/dist/docker-install"
 }
 
 # Newest self-contained install bundle under <base> (own deploy.sh + env/);
@@ -167,7 +173,7 @@ sdkwork_entry_docker_image() {
     update)
       sdkwork_evidence "docker-image update ${ref}"
       if [[ -n "${file}" ]]; then
-        sdkwork_run docker load -i "${file}"
+        sdkwork_local_run docker load -i "${file}"
       else
         sdkwork_local_run docker pull "${ref}"
       fi
@@ -300,8 +306,20 @@ sdkwork_entry_docker_deploy() {
           fi ;;
       esac
       sdkwork_evidence "docker-deploy ${action} env=${SDKWORK_BIN_ENVIRONMENT} host=${SDKWORK_BIN_HOST} tag=${SDKWORK_BIN_IMAGE_TAG:-<env-default>} replicas=${replicas} host-port=${host_port:-<env-default>} edge-http=${edge_http:-<env-default>} edge-https=${edge_https:-<env-default>} domain=${domain:-<env-default>}"
-      [[ -d "${bundle}" ]] || sdkwork_die "${SDKWORK_BIN_E_STATE}" \
-        "install bundle missing: ${bundle} (build it with the module's container:install script first)"
+      # The install bundle is a packaged artifact (MODULE_BIN_SPEC.md §3): there
+      # is no source-tree fallback, because the executors
+      # (bin/docker-bundle-deploy.sh …) and the compose/env inputs live in
+      # separate places and only the module's packager combines them into a
+      # runnable bundle. --dry-run still prints the plan, so the packaging gap
+      # stays visible without a hard failure.
+      if [[ ! -d "${bundle}" ]]; then
+        if [[ "${SDKWORK_BIN_DRY_RUN}" == "1" ]]; then
+          sdkwork_warn "no packaged install bundle under ${SDKWORK_MODULE_ROOT}/dist/docker-install — the plan below assumes it is packaged first"
+        else
+          sdkwork_die "${SDKWORK_BIN_E_STATE}" \
+            "no packaged install bundle under ${SDKWORK_MODULE_ROOT}/dist/docker-install (package it with the module's own bundle packager first)"
+        fi
+      fi
       # 1. sync the bundle (including env/) to the canonical target path;
       #    skip the multi-GB image archive when the target already runs this
       #    version (the bundle deploy.sh then finds the image already loaded)
@@ -332,7 +350,8 @@ sdkwork_entry_docker_deploy() {
       else
         sdkwork_warn "no release.sh in the deployed bundle (bundle-owned release channel unavailable)"
         sdkwork_warn "falling back to an idempotent re-install of the current bundle"
-        [[ -d "${bundle}" ]] || sdkwork_die "${SDKWORK_BIN_E_STATE}" "install bundle missing: ${bundle}"
+        [[ -d "${bundle}" ]] || sdkwork_die "${SDKWORK_BIN_E_STATE}" \
+          "no packaged install bundle under ${SDKWORK_MODULE_ROOT}/dist/docker-install (package it with the module's own bundle packager first)"
         sdkwork_push_dir "${SDKWORK_BIN_HOST}" "${bundle}" "${remote_dir}"
         sdkwork_remote_in_dir "${SDKWORK_BIN_HOST}" "${remote_dir}" "${deploy_args[@]}"
       fi ;;

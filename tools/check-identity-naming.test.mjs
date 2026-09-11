@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import { spawnSync } from 'node:child_process';
 import {
@@ -10,7 +11,7 @@ import {
   legacyHttpRouteCrateName,
 } from './lib/naming-patterns.mjs';
 
-const CHECKER = path.resolve('tools/check-identity-naming.mjs');
+const CHECKER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'check-identity-naming.mjs');
 
 function runChecker(root, mode = 'consumer') {
   return spawnSync(process.execPath, [CHECKER, '--root', root, '--mode', mode], {

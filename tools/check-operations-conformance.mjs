@@ -248,12 +248,22 @@ if (existsSync(deployYamlPath)) {
   standaloneDelivery = [...kinds].join(', ');
   declaresStandaloneContainer = kinds.size > 0 && [...kinds].every((k) => k.startsWith('container-image'));
 }
+// Bundle executors are authored flat in bin/ as docker-bundle-deploy.sh and
+// docker-bundle-release.sh (MODULE_BIN_SPEC.md §2.2); the module's packager
+// copies them into the bundle root, where they carry the artifact names
+// DOCKER_SPEC.md §4.1 fixes. A module still housing them inside a bundle
+// directory is located too, so an un-migrated module reports its bundle
+// *content* correctly — that placement is check-module-bin.mjs's finding
+// (§2.1), not this gate's, and the two gates must not fight over it.
+const bundleDeployExecutor = path.join(root, 'bin', 'docker-bundle-deploy.sh');
+const bundleReleaseExecutor = path.join(root, 'bin', 'docker-bundle-release.sh');
+const hasCanonicalExecutor = existsSync(bundleDeployExecutor);
 let bundleDir = '';
-for (const c of ['deployments/docker/bundle', 'scripts/docker/bundle']) {
+for (const c of ['bin/bundle', 'deployments/docker/bundle', 'scripts/docker/bundle']) {
   const p = path.join(root, c);
   if (existsSync(path.join(p, 'deploy.sh'))) { bundleDir = p; break; }
 }
-const bundleInScope = Boolean(bundleDir) || declaresStandaloneContainer;
+const bundleInScope = hasCanonicalExecutor || Boolean(bundleDir) || declaresStandaloneContainer;
 const bundleScopeNote = `standalone delivery is \`${standaloneDelivery || 'undeclared'}\`, not a standalone container install — the bundle stage is not in scope (OPERATIONS_SPEC.md §7.2)`;
 
 // --- 3. module wiring hooks ------------------------------------------------------
@@ -298,10 +308,21 @@ if (!existsSync(moduleShPath)) {
 }
 
 // --- 4/5. bundle deploy + release channel -----------------------------------------
-if (bundleDir) {
-  record('bundle deploy entrypoint', 'PASS', `${rel(path.join(bundleDir, 'deploy.sh'))}`);
-  if (existsSync(path.join(bundleDir, 'release.sh'))) {
-    const relText = readFileSync(path.join(bundleDir, 'release.sh'), 'utf8');
+// Source of truth is the flat executor in bin/ (§2.2); an un-migrated module is
+// still read from its bundle directory so its *content* verdict stays correct.
+const deployExecutor = hasCanonicalExecutor
+  ? bundleDeployExecutor
+  : (bundleDir ? path.join(bundleDir, 'deploy.sh') : '');
+const releaseExecutor = existsSync(bundleReleaseExecutor)
+  ? bundleReleaseExecutor
+  : (bundleDir && existsSync(path.join(bundleDir, 'release.sh')) ? path.join(bundleDir, 'release.sh') : '');
+const executorLabel = (p) => (hasCanonicalExecutor && p === bundleDeployExecutor
+  ? 'bin/docker-bundle-deploy.sh (→ bundle root deploy.sh)'
+  : rel(p));
+if (deployExecutor) {
+  record('bundle deploy entrypoint', 'PASS', executorLabel(deployExecutor));
+  if (releaseExecutor) {
+    const relText = readFileSync(releaseExecutor, 'utf8');
     const semantics = [
       ['rollback', 'rollback action'],
       ['ledger', 'release ledger'],
@@ -309,13 +330,13 @@ if (bundleDir) {
       ['lock', 'release lock'],
     ];
     const missing = semantics.filter(([needle]) => !relText.includes(needle)).map(([, label]) => label);
-    if (missing.length === 0) record('bundle release channel (§1.2)', 'PASS', `${rel(path.join(bundleDir, 'release.sh'))} implements rollback/ledger/health-gate/lock`);
-    else record('bundle release channel (§1.2)', 'FAIL', `release.sh present but missing: ${missing.join(', ')}`);
+    if (missing.length === 0) record('bundle release channel (§1.2)', 'PASS', `${executorLabel(releaseExecutor)} implements rollback/ledger/health-gate/lock`);
+    else record('bundle release channel (§1.2)', 'FAIL', `release executor present but missing: ${missing.join(', ')}`);
   } else {
-    record('bundle release channel (§1.2)', 'FAIL', 'no release.sh beside deploy.sh — rollback would degrade to re-install');
+    record('bundle release channel (§1.2)', 'FAIL', 'no release executor beside the deploy executor — rollback would degrade to re-install');
   }
 } else if (bundleInScope) {
-  record('bundle deploy entrypoint', 'FAIL', 'no bundle deploy.sh under deployments/docker/bundle or scripts/docker/bundle');
+  record('bundle deploy entrypoint', 'FAIL', 'no bin/docker-bundle-deploy.sh and no bundle deploy.sh under deployments/docker/bundle or scripts/docker/bundle');
   record('bundle release channel (§1.2)', 'FAIL', 'no bundle → no release channel');
 } else {
   record('bundle deploy entrypoint', 'N/A', bundleScopeNote);
@@ -397,7 +418,7 @@ if (composeChecked === 0) {
 else record('compose log rotation (§2.3)', 'FAIL', `services without logging: ${composeBad.join('; ')}`);
 
 // --- 7. env examples ------------------------------------------------------------------
-const envDirs = [path.join(root, 'deployments', 'docker', 'env'), path.join(root, 'docker', 'env'), path.join(bundleDir ? path.join(root, bundleDir) : root, 'env')];
+const envDirs = [path.join(root, 'deployments', 'docker', 'env'), path.join(root, 'docker', 'env'), path.join(bundleDir || root, 'env')];
 const envExampleCount = new Set();
 for (const d of envDirs) {
   if (!existsSync(d)) continue;

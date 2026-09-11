@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import { spawnSync } from 'node:child_process';
 
-const CHECKER = path.resolve('tools/check-pnpm-script-standard.mjs');
+const CHECKER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'check-pnpm-script-standard.mjs');
 
 function makeRepo(manifest, { includeStop = true, normalizeDevProfiles = true } = {}) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-pnpm-script-standard-'));
@@ -35,8 +36,50 @@ function runChecker(root, productPrefix = 'demo') {
   );
 }
 
+function runCheckerJson(root, productPrefix = 'demo') {
+  return spawnSync(
+    process.execPath,
+    [CHECKER, '--root', root, '--json', '--application-code-prefix', productPrefix],
+    { cwd: path.resolve('.'), encoding: 'utf8' },
+  );
+}
+
+function runCheckerWorkspace(workspaceRoot) {
+  return spawnSync(
+    process.execPath,
+    [CHECKER, '--workspace', workspaceRoot, '--json'],
+    { cwd: path.resolve('.'), encoding: 'utf8' },
+  );
+}
+
+// The canonical compliant root shape: every required root script plus the
+// scoped stop command. Derived from makeRepo's normalization so fleet children
+// are audited on exactly the same contract as single-repository fixtures.
+function writeCompliantRoot(workspaceRoot, name) {
+  const root = path.join(workspaceRoot, name);
+  mkdirSync(root, { recursive: true });
+  writeFileSync(
+    path.join(root, 'package.json'),
+    `${JSON.stringify({
+      name,
+      scripts: {
+        dev: 'pnpm dev:standalone',
+        'dev:standalone': 'node scripts/sdkwork-command.mjs dev --deployment-profile standalone --environment development',
+        'dev:cloud': 'node scripts/sdkwork-command.mjs dev --deployment-profile cloud --environment development',
+        stop: 'node scripts/sdkwork-stop.mjs',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+      },
+    }, null, 2)}\n`,
+  );
+  return root;
+}
+
 function canonicalAssemblyCommand(root, toolName) {
-  const toolPath = path.resolve('tools', toolName);
+  const toolPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), toolName);
   const relative = path.relative(root, toolPath).replaceAll('\\', '/');
   const commandPath = path.isAbsolute(relative) || /^[a-z]:\//iu.test(relative)
     ? relative
@@ -1463,5 +1506,225 @@ describe('check-pnpm-script-standard', () => {
     assert.match(result.stderr, /must not expose platform cloud gateway commands/u);
     assert.match(result.stderr, /missing required API assembly script "api:assembly:materialize"/u);
     assert.match(result.stderr, /missing required API assembly script "api:assembly:validate"/u);
+  });
+
+  it('does not fabricate a command by joining separate inline code spans', () => {
+    const root = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'node scripts/sdkwork-command.mjs dev',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+      },
+    });
+    writeFileSync(
+      path.join(root, 'README.md'),
+      [
+        '# Demo',
+        '',
+        '`pnpm.cmd` should be used on Windows if PowerShell blocks `pnpm.ps1`.',
+        '',
+        '- `pnpm` and `cargo` verification commands listed above pass.',
+        '- Recover access through the root `pnpm` commands; the default `target/dev/demo.sqlite` database is used.',
+        '- `commandPathPrepend` prepends `pnpm` / `npm` / `yarn` to `PATH`.',
+        '',
+      ].join('\n'),
+    );
+
+    const result = runChecker(root, 'demo');
+
+    assert.equal(result.status, 0, result.stderr);
+  });
+
+  it('rejects a nonstandard command inside a single inline code span', () => {
+    const root = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'node scripts/sdkwork-command.mjs dev',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+      },
+    });
+    writeFileSync(
+      path.join(root, 'README.md'),
+      ['# Demo', '', '- Run `pnpm dev:web` to start the browser target.', ''].join('\n'),
+    );
+
+    const result = runChecker(root, 'demo');
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /README\.md:3: pnpm dev:web: "web" is not a standard dev runtime target/u);
+  });
+
+  it('ignores pnpm references in comment-only lines of runner scripts', () => {
+    const root = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'node scripts/sdkwork-command.mjs dev',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+      },
+    });
+    const scriptsDir = path.join(root, 'scripts');
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      path.join(scriptsDir, 'prose.mjs'),
+      [
+        '#!/usr/bin/env node',
+        '// Prose in a comment is not a command reference:',
+        '//   pnpm would then fail, pnpm cannot run, pnpm keeps going.',
+        '/**',
+        ' * A docstring that names the words it suppresses — "pnpm would",',
+        ' * "pnpm cannot", "pnpm keeps" — is still only a comment.',
+        ' */',
+        "const install = 'pnpm install';",
+      ].join('\n'),
+    );
+
+    const result = runChecker(root, 'demo');
+
+    assert.equal(result.status, 0, result.stderr);
+  });
+
+  it('still scans a code line that carries a trailing comment', () => {
+    const root = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'node scripts/sdkwork-command.mjs dev',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+      },
+    });
+    const scriptsDir = path.join(root, 'scripts');
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      path.join(scriptsDir, 'legacy.mjs'),
+      ["const command = 'pnpm server:dev'; // retired alias kept during migration", ''].join('\n'),
+    );
+
+    const result = runChecker(root, 'demo');
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /scripts[/\\]legacy\.mjs:1: pnpm server:dev: first segment "server" is not a standard public namespace/u,
+    );
+  });
+
+  it('keeps stdout machine-readable when a runner script is exempted', () => {
+    const root = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'node scripts/sdkwork-command.mjs dev',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+      },
+    });
+    const scriptsDir = path.join(root, 'scripts');
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(
+      path.join(scriptsDir, 'rename-map.mjs'),
+      [
+        '// @sdkwork-script-standard-exempt retired-name-migration',
+        "const renameMap = { 'demo:dev': 'dev:browser', 'demo:build': 'build' };",
+        '',
+      ].join('\n'),
+    );
+
+    const result = runCheckerJson(root, 'demo');
+    // Parsing is the assertion: an exemption note written to stdout would make
+    // the fleet runner read no report at all and silently pass the repository.
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.ok, true, result.stderr);
+    assert.match(result.stderr, /runner script standard exemption: scripts[/\\]rename-map\.mjs/u);
+  });
+
+  it('aggregates a workspace fleet and fails when any repository fails', () => {
+    const workspaceRoot = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-pnpm-fleet-'));
+    writeCompliantRoot(workspaceRoot, 'sdkwork-good');
+    const bad = writeCompliantRoot(workspaceRoot, 'sdkwork-bad');
+    writeFileSync(
+      path.join(bad, 'README.md'),
+      ['# Bad', '', '- Run `pnpm dev:web` to start the browser target.', ''].join('\n'),
+    );
+
+    const result = runCheckerWorkspace(workspaceRoot);
+    const report = JSON.parse(result.stdout);
+
+    assert.notEqual(result.status, 0);
+    assert.equal(report.repositories, 2);
+    assert.equal(report.passed, 1);
+    assert.equal(report.failed, 1);
+
+    const good = report.reports.find((entry) => entry.repository === 'sdkwork-good');
+    const failing = report.reports.find((entry) => entry.repository === 'sdkwork-bad');
+    assert.equal(good.ok, true, JSON.stringify(good.issues));
+    assert.equal(failing.ok, false);
+    assert.deepEqual(failing.issues.map((issue) => issue.scope), ['documentation-examples']);
+  });
+
+  it('does not validate local AI workspace metadata as shipped documentation', () => {
+    const root = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'pnpm dev:standalone',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+      },
+    });
+    // `.workbuddy/` and `.sdkwork/` are per-machine AI workspace directories:
+    // git-ignored, never tracked, and full of prose that names command
+    // placeholders. Their contents describe what an agent did, not the
+    // standard, so validating them yields unactionable findings.
+    mkdirSync(path.join(root, '.workbuddy', 'memory'), { recursive: true });
+    writeFileSync(
+      path.join(root, '.workbuddy', 'memory', '2026-09-11.md'),
+      ['Follow `pnpm run somePlaceholder` in prose.', ''].join('\n'),
+    );
+    mkdirSync(path.join(root, '.sdkwork'), { recursive: true });
+    writeFileSync(path.join(root, '.sdkwork', 'note.md'), 'Also `pnpm run otherPlaceholder`.\n');
+
+    const result = runChecker(root);
+
+    assert.equal(result.status, 0, result.stderr);
+  });
+
+  it('still validates command examples inside shipped documentation', () => {
+    const root = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'pnpm dev:standalone',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+      },
+    });
+    writeFileSync(path.join(root, 'RUNBOOK.md'), 'Start with `pnpm dev:web`.\n');
+
+    const result = runChecker(root);
+
+    // The ignore rule must not disarm the scan for real documents.
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /documentation pnpm command examples are not compliant/u);
   });
 });

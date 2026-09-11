@@ -4,9 +4,10 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, it } from 'node:test';
 
-const ALIGNER = path.resolve('tools/align-agents-progressive-loading.mjs');
+const ALIGNER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'align-agents-progressive-loading.mjs');
 const temporaryRoots = [];
 
 function sha256(text) {

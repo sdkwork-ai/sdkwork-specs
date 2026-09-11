@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scanRepositoryTailwindIntegration } from './lib/tailwind-integration-patterns.mjs';
+import { listWorkspaceRepositoryRoots } from './lib/workspace-check-runner.mjs';
 
 const SPECS_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -33,10 +34,12 @@ function usage() {
 }
 
 function listWorkspaceRepositories(workspaceRoot) {
-  return fs.readdirSync(workspaceRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(workspaceRoot, entry.name))
-    .filter((repoRoot) => fs.existsSync(path.join(repoRoot, 'package.json')) || fs.existsSync(path.join(repoRoot, 'pnpm-workspace.yaml')));
+  // Governed repositories are `sdkwork-*` checkouts that carry an AGENTS.md; this
+  // is the same enumeration every other fleet gate uses. Third-party checkouts
+  // that merely sit in the workspace root (for example the NousResearch
+  // `hermes-agent` clone or `deepseek-harness-*`) are not SDKWork repositories
+  // and MUST NOT be governed by the SDKWork Tailwind integration standard.
+  return listWorkspaceRepositoryRoots(workspaceRoot);
 }
 
 function fail(message, details = []) {

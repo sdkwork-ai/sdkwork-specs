@@ -7,6 +7,7 @@ import {
   alignRepositoryTailwindIntegration,
   scanRepositoryTailwindIntegration,
 } from './lib/tailwind-integration-patterns.mjs';
+import { listWorkspaceRepositoryRoots } from './lib/workspace-check-runner.mjs';
 
 function parseArgs(argv) {
   const args = { mode: 'root', target: process.cwd(), fix: false };
@@ -36,10 +37,9 @@ function usage() {
 }
 
 function listWorkspaceRepositories(workspaceRoot) {
-  return fs.readdirSync(workspaceRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(workspaceRoot, entry.name))
-    .filter((repoRoot) => fs.existsSync(path.join(repoRoot, 'package.json')) || fs.existsSync(path.join(repoRoot, 'pnpm-workspace.yaml')));
+  // Only governed `sdkwork-*` repositories (those carrying an AGENTS.md) are
+  // candidates; third-party checkouts in the workspace root are never rewritten.
+  return listWorkspaceRepositoryRoots(workspaceRoot);
 }
 
 function main() {

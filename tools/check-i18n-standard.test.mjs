@@ -4,8 +4,12 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-const CHECKER = path.resolve('tools/check-i18n-standard.mjs');
+// Resolve the checker relative to this test file, not the caller's cwd: the
+// suite must behave the same whether it is run from `sdkwork-specs/` or from
+// the workspace root via a `node --test sdkwork-specs/tools/...` invocation.
+const CHECKER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'check-i18n-standard.mjs');
 
 function write(root, relativePath, text) {
   const filePath = path.join(root, relativePath);
@@ -22,9 +26,13 @@ function makeRepo() {
 
 function runChecker(args) {
   return spawnSync(process.execPath, [CHECKER, ...args], {
-    cwd: path.resolve('.'),
+    cwd: path.dirname(CHECKER),
     encoding: 'utf8',
   });
+}
+
+function hasGit() {
+  return spawnSync('git', ['--version'], { encoding: 'utf8' }).status === 0;
 }
 
 describe('check-i18n-standard', () => {
@@ -129,5 +137,183 @@ describe('check-i18n-standard', () => {
 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /i18n standard check passed/u);
+  });
+
+  it('rejects the retired custom locale request header in authored source', () => {
+    const root = makeRepo();
+    write(root, 'apps/sdkwork-demo-pc/packages/sdkwork-demo-pc-core/src/sdk-locale.ts', [
+      "const headers = { 'Accept-Language': locale, 'X-SdkWork-Locale': locale };", // i18n-retired-locale-header-allow: detection fixture
+      '',
+    ].join('\n'));
+
+    const result = runChecker(['--root', root]);
+
+    assert.notEqual(result.status, 0, 'expected checker failure');
+    assert.match(result.stderr, /custom locale request header is retired/u);
+    assert.match(result.stderr, /sdk-locale\.ts:1/u);
+  });
+
+  it('allows the retired-header marker on absence assertions and rejection lists', () => {
+    const root = makeRepo();
+    write(root, 'apps/sdkwork-demo-pc/packages/sdkwork-demo-pc-core/src/sdk-locale.test.ts', [
+      "const retired = new Set(['x-sdkwork-locale']); // i18n-retired-locale-header-allow",
+      '',
+    ].join('\n'));
+
+    const result = runChecker(['--root', root]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /i18n standard check passed/u);
+  });
+
+  it('ignores compiler-generated declaration output inside i18n directories', () => {
+    const root = makeRepo();
+    write(root, 'apps/sdkwork-demo-pc/packages/sdkwork-demo-pc-core/src/i18n/index.d.ts', 'export declare const defaultLocale: string;\n');
+    write(root, 'apps/sdkwork-demo-pc/packages/sdkwork-demo-pc-core/src/i18n/rtcCallI18n.d.ts', 'export declare const callTitle: string;\n');
+
+    const result = runChecker(['--root', root]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /i18n standard check passed/u);
+  });
+
+  it('rejects the retired locale source value listed beside the live ones', () => {
+    const root = makeRepo();
+    // The shape the fleet actually had: `specs/web-request-context.schema.json`
+    // declared the source enum as one compact array, retired member included.
+    write(root, 'specs/web-request-context.schema.json', [
+      '{',
+      '  "$defs": {',
+      '    "WebLocaleSource": {',
+      '      "type": "string",',
+      '      "enum": ["user-preference", "tenant-preference", "app-default", "accept-language", "sdk-header", "system-default"]', // i18n-retired-locale-header-allow: detection fixture
+      '    }',
+      '  }',
+      '}',
+      '',
+    ].join('\n'));
+
+    const result = runChecker(['--root', root]);
+
+    assert.notEqual(result.status, 0, 'expected checker failure');
+    assert.match(result.stderr, /locale source enum member retained/u);
+    assert.match(result.stderr, /web-request-context\.schema\.json:5/u);
+  });
+
+  it('rejects a locale source enum member named after the retired header', () => {
+    const root = makeRepo();
+    write(root, 'crates/sdkwork-web-core/src/request_context.rs', [
+      'pub enum WebLocaleSource {',
+      '    UserPreference,',
+      '    SdkHeader,',
+      '    SystemDefault,',
+      '}',
+      '',
+    ].join('\n'));
+
+    const result = runChecker(['--root', root]);
+
+    assert.notEqual(result.status, 0, 'expected checker failure');
+    assert.match(result.stderr, /locale source enum member retained/u);
+    assert.match(result.stderr, /request_context\.rs:3/u);
+  });
+
+  it('accepts a UI header component and a stylesheet class that merely share the name', () => {
+    const root = makeRepo();
+    // A "SdkHeader" header-bar component and a `.sdk-header` CSS rule are ordinary
+    // names, not locale sources — the rule must not punish them.
+    write(root, 'apps/sdkwork-demo-pc/packages/sdkwork-demo-pc-shell/src/SdkHeader.tsx', 'export function SdkHeader() { return null; }\n');
+    write(root, 'apps/sdkwork-demo-pc/packages/sdkwork-demo-pc-shell/src/shell.css', '.sdk-header { display: flex; }\n');
+    write(root, 'apps/sdkwork-demo-pc/packages/sdkwork-demo-pc-shell/src/styles.ts', "export const cls = 'sdk-header';\n");
+
+    const result = runChecker(['--root', root]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /i18n standard check passed/u);
+  });
+
+  it('skips derived compiler output that sits beside its authored TypeScript twin', () => {
+    const root = makeRepo();
+    const stem = 'apps/sdkwork-demo-pc/packages/sdkwork-demo-pc-core/src/sdk-locale';
+    // The authored source is the file a developer edits and can fix.
+    write(root, `${stem}.ts`, "export const localeRequestHeader = 'Accept-Language';\n");
+    // `tsc` dropped a compiled twin next to it; the retired token only survives
+    // there because the artifact has not been recompiled since the retirement.
+    write(root, `${stem}.js`, "const headers = { 'X-SdkWork-Locale': locale };\n"); // i18n-retired-locale-header-allow: derived-output fixture
+    write(root, `${stem}.d.ts`, 'export declare const retiredLocaleHeader: string;\n');
+
+    const result = runChecker(['--root', root]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /i18n standard check passed/u);
+  });
+
+  it('still rejects retired protocol surface in authored standalone JavaScript', () => {
+    const root = makeRepo();
+    // No `.ts` twin, so this is authored JavaScript rather than a compiler
+    // artifact, and the workspace-wide wire contract still applies to it.
+    write(root, 'apps/sdkwork-demo-pc/packages/sdkwork-demo-pc-core/src/legacy-boundary.js', "fetch(url, { headers: { 'X-SdkWork-Locale': locale } });\n"); // i18n-retired-locale-header-allow: authored-JavaScript fixture
+
+    const result = runChecker(['--root', root]);
+
+    assert.notEqual(result.status, 0, 'expected checker failure');
+    assert.match(result.stderr, /custom locale request header is retired/u);
+  });
+
+  it('skips derived bundles under a git-ignored output directory', (t) => {
+    if (!hasGit()) return t.skip('git is not available');
+    const root = makeRepo();
+    const init = spawnSync('git', ['init', '--quiet'], { cwd: root, encoding: 'utf8' });
+    assert.equal(init.status, 0, init.stderr);
+    // `lib/` is bundler output for a TypeScript package and authored source for a
+    // Flutter package, so only the repository can say which one this is.
+    write(root, '.gitignore', 'lib/\n');
+    write(root, 'packages/client/demo/src/index.ts', "export const localeHeader = 'Accept-Language';\n");
+    write(root, 'packages/client/demo/lib/client.js', "const headers = { 'X-SdkWork-Locale': locale };\n"); // i18n-retired-locale-header-allow: ignored-output fixture
+
+    const result = runChecker(['--root', root]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /i18n standard check passed/u);
+  });
+
+  it('ignores the local .sdkwork workspace metadata directory', () => {
+    const root = makeRepo();
+    write(root, '.sdkwork/tmp/order_app_web_bootstrap.rs', 'const HEADERS: [&str; 1] = ["x-sdkwork-locale"];\n'); // i18n-retired-locale-header-allow: skipped-directory fixture
+
+    const result = runChecker(['--root', root]);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /i18n standard check passed/u);
+  });
+
+  it('reports how many files it scanned, so a pass is never vacuous', () => {
+    const root = makeRepo();
+    write(root, 'packages/sdkwork-i18n-contract/src/i18n/keys/iam/auth.ts', 'export const loginTitle = "iam.auth.login.title";\n');
+
+    const result = runChecker(['--root', root]);
+
+    assert.equal(result.status, 0, result.stderr);
+    // The unit count is what distinguishes a wired gate from a no-op.
+    assert.match(result.stdout, /i18n standard check passed \(\d+ file\(s\) scanned\)/u);
+  });
+
+  it('fails closed on a root that does not exist instead of reporting a pass', () => {
+    const missing = path.join(os.tmpdir(), 'sdkwork-i18n-check-absent-root');
+
+    const result = runChecker(['--root', missing]);
+
+    // A moved or renamed root must not silently retire the locale contract.
+    assert.equal(result.status, 2, result.stdout);
+    assert.match(result.stderr, /not a directory/u);
+  });
+
+  it('fails closed on an empty repository instead of reporting a pass', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-i18n-check-empty-'));
+
+    const result = runChecker(['--root', root]);
+
+    assert.equal(result.status, 2, result.stdout);
+    assert.match(result.stderr, /refusing to report success on an empty scan/u);
   });
 });

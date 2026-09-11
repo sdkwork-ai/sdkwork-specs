@@ -129,6 +129,14 @@ function hasHeading(text, heading) {
   return new RegExp(`^##\\s+${escaped}\\s*$`, 'imu').test(text);
 }
 
+// Repository .gitignore excludes scratch directories whose name starts with
+// `target-` (temporary app/agent test fixtures). Those directories are not
+// repository roots and must never be validated for an AGENTS.md entrypoint;
+// walking them produces phantom violations that no change can resolve.
+function isIgnoredDirectoryName(name) {
+  return IGNORED_DIRS.has(name) || name.startsWith('target-');
+}
+
 function walkFiles(root, predicate) {
   const files = [];
 
@@ -136,7 +144,7 @@ function walkFiles(root, predicate) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const entryPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (IGNORED_DIRS.has(entry.name)) continue;
+        if (isIgnoredDirectoryName(entry.name)) continue;
         walk(entryPath);
         continue;
       }

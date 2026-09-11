@@ -36,7 +36,11 @@ export const TAILWIND_BOOTSTRAP_ALLOWLIST = [
   /(?:^|\/)packages\/sdkwork-autocut-desktop\/src\/index\.css$/u,
 ];
 
-export const TAILWIND_UI_LIBRARY_PACKAGE_PATTERN = /\/sdkwork-ui-pc-react\/package\.json$/u;
+// The UI library owns the shared `src/styles/*.css` sheet, so it is exempt from
+// the app-level dependency-section rule. The pattern must accept a repository
+// root child path (`sdkwork-ui-pc-react/package.json`, no leading slash) as well
+// as a nested one — the same `(?:^|/)` prefix the bootstrap allowlist uses.
+export const TAILWIND_UI_LIBRARY_PACKAGE_PATTERN = /(?:^|\/)sdkwork-ui-pc-react\/package\.json$/u;
 
 export function normalizePosixPath(value) {
   return value.replace(/\\/g, '/');

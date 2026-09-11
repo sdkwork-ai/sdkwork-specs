@@ -151,7 +151,7 @@ WebLocaleContext {
   fallbackLocale: LocaleTag
   supportedLocales: LocaleTag[]
   activeLocales: LocaleTag[]
-  source: user-preference | tenant-preference | app-default | accept-language | sdk-header | system-default
+  source: user-preference | tenant-preference | app-default | accept-language | system-default
   catalogVersion?: string
   messageBundleVersion?: string
   timezone?: string
@@ -162,11 +162,11 @@ WebLocaleContext {
 Rules:
 
 - Locale tags `MUST` be normalized according to `I18N_SPEC.md`.
-- Locale resolution precedence `MUST` follow `I18N_SPEC.md` section 2: authenticated user preference, tenant/application preference, approved SDK/host runtime locale, `Accept-Language`, application default, explicit fallback.
+- Locale resolution precedence `MUST` follow `I18N_SPEC.md` section 2: authenticated user preference, tenant/application preference, approved in-process host runtime locale, `Accept-Language`, application default, explicit fallback. The inbound locale wire is the standard `Accept-Language` header only; a custom SDKWork locale request header `MUST NOT` be read, forwarded, or trusted.
 - Public, login, registration, OAuth, password reset, refresh-token, open-api, app-api, backend-api, gateway, and framework control-plane routes `MUST` receive locale context.
 - The framework `MUST` emit `Content-Language` on localized responses and `Vary: Accept-Language` when representation varies by language.
 - The framework `MAY` emit diagnostic bundle version headers defined by `I18N_SPEC.md`.
-- Business handlers and controllers `MUST NOT` parse `Accept-Language`, `X-SdkWork-Locale`, cookies, query parameters, or user-agent headers to choose locale.
+- Business handlers and controllers `MUST NOT` parse `Accept-Language`, cookies, query parameters, or user-agent headers to choose locale.
 - Production locale resolution `MUST NOT` trust query parameters unless the route is a documented preview/test route and route metadata declares the exception.
 
 ## 6. API Surfaces And Auth Modes
@@ -358,6 +358,18 @@ The framework enforces secure defaults without per-route business configuration:
   (`X-Request-Id`, `X-SDKWork-Trace-Id`) via `Access-Control-Expose-Headers`. Development/test
   policies `MAY` widen the preflight header gate to `*` so local surfaces never fail preflight when
   the SDK grows a new request header; production validation `MUST` keep rejecting `*` headers.
+- The allowlist `MUST NOT` be widened to carry a custom header that duplicates a standard HTTP
+  semantic. Locale negotiation is `Accept-Language` (`I18N_SPEC.md` section 4): a custom locale
+  request header `MUST NOT` be added to any CORS policy, and a preflight failure `MUST` be fixed by
+  moving the client onto the standard header, never by allowing the custom one. Identity material is
+  the dual-token credential pair (`Authorization` / `Access-Token`) only; the framework `MUST NOT`
+  admit custom tenant, organization, user, actor, session, or locale request headers
+  (`API_SPEC.md` section 10.2).
+- Development/test widening of the preflight header gate `MUST` be honored by the runtime that
+  serves the browser. A policy shape that downstream CORS materialization cannot express (for
+  example a wildcard combined with credentialed responses) `MUST` be expanded to the explicit
+  default allowlist by the framework itself, not silently dropped, so a local surface never fails
+  preflight because the SDK grew a new header.
 - The `open-api` surface is a server-to-server / generated-SDK surface: CORS origin and preflight
   validation, and the cross-site request guard, `MUST NOT` apply to it. Calls without a browser
   `Origin` are the normal case; requests that do carry an `Origin` `MUST NOT` be CORS-denied on
@@ -427,7 +439,7 @@ Business repository after framework integration:
 - Contract label check: route manifests, materialized OpenAPI, and derived SDK inputs use canonical `x-sdkwork-api-surface` values such as `open-api`, `app-api`, `backend-api`, and `internal-api`, not camelCase runtime enum labels.
 - Pipeline order contract test: standard chain stages are not bypassed.
 - Handler static scan: no raw credential, tenant, organization, user, permission, or request-id header parsing in route crates or controllers.
-- Locale static scan: no handler/controller-local parsing of `Accept-Language`, `X-SdkWork-Locale`, locale query parameters, cookies, or user-agent language values.
+- Locale static scan: no handler/controller-local parsing of `Accept-Language`, locale query parameters, cookies, or user-agent language values.
 - Locale context test: public and protected routes receive `WebRequestContext.locale`; unsupported requested locales resolve through the configured fallback chain.
 - Locale response test: localized responses emit `Content-Language`, and language-varying responses emit `Vary: Accept-Language`.
 - Localized problem test: framework errors and validation errors preserve numeric `ProblemDetail.code` and `traceId`, and expose `i18nKey`/`locale` when safe messages exist.

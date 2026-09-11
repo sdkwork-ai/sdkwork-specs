@@ -67,11 +67,28 @@ function main() {
   }
 
   const violations = [...findMissingComposedFacades(workspace)];
+  const unreadable = [];
   for (const repoRoot of repos) {
     for (const filePath of walkFiles(repoRoot, isConsumerSourcePath)) {
-      const text = fs.readFileSync(filePath, 'utf8');
+      // A directory listing can yield entries that cannot be opened: dangling pnpm workspace
+      // links, and build artifacts removed by a concurrent build. `readFileSync` used to throw
+      // here, which aborted the whole gate with an unhandled ENOENT — and because
+      // `check-sdk-standard.mjs` spawns this tool, it aborted that gate too, turning a
+      // measurable finding list into a stack trace. An unreadable file is reported, not fatal.
+      let text;
+      try {
+        text = fs.readFileSync(filePath, 'utf8');
+      } catch (error) {
+        unreadable.push(`${filePath}: ${error.code ?? error.message}`);
+        continue;
+      }
       violations.push(...findViolationsInText(text, filePath));
     }
+  }
+
+  if (unreadable.length > 0) {
+    console.error(`skipped ${unreadable.length} unreadable path(s) (dangling link or removed artifact):`);
+    for (const entry of unreadable.slice(0, 10)) console.error(`  ${entry}`);
   }
 
   if (violations.length === 0) {

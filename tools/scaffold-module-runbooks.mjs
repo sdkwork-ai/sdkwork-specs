@@ -98,7 +98,17 @@ function readModuleFacts(root) {
       if (typeof v === 'string' && /^\d+\.\d+\.\d+$/.test(v)) facts.version = v;
     } catch { /* keep default */ }
   }
-  facts.hasBundle = fs.existsSync(path.join(root, 'deployments', 'docker', 'bundle', 'deploy.sh'));
+  // The bundle exists when a target-side deploy executor exists
+  // (MODULE_BIN_SPEC.md §2.2) together with its compose/env inputs. The
+  // executor is authored flat in bin/ as docker-bundle-deploy.sh; the legacy
+  // locations are still accepted so an un-migrated module is not reported as
+  // missing its bundle.
+  facts.hasBundle = [
+    path.join(root, 'bin', 'docker-bundle-deploy.sh'),
+    path.join(root, 'bin', 'bundle', 'deploy.sh'),
+    path.join(root, 'deployments', 'docker', 'bundle', 'deploy.sh'),
+    path.join(root, 'scripts', 'docker', 'bundle', 'deploy.sh'),
+  ].some((candidate) => fs.existsSync(candidate));
 
   // Delivery posture (DEPLOYMENT_SPEC.md §deliveryKind). The deploy bundle
   // standardises the standalone *container* install path; a module whose
@@ -130,7 +140,7 @@ function wiringBlockZh(f) {
       const cloud = f.cloudDelivery || 'container-image/kubernetes';
       return `\n> ℹ️ **交付姿态**：本模块 standalone 交付为宿主包（\`${standalone}\`），cloud 交付为容器镜像（\`${cloud}\`）。\n> 本文档 §1 安装 / §2 升级描述的 bundle 容器安装路径（\`deployments/docker/bundle/\`）仅在该模块启用 standalone **容器**安装时适用；\n> 宿主包路径请使用 \`bin/apps-package.sh\` + \`bin/apps-pkg-installer.sh\`，cloud 路径由 kubernetes 编排消费 \`bin/docker-image.sh push\` 产出的镜像。\n`;
     }
-    return `\n> ⚠️ 本模块镜像构建已接线，但 \`deployments/docker/bundle/\`（deploy.sh + release.sh + compose + env）尚未落地：\`install\`/\`upgrade\` 前需先补齐 bundle（参照 OPERATIONS_SPEC.md §1.2）。\n`;
+    return `\n> ⚠️ 本模块镜像构建已接线，但 \`bin/docker-bundle-deploy.sh\` + \`bin/docker-bundle-release.sh\`（执行器，MODULE_BIN_SPEC.md §2.2）与 \`deployments/docker/bundle/\`（compose + env）尚未落地：\`install\`/\`upgrade\` 前需先补齐 bundle（参照 OPERATIONS_SPEC.md §1.2）。\n`;
   }
   if (f.assemblyOnly) {
     return `
@@ -142,8 +152,7 @@ function wiringBlockZh(f) {
   return `
 > ⚠️ **接线状态**：本模块的 \`bin/\` 九入口已按 MODULE_BIN_SPEC.md 挂载，但镜像构建钩子与部署 bundle 尚未接线：
 > - \`bin/lib/module.sh\` → \`sdkwork_image_build\` 仍是脚手架占位（执行会以明确错误退出）；
-> - \`deployments/docker/bundle/\`（deploy.sh + release.sh + compose + env×5）尚未落地。
->
+> - \`bin/docker-bundle-deploy.sh\` / \`-release.sh\`（执行器，MODULE_BIN_SPEC.md §2.2）与 \`deployments/docker/bundle/\`（compose + env×5）尚未落地。
 > 因此 §1 安装 / §2 升级 在接线前**不可执行**；其余章节（status / logs / rollback / down）命令本身可复制即用。
 `;
 }
@@ -156,7 +165,7 @@ function wiringBlockEn(f) {
       const cloud = f.cloudDelivery || 'container-image/kubernetes';
       return `\n> ℹ️ **Delivery posture**: standalone delivery is a host package (\`${standalone}\`); cloud delivery is a container image (\`${cloud}\`).\n> The bundle container-install path described in sections 1 (install) / 2 (upgrade) (\`deployments/docker/bundle/\`) applies only when the module\n> enables a standalone **container** install; use \`bin/apps-package.sh\` + \`bin/apps-pkg-installer.sh\` for the host package, and let kubernetes\n> orchestration consume the image produced by \`bin/docker-image.sh push\` for the cloud plane.\n`;
     }
-    return `\n> ⚠️ The image build hook is wired, but \`deployments/docker/bundle/\` (deploy.sh + release.sh + compose + env) is missing yet: complete the bundle before \`install\`/\`upgrade\` (see OPERATIONS_SPEC.md §1.2).\n`;
+    return `\n> ⚠️ The image build hook is wired, but \`bin/docker-bundle-deploy.sh\` + \`bin/docker-bundle-release.sh\` (the executors, MODULE_BIN_SPEC.md §2.2) and \`deployments/docker/bundle/\` (compose + env) are missing yet: complete the bundle before \`install\`/\`upgrade\` (see OPERATIONS_SPEC.md §1.2).\n`;
   }
   if (f.assemblyOnly) {
     return `
@@ -168,7 +177,7 @@ function wiringBlockEn(f) {
   return `
 > ⚠️ **Wiring status**: the nine \`bin/\` entrypoints are mounted per MODULE_BIN_SPEC.md, but the image build hook and the deploy bundle are not wired yet:
 > - \`bin/lib/module.sh\` → \`sdkwork_image_build\` is still the scaffold placeholder (it exits with an explicit error);
-> - \`deployments/docker/bundle/\` (deploy.sh + release.sh + compose + env×5) does not exist yet.
+> - \`bin/docker-bundle-deploy.sh\` / \`-release.sh\` (executors, MODULE_BIN_SPEC.md §2.2) and \`deployments/docker/bundle/\` (compose + env×5) do not exist yet.
 >
 > Sections 1 (install) and 2 (upgrade) are therefore **not executable** until wiring lands; every other section (status / logs / rollback / down) is copy-paste runnable as-is.
 `;
@@ -181,7 +190,7 @@ function wiringSectionZh(f) {
 ## 6. 接线前置条件（实施清单）
 
 1. 本模块暂无 standalone 服务端二进制（assembly-only）。若产品决定以容器交付，需先落地 standalone gateway crate（参照同族模块的 \`sdkwork-api-<module>-standalone-gateway\`）。
-2. 二进制落地后：实现 \`bin/lib/module.sh\` → \`sdkwork_image_build\`，并按 OPERATIONS_SPEC.md §1.2 / DOCKER_SPEC.md §4 落地 \`deployments/docker/bundle/\`。
+2. 二进制落地后：实现 \`bin/lib/module.sh\` → \`sdkwork_image_build\`，并按 MODULE_BIN_SPEC.md §2.2 / OPERATIONS_SPEC.md §1.2 落地 \`bin/docker-bundle-deploy.sh\` + \`bin/docker-bundle-release.sh\`，以及 \`deployments/docker/bundle/\` 的 compose + env。
 3. 验收：\`node ../sdkwork-specs/tools/check-operations-conformance.mjs --root .\` 全绿。
 `;
   }
@@ -189,7 +198,7 @@ function wiringSectionZh(f) {
 ## 6. 接线前置条件（实施清单）
 
 1. \`bin/lib/module.sh\`：实现 \`sdkwork_image_build\`（对接仓库的容器构建命令）、\`sdkwork_build_app\` / \`sdkwork_package_app\` / \`sdkwork_deploy_app\`（声明了 app 类型：\`${f.appTypes}\`）。
-2. \`deployments/docker/bundle/\`：按 OPERATIONS_SPEC.md §1.2 与 DOCKER_SPEC.md §4 落地 \`deploy.sh\` + \`release.sh\` + compose + \`env/<environment>.env\`×5（含日志轮转、health 门禁）。
+2. \`bin/docker-bundle-deploy.sh\` + \`bin/docker-bundle-release.sh\`（执行器，MODULE_BIN_SPEC.md §2.2），以及 \`deployments/docker/bundle/\` 的 compose + \`env/<environment>.env\`×5（含日志轮转、health 门禁）；模块打包器负责把执行器拷入 bundle 根。
 3. 验收：\`node ../sdkwork-specs/tools/check-operations-conformance.mjs --root .\` 全绿。
 `;
 }
@@ -202,8 +211,9 @@ function wiringSectionEn(f) {
 
 1. This module has no standalone server binary yet (assembly-only). If the product decides on container delivery, land a
    standalone gateway crate first (mirror the family's \`sdkwork-api-<module>-standalone-gateway\`).
-2. Once the binary exists: implement \`bin/lib/module.sh\` → \`sdkwork_image_build\`, and land \`deployments/docker/bundle/\` per
-   OPERATIONS_SPEC.md §1.2 / DOCKER_SPEC.md §4.
+2. Once the binary exists: implement \`bin/lib/module.sh\` → \`sdkwork_image_build\`, and land
+   \`bin/docker-bundle-deploy.sh\` + \`bin/docker-bundle-release.sh\` (MODULE_BIN_SPEC.md §2.2)
+   plus the compose + env inputs under \`deployments/docker/bundle/\` per OPERATIONS_SPEC.md §1.2.
 3. Acceptance: \`node ../sdkwork-specs/tools/check-operations-conformance.mjs --root .\` all green.
 `;
   }
@@ -211,7 +221,7 @@ function wiringSectionEn(f) {
 ## 6. Wiring prerequisites (implementation checklist)
 
 1. \`bin/lib/module.sh\`: implement \`sdkwork_image_build\` (delegate to the repository's container build) plus \`sdkwork_build_app\` / \`sdkwork_package_app\` / \`sdkwork_deploy_app\` (declared app types: \`${f.appTypes}\`).
-2. \`deployments/docker/bundle/\`: land \`deploy.sh\` + \`release.sh\` + compose + \`env/<environment>.env\`×5 per OPERATIONS_SPEC.md §1.2 and DOCKER_SPEC.md §4 (log rotation, health gate included).
+2. \`bin/docker-bundle-deploy.sh\` + \`bin/docker-bundle-release.sh\` (executors, MODULE_BIN_SPEC.md §2.2), plus the compose + \`env/<environment>.env\`×5 inputs under \`deployments/docker/bundle/\` (log rotation, health gate included); the module's packager copies the executors into the bundle root.
 3. Acceptance: \`node ../sdkwork-specs/tools/check-operations-conformance.mjs --root .\` all green.
 `;
 }

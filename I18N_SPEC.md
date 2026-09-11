@@ -1,6 +1,6 @@
 # Internationalization Standard
 
-- Version: 2.0
+- Version: 2.1
 - Scope: cross-stack locale negotiation, frontend and backend user-facing messages, API problem localization metadata, SDK locale propagation, database seed localization, runtime config, deployment defaults, generated locale resources, accessibility text, and reusable SDKWork packages across browser, mobile, native, server, and gateway runtimes
 - Related: `WEB_FRAMEWORK_SPEC.md`, `API_SPEC.md`, `SDK_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `FRONTEND_SPEC.md`, `DATABASE_FRAMEWORK_SPEC.md`, `DATABASE_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `MODULE_SPEC.md`, `IAM_SPEC.md`, `SECURITY_SPEC.md`, `DOCUMENTATION_SPEC.md`, `TEST_SPEC.md`, `NAMING_SPEC.md`, `DOMAIN_SPEC.md`
 
@@ -76,7 +76,7 @@ WebLocaleContext {
   fallbackLocale: LocaleTag
   supportedLocales: LocaleTag[]
   activeLocales: LocaleTag[]
-  source: user-preference | tenant-preference | app-default | accept-language | sdk-header | system-default
+  source: user-preference | tenant-preference | app-default | accept-language | system-default
   catalogVersion?: string
   messageBundleVersion?: string
   timezone?: string
@@ -88,20 +88,27 @@ Rules:
 
 - `WebRequestContext` `MUST` include `locale: WebLocaleContext` for public and protected SDKWork HTTP operations.
 - Public, login, registration, password reset, OAuth, refresh-token, open-api, app-api, backend-api, gateway, and admin/control-plane routes `MUST` receive locale context.
-- `LocaleResolution` is a framework responsibility. Handlers and controllers `MUST NOT` parse `Accept-Language`, `X-SdkWork-Locale`, cookies, query parameters, or user-agent headers directly.
+- `LocaleResolution` is a framework responsibility. Handlers and controllers `MUST NOT` parse `Accept-Language`, locale cookies, query parameters, or user-agent headers directly.
 - Production requests `MUST NOT` trust arbitrary query parameters for locale selection unless the route is an explicitly documented preview/test route and the route manifest declares that behavior.
 - The framework `MUST` expose centralized extension points for user preference lookup, tenant/application preference lookup, message bundle resolution, localized problem mapping, and validation message resolution.
 - Rust is the reference runtime. Java/Spring and other server runtimes `MUST` preserve equivalent context vocabulary, request-stage semantics, headers, and problem-detail behavior.
 
 ## 4. HTTP Locale Headers
 
+Locale negotiation uses standard HTTP headers only. SDKWork `MUST NOT` define, send,
+trust, or document a custom locale request header.
+
 Rules:
 
-- Clients and SDK transports `SHOULD` send standard `Accept-Language` for locale negotiation.
-- SDKWork SDK transports `MAY` send `X-SdkWork-Locale` only when it is produced by an approved runtime locale provider. Feature packages and UI components `MUST NOT` assemble this header manually.
+- Clients and SDK transports `MUST` send standard `Accept-Language` for locale negotiation, including when a runtime locale provider selects the locale explicitly: the provider owns the `Accept-Language` value.
+- A custom locale request header such as `X-SdkWork-Locale` is retired. It `MUST NOT` be sent by any client, SDK transport, or runtime wrapper, `MUST NOT` be parsed by any handler, controller, or framework locale stage, and `MUST NOT` be added to a CORS request-header allowlist. Client locale selection is expressed through `Accept-Language`; in-process preference lookup is an extension point (section 3), not a wire header.
+- Feature packages and UI components `MUST NOT` assemble locale request headers manually; propagation goes through the approved runtime locale provider.
 - Responses whose body or problem detail is locale-sensitive `MUST` include `Content-Language: <effectiveLocale>`.
 - Responses whose representation varies by language `MUST` include `Vary: Accept-Language`.
-- Responses `MAY` include diagnostic version headers such as `X-SdkWork-I18n-Version`, `X-SdkWork-Message-Bundle-Version`, or `X-SdkWork-Backend-Message-Bundle-Version`.
+- Responses `MUST NOT` invent an SDKWork diagnostic i18n header (for example a
+  `X-SdkWork-I18n-Version` / message-bundle-version family). Catalog and bundle versions are
+  build/observability metadata, not wire protocol: expose them through the build manifest, logs,
+  tracing attributes, or a documented standard mechanism instead of a bespoke response header.
 - Headers `MUST NOT` contain translated message content.
 
 ## 5. Message Keys
@@ -272,7 +279,7 @@ Rules:
 Rules:
 
 - Generated SDK runtimes `SHOULD` support a `localeProvider`, `i18nProvider`, or language-equivalent request option supplied at client construction or bootstrap.
-- SDK transports `SHOULD` serialize the current locale through `Accept-Language`; they `MAY` also send an approved SDKWork locale header when required by the runtime profile.
+- SDK transports `MUST` serialize the current locale exclusively through the standard `Accept-Language` header (section 4). They `MUST NOT` synthesize a custom SDKWork locale header, and `MUST NOT` require a target runtime profile to allow one.
 - SDK transports `MUST NOT` expose feature-level manual locale header construction as the normal integration path.
 - Generated SDK error types `MUST` expose numeric `ProblemDetail.code` and `traceId`, and `SHOULD` expose `i18nKey`, `locale`, and field validation entries when the API returns them.
 - SDK examples `SHOULD` show locale provider wiring in bootstrap, not per-call header mutation.
@@ -333,7 +340,12 @@ Rules:
 
 - Static scans `MUST` reject authored app-wide, backend-root-wide, admin-root-wide, or package-wide locale monoliths.
 - Static scans `MUST` verify authored i18n directories match the language and framework layouts in section 6.1 and that generated platform resources are not treated as source-of-truth copy.
-- `tools/check-i18n-standard.mjs` is the canonical static check for repository/workspace i18n source layout, locale monolith rejection, generated/thin platform projection boundaries, Rust/Java backend message bundle placement, and database locale seed path shape.
+- Static scans `MUST` reject any custom locale request header literal (section 4) in authored source, including runtime locale providers, framework locale stages, and CORS request-header allowlists.
+- Static scans `MUST` reject any retained member of the retired locale-source vocabulary (section 3): the `source` enum is closed, and a repository that stopped sending the header `MUST NOT` keep the enum member that documented it. The check `MUST` match the value in its declared forms only — a quoted compact-array member sitting beside the live members, a quoted member alone on its line, or a bare enum variant — so that an unrelated stylesheet class or UI component that happens to share the name is not flagged.
+- Static scans `MUST` judge authored source only. Two derived surfaces `MUST NOT` be reported as i18n violations: a compiler artifact sitting beside the authored file it was produced from (`.js`, `.jsx`, or `.d.ts` next to a `.ts`/`.tsx` twin), and any path the repository's own ignore rules exclude, such as a bundler output directory. Both are copies of a file that is scanned in authored form, and neither is a copy a developer can fix — the remedy for a stale artifact is to delete or regenerate it. The decision `MUST` come from the repository rather than from a directory name: `lib/` is derived output for a TypeScript package and authored source for a Flutter package. Standalone JavaScript with no TypeScript twin and no ignore rule is authored source and remains in scope.
+- Static scans `MUST` cover every language the workspace ships, not only the languages that author locale resources. A retired wire header does not care whether the file that still sends it is TypeScript, ArkTS, Kotlin, Swift, Go, or Python.
+- Static scans `MUST NOT` treat documentation that names a retired or forbidden header in order to prohibit it as a violation. A prohibition has to be able to name what it forbids, so prose in `I18N_SPEC.md`, `AGENTS.md`, and audit records stays out of literal scans.
+- `tools/check-i18n-standard.mjs` is the canonical static check for repository/workspace i18n source layout, locale monolith rejection, generated/thin platform projection boundaries, Rust/Java backend message bundle placement, database locale seed path shape, and the retired custom locale request header.
 - Static scans `MUST` exclude vendored or third-party source trees from SDKWork-authored i18n layout enforcement; integration wrappers remain subject to this standard.
 - Fragment manifest or aggregation tests `MUST` verify every registered fragment has required keys for active locales unless the missing key is explicitly optional.
 - Duplicate keys in the same precedence layer `MUST` fail validation.
@@ -345,7 +357,61 @@ Rules:
 - Database seed smoke tests `MUST` prove `seeds/common` plus default seed locale `zh-CN` are idempotent and that locale seed history records version/checksum evidence.
 - Config/env tests `MUST` prove locale config contains strategy and manifest/version references only, not translated content.
 
-## 16. Acceptance Checklist
+## 16. Gates
+
+| Gate | Command | Enforces |
+| --- | --- | --- |
+| Workspace literal scan | `node tools/check-i18n-standard.mjs --workspace <workspace-root>` | Section 4 across every repository root: no authored source in any scanned language reintroduces the retired custom locale request header, plus the layout rules of section 6. |
+| Repository literal scan | `node tools/check-i18n-standard.mjs --root .` | The same rules for one repository root, without scanning sibling checkouts. Fails closed per section 16.2. |
+| Composition verifier | `node tools/verify-repo.mjs --root .` | Section 4 transitively, by calling the repository literal scan alongside composition, layering, routing, and API-assembly closure checks. |
+| Unit | `node --test tools/check-i18n-standard.test.mjs` | Section 4 header retirement, section 6 layout rules, ignored-output and skipped-directory handling, and the fail-closed contract of section 16.2. |
+
+### 16.1 Gate Wiring (Normative)
+
+1. A repository that ships authored source in any scanned language `MUST` be able
+   to detect a reintroduced retired locale header from its own aggregate. The
+   preferred step is the composition verifier, because one invocation then covers
+   locale, composition, layering, and API-assembly closure:
+
+   ```json
+   "check:app-composition": "node ../sdkwork-specs/tools/verify-repo.mjs --root ."
+   ```
+
+   A repository that instead declares the locale gate directly `MUST` use
+
+   ```json
+   "check:i18n-standard": "node ../sdkwork-specs/tools/check-i18n-standard.mjs --root ."
+   ```
+
+2. It `MUST` reference one of those steps from the aggregate that `pnpm verify`
+   runs, in this preference order: `_sdkwork:verify`, then `verify`, then `check`.
+   The aggregate is the merge-ready gate; a repository that never runs the step
+   cannot detect a retired-header regression.
+3. A repository with none of `_sdkwork:verify`, `verify`, `check` is reported as a
+   **warning**, not a failure: the missing aggregate is a `PNPM_SCRIPT_SPEC.md`
+   gap owned by that specification, and the workspace literal scan still audits
+   its sources.
+4. A repository `MUST NOT` run `--workspace <workspace-root>` from inside its own
+   aggregate. The repository aggregate is the merge-ready unit; a workspace-wide
+   scan inside a single checkout couples unrelated repositories and makes one
+   checkout's verification depend on its sibling checkout state.
+5. The workspace root `@sdkwork/workspace-root` runs the workspace literal scan
+   through `pnpm check:all`.
+
+### 16.2 Fail Closed (Normative)
+
+Retiring the custom locale header is a wire contract, so a gate that reports
+success without reading source is worse than no gate at all: it occupies the
+contract slot while enforcing nothing.
+
+1. A non-existent, non-directory, or empty scan root `MUST` exit non-zero.
+   Reporting a pass in that state is forbidden.
+2. A passing run `MUST` state how many files it scanned, so a reviewer can
+   distinguish a wired gate from a no-op.
+3. A workspace scan that enumerates zero repositories `MUST` fail rather than
+   report a pass.
+
+## 17. Acceptance Checklist
 
 - [ ] Runtime, message catalog, and database seed locale responsibilities are documented separately.
 - [ ] `defaultLocale`, `fallbackLocale`, `supportedLocales`, and `activeLocales` are explicit for production-like deployments.
@@ -355,6 +421,7 @@ Rules:
 - [ ] App-level and package-level i18n indexes are thin exports, registries, or generated aggregators, not authored monolithic catalogs.
 - [ ] `WebRequestContext` includes framework-resolved locale context for SDKWork HTTP APIs.
 - [ ] Handlers/controllers do not parse locale headers or query parameters directly.
+- [ ] Locale negotiation uses standard `Accept-Language` only; no custom SDKWork locale request header exists in source, requests, or CORS header allowlists, and no stale compiler artifact or ignored build copy still emits one.
 - [ ] Login, registration, session, validation, permission-denied, backend/admin, and operator-facing states are localized safely.
 - [ ] API errors preserve numeric `ProblemDetail.code` and `traceId`; localized metadata uses `i18nKey` and `locale`.
 - [ ] Generated SDKs support bootstrap-level locale propagation and expose problem localization metadata where returned.
@@ -363,3 +430,5 @@ Rules:
 - [ ] Application-line overrides preserve package-local fragment boundaries.
 - [ ] Duplicate keys, missing required keys, monolithic locale files, and unsafe interpolation are covered by validation or tests.
 - [ ] Text expansion does not break responsive or native layouts.
+- [ ] A repository shipping scanned-language source can detect a reintroduced retired locale header from its own aggregate (section 16.1), and it does not run a workspace-wide scan from inside that aggregate.
+- [ ] Locale gates fail closed: a missing, non-directory, or empty root exits non-zero, and a passing run reports its scanned file count (section 16.2).

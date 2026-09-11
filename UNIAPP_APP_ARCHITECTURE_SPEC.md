@@ -280,15 +280,15 @@ pnpm install
 pnpm dev
 pnpm dev:standalone
 pnpm dev:cloud
-pnpm dev:uniapp:h5:standalone
-pnpm dev:uniapp:mp-weixin:standalone
-pnpm dev:uniapp:app:standalone
-pnpm build:uniapp
-pnpm build:uniapp:h5
-pnpm build:uniapp:mp-weixin
-pnpm build:uniapp:app:android
-pnpm build:uniapp:staging
-pnpm build:uniapp:prod
+pnpm dev:browser:standalone
+pnpm dev:mini-program:standalone
+pnpm dev:android-native:standalone
+pnpm build
+pnpm build:browser
+pnpm build:mini-program
+pnpm build:android-native
+pnpm build:staging
+pnpm build:prod
 pnpm typecheck
 pnpm lint
 pnpm test
@@ -300,7 +300,7 @@ uni build -p mp-weixin --mode cloud.production
 Rules:
 
 - `pnpm dev` starts the default uni-app development flow for the root's primary target.
-- Public commands are action-first (`build:uniapp:mp-weixin`); native tool commands such as `uni build -p` may remain internal runner details.
+- Public commands use the standard action-first runtime-target vocabulary: the H5 platform is `browser`, the mini-program platform is `mini-program`, and the native app platform is `android-native` / `ios-native`. The compilation vendor (for example `mp-weixin`, `app-plus`, or an `h5` build) is an internal runner detail carried by `uni build -p`, never a public command segment — `build:uniapp:mp-weixin` and `dev:uniapp:h5` are invalid target shapes, not valid targets.
 - Package-level commands should allow focused tests/static checks for changed packages.
 
 ## 12. Verification

@@ -12,6 +12,27 @@ const WORKSPACE_ROOT = path.resolve(TOOL_DIR, '../..');
 
 const INCLUDE_RE = /include_str!\(\s*"([^"]+\.sql)"/g;
 const PATH_RE = /database\/ddl\/baseline\/[^\s"'`]+\.sql|database\/migrations\/[^\s"'`]+\.sql/g;
+/**
+ * A consolidated baseline records the origin of every merged section:
+ *   -- baseline source: ddl/baseline/<engine>/<file>.sql
+ *   -- source: database/ddl/baseline/<engine>/<file>.sql#<anchor>
+ * Renaming a baseline does not rewrite those comments, so they silently start
+ * pointing at a file that no longer exists — provenance that lies about where the
+ * DDL came from. `align-database-bootstrap-references.mjs` is the remediation;
+ * this rule is what keeps the debt from coming back.
+ */
+const PROVENANCE_RE = /^--\s+(?:baseline\s+)?source:\s*(\S+?)(?:#\S*)?\s*$/gmu;
+/**
+ * Only authored repository content is governed. `.sdkwork/` holds generated
+ * runtime contexts (byte copies of module sources rebaked per build) and `.tmp*`
+ * scratch trees hold in-flight tool output; flagging either would report drift in
+ * an artifact nobody authored.
+ */
+const SKIPPED_DIRS = [
+  'node_modules', 'target', '.git', '.runtime', 'dist', 'build', '.pnpm-store',
+  '.sdkwork', '.tools', '.tmp', '.cache', 'tmp', 'cache', 'external', 'vendor',
+];
+const SKIPPED_DIR_PREFIXES = ['.tmp-'];
 
 function parseArgs(argv) {
   const args = { workspace: WORKSPACE_ROOT };
@@ -32,9 +53,14 @@ function listRepos(workspace) {
     .filter((repoRoot) => fs.existsSync(path.join(repoRoot, 'database', 'database.manifest.json')));
 }
 
-function walkSourceFiles(rootDir, files = []) {
+export function shouldSkipDir(name) {
+  return SKIPPED_DIRS.includes(name)
+    || SKIPPED_DIR_PREFIXES.some((prefix) => name.startsWith(prefix));
+}
+
+export function walkSourceFiles(rootDir, files = []) {
   for (const entry of fs.readdirSync(rootDir, { withFileTypes: true })) {
-    if (['node_modules', 'target', '.git', '.runtime', 'dist'].includes(entry.name)) {
+    if (shouldSkipDir(entry.name)) {
       continue;
     }
     const fullPath = path.join(rootDir, entry.name);
@@ -42,7 +68,7 @@ function walkSourceFiles(rootDir, files = []) {
       walkSourceFiles(fullPath, files);
       continue;
     }
-    if (/\.(rs|mjs|js|py|json)$/u.test(entry.name)) {
+    if (/\.(rs|mjs|js|py|json|sql)$/u.test(entry.name)) {
       files.push(fullPath);
     }
   }
@@ -68,7 +94,36 @@ function isRetiredStub(sql) {
   return !/CREATE\s+TABLE/iu.test(stripSqlComments(sql));
 }
 
-function checkBaselineDir(repoRoot, engine, issues) {
+/**
+ * Only self-referential baseline provenance is gated: a comment claiming this
+ * module's baseline came from a sibling baseline file must name a sibling that
+ * actually exists. That is the debt a baseline rename leaves behind, and it is
+ * what `align-database-bootstrap-references.mjs` migrates.
+ *
+ * References to consolidation sources elsewhere in the repository
+ * (`crates/&#42;&#42;/migrations/&#42;&#42;`, `specs/&#42;&#42;`, `migrations/&#42;&#42;`, globs) are historical provenance for
+ * files consolidation intentionally absorbed into the baseline. Their absence is
+ * expected, so they MUST NOT be reported.
+ */
+export function checkProvenance(repoRoot, baselineDir, baselineFile, issues) {
+  const engine = path.basename(baselineDir);
+  const sql = fs.readFileSync(path.join(baselineDir, baselineFile), 'utf8');
+  const siblingDirs = new Set([`ddl/baseline/${engine}`, `database/ddl/baseline/${engine}`]);
+  for (const match of sql.matchAll(PROVENANCE_RE)) {
+    const normalized = match[1].replaceAll('\\', '/');
+    if (!siblingDirs.has(path.posix.dirname(normalized))) {
+      continue;
+    }
+    if (fs.existsSync(path.join(baselineDir, path.posix.basename(normalized)))) {
+      continue;
+    }
+    issues.push(
+      `${engine}/${baselineFile}: provenance reference does not exist: ${match[1]}`,
+    );
+  }
+}
+
+export function checkBaselineDir(repoRoot, engine, issues) {
   const dir = path.join(repoRoot, 'database', 'ddl', 'baseline', engine);
   if (!fs.existsSync(dir)) {
     return;
@@ -90,6 +145,9 @@ function checkBaselineDir(repoRoot, engine, issues) {
     if (/CREATE\s+EXTENSION/iu.test(sql)) {
       issues.push(`${engine}/${primary[0]}: sqlite baseline must not CREATE EXTENSION`);
     }
+  }
+  if (primary.length === 1) {
+    checkProvenance(repoRoot, dir, primary[0], issues);
   }
 }
 
@@ -170,4 +228,6 @@ function main() {
   process.exit(1);
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}

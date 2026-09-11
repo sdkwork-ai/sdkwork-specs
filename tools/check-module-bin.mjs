@@ -59,9 +59,10 @@ const FORBIDDEN_IN_MODULE_SH = Object.freeze([
 
 function checkModuleBin(root) {
   const issues = [];
+  const warnings = [];
   const binDir = path.join(root, 'bin');
   if (!fs.existsSync(binDir)) {
-    return [`missing bin/ directory (MODULE_BIN_SPEC.md §2)`];
+    return { issues: [`missing bin/ directory (MODULE_BIN_SPEC.md §2)`], warnings };
   }
 
   for (const script of REQUIRED_SCRIPTS) {
@@ -83,6 +84,42 @@ function checkModuleBin(root) {
     if (bodyLines.length > MAX_WRAPPER_LINES) {
       issues.push(
         `bin/${script} has ${bodyLines.length} code lines; thin wrappers must stay <= ${MAX_WRAPPER_LINES} (§2)`,
+      );
+    }
+  }
+
+  // §2.1 — no generic grouping subdirectory. Intent is declared by the script
+  // name (§2.2); an opaque bin/bundle/ (or bin/docker/, bin/misc/) wrapper that
+  // hides what each script does is exactly the pattern v1.4 removed. Bundle
+  // executors live flat as bin/docker-bundle-deploy.sh / -release.sh and are
+  // copied to the bundle root by the module's packager.
+  for (const group of ['bundle', 'docker', 'misc']) {
+    const p = path.join(binDir, group);
+    if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+      issues.push(
+        `bin/${group}/ is a generic grouping subdirectory (MODULE_BIN_SPEC.md §2.1); move its scripts flat into bin/ and name them by family (§2.2, e.g. bin/docker-bundle-deploy.sh)`,
+      );
+    }
+  }
+
+  // §2.2 — family membership for every hand-maintained script directly in bin/.
+  // Reported as warnings, not issues: the fleet still carries legacy names
+  // (sdkwork-im's host-service family, sdkwork-webserver's build-apps-static.sh)
+  // and the debt must stay visible without silently drifting. Promote to
+  // `issues` once the fleet is clean.
+  const NAMING_FAMILIES = [
+    /^docker-[a-z0-9]+(?:-[a-z0-9]+)*\.(sh|ps1|cmd)$/,
+    /^apps-[a-z0-9]+(?:-[a-z0-9]+)*\.(sh|ps1|cmd)$/,
+    /^(config|doctor|backup)\.(sh|ps1|cmd)$/,
+  ];
+  for (const entry of fs.readdirSync(binDir, { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    if (!/\.(sh|ps1|cmd)$/.test(entry.name)) continue;
+    // Internal shims are called by other scripts, never by an operator.
+    if (entry.name.startsWith('_')) continue;
+    if (!NAMING_FAMILIES.some((re) => re.test(entry.name))) {
+      warnings.push(
+        `bin/${entry.name} matches no §2.2 name family (docker-* | apps-* | config.sh/doctor.sh/backup.sh); rename it into one, or move it out of bin/`,
       );
     }
   }
@@ -136,7 +173,7 @@ function checkModuleBin(root) {
     issues.push('missing bin/README.md (usage card, §2)');
   }
 
-  return issues;
+  return { issues, warnings };
 }
 
 async function main() {
@@ -162,16 +199,21 @@ async function main() {
   }
 
   const root = path.resolve(values.root ?? '.');
-  const issues = checkModuleBin(root);
-  const report = { module: path.basename(root), root, ok: issues.length === 0, issues };
+  const { issues, warnings } = checkModuleBin(root);
+  const report = { module: path.basename(root), root, ok: issues.length === 0, issues, warnings };
 
   if (values.json) {
     console.log(JSON.stringify(report, null, 2));
   } else if (issues.length > 0) {
     console.error(`module bin standard failed for ${root}`);
     issues.forEach((issue) => console.error(`- ${issue}`));
+    warnings.forEach((issue) => console.error(`warn: ${issue}`));
   } else {
     console.log(`module bin standard passed for ${root}`);
+    if (warnings.length > 0) {
+      console.log(`  ${warnings.length} naming warning(s) (MODULE_BIN_SPEC.md §2.2):`);
+      warnings.forEach((issue) => console.log(`  - ${issue}`));
+    }
   }
   return issues.length > 0 ? 1 : 0;
 }
@@ -220,6 +262,7 @@ async function runWorkspace(wsRoot, limit, json, offFleet) {
       modules: reports.length,
       passed: reports.length - failed.length,
       failed: failed.length,
+      modulesWithNamingWarnings: reports.filter((r) => (r.warnings?.length ?? 0) > 0).length,
       skippedNotModules: skipped.sort(),
       offFleet: offFleetManifests.sort(),
       reports,
@@ -236,6 +279,14 @@ async function runWorkspace(wsRoot, limit, json, offFleet) {
   for (const r of failed) {
     console.log(`  FAIL  ${r.module}`);
     r.issues.forEach((issue) => console.log(`          - ${issue}`));
+  }
+  // §2.2 naming debt is reported but never blocks: the point is that it cannot
+  // drift silently. Promote to a failure once the fleet carries no warnings.
+  const warned = reports.filter((r) => r.ok && (r.warnings?.length ?? 0) > 0);
+  if (warned.length > 0) {
+    const total = warned.reduce((n, r) => n + r.warnings.length, 0);
+    console.log(`  WARN  ${total} naming warning(s) (MODULE_BIN_SPEC.md §2.2) across ${warned.length} module(s) — visible debt, not a gate failure:`);
+    for (const r of warned) console.log(`          ${r.module}: ${r.warnings.length}`);
   }
   if (failed.length === 0) console.log('  every module satisfies the bin/ entrypoint standard');
   return failed.length > 0 ? 1 : 0;

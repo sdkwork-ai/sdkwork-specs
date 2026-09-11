@@ -258,17 +258,27 @@ instance count.
 > single operator channel). They `MUST NOT` be exposed as operator
 > entrypoints: no `package.json` wrapper and no documentation may present
 > direct invocation (`bash deploy.sh …`, `bash release.sh …`) as an
-> operator path. The bundle source directory defaults to
-> `deployments/docker/bundle`; a module may override the resolution via the
-> `sdkwork_module_install_bundle_dir` hook (for example to prefer the newest
-> packaged `dist/docker-install/*` artifact), but the operator surface stays
-> `bin/` either way.
+> operator path.
+>
+> **Executor source (§2.2 of `MODULE_BIN_SPEC.md`).** The executors are
+> authored flat in `bin/` as `docker-bundle-deploy.sh`,
+> `docker-bundle-release.sh`, and (where the module needs it)
+> `docker-bundle-prepare-envs.sh`. The module's bundle packager copies them
+> into the bundle root under the artifact names this section fixes — that
+> copy is the only place the source→artifact mapping is expressed.
+> There is no `bin/bundle/` directory and no source-tree bundle: the install
+> bundle is always a packaged `dist/docker-install/*` artifact, resolved by
+> the `sdkwork_module_install_bundle_dir` hook (`MODULE_BIN_SPEC.md` §3), and
+> the operator surface stays `bin/`.
 
 ### 4.1 Bundle Layout
 
 ```text
 <app>-docker-install-<version>.bundle/
   deploy.sh                       # the single generic entrypoint (§4.2)
+                                  #   source: bin/docker-bundle-deploy.sh
+  release.sh                      # versioned release/rollback ledger wrapper
+                                  #   source: bin/docker-bundle-release.sh
   image.env                       # IMAGE=<canonical reference>, IMAGE_DIGEST=… (release record)
   compose/
     docker-compose.yml            # base service definition (env-neutral)

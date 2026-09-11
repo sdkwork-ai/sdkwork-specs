@@ -1,7 +1,7 @@
 # SDKWork Module `bin/` Entrypoint Standard
 
-- Version: 1.1
-- Scope: the standardized `bin/` script entrypoints every independent SDKWork module root `MUST` ship — Docker image packaging/update, Docker deployment (WSL + remote Ubuntu), application build, application packaging, application deployment, and native OS installer packaging (Windows / Linux / macOS / Android / iOS) — plus the shared library contract that keeps them thin, highly cohesive, and loosely coupled
+- Version: 1.4
+- Scope: the standardized `bin/` script entrypoints every independent SDKWork module root `MUST` ship — Docker image packaging/update, Docker deployment (WSL + remote Ubuntu), application build, application packaging, application deployment, and native OS installer packaging (Windows / Linux / macOS / Android / iOS) — plus the flat-script naming convention (§2.2) and the shared library contract that keeps them thin, highly cohesive, and loosely coupled
 - Related: `DOCKER_SPEC.md` (image naming/tagging, bundle layout, environment matrix), `DEPLOYMENT_SPEC.md` (§6 container install, §6.1 external dependencies), `SDKWORK_WEBSERVER_SPEC.md` (§17 import plane), `PACKAGING_SPEC.md` (artifact content), `ENVIRONMENT_SPEC.md` (§5.1 profile ids), `PNPM_SCRIPT_SPEC.md` (command grammar), `AGENTS_SPEC.md` (module AGENTS.md requirements), `APPLICATION_DEPLOY_LAYOUT_SPEC.md` (install paths)
 
 ## 1. Goals And Design Principles
@@ -24,9 +24,11 @@
   `DOCKER_SPEC.md` §3 / `ENVIRONMENT_SPEC.md` §5.1; same port keys, same
   domains, same external-dependency defaults.
 - **Single operator channel (normative)**: `bin/` is the *only* operator
-  surface of a module. Bundle executors (`deploy.sh`, `release.sh`) are
-  private implementation invoked by `bin/docker-deploy.sh` on the target —
-  operators never call them by hand. Modules `MUST NOT` ship `pnpm`
+  surface of a module. Bundle executors (authored as
+  `bin/docker-bundle-deploy.sh` / `bin/docker-bundle-release.sh`, shipped in
+  the bundle as `deploy.sh` / `release.sh`) are private implementation invoked
+  by `bin/docker-deploy.sh` on the target — operators never call them by hand.
+  Modules `MUST NOT` ship `pnpm`
   `deploy:`/`release:` wrappers that invoke a bundle executor, a
   `remote-deploy` helper, or any other parallel deployment entrypoint, and
   documentation `MUST NOT` present direct invocation as an operator path
@@ -60,6 +62,12 @@ Every independent deployable module root (including every Rust
 
 Rules:
 
+- **`bin/` is flat for scripts, and the file name is the contract.** Every
+  hand-maintained shell/PowerShell/cmd script directly under `bin/` declares
+  its family by its name (§2.2); there is no `bin/bundle/` (or any other
+  generic "misc scripts" subdirectory) to group scripts by intent. A
+  subdirectory under `bin/` holds libraries, non-script assets, or
+  target-side artifacts (§2.1) — never an unnamed grab-bag of entrypoints.
 - `bin/*.sh` are **thin dispatches**: each one sets `SDKWORK_ENTRY` and
   sources `bin/lib/bootstrap.sh` — two statements, no logic. A wrapper with
   more than 8 non-comment lines is a spec violation (enforced by
@@ -83,6 +91,120 @@ Rules:
   literal in a wrapper.
 - Scripts are executable (`chmod +x`), pass `bash -n`, and `MUST NOT` contain
   secrets, absolute machine-specific paths, or environment values baked in.
+
+### 2.1 Script Placement Contract (Normative)
+
+**One rule: every authored script lives under a `bin/` directory.**
+
+There is no second script home and no exception table. A module root has
+exactly one place for hand-maintained scripts — `bin/` (§2) and its
+subdirectories. Everything that must physically exist *inside* another
+artifact is a **build output**, produced by the build copying the script out of
+`bin/`:
+
+| Artifact needs the script in… | Produced by |
+| --- | --- |
+| the container image (`ENTRYPOINT`, dependency init) | the image build stages a copy from `bin/` into the build context |
+| the install bundle (bundle executors at the bundle root) | the bundle packager copies `bin/docker-bundle-*.sh` from `bin/` into the bundle root under the artifact names §4.1 of `DOCKER_SPEC.md` fixes |
+| an OS package (`deb`/`rpm` `postinst`, service unit) | the packaging command renders the template from `bin/` |
+
+Consequences:
+
+- An authored script committed anywhere else — `deployments/**`, `docker/**`,
+  `scripts/**`, `tools/**`, `tests/**`, a repository root, an app directory —
+  is a violation, **whether or not it is tracked**. Move the source under
+  `bin/` and let the build copy it, or delete it.
+
+**Canonical sub-layout.** `bin/` may hold subdirectories, but their meaning is
+fixed so the fleet stays uniform instead of each module inventing a tree:
+
+| Path | Holds |
+| --- | --- |
+| `bin/*.sh` | the standard entrypoint family (§2) — the operator surface, named per §2.2 |
+| `bin/lib/` | shared libraries sourced by the entrypoints (`bootstrap.sh`, `module.sh`) |
+| `bin/container/` | scripts baked *into* the container image — the `ENTRYPOINT` and dependency init/bootstrap (e.g. `postgres-init/`) |
+| `bin/host/` | scripts an operator runs on the docker / WSL host to prepare it |
+| `bin/packaging/` | package-builder inputs — `deb`/`rpm` maintainer-script templates and spec files, release verifiers |
+
+**No generic grouping subdirectory.** `bin/bundle/`, `bin/docker/`, `bin/misc/`
+and equivalents are `MUST NOT`: intent is declared by the script name (§2.2),
+not by an opaque wrapper directory. A target-side executor therefore lives
+flat in `bin/` under a name that states its object and action, and the bundle
+packager copies it into the bundle root under the artifact name the bundle
+contract fixes (`DOCKER_SPEC.md` §4.1) — the same "artifact copies are build
+outputs copied from `bin/`" model as the container entrypoint.
+
+A path is sanctioned when it sits under any `bin/` directory, so this table
+fixes *where things go*, not *whether they pass*: a module that puts the bundle
+executors under `deployments/docker/scripts/` fails both the rule above and this
+layout.
+- Generated tool output is not a script source and is not audited: dependency
+  trees (`node_modules*`), framework generators (Flutter
+  `flutter_export_environment.sh`, `.dart_tool/`), SDK generator output under
+  `sdks/**/bin/` (which is a `bin/` directory, so it is compliant anyway), and
+  build state (`dist/`, `build/`, contexts, caches).
+- Verification is **not** a shell script. Probes, guards, and audits are
+  language-native tests (`node --test`, `cargo test`, `python -m pytest`) living
+  beside their subject or under `tests/`. A shell script that only asserts
+  behaviour is a violation even inside `bin/`.
+- Real test fixtures (`.ps1`/`.sh` under `snapshots/`, `fixtures/`) are test
+  data, not scripts: they are excluded, and they `MUST NOT` be executed by the
+  product.
+- **Scratch workspaces are not a channel.** Agent/build scratch
+  (`workbuddy`/`.workbuddy`, `.sdkwork/*`, `.tmp*`, `tmp/`, and equivalents)
+  `MUST` be git-ignored. A scratch script that appears as `??` in `git status`
+  is a violation: it is one `git add .` away from being committed. Nothing under
+  a scratch directory may be referenced by documentation, runbooks,
+  `package.json` scripts, CI, or the `bin/` family — if a documented procedure
+  needs a script, that script is a `bin/` entrypoint or the procedure is written
+  as `bin/` invocations.
+- Every placed script is `chmod +x`, passes `bash -n`, and satisfies
+  `PORTABILITY_SPEC.md`.
+
+Single enforcement surface: `tools/check-script-placement.mjs`
+(`pnpm check:script-placement`), which audits every fleet module and refuses a
+silent pass.
+
+### 2.2 Script Naming Convention (Normative)
+
+Because `bin/` is flat (§2.1), **the name is the only grouping mechanism**. A
+hand-maintained script directly under `bin/` `MUST` match exactly one family:
+
+| Name pattern | Family | Members |
+| --- | --- | --- |
+| `docker-<object>[-<action>].sh` | Docker lifecycle | `docker-image.sh`, `docker-deploy.sh`, and the target-side bundle executors `docker-bundle-deploy.sh`, `docker-bundle-release.sh`, `docker-bundle-prepare-envs.sh` |
+| `apps-<object>-<action>.sh` | application surfaces | `apps-build.sh`, `apps-package.sh`, `apps-deploy.sh` |
+| `apps-<object>-installer[-<action>].sh` | native OS installers | `apps-pkg-installer.sh` |
+| `config.sh` / `doctor.sh` / `backup.sh` | operations lifecycle | the `OPERATIONS_SPEC.md` §3–§5 entrypoints; deliberately unprefixed |
+
+Rules:
+
+- **Prefix = family, remainder = object + action.** A reader `MUST` be able to
+  tell what a script does from its name alone. `docker-bundle-deploy.sh` reads
+  "deploy the Docker bundle"; a `deploy.sh` inside a generic `bin/bundle/`
+  directory did not, which is exactly the ambiguity this convention removes.
+- **Any OS-installer channel carries an explicit `installer` segment**
+  (e.g. `apps-pkg-installer.sh`). An installer name `MUST NOT` be confusable
+  with the archive-packaging channel (`apps-package.sh`) — one produces OS
+  packages (`deb`/`rpm`/`msi`/`pkg`/`dmg`/`apk`), the other produces release
+  archives.
+- **`docker-` spans the whole Docker lifecycle**, including the executors that
+  run *on the target*. `apps-` spans build/package/deploy of application
+  surfaces. A script that fits neither family is renamed into one, or leaves
+  `bin/` entirely — verification is a test (`tests/`, beside its subject), not
+  a `bin/` shell script.
+- **A platform companion keeps the identical stem**: `apps-pkg-installer.sh`
+  ↔ `apps-pkg-installer.ps1` ↔ its `.cmd` shim, `docker-deploy.sh` ↔ any
+  `.ps1` twin. Never rename one side of a pair.
+- **`bin/` names and bundle artifact names are different things.**
+  `bin/docker-bundle-deploy.sh` is the source; the deployed bundle root carries
+  `deploy.sh` because `DOCKER_SPEC.md` §4.1 and
+  `APPLICATION_DEPLOY_LAYOUT_SPEC.md` §9.1 fix that artifact name. The mapping
+  (source → artifact) is declared exactly once, in the module's bundle
+  packager; no wrapper may re-derive it.
+- Enforcement: `tools/check-module-bin.mjs` audits family membership for every
+  module in the fleet; `tools/check-script-placement.mjs` audits that every
+  authored script lives under `bin/` at all.
 
 ## 3. Shared Library Contract (Normative)
 
@@ -158,8 +280,16 @@ sdkwork_package_app()   { … }                     # app-type → repo packagin
 sdkwork_deploy_app()    { … }                     # app-type → repo deployment delegation
 sdkwork_installer_app() { … }                     # app-type + platform → repo native-installer delegation (§4.9)
 sdkwork_image_build()   { … }                     # → repo container image build command
-sdkwork_module_bundle_dir() { … }                 # OPTIONAL: install bundle path (default deployments/docker/bundle)
+sdkwork_module_install_bundle_dir() { … }         # OPTIONAL: resolve the newest packaged install bundle (default: newest under dist/docker-install)
 ```
+
+There is **no source-tree bundle hook**. The install bundle is a *packaged
+artifact*, never the repository tree: its executors are authored flat in `bin/`
+(§2.2), its compose/env inputs are repository data, and the module's own bundle
+packager is the one place that assembles them. `docker-deploy.sh
+install|upgrade` therefore requires a packaged bundle and fails fast with the
+module's packaging command when none exists — it `MUST NOT` fall back to a
+partially-assembled source directory, which cannot run on the target.
 
 Hooks receive positional arguments only; every generic concern they need is
 already a library primitive. Delegated repository commands `MUST` use the
@@ -206,7 +336,7 @@ docker-image.sh build  [--image-tag <v>]            # build the canonical image 
 docker-image.sh push   [--image-tag <v>]            # push to the registry
 docker-image.sh save   [--image-tag <v>] [-o file]  # docker save → .tar.gz (+ sha256)
 docker-image.sh load   -i file                      # docker load a saved image
-docker-image.sh update [--image-tag <v>]            # pull (or load) + retag + prune dangling — the only sanctioned "update" path
+docker-image.sh update [--image-tag <v>] [-i file]   # refresh the LOCAL image ref: pull (or load a saved archive) + prune dangling
 docker-image.sh inspect [--image-tag <v>]           # print ref, digest, labels, size
 ```
 
@@ -218,8 +348,12 @@ Rules:
 - `build` `MUST` delegate to the repository's canonical container build
   (e.g. `pnpm build:container`, `scripts/webserver-release.mjs`), never to a
   hand-rolled `docker build` with a second Dockerfile path.
-- `update` on a target host replaces the image and then re-applies the
-  running deployment idempotently (see 4.2 `upgrade`).
+- `update` refreshes the **local** image reference: it pulls the tag from the
+  registry, or loads a saved archive when given `-i <file>`, then prunes
+  dangling layers. It is a **local** action — it takes no `--host` and touches
+  no running deployment. Adopting a new image into a running deployment is
+  `docker-deploy.sh upgrade` (§4.2), which executes on the target host.
+  `update` `MUST NOT` be documented or relied on as a deployment operation.
 
 ### 4.2 `bin/docker-deploy.sh` — Image Deployment (WSL And Remote Ubuntu)
 
@@ -227,8 +361,11 @@ The bundle that `install`/`upgrade` push to `/opt/deploy/<module>/bundle` is
 the **newest packaged install bundle** (`dist/docker-install/*install-*.bundle`,
 resolved by the module hook `sdkwork_module_install_bundle_dir` with
 `sdkwork_newest_install_bundle`) — a self-contained stage-2 artifact with its
-own `deploy.sh`, `compose/`, and `env/`. Deploying straight from the source
-bundle directory is only the fallback when nothing has been packaged yet.
+own `deploy.sh`, `compose/`, and `env/`. There is no source-tree fallback: an
+un-packaged module fails fast with its own packaging command (§3), because the
+repository tree holds the executors (`bin/docker-bundle-*.sh`) and the
+compose/env inputs in separate places and only the packager knows how to
+combine them into something that runs on the target.
 The push skips `image.tar.gz` when the target already runs the default image
 tag (`sdkwork_remote_image_exists`), so a same-version reinstall moves
 kilobytes instead of gigabytes.
@@ -542,6 +679,7 @@ node sdkwork-specs/tools/check-module-bin.mjs --root <module-root>
 # fleet regression (same code path in child processes; the standard is binary,
 # so there is no N/A: every module owns a bin/ family)
 node sdkwork-specs/tools/check-module-bin.mjs --workspace <workspace-root>
+node sdkwork-specs/tools/check-script-placement.mjs --workspace <workspace-root>   # §2.1
 node sdkwork-specs/tools/scaffold-module-bin.mjs --root <module-root>   # idempotent scaffold of a missing/incomplete family
 bash -n <module-root>/bin/*.sh
 sdkwork-bin-doctor   # via any bin script's hidden 'doctor' subcommand
@@ -561,6 +699,15 @@ process that cannot emit a report counts as a failure — never a silent pass.
       `apps-pkg-installer.sh`; plus `lib/`, `README.md`);
       each is executable, passes `bash -n`, and stays inside the §2 thin
       wrapper budget.
+- [ ] **Naming (§2.2)**: every hand-maintained script directly under `bin/`
+      matches exactly one family — `docker-*`, `apps-*`, an
+      `apps-*-installer*` name, or the unprefixed `config.sh`/`doctor.sh`/
+      `backup.sh` trio; a `.ps1`/`.cmd` companion keeps the identical stem.
+- [ ] **No generic grouping subdirectory (§2.1)**: no `bin/bundle/`,
+      `bin/docker/`, or `bin/misc/`. Target-side bundle executors live flat as
+      `bin/docker-bundle-deploy.sh` / `-release.sh` / `-prepare-envs.sh`, and
+      the packager copies them to the bundle root as `deploy.sh` / `release.sh`
+      / `prepare-envs.sh`.
 - [ ] Every entrypoint delegates through `lib/bootstrap.sh` → `sdkwork_init`;
       module wiring lives only in `bin/lib/module.sh`.
 - [ ] `bin/lib/module.sh` reimplements no shared concern (no raw ssh/scp,
@@ -586,6 +733,11 @@ process that cannot emit a report counts as a failure — never a silent pass.
       validated, doctor read-only with a non-zero exit on `FAIL`, backups
       checksummed and restore-gated behind `--yes`.
 - [ ] `bin/lib/bootstrap.sh` sources the three `ops-*.sh` shared libraries.
+- [ ] **Script placement (§2.1)**: every authored script lives under `bin/`;
+      artifact copies (image entrypoint, dependency init, bundle executors,
+      package templates) are build outputs copied from `bin/`; verification is
+      expressed as tests, not shell scripts; scratch directories are
+      git-ignored (audited by `check-script-placement.mjs`).
 - [ ] `AGENTS.md` carries the §6 deployment section.
 - [ ] **Single operator channel**: no `package.json` script invokes a bundle
       executor (`bundle/deploy.sh`, `bundle/release.sh`) or a

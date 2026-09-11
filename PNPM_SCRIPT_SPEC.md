@@ -243,6 +243,7 @@ build
 test
 check
 verify
+align
 clean
 typecheck
 lint
@@ -274,6 +275,11 @@ Rules:
 
 - Use `api`, not `apis`, for new root scripts.
 - Use `sdk`, not application-specific SDK prefixes such as `file-sdk`, for cross-application SDK generation and verification commands. Domain-specific package commands may keep narrower names inside the owning package.
+- `check:<standard>` and `verify:<standard>` are read-only. The sanctioned
+  remediation for the same standard is exposed as `align:<standard>`, which is the
+  mutation counterpart of the matching `check:<standard>` and `MUST` delegate to
+  the standard's own fixer tool. The retired plural namespace `alignment:*`
+  `MUST NOT` be reintroduced.
 - Runtime targets `MUST` be exposed through action-first scripts such as `dev:browser`,
   `dev:desktop`, `build:desktop`, `build:container`, `build:android-native`,
   `build:ios-native`, `dev:flutter-android`, and `release:package:mini-program`.

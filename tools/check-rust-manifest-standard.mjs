@@ -91,6 +91,84 @@ function walkManifests(dir, out, depth = 0) {
   }
 }
 
+/**
+ * Directories Cargo actually loads as workspace members.
+ *
+ * RUST_CODE_SPEC.md section 13 obliges *members* to inherit and wire the
+ * baseline. A manifest Cargo never loads has no build to bypass, so auditing it
+ * produces findings nobody can act on: `crates/sdkwork-routes-health-app-api`
+ * exists under several repositories but appears in none of their
+ * `cargo metadata --no-deps` member lists. Scoping the member checks to the
+ * loadable set is therefore spec-accurate, not a relaxation.
+ *
+ * Two sources are unioned:
+ *   * the root `[workspace] members` globs, minus `exclude`
+ *   * every directory referenced by `path = "..."` anywhere in the repository,
+ *     which is how Cargo picks up implicit members. A superset is deliberate:
+ *     over-including keeps a real finding visible rather than hiding it.
+ */
+function loadableMemberDirs(repo, rootText) {
+  const dirs = new Set();
+  const norm = (p) => String(p).replace(/\\/gu, '/');
+
+  const rootManifest = parseManifest(rootText);
+  const workspaceSection = rootManifest.section('workspace');
+  const body = workspaceSection ? workspaceSection.lines.join('\n') : '';
+  const readArray = (key) => {
+    const m = new RegExp(`${key}\\s*=\\s*\\[([\\s\\S]*?)\\]`, 'u').exec(body);
+    if (!m) return null;
+    return [...m[1].matchAll(/"([^"]*)"/gu)].map((x) => x[1].trim()).filter(Boolean);
+  };
+
+  const patterns = readArray('members');
+  const excluded = new Set((readArray('exclude') ?? []).map((p) => norm(`${repo}/${p}`).replace(/\/+/gu, '/')));
+
+  if (patterns) {
+    const regexps = patterns.map((glob) => new RegExp(
+      `^${glob
+        .replace(/[.+^${}()|[\]\\]/gu, '\\$&')
+        .replace(/\*\*/gu, '\u0000')
+        .replace(/\*/gu, '[^/]*')
+        .replace(/\u0000/gu, '.*')}$`,
+      'u',
+    ));
+    const walk = (dir) => {
+      let entries;
+      try {
+        entries = readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of entries) {
+        if (!e.isDirectory() || SKIP_DIRS.has(e.name)) continue;
+        const abs = norm(join(dir, e.name));
+        const rel = abs.slice(norm(repo).length + 1);
+        if (patterns.includes(rel) || regexps.some((r) => r.test(rel))) dirs.add(abs);
+        walk(abs);
+      }
+    };
+    walk(repo);
+  }
+
+  const manifests = [];
+  walkManifests(repo, manifests);
+  for (const file of manifests) {
+    let text;
+    try {
+      text = readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const m of text.matchAll(/path\s*=\s*"([^"]+)"/gu)) {
+      const target = norm(join(dirname(file), m[1]));
+      if (target.startsWith(norm(repo))) dirs.add(target);
+    }
+  }
+
+  for (const d of excluded) dirs.delete(d);
+  return dirs;
+}
+
 function targetRepos() {
   if (ROOT) return [ROOT.replace(/\\/g, '/')];
   const out = [];
@@ -142,6 +220,7 @@ for (const repo of repos) {
   // Member inheritance checks
   const members = [];
   walkManifests(repo, members);
+  const loadableMembers = loadableMemberDirs(repo, rootText);
   for (const file of members) {
     if (file === rootManifestPath) continue;
     let text;
@@ -154,6 +233,16 @@ for (const repo of repos) {
     if (!manifest.section('package')) continue; // not a package manifest
     const pkgName = manifest.value('package', 'name');
     if (!pkgName) continue;
+
+    // Generated SDK trees are build output; they are regenerated, never hand-
+    // edited, and Cargo does not load them as workspace members.
+    const fileDir = file.replace(/\\/gu, '/');
+    if (/\/generated\//u.test(fileDir)) continue;
+
+    // A manifest that declares its own [workspace] owns its own baseline, so it
+    // stays in scope even though the enclosing workspace does not load it.
+    const ownsWorkspace = Boolean(manifest.section('workspace'));
+    if (!ownsWorkspace && !loadableMembers.has(fileDir.slice(0, fileDir.length - '/Cargo.toml'.length))) continue;
 
     const pkgSection = manifest.section('package');
     const editionDeclared = manifest.value('package', 'edition');

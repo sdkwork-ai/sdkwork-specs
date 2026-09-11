@@ -578,7 +578,7 @@ Generated SDK transports participate in locale negotiation but do not own transl
 Rules:
 
 - Generated HTTP SDK clients `SHOULD` accept a bootstrap-level `localeProvider`, `i18nProvider`, or language-equivalent request option when the target language supports configurable transports.
-- SDK transports `SHOULD` serialize the effective locale through `Accept-Language`. They `MAY` send `X-SdkWork-Locale` only when the target runtime profile and `WEB_FRAMEWORK_SPEC.md` allow that header.
+- SDK transports `MUST` serialize the effective locale through the standard `Accept-Language` header, and `MUST NOT` send a custom SDKWork locale header (`I18N_SPEC.md` section 4). Client locale selection is expressed through `Accept-Language`; there is no profile-specific header exception.
 - SDK locale providers `MUST` be configured in application bootstrap or approved runtime wrappers. Feature packages, UI components, and business services `MUST NOT` assemble locale headers manually.
 - SDK examples `SHOULD` show locale provider wiring next to base URL, credential provider, and token manager construction.
 - App SDKs, backend SDKs, and SDKWork-owned business open/domain SDKs `SHOULD` follow the same locale propagation model. Vendor compatibility operations marked `x-sdkwork-wire-protocol: external` preserve upstream locale behavior.

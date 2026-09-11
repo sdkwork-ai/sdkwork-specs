@@ -43,12 +43,30 @@ function fail(message, details = []) {
 }
 
 function walk(dir, files = []) {
-  if (!fs.existsSync(dir)) return files;
-  for (const name of fs.readdirSync(dir)) {
-    if (IGNORE_DIRS.has(name)) continue;
-    const full = path.join(dir, name);
-    const stat = fs.statSync(full);
-    if (stat.isDirectory()) walk(full, files);
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return files;
+  }
+  for (const entry of entries) {
+    if (IGNORE_DIRS.has(entry.name)) continue;
+    // Stale renamed dependency trees (`node_modules.stale.<date>`) are dependency trees too.
+    if (entry.name.startsWith('node_modules')) continue;
+    const full = path.join(dir, entry.name);
+    // `statSync` follows symlinks, so a dangling link — or a directory removed by a concurrent
+    // build — threw ENOENT here and aborted the whole scan with an unhandled crash. Directory
+    // entries are already typed by `readdirSync`, so only links need a defensive stat, and an
+    // unreadable entry is skipped rather than fatal.
+    let isDirectory = entry.isDirectory();
+    if (!isDirectory && entry.isSymbolicLink()) {
+      try {
+        isDirectory = fs.statSync(full).isDirectory();
+      } catch {
+        continue;
+      }
+    }
+    if (isDirectory) walk(full, files);
     else files.push(full);
   }
   return files;

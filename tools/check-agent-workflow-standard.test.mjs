@@ -4,8 +4,12 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import os from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-const CHECKER = path.resolve('tools/check-agent-workflow-standard.mjs');
+// Resolve the checker relative to this test file, not the caller's cwd: the
+// suite must behave the same whether it is run from `sdkwork-specs/` or from
+// the workspace root via a `node --test sdkwork-specs/tools/...` invocation.
+const CHECKER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'check-agent-workflow-standard.mjs');
 
 function write(root, relativePath, text) {
   const filePath = path.join(root, relativePath);
@@ -194,7 +198,7 @@ function makeRepo(options = {}) {
 
 function runChecker(root) {
   return spawnSync(process.execPath, [CHECKER, '--root', root], {
-    cwd: path.resolve('.'),
+    cwd: path.dirname(CHECKER),
     encoding: 'utf8',
   });
 }

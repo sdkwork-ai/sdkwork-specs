@@ -141,6 +141,7 @@ Existing managed blocks include `SDKWORK-NAMING-STANDARD` (Rust naming and depen
 | Dart/Flutter code | `DART_CODE_SPEC.md`, plus `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md` and `APP_FLUTTER_UI_SPEC.md` when Flutter packages or app roots are touched |
 | Frontend/UI code | `COMPOSABLE_ARCHITECTURE_SPEC.md` when reusable package boundaries or SDK composition are touched, `FRONTEND_CODE_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, and exactly one detailed UI architecture spec |
 | API changes | `API_SPEC.md`, `PAGINATION_SPEC.md` when list/search pagination is touched, `WEB_FRAMEWORK_SPEC.md` when Rust HTTP runtime is touched, `WEB_BACKEND_SPEC.md`, `SDK_SPEC.md`, `TEST_SPEC.md` |
+| User-facing copy, locale negotiation, or i18n resources | `I18N_SPEC.md`, `FRONTEND_SPEC.md` for client copy, `WEB_FRAMEWORK_SPEC.md` for framework locale context, `SDK_SPEC.md` for SDK locale propagation, `API_SPEC.md` for problem-detail localization metadata, `TEST_SPEC.md` and `tools/check-i18n-standard.mjs` for layout, duplicate-key, missing-key, fallback, and retired-header validation |
 | Rust HTTP route crates / gateways / migration-only API servers | `COMPOSABLE_ARCHITECTURE_SPEC.md`, `API_SPEC.md`, `SUBJECT_ID_SPEC.md` when SQL subject scope is involved, `WEB_FRAMEWORK_SPEC.md`, `WEB_BACKEND_SPEC.md`, `RUST_CODE_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md` |
 | Database changes | `DATABASE_SPEC.md`, `SUBJECT_ID_SPEC.md` when tenant/user subject columns are involved, `PRIVACY_SPEC.md`, `TEST_SPEC.md` |
 | SDK generation/consumption | `COMPOSABLE_ARCHITECTURE_SPEC.md` when dependency SDKs, runtime surfaces, or component ports are touched, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `RPC_SDK_WORKSPACE_SPEC.md` when RPC SDKs are touched, `API_SPEC.md`, `TEST_SPEC.md` |
@@ -151,6 +152,13 @@ Existing managed blocks include `SDKWORK-NAMING-STANDARD` (Rust naming and depen
 | App identity/release | `APP_MANIFEST_SPEC.md`, `CONFIG_SPEC.md`, `DEPLOYMENT_SPEC.md` |
 | Source config, environment profiles, or deployable-root `etc/` | `SOURCE_CONFIG_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `DEPLOYMENT_SPEC.md`, `TEST_SPEC.md` |
 | Security/auth | `IAM_SPEC.md`, `SUBJECT_ID_SPEC.md` when principal ids or SQL subject mapping is involved, `IAM_LOGIN_INTEGRATION_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md` |
+
+Locale negotiation is standard-header only (`I18N_SPEC.md` §4): the request-side
+signal is the standard `Accept-Language` header, responses carry `Content-Language`
+and `Vary: Accept-Language`, and no SDKWork custom locale request header may be
+defined, sent, parsed, or added to a CORS request-header allow-list. On the wire,
+request headers carry credentials (`Authorization`, `Access-Token`) plus standard
+HTTP headers only; do not invent repository-local protocol headers.
 
 Language specs are on-demand. Do not require agents to load Rust, Java, TypeScript, and frontend specs for unrelated tasks.
 

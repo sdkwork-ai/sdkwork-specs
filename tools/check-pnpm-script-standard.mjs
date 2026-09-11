@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { execFile } from 'node:child_process';
 
 import { isApplicationCloudGatewayScript } from './lib/application-cloud-gateway.mjs';
 import { resolveRepositoryKind } from './lib/packages-layout-patterns.mjs';
@@ -34,6 +35,7 @@ const ALLOWED_FIRST_SEGMENTS = new Set([
   'test',
   'check',
   'verify',
+  'align',
   'clean',
   'typecheck',
   'lint',
@@ -246,6 +248,17 @@ const IGNORED_DIRS = new Set([
   '.mimocode',
   '.pnpm',
   '.vite',
+  // `.tmp/` is the workspace scratch convention (every repository's `.gitignore`
+  // covers it, usually as `.tmp*/` or `*.tmp`), and seven sibling spec tools
+  // already skip it. Local scratch here holds merge outputs and sandbox
+  // package.json copies, so auditing them reports a violation against a file no
+  // developer authored and no repository ships.
+  '.tmp',
+  // `website/` keeps its build output in dot-prefixed siblings of the same
+  // concept: scanning them duplicates every finding already reported against the
+  // authored source, and the generated copy cannot be fixed by hand.
+  '.dist',
+  '.generated',
   'external',
   'node_modules',
   'target',
@@ -256,6 +269,23 @@ const IGNORED_DIRS = new Set([
 ]);
 const IGNORED_DOCUMENT_PATH_PARTS = new Set([
   '.zcode',
+  '.agents/notes/archived',
+  // Completed work notes are dated records of what was done, exactly like the
+  // `archived` set: their command examples describe history, not the standard.
+  '.agents/notes/implemented',
+  // Proposal drafts describe what MAY become the standard, not the standard.
+  // The gate governs active documents (`PNPM_SCRIPT_SPEC.md` section 10 lists
+  // "active runbook examples"), so an unapproved proposal is out of scope.
+  '.agents/notes/proposed',
+  // Local per-machine AI workspace metadata (AGENTS.md local dictionary), never
+  // a shipped document.
+  '.sdkwork',
+  // The WorkBuddy-side equivalent of `.sdkwork`: git-ignored, never tracked, and
+  // holding agent memory logs plus scratch probes. Its prose names command
+  // placeholders ("follow `pnpm run <script>`"), which are not examples a reader
+  // can run; validating them produces findings nobody can act on, and an
+  // unactionable gate stops being read.
+  '.workbuddy',
   'artifacts',
   'docs/archive',
   'docs/release',
@@ -264,11 +294,26 @@ const IGNORED_DOCUMENT_PATH_PARTS = new Set([
   '.sdkwork/manual-backups',
 ]);
 
+/**
+ * Scratch directories carry the `.tmp` prefix in practice (`.tmp`, `.tmp-merge`)
+ * because that is how the fleet's `.gitignore` files spell it. Matching the
+ * prefix rather than a fixed name keeps the skip rule aligned with the ignore
+ * rule instead of drifting one rename behind it.
+ */
+function isIgnoredDirectoryName(name) {
+  return IGNORED_DIRS.has(name) || name.startsWith('.tmp-');
+}
+
 function usage() {
   return [
-    'Usage: node tools/check-pnpm-script-standard.mjs --root <repo> [--application-code-prefix a,b,c]',
+    'Usage: node tools/check-pnpm-script-standard.mjs --root <repo> [--json] [--application-code-prefix a,b,c]',
+    '       node tools/check-pnpm-script-standard.mjs --workspace <workspace-root> [--json] [--concurrency N] [--include-off-fleet]',
     '',
     'Validates SDKWork repository root package.json scripts against PNPM_SCRIPT_SPEC.md.',
+    '',
+    'The --workspace form is the fleet regression: it discovers every sdkwork-*',
+    'repository that owns a root package.json and audits each one through the same',
+    '--root code path, so the fleet verdict cannot drift from the per-repository one.',
   ].join('\n');
 }
 
@@ -341,12 +386,23 @@ function splitCsv(value) {
     .filter(Boolean);
 }
 
-function fail(message, details = []) {
-  console.error(`pnpm script standard failed: ${message}`);
-  for (const detail of details) {
-    console.error(`- ${detail}`);
+/**
+ * Terminal validation failure. Throwing instead of exiting keeps the
+ * single-repository and fleet code paths on one implementation: main() catches
+ * it to print and set the exit code, while the fleet runner catches it per
+ * repository and records the verdict. A shared flag or an early exit would let
+ * the two verdicts drift.
+ */
+class ScriptStandardFailure extends Error {
+  constructor(message, details = []) {
+    super(message);
+    this.name = 'ScriptStandardFailure';
+    this.details = details;
   }
-  process.exit(1);
+}
+
+function fail(message, details = []) {
+  throw new ScriptStandardFailure(message, details);
 }
 
 function isPackageJsonGenerated(packagePath) {
@@ -661,7 +717,10 @@ function pushProfileDevelopmentEntrypointIssues(scripts, issues) {
 function workflowReleaseProfiles(root) {
   const workflowPath = path.join(root, 'sdkwork.workflow.json');
   if (!fs.existsSync(workflowPath)) return new Set(['standalone', 'cloud']);
-  const workflow = readJson(workflowPath);
+  // Optional manifest: a malformed or empty file must degrade to lifecycle
+  // debt, never crash the audit (a single bad manifest used to take down the
+  // whole fleet run because this read threw).
+  const workflow = readJsonIfValid(workflowPath);
   if (!Array.isArray(workflow?.targets) || workflow.targets.length === 0) {
     return new Set(['standalone', 'cloud']);
   }
@@ -680,7 +739,7 @@ function supportedDeploymentProfiles(root) {
   const profiles = workflowReleaseProfiles(root);
   const appConfigPath = path.join(root, 'sdkwork.app.config.json');
   if (fs.existsSync(appConfigPath)) {
-    const appConfig = readJson(appConfigPath);
+    const appConfig = readJsonIfValid(appConfigPath);
     const declared = appConfig?.runtime?.supportedDeploymentProfiles;
     if (Array.isArray(declared) && declared.length > 0) {
       for (const profile of declared) {
@@ -891,7 +950,7 @@ function validatePackageLocalScripts(root) {
   function walk(dir) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (entry.isDirectory()) {
-        if (IGNORED_DIRS.has(entry.name)) continue;
+        if (isIgnoredDirectoryName(entry.name)) continue;
         walk(path.join(dir, entry.name));
         continue;
       }
@@ -949,7 +1008,7 @@ function collectDocumentationFiles(root) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const entryPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (IGNORED_DIRS.has(entry.name)) continue;
+        if (isIgnoredDirectoryName(entry.name)) continue;
         if (isIgnoredPathPart(entryPath, IGNORED_DOCUMENT_PATH_PARTS)) continue;
         walk(entryPath);
         continue;
@@ -987,6 +1046,24 @@ function extractPnpmCommandExamples(line) {
   return commands;
 }
 
+/**
+ * Authored prose constantly contains the word "pnpm" — "pnpm would then…",
+ * "pnpm cannot…", "pnpm keeps…". Treating those as command references produces
+ * findings nobody can act on, which is exactly how a gate stops being read.
+ *
+ * A command reference is only real in a code context: inside a fenced block, or
+ * inside an inline code span.
+ *
+ * Each context is evaluated on its own and contexts are never concatenated.
+ * Joining the inline spans of one line fabricates adjacency the document never
+ * expressed: `` `pnpm.cmd` … `pnpm.ps1` `` becomes the command "pnpm pnpm",
+ * `` `pnpm` and `cargo` verification `` becomes "pnpm cargo", and
+ * `` the root `pnpm` commands … `target/dev/x.sqlite` `` becomes "pnpm target".
+ */
+function inlineCodeSpans(line) {
+  return [...line.matchAll(/`([^`]+)`/gu)].map((m) => m[1]);
+}
+
 function validateDocumentationExamples(root, productPrefixes) {
   const docPaths = collectDocumentationFiles(root);
   const issues = [];
@@ -994,17 +1071,29 @@ function validateDocumentationExamples(root, productPrefixes) {
   for (const docPath of docPaths) {
     const text = fs.readFileSync(docPath, 'utf8');
     const lines = text.split(/\r?\n/);
+    let inFence = false;
     for (const [index, line] of lines.entries()) {
-      for (const { commandText, scriptName } of extractPnpmCommandExamples(line)) {
-        const prefix = `${path.relative(root, docPath)}:${index + 1}: pnpm `;
-        pushCommandNameIssues(
-          scriptName,
-          issues,
-          productPrefixes,
-          prefix,
-          'application-code-prefixed command examples are forbidden',
-        );
-        pushRetiredCommandExampleIssues(scriptName, commandText, issues, prefix);
+      if (/^\s*(?:```|~~~)/u.test(line)) {
+        inFence = !inFence;
+        continue;
+      }
+      // Candidate contexts are evaluated one at a time. A fenced line is code in
+      // full; outside a fence only a single inline code span is a code context.
+      // Concatenating the spans of one line invents commands that the document
+      // never contained.
+      const contexts = inFence ? [line] : inlineCodeSpans(line);
+      for (const context of contexts) {
+        for (const { commandText, scriptName } of extractPnpmCommandExamples(context)) {
+          const prefix = `${path.relative(root, docPath)}:${index + 1}: pnpm `;
+          pushCommandNameIssues(
+            scriptName,
+            issues,
+            productPrefixes,
+            prefix,
+            'application-code-prefixed command examples are forbidden',
+          );
+          pushRetiredCommandExampleIssues(scriptName, commandText, issues, prefix);
+        }
       }
     }
   }
@@ -1023,7 +1112,7 @@ function collectCommandJsonFiles(root) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const entryPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (IGNORED_DIRS.has(entry.name)) continue;
+        if (isIgnoredDirectoryName(entry.name)) continue;
         if (isIgnoredPathPart(entryPath, IGNORED_DOCUMENT_PATH_PARTS)) continue;
         walk(entryPath);
         continue;
@@ -1066,7 +1155,11 @@ function validateJsonCommandExamples(root, productPrefixes) {
   const issues = [];
 
   for (const jsonPath of jsonPaths) {
-    const manifest = readJson(jsonPath);
+    // Command-example scanning is advisory: these files are discovered by
+    // extension, so a malformed one (or a non-JSON payload living at a .json
+    // path) is skipped instead of aborting the audit.
+    const manifest = readJsonIfValid(jsonPath);
+    if (manifest === null) continue;
     for (const [pointer, text] of collectStringValues(manifest)) {
       for (const { commandText, scriptName } of extractPnpmCommandExamples(text)) {
         const prefix = `${path.relative(root, jsonPath)}: ${pointer}: pnpm `;
@@ -1096,7 +1189,7 @@ function collectRunnerScriptFiles(root) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const entryPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (IGNORED_DIRS.has(entry.name)) continue;
+        if (isIgnoredDirectoryName(entry.name)) continue;
         if (isIgnoredPathPart(entryPath, IGNORED_DOCUMENT_PATH_PARTS)) continue;
         walk(entryPath);
         continue;
@@ -1163,6 +1256,14 @@ function isRiskyRunnerScriptReference(scriptName, productPrefixes) {
 const RUNNER_SCRIPT_EXEMPTION_MARKER_PATTERN =
   /^\s*(?:\/\/|[*#]|<!--)*\s*@sdkwork-script-standard-exempt\s+([a-z0-9-]+)\s*$/iu;
 
+// A comment-only line cannot execute anything, so a pnpm or script-name
+// reference inside it is prose, not a command. The gate's own explanatory
+// comments are the first casualty of scanning them: a docstring that names the
+// false-positive words it exists to suppress would fail the gate it documents.
+// Only whole-line comments are skipped; a trailing comment stays in scope, which
+// keeps the rule conservative for real one-liners.
+const RUNNER_COMMENT_ONLY_LINE_PATTERN = /^\s*(?:\/\/|\/\*|\*|#|::|REM(?:\s|$))/iu;
+
 function getRunnerScriptExemption(text) {
   for (const line of text.split(/\r?\n/).slice(0, 20)) {
     const match = RUNNER_SCRIPT_EXEMPTION_MARKER_PATTERN.exec(line);
@@ -1179,11 +1280,15 @@ function validateRunnerScriptExamples(root, productPrefixes) {
     const text = fs.readFileSync(runnerPath, 'utf8');
     const exemption = getRunnerScriptExemption(text);
     if (exemption) {
-      console.log(`runner script standard exemption: ${path.relative(root, runnerPath)} (${exemption})`);
+      // Diagnostics belong on stderr: stdout carries the machine-readable
+      // report in --json mode, and a stray stdout line makes the fleet runner
+      // fail to parse the child report.
+      console.error(`runner script standard exemption: ${path.relative(root, runnerPath)} (${exemption})`);
       continue;
     }
     const lines = text.split(/\r?\n/);
     for (const [index, line] of lines.entries()) {
+      if (RUNNER_COMMENT_ONLY_LINE_PATTERN.test(line)) continue;
       const prefix = `${path.relative(root, runnerPath)}:${index + 1}: pnpm `;
       for (const { commandText, scriptName } of extractPnpmCommandExamples(line)) {
         pushCommandNameIssues(
@@ -1224,35 +1329,211 @@ function validateRunnerScriptExamples(root, productPrefixes) {
   return runnerPaths.length;
 }
 
-const parsed = parseArgs({
-  options: {
-    root: { type: 'string' },
-    'application-code-prefix': { type: 'string', multiple: true },
-    'product-prefix': { type: 'string', multiple: true },
-    help: { type: 'boolean', short: 'h' },
-  },
-  allowPositionals: false,
-});
+/**
+ * Runs every validator for one repository and returns a report instead of
+ * exiting on the first failure. The scope label is preserved so a fleet report
+ * points at the same five scopes the single-repository path names.
+ */
+function auditRoot(root, applicationCodePrefixes) {
+  const issues = [];
+  let packagePath = path.join(root, 'package.json');
+  let scriptCount = 0;
+  let packageCount = 0;
+  let docCount = 0;
+  let jsonCount = 0;
+  let runnerCount = 0;
 
-if (parsed.values.help) {
-  console.log(usage());
-  process.exit(0);
+  const scopes = [
+    ['root-scripts', () => {
+      const result = validateRootScripts(root, applicationCodePrefixes);
+      packagePath = result.packagePath;
+      scriptCount = result.scriptCount;
+    }],
+    ['package-local-scripts', () => { packageCount = validatePackageLocalScripts(root); }],
+    ['documentation-examples', () => { docCount = validateDocumentationExamples(root, applicationCodePrefixes); }],
+    ['command-json-examples', () => { jsonCount = validateJsonCommandExamples(root, applicationCodePrefixes); }],
+    ['runner-script-examples', () => { runnerCount = validateRunnerScriptExamples(root, applicationCodePrefixes); }],
+  ];
+
+  for (const [scope, run] of scopes) {
+    try {
+      run();
+    } catch (error) {
+      if (!(error instanceof ScriptStandardFailure)) throw error;
+      issues.push({ scope, message: error.message, details: error.details });
+    }
+  }
+
+  return {
+    repository: path.basename(root),
+    root,
+    packagePath,
+    ok: issues.length === 0,
+    scriptCount,
+    packageCount,
+    docCount,
+    jsonCount,
+    runnerCount,
+    issues,
+  };
 }
 
-const root = path.resolve(parsed.values.root || process.cwd());
-const applicationCodePrefixes = [
-  ...(parsed.values['application-code-prefix']
-    ? parsed.values['application-code-prefix'].flatMap(splitCsv)
-    : []),
-  ...(parsed.values['product-prefix'] ? parsed.values['product-prefix'].flatMap(splitCsv) : []),
-];
+function printReport(report) {
+  console.error(`pnpm script standard failed: ${report.issues.length} scope(s) not compliant in ${report.repository}`);
+  for (const issue of report.issues) {
+    console.error(`pnpm script standard failed [${issue.scope}]: ${issue.message}`);
+    for (const detail of issue.details) console.error(`- ${detail}`);
+  }
+}
 
-const rootResult = validateRootScripts(root, applicationCodePrefixes);
-const packageCount = validatePackageLocalScripts(root);
-const docCount = validateDocumentationExamples(root, applicationCodePrefixes);
-const jsonCount = validateJsonCommandExamples(root, applicationCodePrefixes);
-const runnerCount = validateRunnerScriptExamples(root, applicationCodePrefixes);
+/**
+ * Fleet regression. Children reuse the --root code path, so the workspace
+ * verdict cannot drift from the per-repository one. The worker pool exists for
+ * the same reason as in check-module-bin.mjs: on a Windows/MSYS workspace node
+ * startup dominates, and ~87 sequential spawns exceed a typical tool timeout
+ * while 8-way parallel finishes in seconds.
+ */
+async function runWorkspace(wsRoot, limit, json, offFleet, applicationCodePrefixes) {
+  if (!fs.existsSync(wsRoot)) {
+    console.error(`workspace does not exist: ${wsRoot}`);
+    return 2;
+  }
 
-console.log(
-  `pnpm script standard ok: ${path.relative(process.cwd(), rootResult.packagePath) || rootResult.packagePath} (${rootResult.scriptCount} root scripts, ${packageCount} package manifests scanned, ${docCount} docs scanned, ${jsonCount} command json files scanned, ${runnerCount} runner scripts scanned)`,
-);
+  const repositories = [];
+  const offFleetRepositories = [];
+  const skippedNoPackage = [];
+  for (const entry of fs.readdirSync(wsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+    const dir = path.join(wsRoot, entry.name);
+    if (!fs.existsSync(path.join(dir, 'package.json'))) { skippedNoPackage.push(entry.name); continue; }
+    if (entry.name.startsWith('sdkwork-')) repositories.push(dir);
+    else { offFleetRepositories.push(entry.name); if (offFleet) repositories.push(dir); }
+  }
+  repositories.sort();
+
+  const reports = new Array(repositories.length);
+  let cursor = 0;
+  async function worker() {
+    for (;;) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= repositories.length) return;
+      reports[index] = await auditOne(repositories[index], applicationCodePrefixes);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, repositories.length) }, worker));
+
+  const failed = reports.filter((report) => !report.ok);
+
+  if (json) {
+    console.log(JSON.stringify({
+      workspace: wsRoot,
+      repositories: reports.length,
+      passed: reports.length - failed.length,
+      failed: failed.length,
+      skippedNoRootPackageJson: skippedNoPackage.sort(),
+      offFleet: offFleetRepositories.sort(),
+      reports,
+    }, null, 2));
+    return failed.length > 0 ? 1 : 0;
+  }
+
+  console.log(`\n[pnpm-script-standard] workspace ${wsRoot}`);
+  console.log(`  repositories: ${reports.length}   passed: ${reports.length - failed.length}   failed: ${failed.length}`);
+  if (skippedNoPackage.length > 0) {
+    console.log(`  skipped (no root package.json): ${skippedNoPackage.sort().join(', ')}`);
+  }
+  if (offFleetRepositories.length > 0) {
+    console.log(`  skipped (outside the sdkwork-* fleet convention, not audited${offFleet ? ' — audited via --include-off-fleet' : ''}): ${offFleetRepositories.sort().join(', ')}`);
+  }
+  for (const report of failed) {
+    console.log(`  FAIL  ${report.repository}`);
+    for (const issue of report.issues) {
+      console.log(`          - [${issue.scope}] ${issue.message}`);
+      issue.details.forEach((detail) => console.log(`            - ${detail}`));
+    }
+  }
+  if (failed.length === 0) console.log('  every repository satisfies the pnpm script standard');
+  return failed.length > 0 ? 1 : 0;
+}
+
+function auditOne(repositoryRoot, applicationCodePrefixes) {
+  return new Promise((resolve) => {
+    const args = [fileURLToPath(import.meta.url), '--root', repositoryRoot, '--json'];
+    for (const prefix of applicationCodePrefixes) args.push('--application-code-prefix', prefix);
+    execFile(process.execPath, args, { maxBuffer: 32 * 1024 * 1024 }, (error, stdout) => {
+      try {
+        resolve(JSON.parse(stdout));
+      } catch {
+        // A child that cannot even emit a report is itself a failure — never
+        // a silent pass.
+        resolve({
+          repository: path.basename(repositoryRoot),
+          root: repositoryRoot,
+          ok: false,
+          issues: [{
+            scope: 'audit-harness',
+            message: error ? String(error.message) : 'no parseable report',
+            details: [],
+          }],
+        });
+      }
+    });
+  });
+}
+
+async function main() {
+  const parsed = parseArgs({
+    options: {
+      root: { type: 'string' },
+      workspace: { type: 'string' },
+      json: { type: 'boolean', default: false },
+      concurrency: { type: 'string' },
+      'include-off-fleet': { type: 'boolean', default: false },
+      'application-code-prefix': { type: 'string', multiple: true },
+      'product-prefix': { type: 'string', multiple: true },
+      help: { type: 'boolean', short: 'h' },
+    },
+    allowPositionals: false,
+  });
+
+  if (parsed.values.help) {
+    console.log(usage());
+    return 0;
+  }
+
+  const applicationCodePrefixes = [
+    ...(parsed.values['application-code-prefix']
+      ? parsed.values['application-code-prefix'].flatMap(splitCsv)
+      : []),
+    ...(parsed.values['product-prefix'] ? parsed.values['product-prefix'].flatMap(splitCsv) : []),
+  ];
+
+  if (parsed.values.workspace) {
+    const limit = Math.max(1, Number(parsed.values.concurrency) || 8);
+    return runWorkspace(
+      path.resolve(parsed.values.workspace),
+      limit,
+      parsed.values.json,
+      parsed.values['include-off-fleet'],
+      applicationCodePrefixes,
+    );
+  }
+
+  const root = path.resolve(parsed.values.root || process.cwd());
+  const report = auditRoot(root, applicationCodePrefixes);
+
+  if (parsed.values.json) {
+    console.log(JSON.stringify(report, null, 2));
+  } else if (!report.ok) {
+    printReport(report);
+  } else {
+    const relativePackage = path.relative(process.cwd(), report.packagePath) || report.packagePath;
+    console.log(
+      `pnpm script standard ok: ${relativePackage} (${report.scriptCount} root scripts, ${report.packageCount} package manifests scanned, ${report.docCount} docs scanned, ${report.jsonCount} command json files scanned, ${report.runnerCount} runner scripts scanned)`,
+    );
+  }
+  return report.ok ? 0 : 1;
+}
+
+process.exitCode = await main();

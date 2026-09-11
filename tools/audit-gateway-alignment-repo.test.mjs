@@ -3,12 +3,13 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import { auditGatewayAlignmentRepo } from './audit-gateway-alignment-repo.mjs';
 import { bootstrapApiAssemblyRepo } from './bootstrap-api-assembly-repo.mjs';
 
-const CHECKER = path.resolve('tools/audit-gateway-alignment-repo.mjs');
+const CHECKER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'audit-gateway-alignment-repo.mjs');
 
 function emptyApplication(t) {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-gateway-audit-'));

@@ -3,10 +3,11 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-const ALIGNER = path.resolve('tools/align-app-topology-deployment-profiles.mjs');
-const TOPOLOGY_VALIDATOR = path.resolve('tools/check-topology-deployment-profiles.mjs');
+const ALIGNER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'align-app-topology-deployment-profiles.mjs');
+const TOPOLOGY_VALIDATOR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'check-topology-deployment-profiles.mjs');
 
 function makeWorkspace({ supportedDeploymentProfiles = ['standalone', 'cloud'] } = {}) {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-align-topology-'));

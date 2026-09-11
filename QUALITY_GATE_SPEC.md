@@ -1,7 +1,7 @@
 # Quality Gate Standard
 
-- Version: 1.0
-- Scope: definition of ready, definition of done, merge gates, release gates, evidence bundles, exceptions
+- Version: 1.1
+- Scope: definition of ready, definition of done, merge gates, release gates, gate wiring, evidence bundles, exceptions
 - Related: `REQUIREMENTS_SPEC.md`, `ARCHITECTURE_DECISION_SPEC.md`, `ENGINEERING_WORKFLOW_SPEC.md`, `CODE_REVIEW_SPEC.md`, `RELEASE_SPEC.md`, `MIGRATION_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `COMPOSABLE_ARCHITECTURE_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `APP_PERMISSION_COMPOSITION_SPEC.md`, `API_SPEC.md`, `RPC_SPEC.md`, `RPC_SDK_WORKSPACE_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `PERFORMANCE_SPEC.md`, `OBSERVABILITY_SPEC.md`, `TEST_SPEC.md`, `GOVERNANCE_SPEC.md`
 
 This standard defines when SDKWork work is allowed to start, merge, and release.
@@ -22,6 +22,18 @@ Rules:
 - Passing tests alone is not enough when requirements, architecture, migration, release, security, or documentation evidence is missing.
 - A gate must name evidence, not confidence.
 - Gate exceptions follow `GOVERNANCE_SPEC.md`.
+
+### 1.1 Gate Wiring Contract
+
+A gate that no one executes is not a control; it is prose. Every spec that requires a verification step `MUST` name the entry point that executes it.
+
+- **Reachability.** A gate `MUST` be reachable from the workspace gate registry — a `check:*` or `test:*` script in the `@sdkwork/workspace-root` `package.json` — or explicitly registered in `sdkwork-specs/gates.manifest.json` with a recorded baseline. A gate that is reachable from neither is unenforced and `MUST` be reported as such rather than assumed to hold.
+- **Fail closed.** A gate pointed at a nonexistent, misspelled, or empty root `MUST` exit non-zero. Reporting success after examining zero files is prohibited: it occupies a contract slot while checking nothing, which is worse than being unwired because it manufactures confidence. A gate `MUST` state how many units it examined so vacuous passes are visible.
+- **No hardcoded targets.** A gate that asserts one fixed repository `MUST` declare itself as such (registry scope `fixed`) and `MUST NOT` be described as workspace-wide or fleet coverage.
+- **Measurement.** `check:all` joins gates with `&&` and therefore stops at the first failure: it records the contract but cannot answer how many gates are red. Regression measurement `MUST` use `pnpm run check:matrix`, which runs every gate in its own process, reports per-gate exit codes and item counts, and compares guardrail gates against their recorded baseline in `sdkwork-specs/gates.manifest.json`. A baseline `MUST` be produced by the counter the matrix itself compares against, never by hand or by re-implementing the count in a second tool: `node tools/measure-gate-items.mjs <tool-file> [args...]` refreshes one gate's number without paying for the whole tier. A gate that crashed `MUST NOT` be recorded as a baseline — a stack trace is not a debt count.
+- **Debt may only shrink.** A guardrail baseline is a debt ceiling. Lowering it is expected whenever debt is paid down; raising it requires an explicit recorded decision.
+
+Gap found 2026-09-11: of 79 fleet gates, 20 were wired in no repository and no root script — including the pattern audit that `DESTRUCTIVE_OPERATION_SPEC.md` section 9 already mandated, whose first fleet run immediately reported three violations that had been present unobserved (a `find ... -exec rm -rf`, a `find -delete`, and a wildcard `rm`). Two of the twenty additionally ignored every root argument and asserted a hardcoded target, so they could never have provided fleet coverage; three were fail-open and reported success after examining nothing. The gates that *are* wired — including the `check-i18n-standard` rule enforcing the retired `X-SdkWork-Locale` header in favour of `Accept-Language` — were confirmed green and are the reason that retirement has held. Evidence: `sdkwork-cloudrouter/docs/audit/WORKSPACE-ALIGNMENT-REGRESSION-2026-09-11.md` section 5.
 
 ## 2. Definition Of Ready
 

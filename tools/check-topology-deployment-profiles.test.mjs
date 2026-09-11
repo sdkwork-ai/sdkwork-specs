@@ -3,9 +3,10 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-const CHECKER = path.resolve('tools/check-topology-deployment-profiles.mjs');
+const CHECKER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'check-topology-deployment-profiles.mjs');
 
 function makeWorkspace(repoName, topology, files = {}) {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-topology-profiles-'));

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -15,6 +16,15 @@ const { values } = parseArgs({
 });
 
 const workspace = path.resolve(values.workspace);
+
+// Fail closed. Walking a path that does not exist yields zero violations, so without this
+// guard a misspelled or nonexistent root produced "check passed" with exit 0 — the gate
+// reported success while examining nothing.
+if (!fs.existsSync(workspace) || !fs.statSync(workspace).isDirectory()) {
+  console.error(`provider Session identity terminology check cannot run: not a directory: ${workspace}`);
+  process.exit(2);
+}
+
 const violations = collectLegacyProviderSessionIdentity(workspace);
 if (violations.length === 0) {
   console.log('provider Session identity terminology check passed');
