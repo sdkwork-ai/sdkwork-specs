@@ -35,6 +35,20 @@ const SEMVER_PATTERN = new RegExp(
 );
 const FORBIDDEN_APPLICATION_PROVISIONING_SQL = /\b(?:CREATE|DROP|ALTER)\s+(?:DATABASE|SCHEMA)\b/iu;
 
+/**
+ * DATABASE_FRAMEWORK_SPEC.md section 12: every standard `db:*` command MUST operate on the
+ * application root that declares it. A directory change, workspace filter, or `--app-root`
+ * pointing outside the repository runs the command against another module's database root,
+ * which validates/migrates/seeds the wrong schema while still exiting successfully and leaves
+ * the declaring root ungated. Cross-repository aliases named for another module (for example
+ * `db:migrate:iam`) are permitted but MUST NOT occupy a standard `db:*` command name.
+ */
+function escapesRepositoryRoot(command) {
+  return /--dir\s+\.\.[\\/]/u.test(command)
+    || /--app-root\s+\.\.[\\/]/u.test(command)
+    || /(?:^|[;&|]\s*)cd\s+\.\.[\\/]/u.test(command);
+}
+
 function parseArgs(argv) {
   const args = { root: process.cwd(), layout: 'application' };
   for (let index = 0; index < argv.length; index += 1) {
@@ -873,6 +887,14 @@ export function validateDatabaseFramework(rootDir) {
         if (!scripts[scriptName]) {
           failures.push(`package.json scripts must define ${scriptName} for authoritative-server modules`);
         }
+      }
+    }
+    for (const scriptName of [...REQUIRED_DB_SCRIPTS, ...AUTHORITATIVE_DB_SCRIPTS]) {
+      const command = scripts[scriptName];
+      if (typeof command === 'string' && escapesRepositoryRoot(command)) {
+        failures.push(
+          `package.json ${scriptName} must operate on this application root and must not delegate to another repository (section 12): ${command}`,
+        );
       }
     }
   }

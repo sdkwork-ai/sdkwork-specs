@@ -811,4 +811,58 @@ assert.ok(
   'authoritative-server manifests must declare lifecycle.activeSeedLocales',
 );
 
+// ---------------------------------------------------------------------------
+// DATABASE_FRAMEWORK_SPEC.md section 12: a standard `db:*` command must operate on the
+// application root that declares it. sdkwork-appbase delegated its entire canonical lifecycle
+// to `../sdkwork-iam`, so `pnpm db:migrate` in appbase migrated IAM's schema and appbase's own
+// root was never validated, migrated, or seeded.
+// ---------------------------------------------------------------------------
+function rootWithScript(scriptName, command) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-db-framework-'));
+  scaffoldValidDatabaseRoot(root);
+  const packageJsonPath = path.join(root, 'package.json');
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  packageJson.scripts[scriptName] = command;
+  writeJson('package.json', packageJson, root);
+  return root;
+}
+
+const delegatedDirRoot = rootWithScript('db:migrate', 'pnpm --dir ../sdkwork-iam run db:migrate');
+const delegatedDir = validateDatabaseFramework(delegatedDirRoot);
+assert.ok(
+  delegatedDir.failures.some((item) => item.includes('db:migrate must operate on this application root')),
+  'a standard db:* command delegating through --dir ../ must be rejected',
+);
+
+const delegatedAppRootFlagRoot = rootWithScript('db:bootstrap', 'node tool.mjs --app-root ../sdkwork-iam bootstrap');
+const delegatedAppRootFlag = validateDatabaseFramework(delegatedAppRootFlagRoot);
+assert.ok(
+  delegatedAppRootFlag.failures.some((item) => item.includes('db:bootstrap must operate on this application root')),
+  'a standard db:* command delegating through --app-root ../ must be rejected',
+);
+
+const delegatedCdRoot = rootWithScript('db:seed', 'cd ../sdkwork-iam && pnpm run db:seed');
+const delegatedCd = validateDatabaseFramework(delegatedCdRoot);
+assert.ok(
+  delegatedCd.failures.some((item) => item.includes('db:seed must operate on this application root')),
+  'a standard db:* command delegating through cd ../ must be rejected',
+);
+
+// An alias named for the other module is permitted: it does not occupy a standard command name.
+const namedAliasRoot = rootWithScript('db:migrate:iam', 'pnpm --dir ../sdkwork-iam run db:migrate');
+const namedAlias = validateDatabaseFramework(namedAliasRoot);
+assert.equal(
+  namedAlias.ok,
+  true,
+  'a module-named cross-repository alias must not be reported as a delegation defect',
+);
+
+// Local root references stay valid: `--app-root .` and repository-relative tool paths.
+const localRootRefRoot = rootWithScript(
+  'db:plan',
+  'node ../sdkwork-specs/tools/postgres/postgres-db-cli.mjs --mode plan --app-root . --dry-run',
+);
+const localRootRef = validateDatabaseFramework(localRootRefRoot);
+assert.equal(localRootRef.ok, true, 'a command using --app-root . must remain valid');
+
 process.stdout.write('check-database-framework-standard.test.mjs passed\n');
