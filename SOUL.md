@@ -1,8 +1,8 @@
 # SDKWork Agent Soul
 
-- Version: 1.4
+- Version: 1.5
 - Scope: shared execution principles for SDKWork agents, automation, human-assisted AI workflows, and repository-local `AGENTS.md` files
-- Related: `AGENTS_SPEC.md`, `COMPONENT_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `ENGINEERING_WORKFLOW_SPEC.md`, `GOVERNANCE_SPEC.md`, `TEST_SPEC.md`, `CODE_STYLE_SPEC.md`, `DESTRUCTIVE_OPERATION_SPEC.md` (load each only when the task makes it applicable)
+- Related: `AGENTS_SPEC.md`, `COMPONENT_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `ENGINEERING_WORKFLOW_SPEC.md`, `GOVERNANCE_SPEC.md`, `TEST_SPEC.md`, `CODE_STYLE_SPEC.md`, `DESTRUCTIVE_OPERATION_SPEC.md`, `ROLLBACK_RESTRICTION_SPEC.md` (load each only when the task makes it applicable)
 
 This file defines the operating soul for SDKWork agents. It is not a style guide and it is not a prompt library. It is the minimum behavior contract that keeps long-running AI work precise, recoverable, and governed by SDKWork standards.
 
@@ -24,6 +24,7 @@ Rules:
 - Generated code is not hand-edited. Fix the source contract, generator input, or approved facade, then regenerate.
 - No pattern-driven deletion. Delete by explicitly enumerated path, never by wildcard, glob, brace expansion, recursive walk, or unbounded expansion. `git rm -r`, `git rm` over a directory or pattern, and `git clean -f*` are forbidden. Wildcards are for read-only commands only. A destructive command is never combined in one shell invocation with a build, install, or publish step, and is never batched beyond the limits in `DESTRUCTIVE_OPERATION_SPEC.md`.
 - Human review owns irreversible direction. Agents can execute, but humans approve unclear product direction, breaking standards changes, security exceptions, migrations, and destructive operations.
+- Fix forward, never rewind. A `git reset`, `git checkout -f`, `git switch -f`, `git restore` toward an earlier state, reflex `git revert`, stash discard, ref deletion, `git rebase`, `git commit --amend` on pushed history, or force push is never the remedy for a defect. Repair by adding, editing, or restoring content in a new commit. Discarding work requires a separate, explicit human instruction that names the operation, the target ref, and the discarded span, and the authorization is recorded in the commit message (authority: `ROLLBACK_RESTRICTION_SPEC.md`).
 
 ## 2. Spec System Hierarchy
 
@@ -110,6 +111,20 @@ Rules:
 
 Task matrix authority: `DESTRUCTIVE_OPERATION_SPEC.md`, `README.md` destructive-operation row, `AGENTS_SPEC.md` destructive-operation row, `CODE_STYLE_SPEC.md` §8.
 
+### 5.1 Rollback Restriction Gate
+
+When a task responds to a defect — a build failure, a type error, a lint failure, a failing test, a merge conflict, a regression, a bad refactor, or an unclear diff — or when it must restore content lost to an earlier revert, load `ROLLBACK_RESTRICTION_SPEC.md` before touching version-control state. This is a task trigger, not a startup requirement.
+
+Rules:
+
+- Errors are fixed forward. A rollback `MUST NOT` be the remedy for a defect; the repair is a new commit that adds, edits, or restores content, and every prior revision stays reachable.
+- `git reset --hard`, `git reset --merge`/`--keep`, `git reset <ref>` that discards staged or working-tree content, `git checkout -f`, `git switch -f`, `git restore --source=<ref> --worktree .`, reflex `git revert`, `git stash drop`/`clear`, `git branch -D` on unmerged work, `git update-ref -d`, direct `.git/refs/` edits, `git reflog expire`, `git gc --prune=now`, `git prune`, `git commit --amend` on pushed history, `git rebase`, `git filter-branch`, and `git push --force`/`--force-with-lease`/`--delete` are forbidden.
+- A rollback `MUST NOT` be inferred from context or tone. "Fix it", "it's broken", "this is a mess", "start over", "just revert it", and "退回" are not authorizations. Stop and ask, including whether the instruction means to *discard* work or to *restore lost* work — that distinction decides which operation is permissible.
+- Recovery is additive: `git restore --worktree --source=<ref> -- <exact paths>` or `git checkout <good-ref> --pathspec-from-file=<repo-relative-list>`. The pathspec `MUST` be an explicit enumerated list, never a directory, glob, brace expansion, or the repository root.
+- Before a bulk restore: commit a checkpoint; create and verify a backup branch, a backup tag, and a patch file; and produce the written three-snapshot blob comparison that separates replaced files from files the damaged revision legitimately authored. Restore the relative complement, not the whole tree, and keep what the damaged revision added. Never treat a local tracking ref as evidence about a remote — confirm with `git ls-remote`.
+
+Task matrix authority: `ROLLBACK_RESTRICTION_SPEC.md`, `README.md` rollback-restriction row, `AGENTS_SPEC.md` rollback-restriction row, `CODE_STYLE_SPEC.md` §8.
+
 ## 6. On-Demand Language Loading
 
 After the task is classified, language-specific specs are loaded only when it touches that language or framework:
@@ -134,6 +149,9 @@ Agents must stop rather than continue when:
 - A requested change conflicts with global specs and no governance exception exists.
 - The task requires a deletion whose targets cannot be enumerated as exact paths, or whose command would use `git rm -r`, `git rm` over a directory or pattern, `git clean -f*`, or a wildcard in a mutating argument position.
 - The task requires deleting git-tracked paths, a directory tree, or a path that resolves outside the active repository root without explicit human confirmation.
+- The task would fix a defect by moving version-control state — a `git reset`, `git checkout -f`, `git switch -f`, `git restore` toward an earlier state, a reflex `git revert`, a stash discard, a ref deletion, a `git rebase`, or a force push — and no explicit human instruction names the operation, the target ref, and the span to be discarded.
+- A request to "fix", "clean up", "undo", "go back", or "restore the old version" could mean discarding the current work or restoring lost work, and the requester has not disambiguated which.
+- A pre-existing gate failure would be claimed without evidence from the prior revision, or a repair is about to be landed with `--force`, `--no-verify`, or `--no-gpg-sign` instead of by fixing the cause.
 
 ## 8. Long-Running Stability
 

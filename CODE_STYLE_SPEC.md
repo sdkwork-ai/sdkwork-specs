@@ -1,8 +1,8 @@
 # Code Style Standard
 
-- Version: 1.2
+- Version: 1.3
 - Scope: cross-language code organization, module boundaries, public exports, generated code handling, errors, testing, build source integrity, destructive operation safety, and review expectations
-- Related: `SOUL.md`, `AGENTS_SPEC.md`, `NAMING_SPEC.md`, `DESTRUCTIVE_OPERATION_SPEC.md` (normative owner of deletion rules), `RUST_CODE_SPEC.md`, `JAVA_CODE_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`, `FRONTEND_CODE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `TEST_SPEC.md`
+- Related: `SOUL.md`, `AGENTS_SPEC.md`, `NAMING_SPEC.md`, `DESTRUCTIVE_OPERATION_SPEC.md` (normative owner of deletion rules), `ROLLBACK_RESTRICTION_SPEC.md` (normative owner of rollback and fix-forward rules), `RUST_CODE_SPEC.md`, `JAVA_CODE_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`, `FRONTEND_CODE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines SDKWork rules that apply to all authored code. Language-specific standards are loaded only when that language is touched.
 
@@ -18,6 +18,7 @@ Rules:
 - Runtime config, credentials, tokens, tenant, organization, user, request id, and trace context must flow through approved config or request-context boundaries.
 - Avoid broad refactors unless they are required to make the touched behavior correct and maintainable.
 - Delete by explicit enumerated path only. A wildcard, glob, brace expansion, recursive walk, or unbounded expansion in a mutating argument position is forbidden; see `DESTRUCTIVE_OPERATION_SPEC.md`.
+- Fix defects forward. Never move version-control state — `git reset`, `git checkout -f`, `git switch -f`, `git restore` toward an earlier state, reflex `git revert`, stash discard, ref deletion, `git rebase`, `git commit --amend` on pushed history, or a force push — to make a build failure, type error, lint failure, test failure, merge conflict, regression, or bad refactor disappear. Recovery is additive and takes an explicit enumerated pathspec; see `ROLLBACK_RESTRICTION_SPEC.md`.
 - New public names follow `NAMING_SPEC.md`.
 
 ## 2. Source Layout Principles
@@ -148,6 +149,19 @@ Rules:
 - A deletion `MUST NOT` be composed in one shell invocation with a build, install, network, or publish step.
 - Cleanup tooling `MUST` satisfy section 7 of this standard in addition to section 1–6 of `DESTRUCTIVE_OPERATION_SPEC.md`.
 
+### 8.1 Rollback Restriction And Fix-Forward
+
+`ROLLBACK_RESTRICTION_SPEC.md` is the normative owner of rollback, restore, and fix-forward rules. This subsection records only the code-organization and tooling consequences that belong to this standard.
+
+Rules:
+
+- A build runner, dev runner, self-healing script, or `bin/` script `MUST NOT` resolve a failure by discarding working-tree state. Resetting to an earlier revision, forcing a checkout, dropping a stash, or deleting a branch or tag is not a repair path.
+- Where a runner self-heals missing git-tracked source files, it `MUST` recover content additively from a named revision (`git checkout HEAD -- <exact path>`, `git restore --worktree --source=<ref> -- <exact path>`) and `MUST NOT` use a directory, glob, or repository-root pathspec.
+- Tooling that restores content `MUST` resolve every path inside the module or repository root, `MUST` fail closed when a path escapes, and `MUST` never combine the restore with a build, install, network, publish, or commit step in one shell invocation.
+- Tooling `MUST NOT` emit `git reset --hard`, `git checkout -f`, `git switch -f`, `git restore --source=<ref> --worktree .`, `git stash drop`/`clear`, `git branch -D`, `git update-ref -d`, `git reflog expire`, `git gc --prune=now`, `git commit --amend` on pushed history, `git rebase`, `git filter-branch`, or a force push, in a script, hook, workflow step, or agent-issued command.
+- Tooling `MUST NOT` write restore or path-list scratch files outside the repository; see section 7 of this standard for build-source integrity and `DESTRUCTIVE_OPERATION_SPEC.md` section 6 for the Windows `/tmp` path-space rule.
+- A script that removes build output `MUST` remove it through the owning tool's exact-path contract, and `MUST NOT` respond to a stale or broken build by reverting the source that produced it.
+
 ## 9. Acceptance Checklist
 
 - [ ] Code follows `NAMING_SPEC.md`.
@@ -163,3 +177,6 @@ Rules:
 - [ ] No deletion used a wildcard, glob, brace expansion, recursive walk, or unbounded expansion.
 - [ ] No `git rm -r`, `git rm` over a directory or pattern, or `git clean -f*` was used.
 - [ ] Deleted paths were enumerated exactly, stayed inside the module root, and were reported.
+- [ ] No defect was addressed by moving version-control state; no `git reset`, `git checkout -f`, `git switch -f`, `git restore` toward an earlier state, reflex `git revert`, stash discard, ref deletion, `git rebase`, `git commit --amend` on pushed history, or force push was used.
+- [ ] Any restore of lost content was additive, used an explicit enumerated pathspec, and stayed inside the module or repository root.
+- [ ] Any claim that a failing gate is pre-existing is backed by evidence from the prior revision.
