@@ -1348,6 +1348,28 @@ Rules:
   contract is backward compatible. Each routed environment's PC/H5 assets
   therefore resolve from that environment's dist tree when it is built and
   synced (build-serve coherence, `ENVIRONMENT_SPEC.md` §5.1.0.2).
+- The environment-scoped plan `MUST` be derived from the declared root alone —
+  insert `<alias>/` before the root's final `<surface>` segment. The
+  `<module>` segment `MUST NOT` be interpreted or reconstructed: it is the
+  module's Adaptive Web **runtime code** (e.g. `im`), which is not the
+  repository directory id (e.g. `sdkwork-im`), so any implementation that
+  rebuilds the prefix from the directory id fails to match, skips the rewrite
+  silently, and serves one environment's bundle under every domain without
+  producing a single diagnostic. The only shape requirement is that the
+  declared root names an Adaptive Web package root (`…/web/<pc|h5>`); every
+  other static root is left unchanged. The entrypoint
+  (`module_env_web_static_root`) and the data plane
+  (`module_imports.rs::environment_scoped_adaptive_root`) `MUST` implement the
+  same segment-agnostic plan.
+- Import discovery `MUST` only commission **governed** repository directories
+  (`sdkwork-*` carrying `AGENTS.md`). The module checkout root is a shared,
+  long-lived path that also accumulates leftovers from earlier deploy layouts,
+  and such a directory can carry a `deployments/webserver/server.common.toml`
+  without being a commissioned repo. Importing one injects whatever it happens
+  to declare — including a stale cross-environment dispatch edge that
+  re-declares the whole fleet matrix — which fails merged-config validation on
+  duplicate `server_name` ownership and crash-loops the data plane. A directory
+  without `AGENTS.md` is skipped and logged, never imported.
 - Each imported sidecar `MUST` keep a distinct import id — the module id
   qualified by profile and environment (`<module>-<profile>-<environment>` for
   `nginx.<profile>.<environment>.conf`). The aggregator emits one `include` per

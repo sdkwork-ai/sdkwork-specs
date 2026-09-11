@@ -102,6 +102,26 @@ function writeAssemblyScripts(root, commands = {}) {
 }
 
 describe('check-pnpm-script-standard', () => {
+  it('keeps the allowed first-segment list identical to PNPM_SCRIPT_SPEC.md', async () => {
+    const { ALLOWED_FIRST_SEGMENTS } = await import('./check-pnpm-script-standard.mjs');
+    const spec = readFileSync(
+      path.resolve(path.dirname(CHECKER), '..', 'PNPM_SCRIPT_SPEC.md'),
+      'utf8',
+    );
+    const block = spec.match(/Allowed command or namespace first segments:\s*```text\n([\s\S]*?)```/u);
+    assert.ok(block, 'PNPM_SCRIPT_SPEC.md must list the allowed first segments in a text fence');
+    const specSegments = block[1].split('\n').map((entry) => entry.trim()).filter(Boolean);
+
+    // A name allowed by only the standard or only the checker is how a rule ends
+    // up occupying the contract slot while enforcing something unauthorized, or
+    // authorizing something no gate reads. Both directions are defects.
+    assert.deepEqual(
+      [...ALLOWED_FIRST_SEGMENTS],
+      specSegments,
+      'the checker and PNPM_SCRIPT_SPEC.md allowed first-segment lists must match in content and order',
+    );
+  });
+
   it('rejects a development root without a scoped stop command', () => {
     const root = makeRepo({
       name: 'sdkwork-demo',
@@ -336,6 +356,9 @@ describe('check-pnpm-script-standard', () => {
   it('treats a component deployment as a delegated app surface instead of an independent API root', () => {
     const root = makeRepo({
       name: 'sdkwork-demo-pc',
+      // A component deployment invokes the same facade, so section 2 requires it
+      // to declare the pinned dependency exactly like an independent root.
+      devDependencies: { '@sdkwork/app-topology': 'workspace:*' },
       scripts: {
         dev: 'pnpm dev:standalone',
         'dev:standalone': 'pnpm exec sdkwork-app dev --root ../.. --deployment-profile standalone',
@@ -410,6 +433,7 @@ describe('check-pnpm-script-standard', () => {
   it('requires only release profiles declared by fixed workflow targets', () => {
     const root = makeRepo({
       name: 'sdkwork-demo',
+      devDependencies: { '@sdkwork/app-topology': 'workspace:*' },
       scripts: {
         dev: 'pnpm dev:standalone',
         'dev:standalone': 'node scripts/sdkwork-command.mjs dev --deployment-profile standalone --environment development',
@@ -434,6 +458,7 @@ describe('check-pnpm-script-standard', () => {
   it('accepts private SDKWork lifecycle hooks behind the canonical public facade', () => {
     const root = makeRepo({
       name: 'sdkwork-demo',
+      devDependencies: { '@sdkwork/app-topology': 'workspace:*' },
       scripts: {
         dev: 'pnpm dev:standalone',
         'dev:standalone': 'pnpm exec sdkwork-app dev --deployment-profile standalone',
@@ -443,9 +468,17 @@ describe('check-pnpm-script-standard', () => {
         check: 'pnpm exec sdkwork-app check',
         verify: 'pnpm exec sdkwork-app verify',
         clean: 'pnpm exec sdkwork-app clean',
+        // Every facade lifecycle verb needs its hook: the facade returns null
+        // from runPrivateLifecycleScript when the hook is absent and then
+        // throws "missing private lifecycle hook". A sibling namespace hook
+        // such as _sdkwork:release:* does not substitute for a lifecycle verb.
+        '_sdkwork:build': 'cargo build --release',
+        '_sdkwork:test': 'vitest run',
+        '_sdkwork:check': 'tsc --noEmit',
+        '_sdkwork:verify': 'pnpm run check && pnpm test',
+        '_sdkwork:clean': 'node scripts/clean-artifacts.mjs',
         '_sdkwork:dev:standalone': 'node scripts/demo-dev.mjs --legacy-layout',
         '_sdkwork:dev:cloud': 'vite --mode cloud',
-        '_sdkwork:build': 'cargo build --release',
         '_sdkwork:release:package': 'node scripts/demo-package.mjs',
         '_sdkwork:runtime:device-edge': 'cargo run -p sdkwork-demo-device-edge-runtime',
       },
@@ -1726,5 +1759,116 @@ describe('check-pnpm-script-standard', () => {
     // The ignore rule must not disarm the scan for real documents.
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /documentation pnpm command examples are not compliant/u);
+  });
+
+  // PNPM_SCRIPT_SPEC.md section 2: the facade owns the public verb, the private
+  // hook owns the tool command, and the two form a required pair. The facade
+  // aborts with "missing private lifecycle hook" when the hook is absent, so
+  // accepting a hook-less delegation would let the gate bless a script that
+  // cannot run -- the "occupies the contract slot while enforcing nothing"
+  // defect class, inverted.
+  function facadeManifest({ hookName = 'build', includeHook = true, dependency = 'workspace:*' } = {}) {
+    const manifest = {
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'pnpm dev:standalone',
+        'dev:standalone': 'pnpm exec sdkwork-app dev --deployment-profile standalone',
+        'dev:cloud': 'pnpm exec sdkwork-app dev --deployment-profile cloud',
+        stop: 'pnpm exec sdkwork-app stop',
+        build: 'pnpm exec sdkwork-app build',
+        test: 'pnpm exec sdkwork-app test',
+        check: 'pnpm exec sdkwork-app check',
+        verify: 'pnpm exec sdkwork-app verify',
+        clean: 'pnpm exec sdkwork-app clean',
+      },
+    };
+    if (includeHook) {
+      for (const verb of ['build', 'test', 'check', 'verify', 'clean']) {
+        manifest.scripts[`_sdkwork:${verb}`] = `node scripts/${verb}.mjs`;
+      }
+    }
+    if (dependency !== null) {
+      manifest.devDependencies = { '@sdkwork/app-topology': dependency };
+    }
+    return manifest;
+  }
+
+  it('accepts the canonical public verb plus private hook pairing', () => {
+    const root = makeRepo(facadeManifest());
+
+    const result = runChecker(root);
+
+    assert.equal(result.status, 0, result.stderr);
+  });
+
+  it('rejects a facade delegation whose private lifecycle hook is missing', () => {
+    const manifest = facadeManifest({ includeHook: false });
+    // Keep every hook except the one under test, so the failure is attributable.
+    for (const verb of ['test', 'check', 'verify', 'clean']) {
+      manifest.scripts[`_sdkwork:${verb}`] = `node scripts/${verb}.mjs`;
+    }
+    const root = makeRepo(manifest);
+
+    const result = runChecker(root);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /build: public command delegates to the sdkwork-app facade/u);
+    assert.match(result.stderr, /_sdkwork:build/u);
+  });
+
+  it('rejects a private lifecycle hook that no public command selects', () => {
+    const root = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'pnpm dev:standalone',
+        'dev:standalone': 'node scripts/sdkwork-command.mjs dev --deployment-profile standalone',
+        'dev:cloud': 'node scripts/sdkwork-command.mjs dev --deployment-profile cloud',
+        stop: 'node scripts/sdkwork-stop.mjs',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+        '_sdkwork:build': 'tsc && vite build',
+      },
+    });
+
+    const result = runChecker(root);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /_sdkwork:build: private lifecycle hook is not selected/u);
+  });
+
+  it('does not mistake a namespaced facade surface for the lifecycle verb', () => {
+    // `sdkwork-app build:pc` is a different command surface; only the bare verb
+    // is the canonical lifecycle delegation, so no hook is required for it.
+    const manifest = facadeManifest({ includeHook: false });
+    for (const verb of ['test', 'check', 'verify', 'clean']) {
+      manifest.scripts[`_sdkwork:${verb}`] = `node scripts/${verb}.mjs`;
+    }
+    manifest.scripts.build = 'pnpm exec sdkwork-app build:pc';
+    const root = makeRepo(manifest);
+
+    const result = runChecker(root);
+
+    assert.doesNotMatch(result.stderr, /_sdkwork:build/u);
+  });
+
+  it('rejects invoking the facade without declaring @sdkwork/app-topology', () => {
+    const root = makeRepo(facadeManifest({ dependency: null }));
+
+    const result = runChecker(root);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /does not declare "@sdkwork\/app-topology"/u);
+  });
+
+  it('rejects an unpinned @sdkwork/app-topology dependency', () => {
+    const root = makeRepo(facadeManifest({ dependency: 'latest' }));
+
+    const result = runChecker(root);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /must be pinned to a workspace or release version/u);
   });
 });

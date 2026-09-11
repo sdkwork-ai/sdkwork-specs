@@ -513,3 +513,84 @@ const statement = /CREATE TABLE(?: IF NOT EXISTS)?\s+([a-z0-9_]+)|ALTER TABLE(?:
 
 1. **`sdkwork-birdcoder2`**（package-layout 余 3 条全在此）：须声明 `repository-kind: application`，把 6241 文件从仓库根 `packages/` 迁出，并修 `pnpm-workspace.yaml` 的 glob。其 README 仍为上游品牌（`# DeepSeek Harness`、`dsh`）——是**架构归属 + 品牌**决策，非机械对齐。
 2. **4 条 `rust.package-name-case`**：`sdkwork-mail`（`mail_sdk`、`Mail-sdk-provider-imap`、`Mail-sdk-provider-smtp`）与 `sdkwork-rtc`（`rtc_sdk`），**全在 vendor 的三方 SDK 子树**（`sdks/**/sdkwork-*-sdk-rust/`）。改名会破坏 vendor 契约，建议以 vendor 白名单豁免而非改写。
+
+---
+
+## 11. 第七轮：`.gitignore` 过度忽略类、门禁假阳性与根生命周期门面迁移（2026-09-11 续）
+
+### 11.1 结果表
+
+| 门禁 | 轮初 | 轮末 | 手段 |
+| --- | --- | --- | --- |
+| `check:script-placement` | 157 | **138** | 修 `git check-ignore --no-index` 假阳性；基线随之下调 |
+| `check:pnpm-script-standard` | 798 / 62 通过 / 25 失败 | **677 / 67 通过 / 20 失败** | 新增两条配对规则 + `align-pnpm-lifecycle-facade` 迁移 24 个仓库 |
+| `check:gitignore-standard` | 不存在 | **100/100，0 违规** | 新建门禁 + 修复器，剔除 77 个文件的 84 条过度忽略规则 |
+| `check:sdk-standard` | 12 条 `deep-generated-transport-import` | **0** | `git rm -r --cached` 退跟踪 260 个可再生产物 |
+
+### 11.2 门禁缺陷：规范写了 `MUST`，门禁从未校验（本轮第 2 类同型缺陷）
+
+`PNPM_SCRIPT_SPEC.md` §2 明确写了两条 `MUST`：
+
+1. §94-96：公开生命周期动词与私有 `_sdkwork:<verb>` 钩子必须**成对**；
+2. §61-64：使用 `pnpm exec sdkwork-app` 的应用必须声明**固定版本**的 `@sdkwork/app-topology` 依赖。
+
+而 `check-pnpm-script-standard.mjs` 全文 **`grep '_sdkwork:'` 命中数为 0** —— 两条 `MUST` 无任何门禁。
+
+**先量后改**：实测全舰队影响面为 **0**（87 仓中 `公开动词⟺私有钩子` 双条件不一致 0 例；53 个调用 `sdkwork-app` 的仓库 53/53 均声明了依赖）。即"靠约定 100% 成立、但门禁为零"，属"占用契约位却不校验"的同型缺陷。
+
+**规范依据不止是文档**：`sdkwork-app-topology/tools/topology/lib/lifecycle.mjs#runPrivateLifecycleScript` 在钩子缺失时 `return null`，`sdkwork-app.mjs` 随即抛 `missing private lifecycle hook`。因此"公开动词指向门面但无钩子"不是风格问题，而是**一个跑不起来的脚本**。
+
+实现：`pushPrivateLifecycleHookIssues`（双向）+ `pushAppTopologyDependencyIssues`（含版本固定校验）；新增 5 个单元测试，并修正 3 个既有测试夹具（2 个缺依赖、1 个断言了错误契约——`accepts private SDKWork lifecycle hooks behind the canonical public facade` 原本只给 `_sdkwork:build` 就判通过）。测试 69/69。
+
+### 11.3 `.gitignore` 过度忽略类（75 + 9 仓）
+
+`bin/` 是 `MODULE_BIN_SPEC.md` 指定的**创作脚本通道**（实测 0 二进制），`sdks/**/generated/` 是生成的 SDK 权威产物。但全舰队 75 仓声明了 `/bin/`、9 仓声明了 `sdks/**/generated/` 忽略规则，等于把"应当受版本控制的创作内容"排除在外。
+
+新建 `check:gitignore-standard`（fail-closed：`--root`/`--workspace` 不存在即 exit 2）+ `align:gitignore-standard`（CRLF 感知、逐行删除、写后回读自证）。对齐后 **100/100，0 违规**；`REPOSITORY_BASELINE_SPEC.md` §2 落规则。
+
+### 11.4 `check:script-placement` 的忽略探针假阳性
+
+`check-script-placement.mjs` 调用 `git check-ignore -q <path>` 判忽略，**缺 `--no-index`**。`git check-ignore` 先查索引：被批量 `git add` 提交过的文件即使是 scratch 也会被判"未忽略"。
+
+- 证据：`sdkwork-community` / `sdkwork-news` 确已声明 `**/.sdkwork/manual-backups/`，且 `git check-ignore -v --no-index` 命中 `.gitignore:46` / `:44`；门禁却报 `SCRATCH-NOT-IGNORED`。
+- 修复后该类归零：**7 → 0**。违规总数 148 → **138**（基线由 157 下调）。
+- 旁证：`sdkwork-assets` 确缺 `**/.sdkwork/manual-backups/`（真缺陷），已补。
+
+### 11.5 `manual-backups` 退跟踪（仅索引，磁盘零损失）
+
+修好探针后暴露 6 仓共 **407** 个已跟踪的 scratch 备份（assets 45、community 29、drive 13、news 299、notary 2、xiangqi 19，均在 `sdks/**/generated/server-openapi/.sdkwork/manual-backups/`）。以 `git ls-files -z | grep -zF ... | xargs -0 git rm -r --cached` 退跟踪：
+
+- 磁盘文件 945 个**全部保留**（退跟踪前后 `find` 计数逐一相同）；
+- 未跟踪噪声 `??` = **0**，证明已被既有忽略规则覆盖。
+
+### 11.6 `align-pnpm-lifecycle-facade`：迁移 24 仓，但拒绝臆造
+
+结果：**72 个应用根中精确命中 24 个门禁失败仓**（与 `check:pnpm-script-standard` 的失败集完全一致，`sdkwork-web-framework` 因只余命名空间问题被正确排除），178 处改动，**只改各仓自己的 `package.json`**。门禁 62→67 通过。
+
+三条设计约束：
+
+1. **不臆造命令**。`build` 在 15 仓缺失，因这些仓交付浏览器/Flutter 客户端，构建是 per-architecture × per-environment（`build:pc:*`、`build:h5:*`），任何单一命令（如 `cargo build`）都是"貌似合理但错误"的答案。该缺口以 **owner 决策**上报，不用占位符填充。
+2. **可追溯的派生**。`_sdkwork:check` 由该仓既有的 `check:*` 叶子聚合（不发明）；`_sdkwork:clean` = `cargo clean`（该仓自己的 Rust 工作区，且是舰队主流约定 10/53）；`_sdkwork:<verb>` 一律**原样搬运**既有公开动词。
+3. **不做整文件重序列化**。多处仓库行尾为 CRLF，其中 4 仓各有 1 行 LF、`sdkwork-superpowers` 为混合行尾。改为**文本拼接**（只重写受影响对象体，逐行复用原有缩进与行尾），验证不变量：新增行数 == 主导行尾增量，即**既有行的行尾零改写**。
+
+幂等性：二次 `--apply` 仅命中 1 仓（修 `sdkwork-audio` 的遗漏），证明其余 23 仓已收敛。测试 10/10。
+
+**自伤与修复**：首次 apply 让 `sdkwork-audio` 的 `dev` 指向了不存在的 `dev:standalone` —— 因为该仓 `runtime.supportedDeploymentProfiles = ["cloud"]`，而对齐器当时按 profile 门控 `dev:standalone`。而门禁与规范对 `dev`/`dev:standalone` 是**无条件要求**（仅 `dev:cloud` 受 profile 门控，§108 要求 `pnpm dev` 永久等价于 `pnpm dev:standalone`）。已改为镜像门禁语义。
+
+### 11.7 方法教训（本轮新增）
+
+1. **`git check-ignore` 必须带 `--no-index`**：它先查索引，已跟踪文件会被误判"未忽略"。凡"判忽略"的探针都要加。
+2. **门禁要为规范里的 `MUST` 建反向索引**：本轮用 `grep -c` 证明某条 `MUST` 在门禁中命中数为 0，是最快最硬的"门禁缺口"证据。
+3. **工具不得臆造内容**：`build`/`clean` 这类无唯一答案的缺口，上报 > 填充。占位符会"占住契约位却不做事"。
+4. **最小 diff 是安全属性**：CRLF/混合行尾仓库上，整文件重序列化会把行尾归一化，直接触发部署 drift 门禁。逐行拼接 + 不变量校验才安全。
+5. **迁移器要镜像门禁的判定**：复用门禁导出的 `isApplicationRepositoryRoot` / `supportedDeploymentProfiles`（本轮从 `check-pnpm-script-standard.mjs` 导出，并加 `import.meta.url` 入口守卫），避免"对齐器与门禁各有一套判据"再生成新债。
+
+### 11.8 遗留 owner 决策（本轮不擅自处置）
+
+1. **`sdkwork-audio` 的 profile 声明自相矛盾**：`sdkwork.app.config.json` 声明 `supportedDeploymentProfiles = ["cloud"]`，但必需命令契约无条件要求 `dev`/`dev:standalone`。当前按门禁语义补齐了 `dev:standalone`；需确认是"补 profile 声明"还是"放宽必需命令契约"。
+2. **15 仓缺 `build`**：`account` 除外，其余为交付客户端的应用仓，需按架构/环境定义规范化的 `build` 语义（或确认 `build` 对纯客户端仓是否应改为按 profile 组合）。
+3. **3 仓缺 `check`**（`drama`、`log`、`sandbox`）：无既有 `check:*` 叶子可聚合，需明确各自应校验什么。
+4. **`sdkwork-superpowers`**：无 `sdkwork.app.config.json`、无 `Cargo.toml`、无 `apps/`，仅 2 条脚本，却因 README 被判为 `application`。需确认其归属（上游插件仓？）与是否应被必需命令契约约束。
+5. **`sdkwork-birdcoder2` 的 571 条命名空间发现**：来自上游 dsh 脚本面，非机械可改，属品牌/架构决策（同 §10.8）。
+6. **`sdkwork-web-framework` 的 `schema-registry:*`**：命名空间迁移，属 `migrate-pnpm-script-names.mjs` 职责。
+

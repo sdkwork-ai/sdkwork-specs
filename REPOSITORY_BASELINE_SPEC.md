@@ -41,6 +41,20 @@ Rules:
 - `AGENTS.md` follows `AGENTS_SPEC.md`.
 - `CLAUDE.md`, `GEMINI.md`, and `CODEX.md` are compatibility shims that point to `AGENTS.md`; they must not duplicate standards.
 - Root `.gitignore` `MUST` ignore build artifacts, local env files, and ignored `.sdkwork/` local state.
+- Root `.gitignore` `MUST NOT` ignore directories the standards designate as authored content. An
+  over-broad ignore rule is invisible to every other check: the content sits on disk, no gate reads
+  the ignore file, and `git status` looks clean — so canonical entrypoints silently become
+  impossible to commit while every other gate stays green. In particular:
+  - the root `bin/` directory: `MODULE_BIN_SPEC.md` section 2 makes `bin/` the module's only
+    authored-script channel and defines no ignore provision for it. A fleet scan on 2026-09-11
+    found `bin/` holds only authored sources (930 `.sh`, 81 `.md`, 24 `.ps1`, 14 `.cmd`, 6 deb/rpm
+    `.template`, 5 `.mjs`) and no binaries;
+  - `sdks/**/generated/`: `SDK_WORKSPACE_GENERATION_SPEC.md` regulates committed
+    `generated/server-openapi` output and `AGENTS.md` defines `sdks/` as holding generated SDK
+    artifacts.
+
+  `check:gitignore-standard` enforces this rule and `align:gitignore-standard` removes offending
+  entries without touching any other line.
 - A repository `MUST NOT` track compiler emit that sits beside its source. Running `tsc` without
   `--noEmit` or an `outDir` drops `.js`, `.d.ts`, `.js.map`, and `.d.ts.map` next to every `.ts`
   input, and those stale copies then shadow the source in two distinct ways: bundlers resolve `.js`
@@ -100,6 +114,8 @@ Rules:
 - [ ] Default branch is `main` locally and on GitHub.
 - [ ] L1 baseline files exist and shims point to `AGENTS.md`.
 - [ ] Root `.gitignore` and `.sdkwork/.gitignore` ignore local-only state.
+- [ ] Root `.gitignore` does not ignore the root `bin/` directory or `sdks/**/generated/`
+      (`check:gitignore-standard` passes).
 - [ ] No compiler emit is tracked beside source files, and root `.gitignore` ignores it.
 - [ ] L2 docs exist or an explicit exception is recorded for narrow utility repositories.
 - [ ] L3 release surfaces exist for publishable application roots when packaging is in scope.

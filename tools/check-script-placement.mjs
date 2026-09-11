@@ -221,7 +221,10 @@ function isUnderIgnoredDir(relDir, ignoredDirs) {
 
 function gitIgnored(root, relPath) {
   try {
-    execFileSync('git', ['-C', root, 'check-ignore', '-q', relPath], { stdio: 'ignore' });
+    // `--no-index` is required: `git check-ignore` consults the index first and reports a TRACKED
+    // file as "not ignored" even when a rule matches, so scratch backups that were committed by a
+    // bulk `git add` were reported as un-ignored although `.gitignore` already covered them.
+    execFileSync('git', ['-C', root, 'check-ignore', '-q', '--no-index', relPath], { stdio: 'ignore' });
     return true;
   } catch {
     return false;

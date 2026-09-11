@@ -167,8 +167,8 @@
         "{workspace}"
       ],
       "tier": "guardrail",
-      "baseline": 798,
-      "note": "PNPM_SCRIPT_SPEC.md section on canonical root scripts. 798 script violations across 25 of 87 repositories on 2026-09-11. 34 repositories wire this gate individually, but the workspace aggregate never ran it, so the others were unchecked. This is the root cause of the 'no aggregate' warnings in the locale gate wiring audit: a repository with no `verify` script has no aggregate to wire any gate into. Baseline measured with run-gate-matrix.mjs#countItems, not by hand; it fell 817 -> 798 when the documentation-examples scan stopped validating git-ignored `.workbuddy/` agent memory as shipped documentation."
+      "baseline": 677,
+      "note": "PNPM_SCRIPT_SPEC.md section on canonical root scripts. 677 script violations across 20 of 87 repositories on 2026-09-11, down from 798. 34 repositories wire this gate individually, but the workspace aggregate never ran it, so the others were unchecked. This is the root cause of the 'no aggregate' warnings in the locale gate wiring audit: a repository with no `verify` script has no aggregate to wire any gate into. Baseline measured with run-gate-matrix.mjs#countItems, not by hand; it fell 817 -> 798 when the documentation-examples scan stopped validating git-ignored `.workbuddy/` agent memory as shipped documentation, and 798 -> 677 via align-pnpm-lifecycle-facade.mjs on 2026-09-11, which took passed repositories from 62 to 67 and edited only each repository's own package.json. Two unenforced MUST clauses were closed here on 2026-09-11 with zero fleet impact, verified before implementing: (1) the public-verb/private-hook pairing of section 2 is now bidirectional for build/test/check/verify/clean. A public verb delegating to the facade without its `_sdkwork:<verb>` hook is a script that cannot run, because runPrivateLifecycleScript returns null for a missing hook and sdkwork-app then throws 'missing private lifecycle hook'; a `_sdkwork:<verb>` hook that no public verb selects is unreachable dead weight. (2) Section 2 requires an application invoking `pnpm exec sdkwork-app` to declare a pinned `@sdkwork/app-topology`. Both clauses were 100 percent satisfied by convention across the fleet (0 mismatches, 53/53 declare the dependency) but enforced by no gate, so the next repository could have regressed either silently. The rules also guard the migration: they refuse a half-done conversion that adds `pnpm exec sdkwork-app <verb>` without moving the real command into the matching hook. Residual debt is concentrated: sdkwork-birdcoder2 contributes 571 namespace findings from the upstream dsh script surface, and 15 repositories still lack `build` because no faithful command can be derived - those ship browser or Flutter clients whose build is per-architecture and per-environment (build:pc:*, build:h5:*), so `cargo build` or a single guessed command would be a plausible but wrong answer, and the gap is reported as an owner decision rather than filled with a placeholder."
     },
     {
       "id": "check:script-placement",
@@ -179,8 +179,8 @@
         "{workspace}"
       ],
       "tier": "guardrail",
-      "baseline": 157,
-      "note": "MODULE_BIN_SPEC.md section 2.1, the placement contract. 157 violations across 100 governed repositories on 2026-09-11. This gate is the standard's declared 'single enforcement surface', but it was declared in sdkwork-specs/package.json only and was therefore in neither tier: no root `check:all` entry and no gate here, so the fleet could regress with nothing noticing. Promoted here to make it measurable. The 157 includes 15 `.cmd`/`.bat` findings and 7 SCRATCH-NOT-IGNORED findings that the gate could not see until the audited class was widened: MODULE_BIN_SPEC section 2.2 makes the `.cmd` companion part of a platform family, yet SCRIPT_SUFFIXES stopped at `.ps1`, so every authored `.cmd`/`.bat` outside bin/ was invisible. Largest owners: sdkwork-superpowers 33, sdkwork-tts 17, sdkwork-im 5 (after 9 redundant legacy scripts were deleted), sdkwork-agentstudio 9, sdkwork-birdcoder2 8."
+      "baseline": 138,
+      "note": "MODULE_BIN_SPEC.md section 2.1, the placement contract. 138 violations across 100 governed repositories and 2689 audited script files on 2026-09-11, 74/100 modules aligned. This gate is the standard's declared 'single enforcement surface', but it was declared in sdkwork-specs/package.json only and was therefore in neither tier: no root `check:all` entry and no gate here, so the fleet could regress with nothing noticing. Promoted here to make it measurable. The count fell 157 -> 138 through two audited-class corrections, both of which were gate defects rather than repository debt. First, MODULE_BIN_SPEC section 2.2 makes the `.cmd` companion part of a platform family, yet SCRIPT_SUFFIXES stopped at `.ps1`, so every authored `.cmd`/`.bat` outside bin/ was invisible; widening the class added 15 findings while simultaneously making the gate honest. Second, the ignore probe called `git check-ignore` without `--no-index`, and `git check-ignore` consults the index before the exclude rules, so any scratch script that a bulk `git add` had committed was reported as SCRATCH-NOT-IGNORED even when `.gitignore` already matched it; adding `--no-index` removed that whole class (now 0 findings) and confirmed the surviving findings are genuine placement debt. Largest owners: sdkwork-superpowers 33, sdkwork-tts 17, sdkwork-agentstudio 9, sdkwork-birdcoder2 8, sdkwork-specs 7, sdkwork-terminal 7."
     },
     {
       "id": "check:module-bin",
@@ -193,6 +193,18 @@
       "tier": "guardrail",
       "baseline": 0,
       "note": "MODULE_BIN_SPEC.md sections 2 and 2.2, the bin/ entrypoint family and naming convention. 79 product modules audited, 79 pass, 0 violations on 2026-09-11. Unwired until now for the same reason as check:script-placement: declared in sdkwork-specs/package.json, present in neither tier. The tool also emits a `violations : N` line as of 2026-09-11, because run-gate-matrix.mjs#countItems reads that label and would otherwise record 0 for every run, which would make the gate decorative. Separately: 49 section 2.2 naming warnings remain in sdkwork-im (host-native surface awaiting a family token); warnings are visible debt by design and are not counted in this baseline."
+    },
+    {
+      "id": "check:gitignore-standard",
+      "tool": "check-gitignore-standard.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--workspace",
+        "{workspace}"
+      ],
+      "tier": "guardrail",
+      "baseline": 0,
+      "note": "REPOSITORY_BASELINE_SPEC.md section 2: a root .gitignore must not ignore directories the standards designate as authored content. The rule protects `bin/` (MODULE_BIN_SPEC.md section 2 makes it the module's only authored-script channel and defines no ignore provision) and `sdks/**/generated/` (SDK_WORKSPACE_GENERATION_SPEC.md regulates committed generated output). Measured 2026-09-11 before the aligner ran: 77 of 100 governed repositories ignored canonical content (75 the root `bin/` directory as `/bin/` or `/bin/*`, 9 `sdks/**/generated/`). 73 of those repositories shipped the nine canonical bin/ entrypoint scripts on disk and 69 of them were entirely untracked -- the standard's mandated entrypoints could not be committed while every other gate stayed green, because no gate reads the ignore file and `git status` looks clean. The `align:gitignore-standard` fixer removed 84 over-reaching entries from 77 files; the fleet is now 100/100 and the baseline is therefore 0."
     }
   ]
 }

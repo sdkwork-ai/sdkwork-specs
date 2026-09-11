@@ -2,7 +2,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { execFile } from 'node:child_process';
 
@@ -10,7 +10,7 @@ import { isApplicationCloudGatewayScript } from './lib/application-cloud-gateway
 import { resolveRepositoryKind } from './lib/packages-layout-patterns.mjs';
 
 const SPECS_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const API_ASSEMBLY_SCRIPT_TOOLS = new Map([
+export const API_ASSEMBLY_SCRIPT_TOOLS = new Map([
   ['api:assembly:materialize', 'materialize-api-assembly.mjs'],
   ['api:assembly:validate', 'validate-api-assembly.mjs'],
 ]);
@@ -26,7 +26,28 @@ const REQUIRED_ROOT_SCRIPTS = [
   'clean',
 ];
 
-const ALLOWED_FIRST_SEGMENTS = new Set([
+const APP_TOPOLOGY_PACKAGE = '@sdkwork/app-topology';
+
+// PNPM_SCRIPT_SPEC.md section 2: the shared facade owns the public lifecycle
+// verbs and dispatches each one to a private `_sdkwork:<verb>` hook that holds
+// the application-specific tool command. The facade aborts with
+// "missing private lifecycle hook _sdkwork:<verb>" when the hook is absent, so
+// a public verb that delegates to the facade without its hook is a script that
+// cannot run at all. The reverse is equally meaningless: a private hook that no
+// public command selects is dead weight.
+const FACADE_LIFECYCLE_COMMANDS = ['build', 'test', 'check', 'verify', 'clean'];
+
+// Section 3 makes the public stop scoped: "`stop` after `dev:cloud` stops only
+// processes created by the local development session and never operates on
+// deployed cloud services." Delegating to the workspace-wide process killer
+// stops every process in the checkout, which is the opposite of scoped, so an
+// application root must use the facade's own session-scoped stop instead.
+export const WORKSPACE_WIDE_STOP_PATTERN = /stop-sdkwork-workspace-processes/u;
+
+// PNPM_SCRIPT_SPEC.md section 4, "Allowed command or namespace first segments".
+// The order mirrors the standard so a drift between the two lists is a plain
+// textual comparison; `check-pnpm-script-standard.test.mjs` asserts equality.
+export const ALLOWED_FIRST_SEGMENTS = new Set([
   'dev',
   'start',
   'stop',
@@ -44,6 +65,7 @@ const ALLOWED_FIRST_SEGMENTS = new Set([
   'deploy',
   'up',
   'down',
+  'import',
   'desktop',
   'db',
   'api',
@@ -53,7 +75,7 @@ const ALLOWED_FIRST_SEGMENTS = new Set([
   'workflow',
   'sbom',
   'nginx',
-  'import',
+  'schema-registry',
   'docs',
   'perf',
   'migrate',
@@ -330,7 +352,10 @@ function readJsonIfValid(file) {
   }
 }
 
-function isApplicationRepositoryRoot(root) {
+// The application-root predicate is exported so the aligner in this directory
+// classifies repositories with exactly the same rule the gate enforces, rather
+// than duplicating the guards and drifting from them.
+export function isApplicationRepositoryRoot(root) {
   const componentPath = path.join(root, 'specs', 'component.spec.json');
   const component = fs.existsSync(componentPath) ? readJsonIfValid(componentPath) : null;
   const componentType = String(component?.component?.type ?? '').trim().toLowerCase();
@@ -347,13 +372,13 @@ function isApplicationRepositoryRoot(root) {
   ]).has(resolveRepositoryKind(root));
 }
 
-function isDelegatedApplicationSurface(root) {
+export function isDelegatedApplicationSurface(root) {
   const deploymentPath = path.join(root, 'etc', 'sdkwork.deployment.config.json');
   if (!fs.existsSync(deploymentPath)) return false;
   return readJsonIfValid(deploymentPath)?.kind === 'sdkwork.component-deployment';
 }
 
-function canonicalApiAssemblyCommand(root, toolName) {
+export function canonicalApiAssemblyCommand(root, toolName) {
   const toolPath = path.join(SPECS_ROOT, 'tools', toolName);
   const relative = path.relative(root, toolPath).replaceAll('\\', '/');
   const commandPath = path.isAbsolute(relative) || /^[a-z]:\//iu.test(relative)
@@ -735,7 +760,7 @@ function workflowReleaseProfiles(root) {
   return profiles.size > 0 ? profiles : new Set(['standalone', 'cloud']);
 }
 
-function supportedDeploymentProfiles(root) {
+export function supportedDeploymentProfiles(root) {
   const profiles = workflowReleaseProfiles(root);
   const appConfigPath = path.join(root, 'sdkwork.app.config.json');
   if (fs.existsSync(appConfigPath)) {
@@ -755,6 +780,56 @@ function supportedDeploymentProfiles(root) {
     }
   }
   return profiles;
+}
+
+function pushScopedStopIssues(scripts, issues) {
+  const stop = scripts.stop;
+  if (typeof stop !== 'string' || !WORKSPACE_WIDE_STOP_PATTERN.test(stop)) return;
+  issues.push(
+    `stop: must stop only processes created by this application's own development session; a workspace-wide process killer operates on every checkout process and violates the scoped-stop requirement (section 3): ${stop}`,
+  );
+}
+
+function pushPrivateLifecycleHookIssues(scripts, issues) {
+  for (const command of FACADE_LIFECYCLE_COMMANDS) {
+    const publicCommand = scripts[command];
+    const hookName = `_sdkwork:${command}`;
+    // The verb must terminate the delegation: `sdkwork-app build:pc` is a
+    // different command surface, not the canonical lifecycle verb.
+    const delegatesToFacade =
+      typeof publicCommand === 'string'
+      && new RegExp(`\\bsdkwork-app\\s+${command}(?![\\w:-])`, 'u').test(publicCommand);
+    const hasHook = typeof scripts[hookName] === 'string' && scripts[hookName].trim() !== '';
+    if (delegatesToFacade && !hasHook) {
+      issues.push(
+        `${command}: public command delegates to the sdkwork-app facade but the required private hook "${hookName}" is missing; the facade aborts with "missing private lifecycle hook ${hookName}"`,
+      );
+    } else if (!delegatesToFacade && hasHook) {
+      issues.push(
+        `${hookName}: private lifecycle hook is not selected by any public command; expose it through "${command}": "pnpm exec sdkwork-app ${command}"`,
+      );
+    }
+  }
+}
+
+function pushAppTopologyDependencyIssues(manifest, issues) {
+  const invokesFacade = Object.values(manifest.scripts || {}).some(
+    (command) => typeof command === 'string' && /\bsdkwork-app\s/u.test(command),
+  );
+  if (!invokesFacade) return;
+  const declared =
+    manifest.dependencies?.[APP_TOPOLOGY_PACKAGE] ?? manifest.devDependencies?.[APP_TOPOLOGY_PACKAGE];
+  if (declared === undefined) {
+    issues.push(
+      `package.json invokes "pnpm exec sdkwork-app" but does not declare "${APP_TOPOLOGY_PACKAGE}"; declare a pinned workspace or release dependency instead of relying on an undeclared globally installed CLI or a fixed parent-directory checkout layout`,
+    );
+    return;
+  }
+  if (typeof declared !== 'string' || !/^(?:workspace:|npm:|link:|file:|portal:|catalog:|[\^~]?\d)/u.test(declared.trim())) {
+    issues.push(
+      `${APP_TOPOLOGY_PACKAGE} must be pinned to a workspace or release version, found "${declared}"`,
+    );
+  }
 }
 
 function pushPairedLifecycleProfileIssues(root, scripts, issues) {
@@ -782,6 +857,19 @@ function pushPairedLifecycleProfileIssues(root, scripts, issues) {
       }
     }
   }
+}
+
+/**
+ * Section 2 normalizes `dev:browser` and `dev:desktop` to
+ * `database = postgres`, `deploymentProfile = standalone`, and
+ * `environment = development`. Exported as a pure predicate so
+ * `align-pnpm-lifecycle-facade.mjs` is the mutation counterpart of this check
+ * rather than a second, drifting copy of the same rule.
+ */
+export function defaultDevRuntimeIssues(defaultScriptName, scripts) {
+  const issues = [];
+  pushDefaultDevRuntimeIssues(defaultScriptName, scripts, issues);
+  return issues;
 }
 
 function pushDefaultDevRuntimeIssues(defaultScriptName, scripts, issues) {
@@ -888,6 +976,7 @@ function validateRootScripts(root, productPrefixes) {
     if (scripts.dev && !scripts.stop) {
       issues.push('stop: repository roots with dev must expose a scoped stop command');
     }
+    pushScopedStopIssues(scripts, issues);
   } else if (delegatedSurface) {
     const profiles = supportedDeploymentProfiles(root);
     for (const required of ['dev', 'dev:standalone', 'dev:cloud', 'stop']) {
@@ -900,6 +989,7 @@ function validateRootScripts(root, productPrefixes) {
     if (scripts.dev && !scripts.stop) {
       issues.push('stop: delegated surfaces with dev must expose a parent-scoped stop command');
     }
+    pushScopedStopIssues(scripts, issues);
   }
 
   for (const scriptName of scriptNames) {
@@ -936,6 +1026,8 @@ function validateRootScripts(root, productPrefixes) {
     pushProfileDevelopmentEntrypointIssues(scripts, issues);
   }
   pushPairedLifecycleProfileIssues(root, scripts, issues);
+  pushPrivateLifecycleHookIssues(scripts, issues);
+  pushAppTopologyDependencyIssues(manifest, issues);
 
   if (issues.length > 0) {
     fail(`${path.relative(process.cwd(), packagePath)} is not compliant`, issues);
@@ -1536,4 +1628,6 @@ async function main() {
   return report.ok ? 0 : 1;
 }
 
-process.exitCode = await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exitCode = await main();
+}

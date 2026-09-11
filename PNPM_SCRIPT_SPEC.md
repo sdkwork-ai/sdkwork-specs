@@ -94,6 +94,17 @@ Rules:
 - A private hook `MUST` be named `_sdkwork:<phase>` or
   `_sdkwork:dev:<standalone|cloud>`. The public command `MUST` select the
   profile; the private hook supplies only application-specific tool commands.
+- The public lifecycle verb and the private hook form a pair, and the pairing is
+  bidirectional for `build`, `test`, `check`, `verify`, and `clean`:
+  - A public verb that delegates to the facade (`pnpm exec sdkwork-app <verb>`)
+    `MUST` have the matching `_sdkwork:<verb>` hook. The facade aborts with
+    `missing private lifecycle hook _sdkwork:<verb>` when the hook is absent, so
+    a delegating public verb without its hook is a script that cannot run.
+  - A `_sdkwork:<verb>` hook `MUST` be selected by the matching public verb.
+    A hook that no public command selects is dead weight: it is reachable only
+    by invoking the private name directly, which section 2 forbids.
+  - `check:pnpm-script-standard` enforces both directions; neither a
+    hook-less facade delegation nor an unreachable private hook passes.
 - Applications `MUST NOT` implement private `_sdkwork:stop` process-selection
   logic. The shared facade owns stop semantics through its scoped heartbeat
   registry plus topology-declared `bindEnv` and managed-resource drivers.
@@ -141,6 +152,17 @@ When a repository root exposes `dev`, it `MUST` also expose `stop`. A `stop` com
 MUST scope process selection to the owning repository or its explicitly configured
 runtime bindings. It MUST NOT terminate processes merely because they share a generic
 executable name such as `node`, `cargo`, `java`, or `python`.
+
+The canonical implementation is the shared facade's session-scoped stop
+(`pnpm exec sdkwork-app stop`), which reads the repository's own development
+session registry and reclaims only the supervisor, its recorded children, and
+the ports it owns. A repository-wide or workspace-wide process killer is
+therefore forbidden as an application root's `stop`: it operates on every
+checkout process rather than on the session this repository created.
+`sdkwork-specs/tools/stop-sdkwork-workspace-processes.mjs` is reserved for
+workspace-level infrastructure repositories that deliberately own the whole
+local stack, and `check:pnpm-script-standard` rejects it in an application root
+and in an app surface root.
 
 Development profile rules:
 
@@ -230,7 +252,10 @@ Repository root script names `MUST` follow:
 <command>[:runtimeTarget][:database][:deploymentProfile][:tier]
 ```
 
-The first segment `MUST` be a standard command or standard tool namespace.
+The first segment `MUST` be a standard command or standard tool namespace. The
+list below is normative and is mirrored verbatim by
+`tools/check-pnpm-script-standard.mjs`; a name that is allowed by only one of the
+two is a defect in the standard.
 
 Allowed command or namespace first segments:
 
@@ -250,6 +275,9 @@ lint
 format
 release
 deploy
+up
+down
+import
 desktop
 db
 api
@@ -259,6 +287,7 @@ topology
 workflow
 sbom
 nginx
+schema-registry
 docs
 perf
 migrate
@@ -275,6 +304,16 @@ Rules:
 
 - Use `api`, not `apis`, for new root scripts.
 - Use `sdk`, not application-specific SDK prefixes such as `file-sdk`, for cross-application SDK generation and verification commands. Domain-specific package commands may keep narrower names inside the owning package.
+- `up` and `down` are the container-orchestration lifecycle used by the deployment
+  infrastructure to bring a Compose environment up or down; `start` and `stop`
+  remain the process-lifecycle commands for a runnable application root.
+- `import` selects the source-import profile of a build-time composition step. It
+  is not a data-import command and `MUST NOT` be used for database seeding, which
+  belongs to `db:seed`.
+- `schema-registry` is the tool namespace of `SCHEMA_REGISTRY_SPEC.md`, implemented
+  by `sdkwork-web-framework` (`crates/sdkwork-web-schema-registry`,
+  `tools/schema_registry/`). Table, frontend, and API registry composition and
+  their verification commands use it.
 - `check:<standard>` and `verify:<standard>` are read-only. The sanctioned
   remediation for the same standard is exposed as `align:<standard>`, which is the
   mutation counterpart of the matching `check:<standard>` and `MUST` delegate to
@@ -1014,6 +1053,8 @@ Rules:
 ## 12. Acceptance Checklist
 
 - [ ] Repository root exposes `dev`, `dev:standalone`, `dev:cloud`, `build`, `test`, `check`, `verify`, and `clean`.
+- [ ] Each public lifecycle verb that delegates to `pnpm exec sdkwork-app` has its matching `_sdkwork:<verb>` hook, and no `_sdkwork:<verb>` hook exists without the public verb that selects it.
+- [ ] A repository invoking `pnpm exec sdkwork-app` declares a pinned `@sdkwork/app-topology` dependency; `check:pnpm-script-standard` enforces both of these, and `align:pnpm-lifecycle-facade` performs the conversion without inventing commands it cannot derive.
 - [ ] `dev` directly delegates to `dev:standalone`; both profile entrypoints resolve to the matching `development` profile.
 - [ ] `dev:cloud` consumes explicit deployed cloud API surfaces without starting a local API, gateway, or database.
 - [ ] Capability-specific root commands exist for release, deploy, API, SDK, database, gateway, topology, and supply-chain workflows when those capabilities exist.
