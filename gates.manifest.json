@@ -1,0 +1,198 @@
+{
+  "$comment": [
+    "Gate registry for the gates that are NOT yet part of the root `check:all` contract.",
+    "`check:all` in <workspace>/package.json remains the single source of truth for the",
+    "contract tier, so those gates are deliberately NOT duplicated here — that would create",
+    "two authorities for the same fact.",
+    "",
+    "scopes:",
+    "  workspace - run once; argv template may use {workspace}",
+    "  repo      - run once per governed repository; argv template may use {repo}",
+    "",
+    "tiers:",
+    "  contract  - must exit 0; a non-zero exit fails the matrix",
+    "  guardrail - known debt; must not grow beyond `baseline`; a higher count fails the matrix",
+    "",
+    "`baseline` was measured on 2026-09-11 with `node sdkwork-specs/tools/run-gate-matrix.mjs`.",
+    "Lower it whenever debt is paid down; never raise it without an explicit decision.",
+    "",
+    "Promoted on 2026-09-11 into root check:all (single authority for the contract tier): check:app-permission-tiers, check:app-runtime-hosting-debt, check:application-layering, check:bootstrap-access-token-lifecycle-standard, check:discovery-standard, check:iam-workspace-paths, check:external-submodule-rule, check:rust-manifest-standard"
+  ],
+  "schemaVersion": 1,
+  "measuredAt": "2026-09-11",
+  "gates": [
+    {
+      "id": "check:destructive-operation-patterns",
+      "tool": "check-destructive-operation-patterns.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--workspace",
+        "{workspace}"
+      ],
+      "tier": "guardrail",
+      "baseline": 3,
+      "note": "DESTRUCTIVE_OPERATION_SPEC.md section 9 mandates this audit; before 2026-09-11 zero repositories ran it."
+    },
+    {
+      "id": "check:theme-conformance",
+      "tool": "check-theme-conformance.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--workspace",
+        "{workspace}"
+      ],
+      "tier": "guardrail",
+      "baseline": 51,
+      "note": "Only became runnable fleet-wide on 2026-09-11; the allowlist has never been calibrated against real code, so part of the baseline may be allowlist misses rather than violations."
+    },
+    {
+      "id": "check:rust-crate-naming-standard",
+      "tool": "check-rust-crate-naming-standard.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--workspace",
+        "{workspace}"
+      ],
+      "tier": "guardrail",
+      "baseline": 704,
+      "note": "Count aggregates per-repo rule tallies and therefore includes [warn] entries, not only errors; the gate exits 1 on errors alone. Treat the baseline as a ceiling on total reported tallies."
+    },
+    {
+      "id": "check:base-url-resolution",
+      "tool": "check-base-url-resolution.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--workspace",
+        "{workspace}"
+      ],
+      "tier": "guardrail",
+      "baseline": 24
+    },
+    {
+      "id": "check:provider-session-identity",
+      "tool": "check-provider-session-identity.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--workspace",
+        "{workspace}"
+      ],
+      "tier": "guardrail",
+      "baseline": 15
+    },
+    {
+      "id": "check:subject-id-alignment",
+      "tool": "check-subject-id-alignment.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--workspace",
+        "{workspace}"
+      ],
+      "tier": "guardrail",
+      "baseline": 200
+    },
+    {
+      "id": "check:topology-deployment-profiles",
+      "tool": "check-topology-deployment-profiles.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--workspace",
+        "{workspace}"
+      ],
+      "tier": "guardrail",
+      "baseline": 24
+    },
+    {
+      "id": "check:vite-workspace-aliases",
+      "tool": "check-vite-workspace-aliases.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--workspace",
+        "{workspace}"
+      ],
+      "tier": "guardrail",
+      "baseline": 7
+    },
+    {
+      "id": "check:workspace-layout",
+      "tool": "check-workspace-layout.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--workspace",
+        "{workspace}"
+      ],
+      "tier": "guardrail",
+      "baseline": 1
+    },
+    {
+      "id": "check:identity-naming",
+      "tool": "check-identity-naming.mjs",
+      "scope": "repo",
+      "argv": [
+        "--root",
+        "{repo}"
+      ],
+      "tier": "guardrail",
+      "baseline": 27,
+      "note": "Per-repository tool (--root). 27 findings across 13 repositories on 2026-09-11; the dominant class is the retired *-pc-product/*-h5-product client package suffix."
+    },
+    {
+      "id": "check:shell-portability",
+      "tool": "check-shell-portability.mjs",
+      "scope": "roots",
+      "argv": [
+        "{roots}"
+      ],
+      "tier": "guardrail",
+      "baseline": 9,
+      "note": "Batched via repeatable --root. 9 GNU-only findings in sdkwork-skills-private and sdkwork-superpowers on 2026-09-11.",
+      "rootsFlag": "--root"
+    },
+    {
+      "id": "check:sdkwork-subpath-exports",
+      "tool": "check-sdkwork-subpath-exports.mjs",
+      "scope": "repo",
+      "argv": [
+        "{repo}"
+      ],
+      "tier": "guardrail",
+      "baseline": 0,
+      "note": "Takes a positional root. Given --workspace it resolved a nonexistent path and reported success on 0 scanned files."
+    },
+    {
+      "id": "check:pnpm-script-standard",
+      "tool": "check-pnpm-script-standard.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--workspace",
+        "{workspace}"
+      ],
+      "tier": "guardrail",
+      "baseline": 798,
+      "note": "PNPM_SCRIPT_SPEC.md section on canonical root scripts. 798 script violations across 25 of 87 repositories on 2026-09-11. 34 repositories wire this gate individually, but the workspace aggregate never ran it, so the others were unchecked. This is the root cause of the 'no aggregate' warnings in the locale gate wiring audit: a repository with no `verify` script has no aggregate to wire any gate into. Baseline measured with run-gate-matrix.mjs#countItems, not by hand; it fell 817 -> 798 when the documentation-examples scan stopped validating git-ignored `.workbuddy/` agent memory as shipped documentation."
+    },
+    {
+      "id": "check:script-placement",
+      "tool": "check-script-placement.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--workspace",
+        "{workspace}"
+      ],
+      "tier": "guardrail",
+      "baseline": 157,
+      "note": "MODULE_BIN_SPEC.md section 2.1, the placement contract. 157 violations across 100 governed repositories on 2026-09-11. This gate is the standard's declared 'single enforcement surface', but it was declared in sdkwork-specs/package.json only and was therefore in neither tier: no root `check:all` entry and no gate here, so the fleet could regress with nothing noticing. Promoted here to make it measurable. The 157 includes 15 `.cmd`/`.bat` findings and 7 SCRATCH-NOT-IGNORED findings that the gate could not see until the audited class was widened: MODULE_BIN_SPEC section 2.2 makes the `.cmd` companion part of a platform family, yet SCRIPT_SUFFIXES stopped at `.ps1`, so every authored `.cmd`/`.bat` outside bin/ was invisible. Largest owners: sdkwork-superpowers 33, sdkwork-tts 17, sdkwork-im 5 (after 9 redundant legacy scripts were deleted), sdkwork-agentstudio 9, sdkwork-birdcoder2 8."
+    },
+    {
+      "id": "check:module-bin",
+      "tool": "check-module-bin.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--workspace",
+        "{workspace}"
+      ],
+      "tier": "guardrail",
+      "baseline": 0,
+      "note": "MODULE_BIN_SPEC.md sections 2 and 2.2, the bin/ entrypoint family and naming convention. 79 product modules audited, 79 pass, 0 violations on 2026-09-11. Unwired until now for the same reason as check:script-placement: declared in sdkwork-specs/package.json, present in neither tier. The tool also emits a `violations : N` line as of 2026-09-11, because run-gate-matrix.mjs#countItems reads that label and would otherwise record 0 for every run, which would make the gate decorative. Separately: 49 section 2.2 naming warnings remain in sdkwork-im (host-native surface awaiting a family token); warnings are visible debt by design and are not counted in this baseline."
+    }
+  ]
+}

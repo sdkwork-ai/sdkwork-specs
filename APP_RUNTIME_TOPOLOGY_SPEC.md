@@ -46,6 +46,12 @@ Examples in conversation:
 Rules:
 
 - `deploymentProfile` values are only `standalone` and `cloud`.
+- `vocabulary.deploymentProfile.allowed` `MUST` be a non-empty subset of
+  `standalone`, `cloud` in that canonical order, mirroring
+  `runtime.supportedDeploymentProfiles` in `sdkwork.app.config.json`
+  (`APP_MANIFEST_SPEC.md` section 10.1). A profile-limited application declares
+  the single profile it ships; an application that owns both deployment
+  architectures declares both.
 - `standalone` means the application is shipped and operated as a
   self-contained deployment unit. It may embed application routes, dependency
   adapters, and an approved platform adapter behind one application ingress.
@@ -345,6 +351,24 @@ live in `APP_RUNTIME_TOPOLOGY_ARCHETYPES.md`.
 | `application-http-gateway` | Drive-class HTTP applications |
 | `realtime-application-platform` | IM and future realtime collaboration apps |
 | `application-rest-edge-device` | AIoT and future edge/device apps |
+| `application-client-root` | Browser-only client roots such as `sdkwork-mall` and `sdkwork-music` |
+
+The archetype decides which surfaces the application `MUST` declare. A surface
+that is not required for the archetype is optional and may still be declared when
+the application actually serves it.
+
+| Archetype | Required surfaces |
+| --- | --- |
+| `application-http-gateway` | `application.public-ingress` |
+| `realtime-application-platform` | `application.public-ingress`, `platform.api-gateway` |
+| `application-rest-edge-device` | `application.app-http`, `edge.device-ingress`, `platform.api-gateway` |
+| `application-client-root` | `platform.api-gateway` |
+
+`application-client-root` is the browser-only client root: it owns no application
+HTTP ingress, so it declares no application-plane surface and its
+`standalone.development` orchestration carries no `api-standalone-gateway`
+process. It `MUST` migrate to `application-http-gateway` once it serves an owned
+application HTTP API.
 
 ## 6. Profile Contract
 

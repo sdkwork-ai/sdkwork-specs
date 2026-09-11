@@ -10,11 +10,41 @@ import { materializeMissingComposedFacades } from './lib/materialize-composed-sd
 import {
   findViolationsInText,
   isConsumerSourcePath,
+  listGitIgnoredPaths,
   listWorkspaceRepos,
+  pathKey,
   walkFiles,
 } from './lib/app-sdk-consumer-import-patterns.mjs';
 
 const SPECS_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * Repository roots that sit directly inside `root`.
+ *
+ * A multi-repository workspace root is itself a repository — it carries
+ * `AGENTS.md` and `package.json`, so `listWorkspaceRepos` legitimately returns
+ * it — and it declares each sibling checkout as a git submodule. Two
+ * consequences make it wrong to walk the workspace root as if it were an
+ * ordinary repository:
+ *
+ * 1. `git ls-files --others --ignored` never reports submodule internals, so the
+ *    root's ignore list cannot prune them. The walk descended into every sibling
+ *    and read its build output: 255 reported violations, all of them inlined
+ *    generated transport inside git-ignored `lib/*.js` bundles.
+ * 2. It read every file in the workspace twice (once unusably from the root,
+ *    once correctly from the owning repository), which is most of this gate's
+ *    runtime.
+ *
+ * Every nested root is enumerated by `listWorkspaceRepos` in this same loop and
+ * scanned with its OWN ignore rules, so skipping them here loses no coverage.
+ */
+function nestedRepositoryRoots(root, repoRoots) {
+  const rootKey = pathKey(root);
+  return repoRoots.filter((candidate) => {
+    const candidateKey = pathKey(candidate);
+    return candidateKey !== rootKey && pathKey(path.dirname(candidate)) === rootKey;
+  });
+}
 
 function findMissingComposedFacades(workspace) {
   const missing = [];
@@ -50,9 +80,9 @@ function main() {
   });
 
   const workspace = path.resolve(values.workspace);
-  const repos = values.repo
+  const repoRoots = values.repo
     ? [path.resolve(values.repo)]
-    : listWorkspaceRepos(workspace);
+    : listWorkspaceRepos(workspace).map((repo) => path.resolve(repo));
 
   if (values['materialize-facades']) {
     const created = materializeMissingComposedFacades(workspace);
@@ -68,8 +98,17 @@ function main() {
 
   const violations = [...findMissingComposedFacades(workspace)];
   const unreadable = [];
-  for (const repoRoot of repos) {
-    for (const filePath of walkFiles(repoRoot, isConsumerSourcePath)) {
+  for (const repoRoot of repoRoots) {
+    // Prune the repository's own build output before the import scan. The
+    // contract is about authored source; a bundled `lib/` (tsdown/rollup/…)
+    // inlines the generated transport it bundled, so scanning it reported the
+    // build product as consumer-import violations and held this contract-tier
+    // gate red. See listGitIgnoredPaths.
+    const { dirs: ignoredDirs, files: ignoredFiles } = listGitIgnoredPaths(repoRoot);
+    // Stay inside this one working tree: a nested repository is scanned by its
+    // own iteration with its own ignore rules. See nestedRepositoryRoots.
+    const skipDirs = nestedRepositoryRoots(repoRoot, repoRoots);
+    for (const filePath of walkFiles(repoRoot, isConsumerSourcePath, { ignoredDirs, ignoredFiles, skipDirs })) {
       // A directory listing can yield entries that cannot be opened: dangling pnpm workspace
       // links, and build artifacts removed by a concurrent build. `readFileSync` used to throw
       // here, which aborted the whole gate with an unhandled ENOENT — and because

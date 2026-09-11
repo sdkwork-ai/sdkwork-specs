@@ -42,6 +42,11 @@
 Every independent deployable module root (including every Rust
 `sdkwork-*` service root) `MUST` ship:
 
+Scoped to **product modules**: a directory named `sdkwork-*` carrying
+`sdkwork.app.config.json` at its root. A pure library (no deployable surface,
+therefore no manifest) is reported as skipped, not failed; §2.1 still applies
+to it. The two scopes are defined once in §7.
+
 ```text
 <module-root>/
   bin/
@@ -96,6 +101,11 @@ Rules:
 
 **One rule: every authored script lives under a `bin/` directory.**
 
+Scoped to **every governed repository** — a directory named `sdkwork-*`
+carrying a root `AGENTS.md`, whether or not it ships a manifest — because this
+clause constrains *where an authored script may live*, which is a property of a
+library too. The two scopes are defined once in §7.
+
 There is no second script home and no exception table. A module root has
 exactly one place for hand-maintained scripts — `bin/` (§2) and its
 subdirectories. Everything that must physically exist *inside* another
@@ -110,6 +120,18 @@ artifact is a **build output**, produced by the build copying the script out of
 
 Consequences:
 
+- **Audited classes.** The audit covers the *shell family* — `.sh`, `.bash`,
+  `.zsh`, `.ksh`, `.ps1`, `.cmd`, `.bat`, plus any extension-less file whose
+  first two bytes are `#!`. `.cmd`/`.bat` are included because §2.2 makes the
+  Windows companion part of the same platform family; a suffix list that stopped
+  at `.ps1` left a whole second script home invisible on Windows. Generated
+  build-tool wrappers (`gradlew`, `mvnw`, and their `.bat`/`.cmd` twins) are tool
+  output and exempt. Language-native tooling (`.mjs`/`.js`/`.ts`/`.py`, whether
+  or not it carries a shebang) is **out of scope**: §2.2 requires verification to
+  be a language-native test, so a `scripts/**/*.mjs` gate or a `node --test`
+  suite beside its subject is the sanctioned form, not a second script home. The
+  rule below is about shell scripts, and `scripts/**` is named as a violation
+  location for them — not for the language-native tooling the fleet keeps there.
 - An authored script committed anywhere else — `deployments/**`, `docker/**`,
   `scripts/**`, `tools/**`, `tests/**`, a repository root, an app directory —
   is a violation, **whether or not it is tracked**. Move the source under
@@ -685,13 +707,32 @@ bash -n <module-root>/bin/*.sh
 sdkwork-bin-doctor   # via any bin script's hidden 'doctor' subcommand
 ```
 
-Both modes apply the same fleet predicate used by the operations gate and by
-the platform's own repo discovery: a *module* is a directory named `sdkwork-*`
-carrying `sdkwork.app.config.json` at its root. Directories without a manifest
-are reported as skipped; a manifest outside the `sdkwork-*` convention (a
-product repo) is reported separately and audited only under
+**Two scopes, stated once.** The two clauses of this standard do not govern the
+same set of repositories, and the difference is deliberate — conflating them
+either under-reports placement debt or invents `bin/` families for libraries
+that have no deployable surface:
+
+| Clause | Governs | Fleet predicate | Tool |
+| --- | --- | --- | --- |
+| **§2.1 Script placement** | every *governed repository* — a directory named `sdkwork-*` carrying a root `AGENTS.md` | `listWorkspaceRepositoryRoots()` | `check-script-placement.mjs` |
+| **§2 entrypoint family / §2.2 naming** | every *product module* — a directory named `sdkwork-*` carrying `sdkwork.app.config.json` | manifest keyed | `check-module-bin.mjs` |
+
+Rationale: §2.1 constrains *where an authored script may live*, which is true
+of a library too — a library that scatters a shell script is still a second
+script home. §2 instead requires a nine-entrypoint family whose members
+(`docker-image.sh`, `docker-deploy.sh`, `apps-pkg-installer.sh`, …) only mean
+something for a repository that builds, ships, or deploys a surface. A pure
+library owns no such family, so it is reported as skipped rather than failed.
+
+A manifest outside the `sdkwork-*` convention (a product repo such as
+`hub-installer`) is reported separately and audited only under
 `--include-off-fleet`, because the fleet convention does not claim it. A child
 process that cannot emit a report counts as a failure — never a silent pass.
+The same principle applies to a scan root: a tool that reads its root from the
+wrong argument resolves a directory that does not exist, scans zero files, and
+exits 0, which is a silent pass rather than a clean result. Gate argvs in
+`sdkwork-specs/gates.manifest.json` and the argument parsing in each tool are
+therefore part of the contract, not an implementation detail.
 
 - [ ] `bin/` contains exactly the nine entrypoints (`docker-image.sh`,
       `docker-deploy.sh`, `config.sh`, `doctor.sh`, `backup.sh`,

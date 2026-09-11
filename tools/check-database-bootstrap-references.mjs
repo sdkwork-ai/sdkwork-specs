@@ -123,7 +123,7 @@ export function checkProvenance(repoRoot, baselineDir, baselineFile, issues) {
   }
 }
 
-export function checkBaselineDir(repoRoot, engine, issues) {
+export function checkBaselineDir(repoRoot, engine, issues, baselineStrategy) {
   const dir = path.join(repoRoot, 'database', 'ddl', 'baseline', engine);
   if (!fs.existsSync(dir)) {
     return;
@@ -131,8 +131,22 @@ export function checkBaselineDir(repoRoot, engine, issues) {
   const sqlFiles = fs.readdirSync(dir).filter((name) => name.endsWith('.sql'));
   const primary = sqlFiles.filter((name) => /^0001_.*_baseline\.sql$/u.test(name));
   const stubs = sqlFiles.filter((name) => !/^0001_.*_baseline\.sql$/u.test(name));
-  if (primary.length !== 1) {
-    issues.push(`${engine}: expected exactly one 0001_*_baseline.sql (found ${primary.length})`);
+
+  // `baselineStrategy` decides whether a baseline file is required at all.
+  // DATABASE_FRAMEWORK_SPEC.md §6.1: `migrations-only` MUST provide at least one
+  // ordered `.up.sql` migration and "a baseline snapshot is optional"; only
+  // `baseline-plus-migrations` and `baseline-only-dev` MUST provide the
+  // engine-specific baseline file. This check was unconditional, so a
+  // migrations-only module that keeps a baseline directory — as sdkwork-drama
+  // does while its README documents drift-tooling consolidation — was reported
+  // as if it had lost a baseline it never claimed to have. Declaration of the
+  // strategy stays mandatory: an undeclared or unknown value is still an error.
+  const baselineRequired = baselineStrategy !== 'migrations-only';
+  if (baselineRequired && primary.length !== 1) {
+    issues.push(
+      `${engine}: expected exactly one 0001_*_baseline.sql (found ${primary.length})` +
+        ` (baselineStrategy=${baselineStrategy ?? '<undeclared>'})`,
+    );
   }
   for (const stub of stubs) {
     const sql = fs.readFileSync(path.join(dir, stub), 'utf8');
@@ -191,14 +205,14 @@ function main() {
     }
 
     if (manifest?.databaseRole === 'authoritative-server') {
-      checkBaselineDir(repoRoot, 'postgres', repoIssues);
+      checkBaselineDir(repoRoot, 'postgres', repoIssues, manifest.baselineStrategy);
       for (const relativePath of ['database/ddl/baseline/sqlite', 'database/migrations/sqlite']) {
         if (fs.existsSync(path.join(repoRoot, relativePath))) {
           repoIssues.push(`${relativePath}: authoritative-server roots must not own SQLite assets`);
         }
       }
     } else if (manifest?.databaseRole === 'client-local') {
-      checkBaselineDir(repoRoot, 'sqlite', repoIssues);
+      checkBaselineDir(repoRoot, 'sqlite', repoIssues, manifest.baselineStrategy);
       for (const relativePath of ['database/ddl/baseline/postgres', 'database/migrations/postgres']) {
         if (fs.existsSync(path.join(repoRoot, relativePath))) {
           repoIssues.push(`${relativePath}: client-local roots must not own PostgreSQL assets`);

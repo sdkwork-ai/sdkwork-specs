@@ -10,6 +10,8 @@ import fs from 'node:fs';
 
 import path from 'node:path';
 
+import { execFileSync } from 'node:child_process';
+
 
 
 export const LEGACY_GENERATED_TYPESCRIPT_PATTERN =
@@ -298,13 +300,135 @@ export function shouldSkipDirectory(name) {
 
 
 
-export function walkFiles(rootDir, predicate = () => true) {
+/**
+ * Everything git reports as ignored under `rootDir`, in one call: directories
+ * (trailing slash from `--directory`) and loose files.
+ *
+ * The consumer-import contract targets *authored source* — the imports a
+ * developer writes in `apps/` and `packages/`. A bundled artifact is not a
+ * source of imports: `packages/client/ui-sdkwork-<name>/lib/client.js` is
+ * emitted by `tsdown` from `src/` and is git-ignored, yet it inlines the
+ * generated transport it bundled, so every inlined match was reported as a
+ * violation. That produced 486 findings against a single repository's build
+ * output and held `check:sdk-standard` (a contract-tier gate) permanently red.
+ *
+ * `shouldSkipDirectory` already excludes `dist`/`build` by *name*, which covers
+ * the common bundlers but silently misses every other output directory name
+ * (`lib` here). Pruning by the repository's own ignore rules instead of a name
+ * list is the same predicate `check-script-placement.mjs` uses for §2.1: build
+ * state is what git ignores, whatever it is called.
+ */
+export function listGitIgnoredPaths(rootDir) {
+
+  const dirs = new Set();
+
+  const files = new Set();
+
+  try {
+
+    const out = execFileSync(
+      'git',
+      ['-C', rootDir, 'ls-files', '--others', '--ignored', '--exclude-standard', '--directory'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 },
+    );
+
+    for (const line of out.split('\n')) {
+
+      const trimmed = line.trim();
+
+      if (!trimmed) continue;
+
+      const isDir = trimmed.endsWith('/');
+
+      const rel = trimmed.replace(/\/+$/, '').split(path.sep).join('/');
+
+      if (!rel) continue;
+
+      if (isDir) dirs.add(rel);
+
+      else files.add(rel);
+
+    }
+
+  } catch {
+
+    // Not a repository, or git unavailable: no pruning. The walk still runs,
+    // so a missing git degrades to the previous (name-based) behaviour rather
+    // than silently auditing nothing.
+  }
+
+  return { dirs, files };
+
+}
+
+/**
+ * Comparable key for a path: resolved, and case-folded on Windows where the
+ * filesystem is case-insensitive. `walkFiles` uses it to compare a walk root
+ * against the nested repository roots it must not descend into.
+ */
+export function pathKey(value) {
+
+  const resolved = path.resolve(value);
+
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+
+}
+
+/** True when `relPath` sits in, or below, an ignored directory. */
+function isUnderIgnoredDir(relPath, ignoredDirs) {
+
+  if (ignoredDirs.has(relPath)) return true;
+
+  let cursor = relPath;
+
+  while (cursor.includes('/')) {
+
+    cursor = cursor.slice(0, cursor.lastIndexOf('/'));
+
+    if (ignoredDirs.has(cursor)) return true;
+
+  }
+
+  return false;
+
+}
+
+/**
+ * Walk `rootDir` for files matching `predicate`.
+ *
+ * `options.ignoredDirs` / `options.ignoredFiles` prune the walk by the
+ * repository's own ignore rules. `options.skipDirs` additionally refuses to
+ * descend into given absolute directories, which the caller uses to keep the
+ * walk inside ONE repository working tree.
+ *
+ * That last option matters because a multi-repository workspace root is itself
+ * a repository (it carries `AGENTS.md` + `package.json`) that declares each
+ * sibling checkout as a git submodule. Git never reports submodule internals as
+ * ignored, so the root's own ignore list cannot prune them: `walkFiles` on the
+ * workspace root descended into every sibling and read its build output. Each
+ * repository is enumerated as its own root by `listWorkspaceRepos`, so skipping
+ * the nested roots loses no coverage while removing both the false positives
+ * and the duplicate read of every file in the workspace.
+ */
+export function walkFiles(rootDir, predicate = () => true, options = {}) {
 
   const results = [];
 
   if (!fs.existsSync(rootDir)) return results;
 
+  const ignoredDirs = options.ignoredDirs ?? null;
 
+  const ignoredFiles = options.ignoredFiles ?? null;
+
+  const skipDirs = options.skipDirs ? [...options.skipDirs] : null;
+
+  const skipKeys = skipDirs && skipDirs.length > 0
+    ? new Set(skipDirs.map((entry) => pathKey(entry)))
+    : null;
+
+  const root = path.resolve(rootDir);
+
+  const toRel = (abs) => path.relative(root, abs).split(path.sep).join('/');
 
   const stack = [rootDir];
 
@@ -318,9 +442,15 @@ export function walkFiles(rootDir, predicate = () => true) {
 
       const fullPath = path.join(current, entry.name);
 
+      const rel = ignoredDirs || ignoredFiles ? toRel(fullPath) : '';
+
       if (entry.isDirectory()) {
 
         if (shouldSkipDirectory(entry.name)) continue;
+
+        if (skipKeys && skipKeys.has(pathKey(fullPath))) continue;
+
+        if (ignoredDirs && isUnderIgnoredDir(rel, ignoredDirs)) continue;
 
         stack.push(fullPath);
 
@@ -328,13 +458,13 @@ export function walkFiles(rootDir, predicate = () => true) {
 
       }
 
+      if (ignoredFiles && ignoredFiles.has(rel)) continue;
+
       if (predicate(fullPath)) results.push(fullPath);
 
     }
 
   }
-
-
 
   return results.sort();
 

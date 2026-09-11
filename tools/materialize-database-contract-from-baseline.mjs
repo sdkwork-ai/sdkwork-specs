@@ -6,6 +6,7 @@ function parseArgs(argv) {
   const args = {
     root: process.cwd(),
     baseline: '',
+    migrations: '',
     moduleId: '',
     owner: '',
     tablePrefix: '',
@@ -18,6 +19,9 @@ function parseArgs(argv) {
       index += 1;
     } else if (token === '--baseline') {
       args.baseline = argv[index + 1] ?? '';
+      index += 1;
+    } else if (token === '--migrations') {
+      args.migrations = argv[index + 1] ?? '';
       index += 1;
     } else if (token === '--module-id') {
       args.moduleId = argv[index + 1] ?? '';
@@ -39,18 +43,74 @@ function parseArgs(argv) {
   return args;
 }
 
+/**
+ * `migrations-only` roots have no baseline. Section 12 requires the command to
+ * materialize from the root's own committed DDL, which for that strategy is the
+ * ordered `*.up.sql` set. Concatenating it in version order reproduces the
+ * effective contract a fresh install reaches after applying every migration.
+ */
+function readMigrationsOnlyDdl(root, migrationsRelativeDir) {
+  const migrationsDir = path.join(root, migrationsRelativeDir);
+  if (!fs.existsSync(migrationsDir)) {
+    throw new Error(`--migrations directory not found: ${migrationsRelativeDir}`);
+  }
+  const upFiles = fs
+    .readdirSync(migrationsDir)
+    .filter((name) => name.endsWith('.up.sql'))
+    .sort();
+  if (upFiles.length === 0) {
+    throw new Error(
+      `--migrations directory ${migrationsRelativeDir} has no .up.sql file; migrations-only requires at least one ordered migration`,
+    );
+  }
+  return upFiles.map((name) => fs.readFileSync(path.join(migrationsDir, name), 'utf8')).join('\n');
+}
+
+/**
+ * Resolve the table names a fresh install ends up with, by replaying the DDL in
+ * order: `CREATE TABLE` adds a name, `ALTER TABLE ... RENAME TO ...` replaces it,
+ * `DROP TABLE` removes it.
+ *
+ * Parsing only `CREATE TABLE` is not enough. A forward, spec-mandated rename
+ * migration (section 7.4: repair incompatible objects with a reviewed forward
+ * migration) leaves the original `CREATE` in place and renames afterwards, so a
+ * `CREATE`-only scan would materialize the pre-rename names — the contract would
+ * be regenerated with table names that no longer exist.
+ */
 function collectTableNames(sql) {
-  const seen = new Set();
-  const tableNames = [];
-  for (const match of sql.matchAll(/CREATE TABLE(?: IF NOT EXISTS)? ([a-z0-9_]+)/gi)) {
-    const name = match[1];
-    if (seen.has(name)) {
+  const order = [];
+  const present = new Set();
+  const statement =
+    /CREATE TABLE(?: IF NOT EXISTS)?\s+([a-z0-9_]+)|ALTER TABLE(?: IF EXISTS)?\s+([a-z0-9_]+)\s+RENAME TO\s+([a-z0-9_]+)|DROP TABLE(?: IF EXISTS)?\s+([a-z0-9_]+)/gi;
+  for (const match of sql.matchAll(statement)) {
+    const [, created, renamedFrom, renamedTo, dropped] = match;
+    if (created) {
+      if (!present.has(created)) {
+        present.add(created);
+        order.push(created);
+      }
       continue;
     }
-    seen.add(name);
-    tableNames.push(name);
+    if (renamedFrom) {
+      const index = order.indexOf(renamedFrom);
+      present.delete(renamedFrom);
+      if (index >= 0) {
+        order[index] = renamedTo;
+      } else {
+        order.push(renamedTo);
+      }
+      present.add(renamedTo);
+      continue;
+    }
+    if (dropped) {
+      const index = order.indexOf(dropped);
+      if (index >= 0) {
+        order.splice(index, 1);
+      }
+      present.delete(dropped);
+    }
   }
-  return tableNames;
+  return order;
 }
 
 function collectPrefixes(tableNames) {
@@ -198,12 +258,18 @@ function renderPrefixContract(prefixes, fallbackPrefix) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!args.baseline || !args.moduleId || !args.owner) {
-    throw new Error('usage: --root <dir> --baseline <relative-postgres-sql> --module-id <id> --owner <team> [--table-prefix p_] [--prefixes p1_,p2_]');
+  if ((!args.baseline && !args.migrations) || !args.moduleId || !args.owner) {
+    throw new Error(
+      'usage: --root <dir> (--baseline <relative-sql> | --migrations <relative-dir>) --module-id <id> --owner <team> [--table-prefix p_] [--prefixes p1_,p2_]',
+    );
+  }
+  if (args.baseline && args.migrations) {
+    throw new Error('--baseline and --migrations are mutually exclusive');
   }
 
-  const baselinePath = path.join(args.root, args.baseline);
-  const sql = fs.readFileSync(baselinePath, 'utf8');
+  const sql = args.baseline
+    ? fs.readFileSync(path.join(args.root, args.baseline), 'utf8')
+    : readMigrationsOnlyDdl(args.root, args.migrations);
   const tableNames = collectTableNames(sql);
   const prefixes =
     args.prefixes.length > 0

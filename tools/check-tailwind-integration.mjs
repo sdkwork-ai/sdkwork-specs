@@ -66,6 +66,16 @@ function main() {
     ? listWorkspaceRepositories(args.target)
     : [args.target];
 
+  // Fail closed. `listWorkspaceRepositoryRoots` returns `[]` for a root that does
+  // not exist and for a directory holding no governed `sdkwork-*` checkout. In both
+  // cases the loop below runs zero times and the gate printed "tailwind integration
+  // passed (0 repository root(s))" with exit 0 — a passing line for a scan that read
+  // nothing. QUALITY_GATE_SPEC.md: a gate that reports success without reading source
+  // is worse than no gate, because it occupies a contract slot while enforcing nothing.
+  if (repoRoots.length === 0) {
+    fail(`no governed repository root under ${args.target}; refusing to report success on an empty scan`);
+  }
+
   const allIssues = [];
   for (const repoRoot of repoRoots) {
     allIssues.push(...scanRepositoryTailwindIntegration(repoRoot).map((issue) => ({

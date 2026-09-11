@@ -188,6 +188,16 @@ manual container log archaeology and is a spec violation.
 
 Every SDKWork application root or standalone backend service root that owns authoritative relational data `MUST` include:
 
+**Ownership predicate.** A repository *owns* authoritative relational data only when it holds persistence assets of its own:
+
+- a `database/` root; or
+- an in-repository migration directory; or
+- a persistence crate declared as a workspace member or a repository-local path dependency (for example `crates/sdkwork-account-repository-sqlx`).
+
+A path dependency whose target escapes the repository (`../<sibling>-<module>/crates/<name>-repository-sqlx`) is **consumption** of another module's persistence crate. It `MUST NOT` be treated as ownership, and it `MUST NOT` cause the consuming repository to be required to declare `database/` or the `db:*` script surface. A repository that owns no authoritative relational data `MUST NOT` declare a `database/` root or the `db:*` script surface; its persistence needs are satisfied through the owning module's SDK or RPC facade.
+
+Tools that enumerate database owners `MUST` derive ownership from this predicate rather than from a raw `repository-sqlx` substring match, which cannot distinguish ownership from consumption.
+
 ```text
 database/
   README.md
@@ -224,7 +234,7 @@ tests/
 Rules:
 
 - `database/` is the only authoritative source for lifecycle assets. Crate-local `migrations/` directories `MUST` migrate into `database/migrations/` or be referenced through SPI asset locators during a compatibility window.
-- `database/README.md` `MUST` document owner, `authoritative-server` role, PostgreSQL version/extension support, bootstrap commands, verification commands, and related specs.
+- `database/README.md` `MUST` document owner, `authoritative-server` role, PostgreSQL version/extension support, bootstrap commands, verification commands, related specs, and a `## Initialization state` section recording the `baselineStrategy`, the committed primary baseline path or the `migrations-only` bootstrap set, the ordered migration range, and the consolidation level defined in section 7.5.
 - Authoritative `database/` roots `MUST NOT` contain `migrations/sqlite/` or `ddl/baseline/sqlite/`. SQLite assets belong to a client/native module under section 5.2.
 - `fixtures/` is test-only. Production bootstrap `MUST NOT` read from `fixtures/`.
 - Generated artifacts under `ddl/generated/` `MUST NOT` be hand-edited.
@@ -342,6 +352,16 @@ Rules:
 - `migrations-only` `MUST` provide at least one ordered `.up.sql` migration that can initialize an empty database; a baseline snapshot is optional and is not an alternate production bootstrap path.
 - `baseline-plus-migrations` and `baseline-only-dev` `MUST` provide an engine-specific baseline SQL file. Post-baseline migrations may be empty until the contract evolves.
 - `baseline-only-dev` `MUST NOT` be selected by a production, staging, upgrade, or release profile.
+- An `authoritative-server` manifest `MUST` declare `lifecycle.activeSeedLocales` as a non-empty array.
+
+Single-prefix, multi-prefix, and multi-module roots:
+
+- A root that owns one prefix family `MUST` declare a non-empty `tablePrefix`. A root that owns several prefix families inside the same shared schema `MUST` declare `tablePrefixes` instead: a non-empty array of distinct, ownership-specific prefixes, where the first entry is the primary prefix.
+- `tablePrefix` and `tablePrefixes` `MUST NOT` both be declared. A root that declares neither is not an ownership-scoped database root and does not satisfy this standard.
+- The primary prefix (`tablePrefix`, or `tablePrefixes[0]`) `MUST` exactly equal `contract/schema.yaml#table_prefix`.
+- `contract/prefix-registry.json` `MUST` list every declared prefix family with its owner; additional per-family attributes such as a domain label `MAY` be added. Declaring a prefix in the manifest without registering it is non-compliant.
+- `modules` lists the module ids the root owns and `MUST` be `[]` when the root is a single-module root. A multi-module root `MUST` list every owned module id, and `serviceCode` identifies the primary module.
+- The broad-domain prefix prohibition in section 1 still applies: a shared prefix family such as `ai_` is only compliant when one application owns every table that uses it.
 
 Client-local manifest profile:
 
@@ -473,6 +493,8 @@ Rules:
 - `activeLocales` `MUST` be a subset of `supportedLocales`; `defaultLocale` and `fallbackLocale` `MUST` be members of `supportedLocales`.
 - `localeSets.{locale}.version` and `checksum` `MUST` change when the locale seed content changes.
 - Locale set files `MUST` reference files under `seeds/locales/{locale}/` for the same locale only.
+- `localeSets` `MUST` declare an entry for every locale listed in `activeLocales`. An active locale that has no locale-specific seed content yet declares `version`, `checksum`, and an empty `files` array rather than being omitted. A locale that must not execute is reserved by removing it from `activeLocales` (section 8.1) and from `profiles.*.locales`, not by leaving `localeSets` undeclared.
+- `database.manifest.json#lifecycle.activeSeedLocales` `MUST` list the same locales as `seeds/seed.manifest.json#activeLocales`.
 
 ## 7. Migration Standard
 
@@ -488,7 +510,7 @@ migrations/postgres/0001_create_forum_space.down.sql  # optional when safely rev
 Rules:
 
 - Version prefix `MUST` be zero-padded numeric or ISO-like sortable token.
-- Every `.up.sql` migration `MUST` declare its rollback strategy in metadata. A paired `.down.sql` file is optional and allowed only for a tested, bounded, data-preserving reversal. Irreversible or lossy migrations declare `reversible: false` and `rollback: forward-fix|restore-cutover`.
+- Every `.up.sql` migration `MUST` declare its rollback strategy in metadata. A paired `.down.sql` file is optional and allowed only for a tested, bounded, data-preserving reversal. Irreversible or lossy migrations declare `reversible: false` and a `rollback` token of `forward-fix` or `restore-cutover`. Conversely, a migration that ships a `.down.sql` `MUST` declare `reversible: true` and a `rollback` token of `down-migration`; a `.down.sql` whose `.up.sql` declares an irreversible strategy is contradictory and `MUST` be removed or recorded through the historical metadata sidecar of section 7.2.
 - Authoritative server migrations `MUST` live only under `migrations/postgres/` and may use PostgreSQL-native syntax required by the contract.
 - Client-local migrations `MUST` live only in the owning client module under `migrations/sqlite/` and implement that module's separate client-local contract.
 - PostgreSQL and SQLite migrations `MUST NOT` be copied, mechanically transliterated, or selected by runtime branching inside one SQL file. Cross-role data movement belongs in an explicit sync/projection contract.
@@ -519,6 +541,10 @@ Metadata rules:
 - `transactional: false` is required for operations such as `CREATE INDEX CONCURRENTLY`; the lifecycle runner `MUST` not wrap them in an implicit transaction.
 - The structured comment block is part of the checksum-covered migration content. Authors `MUST` complete it before the migration enters the Git index or can be consumed by another workspace.
 - A tracked historical migration `MUST NOT` be rewritten to add, repair, reorder, or reformat metadata. Missing historical metadata `MUST` be recorded in `migrations/{engine}/metadata.json` with `kind: sdkwork.database.migration-metadata` and `sourcePolicy: historical-immutable`; the next schema change uses a new forward migration.
+- The sidecar is the authoritative machine-readable record for a history-immutable migration. It `MAY` record a value for any metadata field, including a field the structured header already declares. Every field the sidecar overrides `MUST` carry a non-empty `correctionReason`, and the recorded value `MUST` itself be valid under this standard. The migration SQL remains byte-for-byte unchanged and remains checksum-covered; only the recorded metadata is corrected.
+- The effective metadata — header values with sidecar corrections applied — `MUST` satisfy every metadata rule that applies to a newly authored migration: `engine` equal to the containing engine directory, `reversible` exactly `true` or `false`, `rollback` beginning with one of the three strategy tokens below, and defined `transactional`, `lock`, `lock_timeout`, and `statement_timeout` for PostgreSQL. This is what makes a malformed historical header repairable without rewriting history.
+- `rollback` `MUST` begin with exactly one of `down-migration`, `forward-fix`, or `restore-cutover`. A parenthetical explanation `MAY` follow the token, for example `forward-fix (sentinel backfill is the canonical fix)`. The leading token is the machine-readable strategy; the explanation is documentation and `MUST NOT` replace the token. A value that does not begin with a token — raw SQL, or prose such as `drops both columns` — is malformed and `MUST` be corrected through the sidecar.
+- A `.down.sql` is permitted only for a bounded, data-preserving reversal (section 7.1). When a paired `.down.sql` performs a lossy reversal, the effective strategy `MUST` be `reversible: false` with `rollback` token `forward-fix` or `restore-cutover`, and the `.down.sql` `MUST` be removed; the reversal prose belongs in the migration `purpose` and the release rollback plan.
 - Automated metadata alignment `MAY` add headers to newly authored, untracked migration files or maintain the historical metadata sidecar. It `MUST` leave tracked migration SQL byte-for-byte unchanged.
 
 ### 7.3 History Tables
@@ -548,6 +574,35 @@ Rules aligned with `MIGRATION_SPEC.md` and `DATABASE_SPEC.md` section 22:
 - A release rollback `MUST` prefer compatible application rollback or forward-fix. Automated execution of every available `.down.sql` in reverse order is forbidden.
 - Shared-schema drift or an existing incompatible object `MUST` be repaired with a reviewed forward migration owned by the affected module. Replaying a changed baseline over a non-empty shared schema, deleting lifecycle history, or creating an application-specific database/schema to obtain a clean bootstrap is forbidden.
 - Migration tests `MUST` include a fallback schema containing a same-named decoy object when a migration uses unqualified object discovery or DDL. The migration must operate only on the first canonical schema and leave the fallback object unchanged. Production lifecycle execution uses `SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC=false`; temporary compatibility requires a dated exception and removal milestone.
+
+### 7.5 Initialization State And Baseline Consolidation
+
+*Initialization state* means a database root can be bootstrapped from its committed assets without replaying superseded history, and that every committed asset is accounted for by the contract. It is a property of the **asset set**, not a requirement that the migration tree be empty.
+
+Canonical baseline:
+
+- An authoritative-server root whose `baselineStrategy` is `baseline-plus-migrations` or `baseline-only-dev` `MUST` commit exactly one primary baseline at `ddl/baseline/postgres/0001_<moduleId>_baseline.sql`, where `<moduleId>` is `database.manifest.json#moduleId`.
+- A `migrations-only` root `MUST NOT` be required to commit a baseline; its ordered `migrations/postgres/*.up.sql` set is the bootstrap source defined in section 6.1.
+- Additional `.sql` files under `ddl/baseline/postgres/` `MUST` be retired stubs. A retired stub `MAY` retain provenance comments but `MUST NOT` contain `CREATE TABLE`; a second competing definition of the same table is forbidden.
+
+Post-baseline migrations:
+
+- Ordered post-baseline migrations `MUST` be retained as the upgrade path. They are lifecycle history under section 7.3 and `MUST NOT` be deleted, folded away, or classified as debt solely because the current baseline already expresses the same end state (section 7.4 forbids deleting lifecycle history and requires a reviewed forward migration to repair an existing object).
+- The primary baseline is an **immutable bootstrap anchor**. It `MUST NOT` be rewritten to absorb later migrations. A fresh install applies the baseline followed by every ordered migration, so the baseline alone is not the complete active table inventory; the baseline README `SHOULD` state that explicitly rather than implying it is the whole schema.
+- A post-baseline migration is therefore load-bearing for every deployment, including a fresh install, and not only for databases created before the baseline. A migration whose effect the baseline happens to already contain remains valid: it is idempotent by construction, not redundant debt.
+- Migration content is checksum-immutable under section 7.3, so the baseline and the migration files jointly define the contract; do not rewrite either to make the other "complete".
+
+Initialization-state debt is limited to:
+
+| Debt | Definition |
+| --- | --- |
+| `loose-migration` | A `.sql` file placed directly under `database/migrations/` instead of an engine directory such as `migrations/postgres/`. |
+| `engine-mismatch` | A migration whose `engine` metadata or containing directory disagrees with `database.manifest.json#engines`. |
+| `missing-metadata` | A migration that omits metadata required by section 7.2. |
+| `competing-baseline` | More than one `0001_*_baseline.sql`, a primary baseline whose name is not `0001_<moduleId>_baseline.sql`, or a baseline supplement that is not a retired stub. |
+| `undocumented-state` | `database/README.md` omits the `## Initialization state` section required by section 5.1. |
+
+The presence of an ordered `migrations/postgres/*.up.sql` file is **not** by itself initialization-state debt.
 
 ## 8. Seed And Locale Standard
 
@@ -919,12 +974,14 @@ Application roots `MUST` expose standard commands per `PNPM_SCRIPT_SPEC.md`:
 | `db:status` | Print lifecycle/installation state |
 | `db:drift` | Print drift report |
 | `db:drift:check` | Exit non-zero on error-level drift or pending migrations |
-| `db:materialize:contract` | Materialize L2 contract registries and manifest fields from baseline DDL |
+| `db:materialize:contract` | Materialize L2 contract registries and manifest fields from committed DDL (the baseline, or the ordered migration set for `migrations-only`) |
 | `db:bootstrap` | `db:migrate` then `db:seed` for development/bootstrap flows |
 
 Desktop or Tauri hosts with a declared `client-local` module `MAY` package that module's SQLite baseline and migrations into the native runtime. They `MUST NOT` mirror or mechanically convert the PostgreSQL authoritative baseline. Server CI and shared environments `MUST` use `sdkwork-database-cli` against the PostgreSQL `SDKWORK_DATABASE_*` profile; client-local CI validates its own SQLite contract separately.
 
 CLI backing implementation `MUST` live in `sdkwork-database-cli` or repository `tools/database/` thin wrappers.
+
+`db:materialize:contract` `MUST` materialize the L2 contract registries and manifest fields for its own application root from its own committed DDL source, resolved as in section 7.5: the canonical baseline for `baseline-plus-migrations` and `baseline-only-dev`, or the ordered `migrations/{engine}/*.up.sql` set for `migrations-only`. It `MUST NOT` delegate to another repository's database root or baseline, and the delegated materializer `MUST` resolve the canonical source path itself rather than depending on the exact script text.
 
 ## 13. Verification And Quality Gates
 
@@ -1014,6 +1071,7 @@ Application database lifecycle is compliant when:
 - [ ] `contract/schema.yaml` and registries exist for L2+
 - [ ] Authoritative manifest declares `databaseRole=authoritative-server`, `engines=[postgres]`, and `defaultEngine=postgres`
 - [ ] PostgreSQL migrations are ordered, checksum-tracked, history-backed, metadata-complete, and use safe forward/rollback strategy
+- [ ] Initialization state matches section 7.5: one canonical `0001_<moduleId>_baseline.sql` (or a `migrations-only` bootstrap set), no loose or metadata-incomplete migrations, no competing baseline, and the state documented in `database/README.md`
 - [ ] Seeds split `common` vs locale directories; default seed locale is `zh-CN`
 - [ ] Locale seed manifests declare `i18nVersion`, fallback/default/supported/active locales, locale set versions, and checksums.
 - [ ] Connection pool uses `sdkwork-database`

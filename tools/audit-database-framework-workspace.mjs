@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateDatabaseFramework } from './check-database-framework-standard.mjs';
 
 const TOOL_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -19,6 +19,42 @@ const REQUIRED_DB_SCRIPTS = [
   'db:materialize:contract',
   'db:bootstrap',
 ];
+
+// A repository owns its persistence crate when the crate lives inside it: either as a workspace
+// member (`"crates/<name>-repository-sqlx"`) or as a repository-local path dependency
+// (`...[!] = { path = "crates/<name>-repository-sqlx" }`).
+//
+// The dependency KEY is a Rust alias and may use underscores (`sdkwork_account_repository_sqlx`)
+// while the crate DIRECTORY is always kebab-case (`crates/sdkwork-account-repository-sqlx`), so
+// both spellings must be accepted.
+const REPOSITORY_SQLX_MEMBER =
+  /^[ \t]*"crates\/[^"]*repository[-_]sqlx[^"]*"[ \t]*,?[ \t]*$/m;
+const REPOSITORY_SQLX_PATH_DEPENDENCY =
+  /^[ \t]*[A-Za-z0-9_-]*repository[-_]sqlx[A-Za-z0-9_-]*[ \t]*=[ \t]*\{[^}]*\bpath[ \t]*=[ \t]*"([^"]+)"/gm;
+
+/**
+ * Whether a repository owns an SQLx persistence crate of its own.
+ *
+ * A path dependency that escapes the repository (for example
+ * `sdkwork-models-user-config-repository-sqlx = { path = "../sdkwork-models/crates/..." }`)
+ * means the repository CONSUMES another module's persistence crate and owns no migrations,
+ * manifest, or `database/` root of its own. Counting it as a database owner produced a false
+ * `missing:db:*` finding for `sdkwork-birdcoder`, an application shell with no database.
+ */
+export function ownsRepositorySqlxCrate(repoRoot) {
+  const cargoManifest = path.join(repoRoot, 'Cargo.toml');
+  if (!fs.existsSync(cargoManifest)) {
+    return false;
+  }
+  const source = fs.readFileSync(cargoManifest, 'utf8');
+  for (const match of source.matchAll(REPOSITORY_SQLX_PATH_DEPENDENCY)) {
+    const declared = match[1].replace(/\\/g, '/');
+    if (declared !== '..' && !declared.startsWith('../')) {
+      return true;
+    }
+  }
+  return REPOSITORY_SQLX_MEMBER.test(source);
+}
 
 function parseArgs(argv) {
   const args = { workspace: WORKSPACE_ROOT, json: false };
@@ -93,17 +129,13 @@ function scriptCoverage(packageJsonPath) {
   return { present, missing };
 }
 
-function classifyRepo(repoName, repoRoot) {
+export function classifyRepo(repoName, repoRoot) {
   const hasDatabaseDir = directoryContainsFiles(path.join(repoRoot, 'database'));
   const hasManifest = fs.existsSync(path.join(repoRoot, 'database', 'database.manifest.json'));
   const framework = hasDatabaseDir ? validateDatabaseFramework(repoRoot) : { ok: true, skipped: true, failures: [] };
   const legacyPaths = detectLegacyPaths(repoRoot);
   const scripts = scriptCoverage(path.join(repoRoot, 'package.json'));
-  const ownsDb =
-    hasDatabaseDir ||
-    legacyPaths.length > 0 ||
-    fs.existsSync(path.join(repoRoot, 'Cargo.toml')) &&
-      fs.readFileSync(path.join(repoRoot, 'Cargo.toml'), 'utf8').includes('repository-sqlx');
+  const ownsDb = hasDatabaseDir || legacyPaths.length > 0 || ownsRepositorySqlxCrate(repoRoot);
 
   let compliance = 'none';
   if (hasManifest && framework.ok && scripts.missing.length === 0) {
@@ -174,4 +206,7 @@ function main() {
   process.exit(failing.length === 0 ? 0 : 1);
 }
 
-main();
+const entryUrl = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : null;
+if (import.meta.url === entryUrl) {
+  main();
+}

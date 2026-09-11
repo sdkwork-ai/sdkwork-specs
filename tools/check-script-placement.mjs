@@ -60,14 +60,47 @@ const SCRATCH_DIR_PATTERNS = Object.freeze([
 ]);
 
 const SCRIPT_SUFFIXES = Object.freeze([
-  '.sh', '.bash', '.zsh', '.ksh', '.ps1',
+  '.sh', '.bash', '.zsh', '.ksh', '.ps1', '.cmd', '.bat',
 ]);
 
+/**
+ * Generated build-tool wrappers. `gradlew` / `mvnw` are emitted verbatim by
+ * their build tool and re-emitted on upgrade, so they are tool output rather
+ * than authored module scripts — the same category the generated-file patterns
+ * above already exempt. Naming them here keeps the rules below (the shebang
+ * rule that catches an un-suffixed authored `entrypoint`, and the `.cmd`/`.bat`
+ * suffix rule that catches the Windows twin of an authored `.sh`) free of those
+ * false positives.
+ */
+const TOOL_WRAPPER_STEMS = Object.freeze(['gradlew', 'mvnw']);
+
+function isToolWrapper(name) {
+  const lower = name.toLowerCase();
+  return TOOL_WRAPPER_STEMS.some(
+    (stem) => lower === stem || lower === `${stem}.bat` || lower === `${stem}.cmd`,
+  );
+}
+
+/**
+ * Authored scripts are recognised by suffix, and — for extension-less files —
+ * by shebang. `.cmd`/`.bat` are audited because `MODULE_BIN_SPEC.md` §2.2 makes
+ * the Windows companion part of the same platform family ("a `.ps1`/`.cmd`
+ * companion keeps the identical stem"): a suffix list that stopped at `.ps1`
+ * left every authored `.cmd`/`.bat` outside `bin/` invisible, so a module could
+ * satisfy the placement gate while shipping a second script home on Windows.
+ */
 function isScript(name) {
+  if (isToolWrapper(name)) return false;
   const lower = name.toLowerCase();
   if (lower.endsWith('.spec.template')) return false;
   if (lower.endsWith('.sh.template')) return true;
   return SCRIPT_SUFFIXES.some((suffix) => lower.endsWith(suffix));
+}
+
+function isScriptFile(name, absPath) {
+  if (isScript(name)) return true;
+  if (name.includes('.')) return false;
+  return hasShebang(absPath);
 }
 
 /**
@@ -91,22 +124,6 @@ function hasShebang(absPath) {
   } finally {
     if (handle !== undefined) fs.closeSync(handle);
   }
-}
-
-/**
- * Generated build-tool wrappers. `gradlew` / `mvnw` are emitted verbatim by
- * their build tool and re-emitted on upgrade, so they are tool output rather
- * than authored module scripts — the same category the generated-file patterns
- * above already exempt. Naming them here keeps the shebang rule (which is what
- * catches an un-suffixed authored `entrypoint`) free of those false positives.
- */
-const TOOL_WRAPPER_NAMES = Object.freeze(['gradlew', 'mvnw']);
-
-function isScriptFile(name, absPath) {
-  if (isScript(name)) return true;
-  if (name.includes('.')) return false;
-  if (TOOL_WRAPPER_NAMES.includes(name)) return false;
-  return hasShebang(absPath);
 }
 
 function isScratchDir(name) {

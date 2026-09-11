@@ -174,7 +174,7 @@ assert.ok(
   'failure should identify schema and manifest prefix mismatch',
 );
 assert.ok(
-  mismatchedPrefix.failures.some((item) => item.includes('prefix-registry.json must declare')),
+  mismatchedPrefix.failures.some((item) => item.includes('must register every database.manifest.json tablePrefix')),
   'failure should identify missing prefix ownership declaration',
 );
 assert.ok(
@@ -709,6 +709,106 @@ assert.ok(
 assert.ok(
   orgContractFails.some((item) => item.includes("DEFAULT ''")),
   'empty-string default must be reported as not the sentinel',
+);
+
+// Section 6.1: multi-prefix roots declare `tablePrefixes` (first entry primary) and
+// must register every declined family; a root that declares neither, or declares
+// both, is not an ownership-scoped database root.
+const multiPrefixRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-db-framework-'));
+scaffoldValidDatabaseRoot(multiPrefixRoot);
+const multiPrefixManifestPath = path.join(multiPrefixRoot, 'database/database.manifest.json');
+const multiPrefixManifest = JSON.parse(fs.readFileSync(multiPrefixManifestPath, 'utf8'));
+delete multiPrefixManifest.tablePrefix;
+multiPrefixManifest.tablePrefixes = ['demo_', 'demo_aux_'];
+writeJson('database/database.manifest.json', multiPrefixManifest, multiPrefixRoot);
+writeText(
+  'database/contract/schema.yaml',
+  'schema_version: 1\nkind: sdkwork.database.schema\ndatabase_role: authoritative-server\nmodule_id: demo\ncontract_version: 5.0.0\nengines:\n  - postgres\ntable_prefix: demo_\ntables: []\n',
+  multiPrefixRoot,
+);
+writeJson(
+  'database/contract/prefix-registry.json',
+  {
+    schemaVersion: 1,
+    kind: 'sdkwork.database.prefix-registry',
+    prefixes: [
+      { prefix: 'demo_', owner: 'demo-platform' },
+      { prefix: 'demo_aux_', owner: 'demo-platform' },
+    ],
+  },
+  multiPrefixRoot,
+);
+const multiPrefix = validateDatabaseModuleContract(path.join(multiPrefixRoot, 'database'));
+assert.ok(
+  !multiPrefix.failures.some((item) => item.includes('tablePrefix')),
+  `a fully registered multi-prefix root must pass, got ${JSON.stringify(multiPrefix.failures)}`,
+);
+
+const unregisteredSecondPrefixRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-db-framework-'));
+scaffoldValidDatabaseRoot(unregisteredSecondPrefixRoot);
+const unregisteredSecondPrefixManifest = JSON.parse(
+  fs.readFileSync(path.join(unregisteredSecondPrefixRoot, 'database/database.manifest.json'), 'utf8'),
+);
+delete unregisteredSecondPrefixManifest.tablePrefix;
+unregisteredSecondPrefixManifest.tablePrefixes = ['demo_', 'demo_aux_'];
+writeJson('database/database.manifest.json', unregisteredSecondPrefixManifest, unregisteredSecondPrefixRoot);
+writeText(
+  'database/contract/schema.yaml',
+  'schema_version: 1\nkind: sdkwork.database.schema\ndatabase_role: authoritative-server\nmodule_id: demo\ncontract_version: 5.0.0\nengines:\n  - postgres\ntable_prefix: demo_\ntables: []\n',
+  unregisteredSecondPrefixRoot,
+);
+const unregisteredSecondPrefix = validateDatabaseModuleContract(
+  path.join(unregisteredSecondPrefixRoot, 'database'),
+);
+assert.ok(
+  unregisteredSecondPrefix.failures.some(
+    (item) => item.includes('must register every database.manifest.json tablePrefix')
+      && item.includes('demo_aux_'),
+  ),
+  'every declared prefix family must be registered, not only the primary one',
+);
+
+const noPrefixRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-db-framework-'));
+scaffoldValidDatabaseRoot(noPrefixRoot);
+const noPrefixManifestPath = path.join(noPrefixRoot, 'database/database.manifest.json');
+const noPrefixManifest = JSON.parse(fs.readFileSync(noPrefixManifestPath, 'utf8'));
+delete noPrefixManifest.tablePrefix;
+writeJson('database/database.manifest.json', noPrefixManifest, noPrefixRoot);
+const noPrefix = validateDatabaseModuleContract(path.join(noPrefixRoot, 'database'));
+assert.ok(
+  noPrefix.failures.some((item) => item.includes('must declare a non-empty tablePrefix or tablePrefixes')),
+  'a root with no declared prefix is not ownership-scoped',
+);
+
+const bothPrefixFormsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-db-framework-'));
+scaffoldValidDatabaseRoot(bothPrefixFormsRoot);
+const bothPrefixFormsManifestPath = path.join(bothPrefixFormsRoot, 'database/database.manifest.json');
+const bothPrefixFormsManifest = JSON.parse(fs.readFileSync(bothPrefixFormsManifestPath, 'utf8'));
+bothPrefixFormsManifest.tablePrefixes = ['demo_'];
+writeJson('database/database.manifest.json', bothPrefixFormsManifest, bothPrefixFormsRoot);
+const bothPrefixForms = validateDatabaseModuleContract(path.join(bothPrefixFormsRoot, 'database'));
+assert.ok(
+  bothPrefixForms.failures.some((item) => item.includes('must not declare both tablePrefix and tablePrefixes')),
+  'declaring both prefix forms must be rejected',
+);
+
+const noActiveSeedLocaleRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-db-framework-'));
+scaffoldValidDatabaseRoot(noActiveSeedLocaleRoot);
+const noActiveSeedLocaleManifestPath = path.join(
+  noActiveSeedLocaleRoot,
+  'database/database.manifest.json',
+);
+const noActiveSeedLocaleManifest = JSON.parse(
+  fs.readFileSync(noActiveSeedLocaleManifestPath, 'utf8'),
+);
+delete noActiveSeedLocaleManifest.lifecycle.activeSeedLocales;
+writeJson('database/database.manifest.json', noActiveSeedLocaleManifest, noActiveSeedLocaleRoot);
+const noActiveSeedLocale = validateDatabaseModuleContract(
+  path.join(noActiveSeedLocaleRoot, 'database'),
+);
+assert.ok(
+  noActiveSeedLocale.failures.some((item) => item.includes('activeSeedLocales must be a non-empty array')),
+  'authoritative-server manifests must declare lifecycle.activeSeedLocales',
 );
 
 process.stdout.write('check-database-framework-standard.test.mjs passed\n');

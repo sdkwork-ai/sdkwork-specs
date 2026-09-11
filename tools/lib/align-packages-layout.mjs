@@ -64,6 +64,19 @@ function isDirectory(targetPath) {
   }
 }
 
+/**
+ * True when the path itself is a symlink/junction. `lstatSync` is required:
+ * `statSync` follows the link and reports the target, so every recursive-delete
+ * decision must consult the link status of the path before descending into it.
+ */
+function isSymbolicLinkPath(targetPath) {
+  try {
+    return fs.lstatSync(targetPath).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
 function listChildDirectories(dirPath) {
   if (!isDirectory(dirPath)) {
     return [];
@@ -197,7 +210,10 @@ function hasWorkspacePackageAtRoot(packagesDir) {
 function removeOrphanPackageDirectories(repoRoot, dryRun) {
   const actions = [];
   const packagesDir = path.join(repoRoot, 'packages');
-  if (!isDirectory(packagesDir)) {
+  // Never descend through a compatibility link: the entries it exposes are the
+  // canonical packages, and deleting a "no package.json" entry would delete the
+  // real source through the link.
+  if (!isDirectory(packagesDir) || isSymbolicLinkPath(packagesDir)) {
     return actions;
   }
 
@@ -270,7 +286,7 @@ function collectLegacyPackageMoves(repoRoot, applicationCode) {
 
   for (const [legacyFamily, suffix] of Object.entries(LEGACY_FAMILY_TARGET_SUFFIX)) {
     const legacyAbsolute = path.join(repoRoot, legacyFamily);
-    if (!isDirectory(legacyAbsolute)) {
+    if (!isDirectory(legacyAbsolute) || isSymbolicLinkPath(legacyAbsolute)) {
       continue;
     }
 
@@ -280,7 +296,7 @@ function collectLegacyPackageMoves(repoRoot, applicationCode) {
   }
 
   const repoPackagesDir = path.join(repoRoot, 'packages');
-  if (isDirectory(repoPackagesDir)) {
+  if (isDirectory(repoPackagesDir) && !isSymbolicLinkPath(repoPackagesDir)) {
     for (const entry of listChildDirectories(repoPackagesDir)) {
       if (LEGACY_REPO_PACKAGE_FAMILIES.some((legacyPath) => legacyPath.endsWith(entry))) {
         continue;
@@ -413,6 +429,56 @@ function moveDirectorySync(fromAbsolute, toAbsolute) {
   }
 }
 
+/**
+ * Directories that are build output or installed dependencies rather than
+ * authored source. They are excluded from the duplicate comparison so a stale
+ * `dist/` or `node_modules/` in one copy does not mask an identity match.
+ */
+const DUPLICATE_COMPARE_IGNORED_DIRS = new Set([
+  'node_modules', 'dist', 'target', '.turbo', '.cache', '.next', 'coverage',
+]);
+
+/**
+ * Compare two directory trees by relative path and byte content.
+ *
+ * `alignRepositoryPackagesLayout` deletes the legacy copy whenever the canonical
+ * target already exists. Without this check a diverged legacy tree — one that
+ * received a local fix the canonical copy never got — would be deleted with no
+ * way to notice. The caller keeps and reports the legacy tree instead, so the
+ * layout gate stays red until an operator reconciles the two.
+ */
+function treesAreIdentical(leftAbsolute, rightAbsolute) {
+  const collect = (dirPath, prefix, files) => {
+    for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        if (DUPLICATE_COMPARE_IGNORED_DIRS.has(entry.name)) {
+          continue;
+        }
+        collect(path.join(dirPath, entry.name), relative, files);
+        continue;
+      }
+      if (entry.isFile()) {
+        files.set(relative, fs.readFileSync(path.join(dirPath, entry.name)));
+      }
+    }
+    return files;
+  };
+
+  const leftFiles = collect(leftAbsolute, '', new Map());
+  const rightFiles = collect(rightAbsolute, '', new Map());
+  if (leftFiles.size !== rightFiles.size) {
+    return false;
+  }
+  for (const [relative, content] of leftFiles) {
+    const counterpart = rightFiles.get(relative);
+    if (counterpart === undefined || !counterpart.equals(content)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function removeEmptyDirectoryTree(dirPath, dryRun) {
   if (!isDirectory(dirPath)) {
     return false;
@@ -487,21 +553,28 @@ function repairDoublePrefixedApplicationRoots(repoRoot, dryRun) {
 function removeEmptyLegacyDirectories(repoRoot, dryRun) {
   const actions = [];
   for (const legacyFamily of LEGACY_REPO_PACKAGE_FAMILIES) {
-    if (removeEmptyDirectoryTree(path.join(repoRoot, legacyFamily), dryRun)) {
+    const legacyAbsolute = path.join(repoRoot, legacyFamily);
+    if (isSymbolicLinkPath(legacyAbsolute)) {
+      continue;
+    }
+    if (removeEmptyDirectoryTree(legacyAbsolute, dryRun)) {
       actions.push(`remove empty ${legacyFamily}/`);
     }
   }
 
-  if (removeEmptyDirectoryTree(path.join(repoRoot, 'packages'), dryRun)) {
+  const packagesDir = path.join(repoRoot, 'packages');
+  // A compatibility link is removed by `unlinkSync` in the caller. Treating it as
+  // a stub directory here would `rmSync` through the link into the canonical tree.
+  if (isSymbolicLinkPath(packagesDir)) {
+    return actions;
+  }
+  if (removeEmptyDirectoryTree(packagesDir, dryRun)) {
     actions.push('remove empty packages/');
-  } else {
-    const packagesDir = path.join(repoRoot, 'packages');
-    if (isDirectory(packagesDir) && !hasWorkspacePackageAtRoot(packagesDir)) {
-      if (!dryRun) {
-        fs.rmSync(packagesDir, { recursive: true, force: true });
-      }
-      actions.push('remove stub packages/');
+  } else if (isDirectory(packagesDir) && !hasWorkspacePackageAtRoot(packagesDir)) {
+    if (!dryRun) {
+      fs.rmSync(packagesDir, { recursive: true, force: true });
     }
+    actions.push('remove stub packages/');
   }
   return actions;
 }
@@ -535,10 +608,33 @@ export function alignRepositoryPackagesLayout(repoRoot, options = {}) {
 
   const applicationCode = inferApplicationCode(repoRoot);
   repairDoublePrefixedApplicationRoots(repoRoot, dryRun).forEach((action) => actions.push(action));
+
+  // A compatibility link at a legacy family root resolves into the canonical
+  // `apps/<application-root>/packages/` tree. Removing it means removing the link
+  // itself: `fs.rmSync` on a path whose ancestor is a link follows the link and
+  // deletes the canonical packages instead, leaving a dangling link behind.
+  for (const legacyFamily of new Set(['packages', ...LEGACY_REPO_PACKAGE_FAMILIES])) {
+    const legacyAbsolute = path.join(repoRoot, legacyFamily);
+    if (!isSymbolicLinkPath(legacyAbsolute)) {
+      continue;
+    }
+    if (!dryRun) {
+      fs.unlinkSync(legacyAbsolute);
+    }
+    actions.push(`remove legacy packages symlink: ${legacyFamily}`);
+    changed.push(legacyFamily);
+  }
+
   const moves = collectLegacyPackageMoves(repoRoot, applicationCode);
 
   for (const move of moves) {
     if (fs.existsSync(move.toAbsolute)) {
+      if (!treesAreIdentical(move.fromAbsolute, move.toAbsolute)) {
+        actions.push(
+          `keep legacy source, content differs: ${move.from} (reconcile with ${move.to} before removing)`,
+        );
+        continue;
+      }
       if (!dryRun) {
         fs.rmSync(move.fromAbsolute, { recursive: true, force: true });
       }

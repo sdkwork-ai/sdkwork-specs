@@ -14,7 +14,7 @@ const REQUIRED_DB_SCRIPTS = [
   'db:drift',
   'db:drift:check',
 ];
-const L2_DB_SCRIPTS = ['db:materialize:contract', 'db:bootstrap'];
+const AUTHORITATIVE_DB_SCRIPTS = ['db:materialize:contract', 'db:bootstrap'];
 const MANIFEST_SCHEMA_VERSION = 2;
 const AUTHORITATIVE_ROLE = 'authoritative-server';
 const CLIENT_LOCAL_ROLE = 'client-local';
@@ -81,6 +81,18 @@ function primaryManifestPrefix(manifest) {
     return manifest.tablePrefixes[0];
   }
   return manifest.tablePrefix ?? null;
+}
+
+/**
+ * Section 6.1: a root declares its owned prefix families either as a single
+ * `tablePrefix` or as a non-empty `tablePrefixes` array whose first entry is
+ * primary. Every declared family must be registered in `prefix-registry.json`.
+ */
+function declaredManifestPrefixes(manifest) {
+  if (Array.isArray(manifest.tablePrefixes) && manifest.tablePrefixes.length > 0) {
+    return manifest.tablePrefixes.filter(isNonEmptyString);
+  }
+  return isNonEmptyString(manifest.tablePrefix) ? [manifest.tablePrefix] : [];
 }
 
 function isValidSemver(value) {
@@ -447,6 +459,19 @@ export function validateDatabaseModuleContract(moduleRootDir) {
       'database.manifest.json lifecycle.autoMigrate must be false for authoritative-server modules',
     );
   }
+  // Section 6.1: an authoritative-server manifest must declare the active seed
+  // locale set. The layout validator defaults a missing value to zh-CN, which would
+  // otherwise let the field stay absent and make section 6.4's manifest/seed
+  // equality rule vacuous.
+  if (
+    databaseRole === AUTHORITATIVE_ROLE
+    && (!Array.isArray(manifest.lifecycle?.activeSeedLocales)
+      || manifest.lifecycle.activeSeedLocales.length === 0)
+  ) {
+    fail(
+      'database.manifest.json lifecycle.activeSeedLocales must be a non-empty array for authoritative-server modules',
+    );
+  }
 
   const baselineStrategy = manifest.baselineStrategy;
   if (!BASELINE_STRATEGIES.has(baselineStrategy)) {
@@ -475,14 +500,31 @@ export function validateDatabaseModuleContract(moduleRootDir) {
       }
     }
 
+    // Section 6.1: a root that declares neither tablePrefix nor tablePrefixes is
+    // not an ownership-scoped database root.
+    if (declaredManifestPrefixes(manifest).length === 0) {
+      fail('database.manifest.json must declare a non-empty tablePrefix or tablePrefixes for an authoritative-server root');
+    }
+    if (Array.isArray(manifest.tablePrefixes) && manifest.tablePrefixes.length > 0 && manifest.tablePrefix !== undefined) {
+      fail('database.manifest.json must not declare both tablePrefix and tablePrefixes');
+    }
+
     try {
       const prefixRegistry = readJsonAt(moduleRootDir, 'contract/prefix-registry.json');
       if (!Array.isArray(prefixRegistry.prefixes) || prefixRegistry.prefixes.length === 0) {
-        fail('contract/prefix-registry.json prefixes must be non-empty for L2 modules');
-      } else if (!prefixRegistry.prefixes.some((entry) => entry?.prefix === primaryManifestPrefix(manifest))) {
-        fail(
-          `contract/prefix-registry.json must declare database.manifest.json primary tablePrefix (${primaryManifestPrefix(manifest) ?? 'missing'})`,
+        fail('contract/prefix-registry.json prefixes must be non-empty for an authoritative-server root');
+      } else {
+        const registeredPrefixes = new Set(
+          prefixRegistry.prefixes.map((entry) => entry?.prefix).filter(isNonEmptyString),
         );
+        const unregistered = declaredManifestPrefixes(manifest).filter(
+          (prefix) => !registeredPrefixes.has(prefix),
+        );
+        if (unregistered.length > 0) {
+          fail(
+            `contract/prefix-registry.json must register every database.manifest.json tablePrefix (missing ${unregistered.join(', ')})`,
+          );
+        }
       }
     } catch (error) {
       fail(`contract/prefix-registry.json must be valid JSON (${error.message})`);
@@ -491,7 +533,7 @@ export function validateDatabaseModuleContract(moduleRootDir) {
     try {
       const tableRegistry = readJsonAt(moduleRootDir, 'contract/table-registry.json');
       if (!Array.isArray(tableRegistry.tables) || tableRegistry.tables.length === 0) {
-        fail('contract/table-registry.json tables must be non-empty for L2 modules');
+        fail('contract/table-registry.json tables must be non-empty for an authoritative-server root');
       } else if (
         Array.isArray(manifest.tablePrefixes) && manifest.tablePrefixes.length > 0
         && tableRegistry.tables.some(
@@ -560,6 +602,30 @@ function migrationMetadata(sql) {
   return values;
 }
 
+/**
+ * Section 7.2: `rollback` MUST begin with a strategy token; a parenthetical
+ * explanation MAY follow, for example `forward-fix (sentinel backfill ...)`.
+ */
+const ROLLBACK_TOKENS = ['down-migration', 'forward-fix', 'restore-cutover'];
+
+function rollbackToken(value) {
+  if (!isNonEmptyString(value)) return null;
+  const token = ROLLBACK_TOKENS.find((candidate) => value === candidate || value.startsWith(`${candidate} `));
+  return token ?? null;
+}
+
+/**
+ * Section 7.2: the metadata sidecar is the authoritative machine-readable record for a
+ * history-immutable migration. It may correct a header value that is missing or invalid.
+ */
+function isValidHistoricalMetadataValue(key, value, engine) {
+  if (!isNonEmptyString(value)) return false;
+  if (key === 'engine') return value === engine;
+  if (key === 'rollback') return rollbackToken(value) !== null;
+  if (key === 'reversible' || key === 'transactional') return value === 'true' || value === 'false';
+  return true;
+}
+
 function migrationMetadataSidecar(migrationDir, engine, fail) {
   const relativePath = `migrations/${engine}/metadata.json`;
   const sidecarPath = path.join(migrationDir, 'metadata.json');
@@ -617,13 +683,25 @@ function validateMigrationDirectory(moduleRootDir, engine, fail) {
     const upPath = path.join(migrationDir, entry);
     const upSql = fs.readFileSync(upPath, 'utf8');
     const headerMetadata = migrationMetadata(upSql);
-    const sidecarMetadata = supplementalMetadata[entry] ?? {};
-    for (const [key, value] of Object.entries(sidecarMetadata)) {
-      if (headerMetadata[key] !== undefined && headerMetadata[key] !== value) {
-        fail(`migrations/${engine}/metadata.json entry ${entry} conflicts with header metadata ${key}`);
+    const { correctionReason, ...sidecarMetadata } = supplementalMetadata[entry] ?? {};
+    // Section 7.2: the sidecar may record a value for any field, including one the
+    // header already declares. Every override must be auditable and must itself be valid.
+    const overrides = Object.keys(sidecarMetadata).filter(
+      (key) => headerMetadata[key] !== undefined && headerMetadata[key] !== sidecarMetadata[key],
+    );
+    if (overrides.length > 0 && !isNonEmptyString(correctionReason)) {
+      fail(
+        `migrations/${engine}/metadata.json entry ${entry} must define correctionReason when overriding ${overrides.join(', ')}`,
+      );
+    }
+    for (const key of overrides) {
+      if (!isValidHistoricalMetadataValue(key, sidecarMetadata[key], engine)) {
+        fail(
+          `migrations/${engine}/metadata.json entry ${entry} correction ${key}=${sidecarMetadata[key]} is not a valid value`,
+        );
       }
     }
-    const metadata = { ...sidecarMetadata, ...headerMetadata };
+    const metadata = { ...headerMetadata, ...sidecarMetadata };
     const downName = entry.replace(/\.up\.sql$/u, '.down.sql');
     const downPath = path.join(migrationDir, downName);
     const hasDown = fs.existsSync(downPath);
@@ -645,6 +723,16 @@ function validateMigrationDirectory(moduleRootDir, engine, fail) {
         fail(`migrations/${engine}/${entry} metadata ${key} must be defined`);
       }
     }
+    // Section 7.2: `rollback` MUST begin with a machine-readable strategy token.
+    const effectiveRollbackToken = rollbackToken(metadata.rollback);
+    if (isNonEmptyString(metadata.rollback) && effectiveRollbackToken === null) {
+      fail(
+        `migrations/${engine}/${entry} metadata rollback must begin with down-migration, forward-fix, or restore-cutover (found ${metadata.rollback})`,
+      );
+    }
+    if (isNonEmptyString(metadata.reversible) && metadata.reversible !== 'true' && metadata.reversible !== 'false') {
+      fail(`migrations/${engine}/${entry} metadata reversible must be true or false (found ${metadata.reversible})`);
+    }
     if (engine === 'postgres') {
       for (const key of ['lock', 'lock_timeout', 'statement_timeout']) {
         if (!isNonEmptyString(metadata[key])) {
@@ -653,10 +741,10 @@ function validateMigrationDirectory(moduleRootDir, engine, fail) {
       }
     }
 
-    if (metadata.reversible === 'true' && metadata.rollback === 'down-migration' && !hasDown) {
+    if (metadata.reversible === 'true' && effectiveRollbackToken === 'down-migration' && !hasDown) {
       fail(`migrations/${engine}/${downName} must exist when rollback is down-migration`);
     }
-    if (hasDown && (metadata.reversible !== 'true' || metadata.rollback !== 'down-migration')) {
+    if (hasDown && (metadata.reversible !== 'true' || effectiveRollbackToken !== 'down-migration')) {
       fail(
         `migrations/${engine}/${downName} requires reversible: true and rollback: down-migration`,
       );
@@ -781,9 +869,9 @@ export function validateDatabaseFramework(rootDir) {
       }
     }
     if (contractResult.databaseRole === AUTHORITATIVE_ROLE) {
-      for (const scriptName of L2_DB_SCRIPTS) {
+      for (const scriptName of AUTHORITATIVE_DB_SCRIPTS) {
         if (!scripts[scriptName]) {
-          failures.push(`package.json scripts must define ${scriptName} for L2 database modules`);
+          failures.push(`package.json scripts must define ${scriptName} for authoritative-server modules`);
         }
       }
     }

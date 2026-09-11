@@ -1332,11 +1332,31 @@ Rules:
 - Narrowing `SDKWORK_WEBSERVER_IMPORT_ENVIRONMENTS` is an explicit operator
   commission (e.g. an isolated tier that intentionally serves a subset);
   `IMPORT_REQUIRED`/probe behaviour is unchanged.
-- The per-module Adaptive Web static roots and the module app-roots catalog
-  already carry a per-environment dimension
-  (`pc_static_by_environment` / `h5_static_by_environment`), so each routed
-  environment's PC/H5 assets resolve from that environment's dist tree when it
-  is built and synced (build-serve coherence, `ENVIRONMENT_SPEC.md` §5.1.0.2).
+- The per-module Adaptive Web static roots `MUST` resolve per routed
+  environment (`SDKWORK_DEPLOY_SPEC.md` §8.1 fixes every sidecar's `@pc`/`@h5`
+  roots to one package path, `/usr/share/sdkwork/<module>/web/<surface>`, so a
+  single path would otherwise serve one environment's PC/H5 bundle under every
+  commissioned environment's domain). The container entrypoint `MUST`
+  materialize an environment-scoped sibling root
+  `<base>/<module>/web/<alias>/<surface>` (`alias` ∈
+  `dev|test|staging|demo|prod`) for **every** commissioned environment, and the
+  webserver data plane `MUST` resolve each imported sidecar's Adaptive Web
+  static resources to its own environment's sibling root when that root exists.
+  This is resolution, not rewriting: the module sidecar stays the single source
+  of truth and is never edited (`§17.3`). When the sibling root is absent (a
+  single-environment deployment) the declared root is used unchanged, so the
+  contract is backward compatible. Each routed environment's PC/H5 assets
+  therefore resolve from that environment's dist tree when it is built and
+  synced (build-serve coherence, `ENVIRONMENT_SPEC.md` §5.1.0.2).
+- Each imported sidecar `MUST` keep a distinct import id — the module id
+  qualified by profile and environment (`<module>-<profile>-<environment>` for
+  `nginx.<profile>.<environment>.conf`). The aggregator emits one `include` per
+  commissioned environment, and the import list upserts by `id` (a later entry
+  with the same `id` replaces the earlier one), so an id derived from the module
+  alone collapses the commissioned set down to the last-listed sidecar and every
+  other environment's domain falls through to the listener default host. Legacy
+  single-file sidecars that do not follow the
+  `nginx.<profile>.<environment>.conf` naming keep the bare module id.
 
 ### 17.4 `sdkwork-webserver` Is Standalone-Only
 

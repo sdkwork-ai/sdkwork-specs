@@ -21,6 +21,7 @@ targets are runtime targets governed by `CONFIG_SPEC.md` and
 | `application-http-gateway` | application HTTP gateway | `sdkwork-drive` |
 | `realtime-application-platform` | realtime application plus platform gateway | `sdkwork-im`, future collaboration/RTC apps |
 | `application-rest-edge-device` | application REST plus edge device | `sdkwork-aiot`, future IoT/edge apps |
+| `application-client-root` | browser-only client root | `sdkwork-mall`, `sdkwork-music`, `sdkwork-sandbox`, `sdkwork-web-framework` |
 
 Retired archetype ids: `http-product-gateway`,
 `multi-plane-realtime`, and `dual-plane-connected`.
@@ -188,7 +189,51 @@ Rules:
 - Internal edge bridges and worker processes may scale independently, but the
   public application profile remains either `standalone.*` or `cloud.*`.
 
-## 5. Adding A New Archetype
+## 5. `application-client-root`
+
+Browser-only client root. It ships PC/H5 browser bundles and consumes deployed
+platform APIs through the deployed platform gateway. It owns no application HTTP
+ingress, so its nginx webserver profile stays disabled and no application-plane
+listener is published.
+
+### Connectivity Planes
+
+- `platform` is required: every browser API call resolves through the platform
+  gateway surface.
+- `application` is **not** owned. A client root `MUST NOT` declare
+  `application.public-ingress`, `application.app-http`, or any other
+  application-plane HTTP surface.
+- `operations` and `edge` are not used.
+
+### Surfaces
+
+| Surface id | Plane | Protocols | Required |
+| --- | --- | --- | --- |
+| `platform.api-gateway` | platform | `http` | Yes |
+
+### Allowed Profiles
+
+| Profile id | deploymentProfile |
+| --- | --- |
+| `standalone.development` | standalone |
+| `standalone.production` | standalone |
+| `cloud.development` | cloud |
+| `cloud.production` | cloud |
+
+Rules:
+
+- `platform.api-gateway` `MUST` declare `httpUrlEnv`; a browser consumer also
+  declares `clientHttpEnv`.
+- The archetype `MUST NOT` declare an `api-standalone-gateway` process in any
+  orchestration profile: it terminates no application HTTP API, so its
+  `standalone` profile starts no local ingress process (see
+  `APP_RUNTIME_TOPOLOGY_SPEC.md` section 5).
+- Browser bundle delivery is owned by the application's own dev/build tooling in
+  `standalone` and by the deployed platform host in `cloud`.
+- A client root that later grows an owned application HTTP API `MUST` migrate to
+  `application-http-gateway` instead of adding an application-plane surface here.
+
+## 6. Adding A New Archetype
 
 1. Propose archetype id, deployment profile support, and connectivity planes in
    an architecture decision.

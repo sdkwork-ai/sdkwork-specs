@@ -272,6 +272,11 @@ async function runWorkspace(wsRoot, limit, json, offFleet) {
 
   console.log(`\n[module-bin] workspace ${wsRoot}`);
   console.log(`  modules: ${reports.length}   passed: ${reports.length - failed.length}   failed: ${failed.length}`);
+  // A `violations : N` line is the shape `run-gate-matrix.mjs#countItems` reads,
+  // so a guardrail entry can measure this gate. Without it the matrix recorded
+  // 0 for every run and the gate could never fail — the placement gates were
+  // unwired from both tiers entirely before this line existed.
+  console.log(`  violations:      ${failed.reduce((n, r) => n + (r.issues?.length ?? 0), 0)}`);
   if (skipped.length > 0) console.log(`  skipped (not a module — no sdkwork.app.config.json): ${skipped.sort().join(', ')}`);
   if (offFleetManifests.length > 0) {
     console.log(`  skipped (manifest outside the sdkwork-* fleet convention, not audited${offFleet ? ' — audited via --include-off-fleet' : ''}): ${offFleetManifests.sort().join(', ')}`);

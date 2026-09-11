@@ -106,6 +106,21 @@ export function hasRepositoryRootPackages(repoRoot) {
   return isDirectory(path.join(repoRoot, 'packages'));
 }
 
+/**
+ * A repository-root `packages/` that is a symlink/junction into the canonical
+ * `apps/<application-root>/packages/` tree is a compatibility link, not a second
+ * package family. It must be classified separately: the remedy is to remove the
+ * link itself, and any tool that recursively deletes the path would otherwise
+ * follow the link and destroy the canonical source.
+ */
+export function isRepositoryRootPackagesSymlink(repoRoot) {
+  try {
+    return fs.lstatSync(path.join(repoRoot, 'packages')).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
 export function resolveRepositoryKind(repoRoot, options = {}) {
   if (options.repositoryKind) {
     return options.repositoryKind;
@@ -206,12 +221,16 @@ export function classifyRepositoryRootPackages(repoRoot, options = {}) {
     || (repositoryKind === 'unknown' && ownsApplicationLineCapabilities(repoRoot));
 
   if (requiresArchitectureQualifiedPackages && repositoryKind !== 'shared-package-family') {
-    const severity = issueSeverity('forbidden-repo-root-packages', mode, repositoryKind);
+    const packagesIsSymlink = isRepositoryRootPackagesSymlink(repoRoot);
+    const kind = packagesIsSymlink ? 'legacy-packages-symlink' : 'forbidden-repo-root-packages';
+    const severity = issueSeverity(kind, mode, repositoryKind);
     if (severity !== 'skip') {
       issues.push({
-        kind: 'forbidden-repo-root-packages',
+        kind,
         severity,
-        detail: 'repository-root packages/ is forbidden for application repositories; use apps/sdkwork-<application-code>-common/packages/ or apps/sdkwork-<application-code>-<client-arch>/packages/',
+        detail: packagesIsSymlink
+          ? 'repository-root packages/ is a compatibility link into apps/<application-root>/packages/; remove the link itself (unlink only — never delete through it, that would destroy the canonical packages)'
+          : 'repository-root packages/ is forbidden for application repositories; use apps/sdkwork-<application-code>-common/packages/ or apps/sdkwork-<application-code>-<client-arch>/packages/',
         path: 'packages/',
       });
     }

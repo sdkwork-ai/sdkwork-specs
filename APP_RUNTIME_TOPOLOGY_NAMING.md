@@ -252,6 +252,7 @@ Rules:
 | `application-http-gateway`      | application HTTP gateway                   | Single application HTTP ingress                      |
 | `realtime-application-platform` | realtime application plus platform gateway | HTTP + WS product ingress with platform dependencies |
 | `application-rest-edge-device`  | application REST plus edge device          | REST services plus separate device ingress           |
+| `application-client-root`       | browser-only client root                   | Browser client that owns no application HTTP ingress |
 
 Retired archetype ids: `http-product-gateway`,
 `multi-plane-realtime`, and `dual-plane-connected`.
