@@ -588,9 +588,113 @@ const statement = /CREATE TABLE(?: IF NOT EXISTS)?\s+([a-z0-9_]+)|ALTER TABLE(?:
 ### 11.8 遗留 owner 决策（本轮不擅自处置）
 
 1. **`sdkwork-audio` 的 profile 声明自相矛盾**：`sdkwork.app.config.json` 声明 `supportedDeploymentProfiles = ["cloud"]`，但必需命令契约无条件要求 `dev`/`dev:standalone`。当前按门禁语义补齐了 `dev:standalone`；需确认是"补 profile 声明"还是"放宽必需命令契约"。
-2. **15 仓缺 `build`**：`account` 除外，其余为交付客户端的应用仓，需按架构/环境定义规范化的 `build` 语义（或确认 `build` 对纯客户端仓是否应改为按 profile 组合）。
-3. **3 仓缺 `check`**（`drama`、`log`、`sandbox`）：无既有 `check:*` 叶子可聚合，需明确各自应校验什么。
+2. ~~**15 仓缺 `build`**~~ —— **第八轮已解决**：`deriveBuildParts` 按「cargo `--release` 优先 ＋ `CLIENT_SURFACE_ORDER` 逐面取 `build:prod`」派生；仍无法派生的表面（如 `image` / `log` / `search` 的若干面）逐条上报为 owner 决策。
+3. ~~**3 仓缺 `check`**（`drama`、`log`、`sandbox`）~~ —— **第八轮已解决**：三仓均聚合出 `_sdkwork:check`（`drama` 3 条 / `log` 4 条 / `sandbox` 3 条既有校验命令）。
 4. **`sdkwork-superpowers`**：无 `sdkwork.app.config.json`、无 `Cargo.toml`、无 `apps/`，仅 2 条脚本，却因 README 被判为 `application`。需确认其归属（上游插件仓？）与是否应被必需命令契约约束。
 5. **`sdkwork-birdcoder2` 的 571 条命名空间发现**：来自上游 dsh 脚本面，非机械可改，属品牌/架构决策（同 §10.8）。
-6. **`sdkwork-web-framework` 的 `schema-registry:*`**：命名空间迁移，属 `migrate-pnpm-script-names.mjs` 职责。
+6. ~~**`sdkwork-web-framework` 的 `schema-registry:*`**~~ —— **第八轮已解决**：`schema-registry` 是 `SCHEMA_REGISTRY_SPEC.md` 的工具命名空间（框架实现即 `sdkwork-web-framework`），规范 §4 允许首段遗漏了它；已补入规范与 checker，并加双向漂移守卫测试。
 
+## 12. 第八轮：脚本命名空间收口、stop 作用域与一次工作区级误删的恢复（2026-09-12）
+
+### 12.1 结果
+
+| 指标 | 轮初 | 轮末 |
+| --- | --- | --- |
+| `check:pnpm-script-standard` 通过仓 | 61 / 87 | **84 / 87** |
+| `countItems`（基线） | 703 → 677 | **617** |
+| scoped-stop 违规 | 20 | **1**（owner 决策） |
+| 私有 hook 配对 / `@sdkwork/app-topology` 版本违规 | 0 | 0 |
+| `check:gitignore-standard` | — | **100 / 100，0 违规** |
+
+### 12.2 规范补全：class-(a) 漂移（门禁允许、规范未授权）
+
+规范 §4 的「允许的首段」缺少 `up` / `down` / `import`（checker 早已允许，且 `sdkwork-webserver`
+实有 `up:container:<env>`、`down:container:<env>`、`import:switch:<profile>` 三个家族），
+另 `schema-registry` 两侧都缺，而其背后的 `SCHEMA_REGISTRY_SPEC.md` 是一等标准。
+已把两个清单**逐项对齐**，并新增**双向漂移守卫测试**：断言规范文本与 checker 的
+`ALLOWED_FIRST_SEGMENTS` 内容与顺序完全一致。这样「只被一侧承认的名字」这一类缺陷不会再复发。
+
+### 12.3 门禁新增规则（先测冲击面，再落地）
+
+- **§7 `api:assembly:*`**：拥有 `crates/sdkwork-api-<code>-assembly/` 的应用根必须暴露且**直调**
+  canonical 工具。落地于 `drama` / `generations` / `mall` / `video`（`birdcoder2` 待 fork 决策）。
+- **§2 默认 dev 运行时**：`dev:browser` / `dev:desktop` 必须解析到 `postgres` + `standalone`。
+  对齐器把**原命令原样搬进** `dev:<target>:postgres:standalone`，只改指针、不改行为（`mall`）。
+
+两条派生都写进 `align-pnpm-lifecycle-facade.mjs`，并**复用门禁导出的谓词**
+（`API_ASSEMBLY_SCRIPT_TOOLS` / `canonicalApiAssemblyCommand` / `defaultDevRuntimeIssues`），
+保证「对齐器算出的值」与「门禁接受的值」字面相同。
+
+### 12.4 一条结构性修正：stop 缺口不得升级为整体转换
+
+首版把 `stopNeedsWork` 并入「是否转换」的判据，导致**仅缺 `stop` 而生命周期自洽**的仓库被整体
+改写成 facade。这违反代码自身的既有原则（「采用 facade 是刻意决策，不是对齐修复」），
+也与 §3 冲突：facade 的 stop 只能停它自己记录的进程树，对自有 dev 运行器的仓库等于停不到任何东西。
+现改为 `facadeTarget = incomplete || invokesFacade`，`stop`-only 缺口降级为 **owner 决策**并给出明确文字。
+该修正由两个单测锁定（「完整仓不被触碰」「cargo 仓派生 build 并上报无构建脚本的表面」）。
+
+### 12.5 删除的两类技术债（含一颗地雷）
+
+| 对象 | 证据 | 处置 |
+| --- | --- | --- |
+| `order/scripts/openapi/prune-legacy-openapi.mjs` | `ORDER_OWNED_TAG_PREFIXES` = `orders`/`afterSales`/… 而 authority 实际 tag 是 `orderOrders`/`orderAfterSales`/… ⇒ 运行会把**全部 tag 过滤空并写回文件** | 删除（无任何引用） |
+| `order/scripts/openapi/materialize-recharges-openapi.mjs` | 其定义的 24 条 path 已 100% 存在于目标 authority ⇒ 已耗尽的迁移写入器，重跑会覆盖后续编辑 | 删除（无任何引用） |
+| `specs/tools/align-pnpm-stop-scripts.mjs` | 零引用；唯一职责是给缺 `stop` 的仓库注入 `stop-sdkwork-workspace-processes.mjs`（工作区级杀进程）⇒ 正是 scoped-stop 违规的**生成源** | 退役 |
+
+`sync:openapi`（`account` / `order`）改名为规范 §228 能力表的 **`api:materialize`**
+（证据：能力表 + `aiot` / `knowledgebase` / `notary` 三仓既用名），order 的 3 处文档/测试引用同步更新。
+
+### 12.6 事故：tools/ 被会话同期的外部进程整体误删，已完整恢复
+
+时间线：`01:57:18–01:57:37` 回收站新增 **506 个** `tools/` 对象（490 受跟踪 + 5 未跟踪新文件）；
+`02:02:11` 外部自动化**自动提交** `d40fbc0`；模块仓同期出现 `chore(bin): land standard bin/…`。
+回收站还含 `.git/index.lock`（01:59:05）、`AUTO_MERGE.lock`、`HEAD.lock` 与 `09-11 10:53` 的
+`objects/**` ⇒ 该工作区存在并发 git 活动。
+
+恢复顺序（三类损失、三种手段）：
+
+1. 受跟踪删除 → `git diff --name-only --diff-filter=D -z | xargs -0 git checkout --`
+   （**不可**用 `git checkout -- .`，会连未提交修改一起回滚）。
+2. 未跟踪新文件 → 回收站 `$R<id>` 字节恢复 + sha256 + 字节数校验（含 29,447B 的扩展版 aligner）。
+3. **受跟踪且带未提交修改的文件是隐形损失**：`git checkout` 还原成 HEAD 后 `git status` 变干净，
+   编辑静默丢失。必须取回收站载荷与磁盘**逐文件 sha256 比对**，不同的用回收站版本覆盖
+   （同路径按 FILETIME 取最新，过滤 `.git/**`）。据此救回 `check-pnpm-script-standard.mjs`
+   的全部规则与导出、其测试，以及 `check-script-placement.mjs` 的 `--no-index` 修复。
+
+验收：4 个测试套件 **82 / 82 通过**；随后外部自动提交恰好把恢复结果固化，无内容丢失。
+
+### 12.7 行尾陷阱再现（手工编辑同样致命）
+
+`Edit` 会把 CRLF 文件的 `package.json` **整体归一化为 LF**：`sdkwork-order/package.json` 由
+96 CRLF + 1 裸 LF 变为纯 LF —— 正是部署 drift 门禁 `checksum_mismatch` 的触发条件。
+修法是**重烘焙**：以 LF 内容重建，逐行还原 `\r\n`，并保留原文件第 22 段（`check:governance` 行）
+那一处**裸 LF**，使 EOL 剖面逐字节一致。25 仓不变式复核 **0 违规**。
+
+### 12.8 剩余 owner 决策（3 项，均需拍板）
+
+1. **`sdkwork-superpowers`**：README 声明 `repository-kind: application`，但无 app config、
+   无 `apps/sdkwork-*` 面、无 `apis|crates|sdks` ⇒ 与 §1.1.2「application = 可运行应用仓」不符，
+   因而落入必需命令契约而缺 `build` / `test` / `clean`。全库有 **8 仓**同形状
+   （`catalog` / `connect` / `miniapp-engine` / `simulator` / `skills-private` / `superpowers` / `ui` / `zip`），
+   需逐仓判定：改声明，还是补真实生命周期（其中 `catalog` 有 assembly crate，属后端-only 应用，应保留 application）。
+2. **`sdkwork-birdcoder2`**：607 条发现中 **571 条**为 namespace，源自上游
+   `deepseek-ai/deepseek-harness`（`upstream` remote；根清单 `name=@deepseek-ai/dsh-root`；历史全为上游
+   release/merge）。改名会持续与上游 wave 冲突并打断上游 CI ⇒ 应作为**仓库级上游 fork 声明**处理：
+   规范 §41 目前只覆盖 `external/` | `third_party/` | `vendor/` 的**目录级** vendor，需补「整仓 fork」条款
+   ＋声明文件（如 `etc/sdkwork.upstream-fork.json`）＋门禁谓词＋测试；其 `api:assembly:*` 可先行落地。
+3. **`sdkwork-api-cloud-gateway`**：有自有 dev 运行器（`scripts/dev/run-sdkwork-api-cloud-gateway-dev.mjs`），
+   facade 不掌管其 dev ⇒ 交给 facade 的 stop 停不到任何东西，保留为决策（门禁现报 1 条）。
+
+### 12.9 第八轮方法教训
+
+1. **「允许清单」必须双向漂移守卫**：只要规范与 checker 各存一份列表就一定会分叉。断言两者逐项相等，
+   比任何文档纪律都可靠。
+2. **复用门禁谓词，不要复写**：对齐器从 checker `import` 派生所需的一切（含 `canonicalApiAssemblyCommand`），
+   否则「对齐器通过、门禁不通过」会长期存在。
+3. **`stopNeedsWork` 这类「缺口」不得进入「是否转换」的判据**：缺口的作用域决定了正确处置（补、换、上报），
+   把它并进转换判据会让一个命令的缺口放大成全仓改写。
+4. **删除前先证「已耗尽」**：`materialize-*` 类脚本要逐 path 比对目标 authority；`prune-*` 类要核对其
+   筛选前缀与现行命名是否仍匹配 —— 本轮正是靠这一点发现了一颗会清空 authority 的地雷。
+5. **手工编辑 CRLF 文件后必须复核 EOL 剖面**，并把「主导行尾 + 裸 LF 位置不变」写成可复跑的断言。
+6. **会话期内可能发生外部批量删除与自动提交**：先把「受跟踪删除 / 未跟踪新增 / 受跟踪带未提交修改」
+   三类分开，第三类只能靠回收站比对找回；恢复后必跑单测自证。

@@ -82,7 +82,7 @@ describe('align-pnpm-lifecycle-facade', () => {
       ...COMPLETE,
       build: undefined,
       'build:pc:prod': 'node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment prod',
-    }, { cargo: true, apps: true });
+    }, { apps: true });
     const plan = planRepositoryLifecycleFacade(root);
 
     // A guessed build command would occupy the contract slot while doing the
@@ -90,6 +90,20 @@ describe('align-pnpm-lifecycle-facade', () => {
     assert.equal(scriptsOf(root).build, undefined);
     assert.ok(plan.decisions.some((entry) => entry.startsWith('_sdkwork:build:')), plan.decisions.join('\n'));
     assert.ok(!plan.changes.some((entry) => entry.includes('_sdkwork:build')));
+  });
+
+  it('derives the Rust workspace build and reports client surfaces that have none', () => {
+    const root = makeRepo({ ...COMPLETE, build: undefined }, { cargo: true, apps: true });
+    const plan = planRepositoryLifecycleFacade(root);
+
+    // `cargo build --workspace --release` is the documented Rust-workspace
+    // convention, so it is a derivation rather than a guess; the app surface that
+    // ships no build script is still reported as an owner decision.
+    assert.equal(plan.hooks['_sdkwork:build'], 'cargo build --workspace --release');
+    assert.ok(
+      plan.decisions.some((entry) => entry.includes('apps/sdkwork-demo-pc has no build script')),
+      plan.decisions.join('\n'),
+    );
   });
 
   it('preserves CRLF line endings and the line count that existed before', () => {

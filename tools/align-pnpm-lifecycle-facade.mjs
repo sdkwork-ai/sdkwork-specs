@@ -394,6 +394,14 @@ export function planRepositoryLifecycleFacade(repoRoot) {
   // exposes every required command with its own implementation conforms to the
   // standard's required-command contract; adopting the facade there is a
   // separate, deliberate decision rather than an alignment fix.
+  //
+  // A missing or unscoped `stop` deliberately does NOT make a repository a
+  // conversion target. Handing `stop` to the facade only works when the facade
+  // also owns `dev`, because the facade stops the process tree it recorded; for a
+  // repository that keeps its own development runner, escalating a stop-only gap
+  // into a wholesale lifecycle conversion would replace working lifecycle scripts
+  // to fix a command that still could not find the processes it must stop. That
+  // case is reported as an owner decision instead.
   const required = [
     ...DEVELOPMENT_COMMANDS.filter((command) => command !== 'dev:cloud' || profiles.has('cloud')),
     ...LIFECYCLE_COMMANDS,
@@ -401,6 +409,7 @@ export function planRepositoryLifecycleFacade(repoRoot) {
   const incomplete = required.some(
     (command) => !(typeof scripts[command] === 'string' && scripts[command].trim() !== ''),
   );
+  const facadeTarget = incomplete || invokesFacade(scripts);
 
   // Section 7 assembly commands and the section 2 default dev runtimes are
   // independent of the lifecycle facade, so they are aligned for every
@@ -422,11 +431,11 @@ export function planRepositoryLifecycleFacade(repoRoot) {
     }
   }
 
-  if (!incomplete && !stopNeedsWork && !invokesFacade(scripts) && changes.length === 0) {
+  if (!facadeTarget && changes.length === 0 && !stopNeedsWork) {
     return { packagePath, raw, manifest, scripts, nextScripts, hooks, addDependency: false, decisions, changes, skipped: 'complete' };
   }
 
-  for (const command of LIFECYCLE_COMMANDS) {
+  for (const command of facadeTarget ? LIFECYCLE_COMMANDS : []) {
     const hookName = `_sdkwork:${command}`;
     const current = scripts[command];
     const existingHook = scripts[hookName];
@@ -520,6 +529,10 @@ export function planRepositoryLifecycleFacade(repoRoot) {
     } else if (typeof stop === 'string' && WORKSPACE_WIDE_STOP_PATTERN.test(stop)) {
       decisions.push(
         'stop: a workspace-wide process killer is not scoped to this application, but a bespoke development runner stops nothing the facade recorded; the repository needs its own session-scoped stop',
+      );
+    } else if (typeof stop !== 'string' || stop.trim() === '') {
+      decisions.push(
+        'stop: "dev" is exposed but no scoped stop exists; the repository keeps its own development runner, so it must add a session-scoped stop rather than delegate to a facade that never started it',
       );
     }
   }
