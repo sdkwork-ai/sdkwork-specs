@@ -252,6 +252,18 @@ Each deployable ships one self-consistent install bundle per release — the
 single artifact an operator downloads to install any environment with any
 instance count.
 
+> **Bundle executors are private.** `deploy.sh` (and a bundle-carried
+> `release.sh` ledger wrapper) are implementation invoked by
+> `bin/docker-deploy.sh` on the target host (`MODULE_BIN_SPEC.md` §4.2,
+> single operator channel). They `MUST NOT` be exposed as operator
+> entrypoints: no `package.json` wrapper and no documentation may present
+> direct invocation (`bash deploy.sh …`, `bash release.sh …`) as an
+> operator path. The bundle source directory defaults to
+> `deployments/docker/bundle`; a module may override the resolution via the
+> `sdkwork_module_install_bundle_dir` hook (for example to prefer the newest
+> packaged `dist/docker-install/*` artifact), but the operator surface stays
+> `bin/` either way.
+
 ### 4.1 Bundle Layout
 
 ```text

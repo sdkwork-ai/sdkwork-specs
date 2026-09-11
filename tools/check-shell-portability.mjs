@@ -52,13 +52,17 @@ const BASH4_RULES = Object.freeze([
 ]);
 
 // GNU-only command usage that BSD/macOS coreutils reject or answer differently.
-const GNU_RULES = Object.freeze([
+export const GNU_RULES = Object.freeze([
   { pattern: /\bstat\s+(-[a-zA-Z]*c|--format)/, issue: 'stat -c (GNU); use sdkwork_file_mtime (stat -c/-f shim)' },
   { pattern: /\bsha256sum\b/, issue: 'sha256sum (GNU coreutils); use sdkwork_sha256_file or the sha256sum/shasum/openssl chain' },
   { pattern: /\bsed\s+[^|;&\n]*\B-i/, issue: 'sed -i (BSD needs -i \'\', GNU breaks on it); use awk + tmp + mv' },
   { pattern: /\bbase64\s+(-[a-zA-Z]*w)/, issue: 'base64 -w (GNU); base64 | tr -d \'\\r\\n\' fallback exists in sdkwork-common.sh' },
   { pattern: /\bxargs\s+[^|;&\n]*-r\b/, issue: 'xargs -r (GNU); guard with a count check instead' },
-  { pattern: /\btimeout\s+-?\d/, issue: 'timeout N (GNU coreutils); not present on macOS' },
+  // The GNU `timeout` command, including its `-k`/`-s` options. The lookbehind
+  // keeps curl's `--connect-timeout N` / `--retry-max-time N` options out of the
+  // result: those are curl flags that behave identically on macOS, and matching
+  // them produced false positives on ordinary download helpers.
+  { pattern: /(?<![-.\w])timeout\s+(?:-\S+\s+)*\d/, issue: 'timeout N (GNU coreutils); not present on macOS' },
   { pattern: /\breadlink\s+[^|;&\n]*-f/, issue: 'readlink -f (GNU); not on macOS bash env' },
   { pattern: /\bdate\s+(-d|--date)/, issue: 'date -d (GNU); use UTC epoch math or date -u' },
   { pattern: /\bgetent\b/, issue: 'getent (glibc); not on macOS/BSD' },
@@ -70,7 +74,22 @@ const GNU_RULES = Object.freeze([
   { pattern: /\binstall\s+(-[a-zA-Z]*D)/, issue: 'install -D (GNU); mkdir -p then install' },
 ]);
 
-const DEFAULT_EXCLUDES = Object.freeze(['node_modules', '.git', 'target']);
+// Directory names never linted. Three classes, all "not our source":
+//   - tool/vendored state : node_modules, .git, target, external, vendor
+//   - generated output    : dist, build, out, bak, coverage, .next
+//   - agent scratch state : .workbuddy, .sdkwork, .tmp, tmp
+// `external/` holds vendored third-party trees (arduino-esp32, esp-idf,
+// mbedtls, openclaw, …): their shell scripts are not this workspace's to fix,
+// and any edit would be lost on the next vendor sync. `dist/` holds built
+// install bundles, which are copies of the sources linted here. Without this
+// scoping the gate reported 500+ findings, almost all phantom, which is how a
+// mandatory gate stops being read.
+const DEFAULT_EXCLUDES = Object.freeze([
+  'node_modules', '.git', 'target',
+  'external', 'vendor',
+  'dist', 'build', 'out', 'bak', 'coverage', '.next',
+  '.workbuddy', '.sdkwork', '.tmp', 'tmp', '.wsl-tmp',
+]);
 
 function walkShFiles(dir, excludes, out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -128,8 +147,15 @@ function main() {
       root: { type: 'string', multiple: true, default: [] },
       exclude: { type: 'string', default: '' },
       'bash-n': { type: 'boolean', default: true },
+      // Node's parseArgs does not synthesise `--no-<name>` for booleans, so the
+      // negated form has to be declared explicitly — otherwise the flag the
+      // usage line advertises is unparseable (ERR_PARSE_ARGS_UNKNOWN_OPTION).
+      // Skipping `bash -n` is what makes a whole-fleet sweep affordable: one
+      // bash process per file dominates the runtime on Windows/MSYS.
+      'no-bash-n': { type: 'boolean', default: false },
     },
   });
+  const bashN = values['bash-n'] && !values['no-bash-n'];
   if (values.help || values.root.length === 0) {
     console.log('Usage: node tools/check-shell-portability.mjs --root <dir> [--root <dir2> ...] [--no-bash-n] [--exclude dir,dir]');
     return;
@@ -139,7 +165,7 @@ function main() {
   const findings = [];
   let fileCount = 0;
   let bashAvailable = true;
-  if (values['bash-n']) {
+  if (bashN) {
     try { execFileSync('bash', ['-n', '/dev/null'], { stdio: 'pipe' }); }
     catch { bashAvailable = false; }
   }
@@ -153,7 +179,7 @@ function main() {
     for (const file of walkShFiles(abs, excludes)) {
       fileCount += 1;
       findings.push(...lintFile(file));
-      if (values['bash-n'] && bashAvailable) findings.push(...bashSyntaxCheck(file));
+      if (bashN && bashAvailable) findings.push(...bashSyntaxCheck(file));
     }
   }
 
@@ -163,7 +189,7 @@ function main() {
     process.exitCode = 1;
     return;
   }
-  console.log(`shell portability passed: ${fileCount} files, 0 findings (bash -n: ${values['bash-n'] && bashAvailable ? 'on' : 'off'})`);
+  console.log(`shell portability passed: ${fileCount} files, 0 findings (bash -n: ${bashN && bashAvailable ? 'on' : 'off'})`);
 }
 
 main();

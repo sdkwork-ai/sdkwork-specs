@@ -1,8 +1,8 @@
 # SDKWork Agent Soul
 
-- Version: 1.3
+- Version: 1.4
 - Scope: shared execution principles for SDKWork agents, automation, human-assisted AI workflows, and repository-local `AGENTS.md` files
-- Related: `AGENTS_SPEC.md`, `COMPONENT_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `ENGINEERING_WORKFLOW_SPEC.md`, `GOVERNANCE_SPEC.md`, `TEST_SPEC.md`, `CODE_STYLE_SPEC.md` (load each only when the task makes it applicable)
+- Related: `AGENTS_SPEC.md`, `COMPONENT_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `ENGINEERING_WORKFLOW_SPEC.md`, `GOVERNANCE_SPEC.md`, `TEST_SPEC.md`, `CODE_STYLE_SPEC.md`, `DESTRUCTIVE_OPERATION_SPEC.md` (load each only when the task makes it applicable)
 
 This file defines the operating soul for SDKWork agents. It is not a style guide and it is not a prompt library. It is the minimum behavior contract that keeps long-running AI work precise, recoverable, and governed by SDKWork standards.
 
@@ -22,6 +22,7 @@ Rules:
 - One module, one specs directory. Every authored module owns its own `specs/` system; do not centralize module contracts in repository READMEs, `AGENTS.md` bodies, or copied global spec files.
 - README and docs are discovery, not standards. Repository README, `docs/`, and `sdkwork-specs/README.md` are indexes and narrative; normative platform rules live in global `*_SPEC.md` files and this `SOUL.md`, while machine contracts live in `specs/`.
 - Generated code is not hand-edited. Fix the source contract, generator input, or approved facade, then regenerate.
+- No pattern-driven deletion. Delete by explicitly enumerated path, never by wildcard, glob, brace expansion, recursive walk, or unbounded expansion. `git rm -r`, `git rm` over a directory or pattern, and `git clean -f*` are forbidden. Wildcards are for read-only commands only. A destructive command is never combined in one shell invocation with a build, install, or publish step, and is never batched beyond the limits in `DESTRUCTIVE_OPERATION_SPEC.md`.
 - Human review owns irreversible direction. Agents can execute, but humans approve unclear product direction, breaking standards changes, security exceptions, migrations, and destructive operations.
 
 ## 2. Spec System Hierarchy
@@ -95,7 +96,21 @@ When a task changes a list/search API, repository, projection read model, SDK li
 
 Task matrix authority: `README.md` list/search pagination row, `PAGINATION_SPEC.md`, `AGENTS_SPEC.md` API changes row.
 
-## 5. On-Demand Language Loading
+## 5. Destructive Operation Gate
+
+When a task will delete, move, overwrite, reset, or force-check-out files, version-control state, database rows, or deployed artifacts, load `DESTRUCTIVE_OPERATION_SPEC.md` before issuing the command, and apply its enumeration, containment, batching, confirmation, and recovery requirements. This is a task trigger, not a startup requirement.
+
+Rules:
+
+- Deletion targets `MUST` be enumerated as exact paths before the command runs; a target derived from a wildcard, glob, brace expansion, recursive walk, or unbounded expansion is forbidden.
+- `git rm -r`, `git rm` over a directory or pattern, and `git clean -f*` are forbidden in every SDKWork repository, including inside scripts, hooks, and workflows.
+- Prefer `rm <exact/path>` plus tracked `git status`/`git add <paths>` over version-control-driven deletion, so the deletion is recorded rather than executed as one bulk transaction.
+- A destructive command `MUST NOT` be combined in one shell invocation with a build, install, network, or publish step.
+- Human confirmation is required before deleting git-tracked paths, directory trees, paths outside the active repository root, or more than 20 entries.
+
+Task matrix authority: `DESTRUCTIVE_OPERATION_SPEC.md`, `README.md` destructive-operation row, `AGENTS_SPEC.md` destructive-operation row, `CODE_STYLE_SPEC.md` §8.
+
+## 6. On-Demand Language Loading
 
 After the task is classified, language-specific specs are loaded only when it touches that language or framework:
 
@@ -106,7 +121,7 @@ After the task is classified, language-specific specs are loaded only when it to
 
 Do not load language, runtime, UI, deployment, or SDK standards merely because the repository contains those files. This keeps context small and makes the active rules obvious.
 
-## 6. Agent Refusal Points
+## 7. Agent Refusal Points
 
 Agents must stop rather than continue when:
 
@@ -117,8 +132,10 @@ Agents must stop rather than continue when:
 - A code change would bypass generated SDKs, route manifests, appbase IAM, Drive Uploader, global security standards, or workspace federation (`file:` / `link:` sibling SDKWork sources in member `package.json`; authority: `DEPENDENCY_MANAGEMENT_SPEC.md` section 3, `check-workspace-member-protocol.mjs`).
 - A file appears generated but the source contract or generator command is unknown.
 - A requested change conflicts with global specs and no governance exception exists.
+- The task requires a deletion whose targets cannot be enumerated as exact paths, or whose command would use `git rm -r`, `git rm` over a directory or pattern, `git clean -f*`, or a wildcard in a mutating argument position.
+- The task requires deleting git-tracked paths, a directory tree, or a path that resolves outside the active repository root without explicit human confirmation.
 
-## 7. Long-Running Stability
+## 8. Long-Running Stability
 
 Agents running multi-step work should record a task-scoped checkpoint:
 

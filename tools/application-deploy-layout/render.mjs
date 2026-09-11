@@ -1,5 +1,7 @@
 import path from 'node:path';
 
+import { PROFILE_ID_PATTERN } from '../deploy/schema-validate.mjs';
+import { resolveWebMode } from '../deploy/web.mjs';
 import { LAYOUT_MARKER_END, LAYOUT_MARKER_START } from './constants.mjs';
 import { envPrefixFromCode } from './discover.mjs';
 
@@ -81,11 +83,24 @@ function primaryHostForProfile(topology, profileId) {
   return null;
 }
 
-export function renderDeployYaml({ topology, appId }) {
-  const profileIds = Object.keys(topology?.profileFiles ?? topology?.profiles ?? {}).sort();
+export function renderDeployYaml({ topology, appId, moduleRoot = null }) {
+  // A deployment manifest may only declare deployable profiles. The topology
+  // vocabulary is wider (it also covers development and demo, which are local
+  // lifecycle environments), so emitting every topology profile produced a
+  // manifest that immediately failed check-deploy-standard — the bug that gave
+  // newly bootstrapped repositories an invalid deployments/deploy.yaml.
+  const profileIds = Object.keys(topology?.profileFiles ?? topology?.profiles ?? {})
+    .filter((id) => PROFILE_ID_PATTERN.test(id))
+    .sort();
   if (profileIds.length === 0) {
-    profileIds.push('cloud.production', 'standalone.development');
+    profileIds.push('cloud.production');
   }
+
+  // A public domain may only advertise a web edge when the application ships a
+  // web surface. An API-only application (no apps/<app>-pc/, no -h5/, no static
+  // fallback) must expose `api`, or the manifest fails web-surface validation.
+  const webMode = moduleRoot ? resolveWebMode(moduleRoot, appId, 'adaptive') : null;
+  const hasWebSurface = webMode ? (webMode.errors ?? []).length === 0 : true;
   const defaultProfile =
     topology?.defaults?.productionProfileId ??
     profileIds.find((id) => id.endsWith('.production')) ??
@@ -135,8 +150,12 @@ export function renderDeployYaml({ topology, appId }) {
       lines.push('    expose:');
       lines.push(`      - domain: ${domain}`);
       lines.push('        tls: sdkwork.com');
-      lines.push('        mode: web+api');
-      lines.push('        web: adaptive');
+      if (hasWebSurface) {
+        lines.push('        mode: web+api');
+        lines.push('        web: adaptive');
+      } else {
+        lines.push('        mode: api');
+      }
     } else {
       lines.push('    expose: []');
     }
@@ -155,14 +174,33 @@ function runtimeCodeFromProfile(appId) {
   return appId.replace(/^sdkwork-/u, '');
 }
 
+/**
+ * Insert or replace the deploy-layout section of `etc/README.md`.
+ *
+ * This MUST be idempotent: the workspace aligner is run repeatedly
+ * (align-application-deploy-layout.mjs --workspace), and its contract is that a
+ * repo already in the canonical shape reports no change. The previous
+ * implementation re-appended the suffix after the end marker verbatim while
+ * `section` already carried the newline that terminated the marker line, so
+ * every run appended one more newline to the file, forever — a spurious diff
+ * in every repository on every invocation. Both the section and the file tail
+ * are therefore normalised to a single canonical shape here.
+ */
 export function upsertLayoutSection(existing, section, title = 'Source Configuration') {
-  if (!existing) return `# ${title}\n\n${section}\n`;
+  const block = section.replace(/\s+$/u, '');
+  if (!existing) return `# ${title}\n\n${block}\n`;
   if (existing.includes(LAYOUT_MARKER_START)) {
     const start = existing.indexOf(LAYOUT_MARKER_START);
     const end = existing.indexOf(LAYOUT_MARKER_END);
     if (end > start) {
-      return `${existing.slice(0, start)}${section}${existing.slice(end + LAYOUT_MARKER_END.length)}`;
+      const before = existing.slice(0, start).replace(/\s+$/u, '');
+      const after = existing
+        .slice(end + LAYOUT_MARKER_END.length)
+        .replace(/^\s+/u, '')
+        .replace(/\s+$/u, '');
+      if (!after) return `${before}\n\n${block}\n`;
+      return `${before}\n\n${block}\n\n${after}\n`;
     }
   }
-  return `${existing.trimEnd()}\n\n${section}\n`;
+  return `${existing.replace(/\s+$/u, '')}\n\n${block}\n`;
 }

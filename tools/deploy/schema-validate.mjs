@@ -14,7 +14,20 @@ const WEB_VALUES_V1 = new Set(['adaptive', 'auto', 'pc', 'h5']);
 const WEB_VALUES_V2 = new Set(['adaptive', 'pc', 'h5']);
 const EXPOSE_MODES = new Set(['web', 'api', 'web+api']);
 const LAYOUTS = new Set(['source-tree', 'binary-package']);
-const PROFILE_ID_PATTERN = /^(standalone|cloud)\.(test|staging|production)$/u;
+/**
+ * Profile ids a deployment manifest (`deployments/deploy.yaml`) may declare.
+ *
+ * `development` and `demo` are lifecycle environments and remain valid
+ * topology profiles (`etc/topology/<profile>.env`, `specs/topology.spec.json`
+ * `profileFiles`), but they are not deployable targets: the deploy toolchain
+ * only ever selects test, staging or production (tools/deploy/init.mjs,
+ * tools/deploy/selection.mjs), and check-deploy-standard.test.mjs locks this
+ * rejection in ("deploy manifest rejects development ... profile drift").
+ *
+ * Any generator that materialises a deploy manifest MUST filter to this set —
+ * exporting it here keeps that rule in one place.
+ */
+export const PROFILE_ID_PATTERN = /^(standalone|cloud)\.(test|staging|production)$/u;
 
 const DEPLOYMENT_ENUMS = {
   deploymentProfile: new Set(['standalone', 'cloud']),

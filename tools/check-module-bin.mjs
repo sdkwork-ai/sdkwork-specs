@@ -2,11 +2,33 @@
 
 /**
  * Validate a module's bin/ entrypoint family against MODULE_BIN_SPEC.md.
- * Usage: node tools/check-module-bin.mjs --root <module-root>
+ *
+ * Two invocation modes:
+ *
+ *   node tools/check-module-bin.mjs --root <module-root> [--json]
+ *     Per-module CI. The exit code is the verdict for that one module.
+ *
+ *   node tools/check-module-bin.mjs --workspace <workspace-root> [--json] [--concurrency N] [--include-off-fleet]
+ *     Fleet regression. Discovers every module in the workspace, audits each
+ *     through the same --root implementation in a child process, and fails if
+ *     any module fails.
+ *
+ * Fleet predicate (identical to check-operations-conformance.mjs and to the
+ * platform's own repo discovery in tools/application-deploy-layout/discover.mjs):
+ * a *module* is a directory named sdkwork-* that carries sdkwork.app.config.json
+ * at its root. Directories without a manifest are reported as skipped; a
+ * manifest outside the sdkwork-* convention (a product repo such as
+ * hub-installer) is reported separately and audited only with
+ * --include-off-fleet, because the fleet convention does not claim it.
+ *
+ * Unlike the operations gate there is no N/A here: every module owns a bin/
+ * family, so the verdict is binary.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const REQUIRED_SCRIPTS = Object.freeze([
@@ -117,26 +139,127 @@ function checkModuleBin(root) {
   return issues;
 }
 
-function main() {
+async function main() {
   const { values } = parseArgs({
     options: {
       help: { type: 'boolean', short: 'h' },
-      root: { type: 'string', default: '.' },
+      root: { type: 'string' },
+      workspace: { type: 'string' },
+      json: { type: 'boolean', default: false },
+      concurrency: { type: 'string' },
+      'include-off-fleet': { type: 'boolean', default: false },
     },
   });
   if (values.help) {
-    console.log('Usage: node tools/check-module-bin.mjs --root <module-root>');
-    return;
+    console.log('Usage: node tools/check-module-bin.mjs --root <module-root> [--json]');
+    console.log('       node tools/check-module-bin.mjs --workspace <workspace-root> [--json] [--concurrency N] [--include-off-fleet]');
+    return 0;
   }
-  const root = path.resolve(values.root);
+
+  if (values.workspace) {
+    const limit = Math.max(1, Number(values.concurrency) || 8);
+    return runWorkspace(path.resolve(values.workspace), limit, values.json, values['include-off-fleet']);
+  }
+
+  const root = path.resolve(values.root ?? '.');
   const issues = checkModuleBin(root);
-  if (issues.length > 0) {
+  const report = { module: path.basename(root), root, ok: issues.length === 0, issues };
+
+  if (values.json) {
+    console.log(JSON.stringify(report, null, 2));
+  } else if (issues.length > 0) {
     console.error(`module bin standard failed for ${root}`);
     issues.forEach((issue) => console.error(`- ${issue}`));
-    process.exitCode = 1;
-    return;
+  } else {
+    console.log(`module bin standard passed for ${root}`);
   }
-  console.log(`module bin standard passed for ${root}`);
+  return issues.length > 0 ? 1 : 0;
 }
 
-main();
+/**
+ * Fleet regression. Child processes reuse the --root code path above, so the
+ * workspace verdict cannot drift from the per-module one. The worker pool
+ * exists for the same reason as in check-operations-conformance.mjs: on a
+ * Windows/MSYS workspace node startup dominates, and 79 sequential spawns
+ * exceed a typical tool timeout while 8-way parallel finishes in seconds.
+ */
+async function runWorkspace(wsRoot, limit, json, offFleet) {
+  if (!fs.existsSync(wsRoot)) {
+    console.error(`workspace does not exist: ${wsRoot}`);
+    return 2;
+  }
+  const manifests = [];
+  const offFleetManifests = [];
+  const skipped = [];
+  for (const entry of fs.readdirSync(wsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+    const dir = path.join(wsRoot, entry.name);
+    if (!fs.existsSync(path.join(dir, 'sdkwork.app.config.json'))) { skipped.push(entry.name); continue; }
+    if (entry.name.startsWith('sdkwork-')) manifests.push(dir);
+    else { offFleetManifests.push(entry.name); if (offFleet) manifests.push(dir); }
+  }
+  manifests.sort();
+
+  const reports = new Array(manifests.length);
+  let cursor = 0;
+  async function worker() {
+    for (;;) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= manifests.length) return;
+      reports[index] = await auditOne(manifests[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, manifests.length) }, worker));
+
+  const failed = reports.filter((r) => !r.ok);
+
+  if (json) {
+    console.log(JSON.stringify({
+      workspace: wsRoot,
+      modules: reports.length,
+      passed: reports.length - failed.length,
+      failed: failed.length,
+      skippedNotModules: skipped.sort(),
+      offFleet: offFleetManifests.sort(),
+      reports,
+    }, null, 2));
+    return failed.length > 0 ? 1 : 0;
+  }
+
+  console.log(`\n[module-bin] workspace ${wsRoot}`);
+  console.log(`  modules: ${reports.length}   passed: ${reports.length - failed.length}   failed: ${failed.length}`);
+  if (skipped.length > 0) console.log(`  skipped (not a module — no sdkwork.app.config.json): ${skipped.sort().join(', ')}`);
+  if (offFleetManifests.length > 0) {
+    console.log(`  skipped (manifest outside the sdkwork-* fleet convention, not audited${offFleet ? ' — audited via --include-off-fleet' : ''}): ${offFleetManifests.sort().join(', ')}`);
+  }
+  for (const r of failed) {
+    console.log(`  FAIL  ${r.module}`);
+    r.issues.forEach((issue) => console.log(`          - ${issue}`));
+  }
+  if (failed.length === 0) console.log('  every module satisfies the bin/ entrypoint standard');
+  return failed.length > 0 ? 1 : 0;
+}
+
+function auditOne(moduleRoot) {
+  return new Promise((resolve) => {
+    execFile(process.execPath, [fileURLToPath(import.meta.url), '--root', moduleRoot, '--json'],
+      { maxBuffer: 8 * 1024 * 1024 },
+      (error, stdout) => {
+        try {
+          resolve(JSON.parse(stdout));
+        } catch {
+          // A child that cannot even emit a report is itself a failure — never
+          // a silent pass.
+          resolve({
+            module: path.basename(moduleRoot),
+            root: moduleRoot,
+            ok: false,
+            issues: [`audit harness: ${error ? String(error.message) : 'no parseable report'}`],
+          });
+        }
+      });
+  });
+}
+
+process.exitCode = await main();

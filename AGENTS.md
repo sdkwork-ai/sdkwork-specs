@@ -79,6 +79,7 @@ The following are task gates, not a startup bundle. Read the relevant sections o
 | --- | --- | --- |
 | Agent or repository-entry change | `SOUL.md`, `AGENTS_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `DOCUMENTATION_SPEC.md`, `TEST_SPEC.md` | `GOVERNANCE_SPEC.md` when the change is breaking, cross-root, or needs an exception |
 | Code style or naming change | `CODE_STYLE_SPEC.md`, `NAMING_SPEC.md` | Only the touched language/framework spec: `RUST_CODE_SPEC.md`, `JAVA_CODE_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`, or `FRONTEND_CODE_SPEC.md`; `PNPM_SCRIPT_SPEC.md` for package command standardization, package scripts, or root lifecycle commands |
+| Deletion, move, overwrite, reset, or force-checkout of files, version-control state, database rows, or deployed artifacts | `DESTRUCTIVE_OPERATION_SPEC.md`, `SOUL.md` §5, `CODE_STYLE_SPEC.md` §8 | `PORTABILITY_SPEC.md` and `MODULE_BIN_SPEC.md` for shell/`bin/` scripts, `OPERATIONS_SPEC.md` for deployed state, `GOVERNANCE_SPEC.md` §3 when an exception is requested; verify with `tools/sync-agent-destructive-operation-standard.mjs --check` and `tools/check-destructive-operation-patterns.mjs` |
 | Contract or platform change | `README.md`, `REQUIREMENTS_SPEC.md`, `ARCHITECTURE_DECISION_SPEC.md`, `ENGINEERING_WORKFLOW_SPEC.md`, `CODE_REVIEW_SPEC.md`, `QUALITY_GATE_SPEC.md`, the affected domain spec, `GOVERNANCE_SPEC.md`, and `TEST_SPEC.md` | Read the applicable sections in lifecycle order rather than loading every full file at startup |
 | Release, migration, or supply-chain standard change | `RELEASE_SPEC.md`, `MIGRATION_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `QUALITY_GATE_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `GOVERNANCE_SPEC.md`, and `TEST_SPEC.md` | Read the applicable sections in release, migration, and supply-chain sequence rather than loading every full file at startup |
 
@@ -102,6 +103,8 @@ The following are task gates, not a startup bundle. Read the relevant sections o
 Spec files use concise Markdown, RFC-style `MUST`/`SHOULD`/`MAY` language where rules are normative, and examples only when they make validation clearer. Do not duplicate large sections across specs; cross-link instead.
 
 Build scripts, dev runners, and `pnpm clean` must follow `CODE_STYLE_SPEC.md` §7 (Build Source Integrity And Self-Healing). Git-tracked build-critical source files must be verified before builds and self-healed from git when missing; `clean` must not delete them.
+
+Deletion follows `DESTRUCTIVE_OPERATION_SPEC.md` and `CODE_STYLE_SPEC.md` §8: enumerate exact paths, never delete by wildcard, glob, brace expansion, recursive walk, or unbounded expansion, and never use `git rm -r`, `git rm` over a directory or pattern, or `git clean -f*` in a command, script, hook, or workflow. Every repository `AGENTS.md` carries the tool-owned `SDKWORK-DESTRUCTIVE-OPERATION-STANDARD` block; refresh it with `node ./tools/sync-agent-destructive-operation-standard.mjs --workspace .. --apply`.
 
 ## Build, Test, and Verification
 
@@ -260,3 +263,49 @@ Verification:
 node ../sdkwork-specs/tools/sync-agent-sdk-generation-standard.mjs --root . --check
 ```
 <!-- /SDKWORK-SDK-GENERATION-STANDARD: v1 -->
+
+<!-- SDKWORK-DESTRUCTIVE-OPERATION-STANDARD: v1 -->
+## Destructive Operation Safety
+
+Authority: `./DESTRUCTIVE_OPERATION_SPEC.md`.
+
+Deletion must be explicit, enumerated, and reviewable. Deleting by pattern instead of by named
+path is forbidden. Wildcards are for read-only commands only.
+
+- `git rm -r`, `git rm` over a directory or pattern, and `git clean -f`/`-fd`/`-fdx` are
+  FORBIDDEN. A recursive `git rm` stages many deletions in one index transaction; if the process
+  is interrupted (SIGTERM, timeout, sandbox kill, crash) entries are already gone from disk while
+  the index is only half-written, which is silent non-atomic mass data loss.
+- Delete tracked files with `rm <exact/path>` on each named path, let `git status --short`
+  record the `D` entries, then stage only the enumerated paths. Commit the deletion separately
+  from functional changes.
+- Shell and script deletion by wildcard is FORBIDDEN: `rm -rf`/`rm -r`/`rm -f` with
+  `*`/`**`/`?`/`[...]`/brace expansion, `find ... -delete`, `find ... -exec rm`,
+  `find ... | xargs rm`, `for f in *; do rm ...`, `del /S /Q`, `rd /S /Q`,
+  `Remove-Item -Recurse -Force` on a glob, `shutil.rmtree`, `fs.rm(dir, { recursive: true })`,
+  and `rimraf` over a glob.
+- A deletion MUST NOT be combined in one shell invocation with a build, install, network, or
+  publish step, and MUST NOT derive its targets from an unvalidated argument, environment
+  variable, or configuration value.
+- Permitted narrow deletion: `rm <exact/path>`; a short literal path list owned by the tool that
+  declares it; the module's own generated artifacts through its owning tool
+  (`pnpm clean`, `cargo clean`) per `CODE_STYLE_SPEC.md` §7; and
+  `git restore --worktree --source=HEAD -- <exact paths>`.
+- Required sequence before any deletion: enumerate exact paths; confirm every path resolves inside
+  the active repository or module root; classify tracked/generated/cached/unknown; prefer `rm`
+  plus tracked `git status`; delete in batches of 20 or fewer with a status check between
+  batches; report the removed paths and the authorizing decision.
+- Request explicit human confirmation before deleting any git-tracked path, any directory tree,
+  any path resolving outside the active repository root, or more than 20 paths.
+- Recovery after an accidental mass deletion: clear a stale `.git/index.lock`, write the path
+  list to a file INSIDE the repository (never `/tmp` on Windows, where the Git Bash path space
+  and the native tool path space disagree), and run a single
+  `git restore --worktree --pathspec-from-file=<repo-relative-list>`. Never loop one
+  version-control call per path; the same termination cause interrupts the loop part-way.
+
+Verification (from the repository root):
+
+```bash
+node ./tools/sync-agent-destructive-operation-standard.mjs --root . --check
+```
+<!-- /SDKWORK-DESTRUCTIVE-OPERATION-STANDARD: v1 -->

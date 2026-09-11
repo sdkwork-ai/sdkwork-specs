@@ -23,6 +23,17 @@
 - **Same environment canon**: the five lifecycle environments of
   `DOCKER_SPEC.md` §3 / `ENVIRONMENT_SPEC.md` §5.1; same port keys, same
   domains, same external-dependency defaults.
+- **Single operator channel (normative)**: `bin/` is the *only* operator
+  surface of a module. Bundle executors (`deploy.sh`, `release.sh`) are
+  private implementation invoked by `bin/docker-deploy.sh` on the target —
+  operators never call them by hand. Modules `MUST NOT` ship `pnpm`
+  `deploy:`/`release:` wrappers that invoke a bundle executor, a
+  `remote-deploy` helper, or any other parallel deployment entrypoint, and
+  documentation `MUST NOT` present direct invocation as an operator path
+  (audited by `check-operations-conformance.mjs`). Host-provisioning
+  infrastructure (PostgreSQL/Redis setup, hosts binding) and the repository
+  release chain that `bin/` hooks delegate to are implementation, not
+  operator channels, and stay out of operator documentation.
 
 ## 2. Layout Contract (Normative)
 
@@ -526,11 +537,23 @@ normative bodies from the root specs (`AGENTS_SPEC.md`).
 Validation tooling:
 
 ```sh
+# per-module CI
 node sdkwork-specs/tools/check-module-bin.mjs --root <module-root>
+# fleet regression (same code path in child processes; the standard is binary,
+# so there is no N/A: every module owns a bin/ family)
+node sdkwork-specs/tools/check-module-bin.mjs --workspace <workspace-root>
 node sdkwork-specs/tools/scaffold-module-bin.mjs --root <module-root>   # idempotent scaffold of a missing/incomplete family
 bash -n <module-root>/bin/*.sh
 sdkwork-bin-doctor   # via any bin script's hidden 'doctor' subcommand
 ```
+
+Both modes apply the same fleet predicate used by the operations gate and by
+the platform's own repo discovery: a *module* is a directory named `sdkwork-*`
+carrying `sdkwork.app.config.json` at its root. Directories without a manifest
+are reported as skipped; a manifest outside the `sdkwork-*` convention (a
+product repo) is reported separately and audited only under
+`--include-off-fleet`, because the fleet convention does not claim it. A child
+process that cannot emit a report counts as a failure — never a silent pass.
 
 - [ ] `bin/` contains exactly the nine entrypoints (`docker-image.sh`,
       `docker-deploy.sh`, `config.sh`, `doctor.sh`, `backup.sh`,
@@ -564,3 +587,9 @@ sdkwork-bin-doctor   # via any bin script's hidden 'doctor' subcommand
       checksummed and restore-gated behind `--yes`.
 - [ ] `bin/lib/bootstrap.sh` sources the three `ops-*.sh` shared libraries.
 - [ ] `AGENTS.md` carries the §6 deployment section.
+- [ ] **Single operator channel**: no `package.json` script invokes a bundle
+      executor (`bundle/deploy.sh`, `bundle/release.sh`) or a
+      `remote-deploy` helper directly; no operator-facing documentation
+      (README, runbooks, operator guides) presents direct executor
+      invocation as an operator path; the only documented deploy surface is
+      `bin/` (audited by `check-operations-conformance.mjs`).

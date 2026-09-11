@@ -92,6 +92,40 @@ if command -v sha256sum >/dev/null 2>&1; then        # PORTABILITY:allow
 
 滥用豁免标记会被 review 拒绝：任何豁免必须能回答"这段代码为什么永远/必然运行在允许该命令的环境里"。
 
+**边界提醒**：bundle 的 `deploy.sh` / `release.sh` 属**操作员侧**（§5），部署目标包含 Linux/macOS 服务端，
+因此**不得**用 `PORTABILITY:target-linux` 豁免。它们的 GNU 依赖要改成可移植写法，工作区内已有两个标准范式：
+
+```bash
+# 摘要链：sha256sum (GNU) → shasum (macOS) → openssl（见各 bundle release.sh）
+if command -v sha256sum >/dev/null 2>&1; then
+  actual="$(sha256sum "${file}" | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+  actual="$(shasum -a 256 "${file}" | awk '{print $1}')"
+else
+  actual="$(openssl dgst -sha256 "${file}" | awk '{print $NF}')"
+fi
+
+# 有界执行：GNU timeout 在 macOS 缺失，用后台看门狗兜底（见各 bundle deploy.sh 的 run_bounded）
+run_bounded() {
+  local seconds="$1"; shift
+  if command -v timeout >/dev/null 2>&1; then
+    local bounded_rc=0
+    timeout "${seconds}" "$@" || bounded_rc=$?
+    return "${bounded_rc}"
+  fi
+  "$@" &
+  local cmd_pid=$!
+  ( sleep "${seconds}"; kill -TERM "${cmd_pid}" 2>/dev/null ) >/dev/null 2>&1 &
+  local watchdog_pid=$!
+  local rc=0
+  wait "${cmd_pid}" 2>/dev/null || rc=$?
+  kill -TERM "${watchdog_pid}" 2>/dev/null || true
+  return "${rc}"
+}
+```
+
+`timeout "${seconds}" "$@"` 不能写字面数字参数（`timeout 6 …`）以外的形式时无妨——门禁按"命令 + 数字"识别 GNU `timeout`。
+
 ---
 
 ## 5. 范围划分（Scope boundaries）
@@ -99,9 +133,22 @@ if command -v sha256sum >/dev/null 2>&1; then        # PORTABILITY:allow
 - **操作员侧**（本规范强制）：specs 共享库、模块 bin/ 与 bin/lib、bundle 的 deploy/release/prepare-envs。
   这些脚本可能在 macOS 或任意 Linux 笔记本/跳板机上运行。
 - **目标机侧**（允许 GNU，需标注 `PORTABILITY:target-linux`）：通过 `sdkwork_remote` 下发的远程脚本、
-  postgres 容器 init 脚本（容器内固定 Debian 基础镜像）。
+  仅在 Linux 宿主机/容器内执行的准备脚本（Ubuntu CI 脚本、WSL/宿主初始化、容器 entrypoint）。
 - **Windows/MSYS（Git Bash）**：脚本可以运行，但远程调用经 `wsl.exe` 桥，fork 开销大；
   本规范不做 Windows 性能承诺，仅保证行为正确。
+
+### 5.1 不被 lint 的目录（门禁作用域）
+
+门禁只审**本工作区的源代码**。以下目录名会被跳过，并且**不**计入 finding：
+
+| 类别 | 目录名 | 原因 |
+| --- | --- | --- |
+| 工具/依赖状态 | `node_modules` `.git` `target` `external` `vendor` | `external/` 是 vendored 第三方树（arduino-esp32 / esp-idf / mbedtls / openclaw …），修改会在下次 vendor 同步时丢失 |
+| 构建产物 | `dist` `build` `out` `bak` `coverage` `.next` | `dist/` 下的 bundle 是上面已审源码的副本 |
+| Agent/运行时暂存 | `.workbuddy` `.sdkwork` `.tmp` `tmp` `.wsl-tmp` | 一次性脚手架与运行时状态，不是产品源码。`.wsl-tmp` 是工作区根的 WSL 侧临时脚手架目录（2026-09-10 加入：65 个临时脚本，未被任何规范/工具引用） |
+
+未纳入该表的目录一律受审。若某个清单外的路径确实不该审，走"扩大排除表 + 在本文档说明理由"的流程，
+不要靠豁免标记逐行标注。
 
 ## 6. 回归要求（Regression duty)
 
@@ -110,5 +157,11 @@ if command -v sha256sum >/dev/null 2>&1; then        # PORTABILITY:allow
 2. `node sdkwork-specs/tools/check-module-bin.mjs --root <module>`（每模块 0 finding）
 3. 至少一个真实只读冒烟：`bin/config.sh show --environment <env>`、`bin/doctor.sh`、`bin/backup.sh list`。
 
+全工作区（舰队）批量回归时追加 `--no-bash-n`：`bash -n` 会为**每个文件** fork 一个 bash，
+在 Windows/MSYS 上把一次全舰队扫描从数秒拖到 30 分钟以上。语法检查在模块级 CI 里跑即可；
+批量扫描只看静态 finding。
+
 After touching any governed script: run the portability gate (0 findings), the module-bin gate
 (0 findings per module), and at least one real read-only smoke command.
+For a whole-fleet sweep add `--no-bash-n` — one `bash -n` fork per file turns a few seconds into
+30+ minutes on Windows/MSYS, while module CI still runs the syntax check.

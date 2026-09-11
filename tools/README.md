@@ -204,4 +204,21 @@ Rules:
   `iam_web_request_context_resolver_from_env`) and blocks legacy resolver imports,
   deprecated factory calls, and application-local pass-through resolver wrappers per
   `IAM_SPEC.md` and `WEB_FRAMEWORK_SPEC.md`.
+- `sync-agent-destructive-operation-standard.mjs` propagates the normative
+  deletion discipline of `DESTRUCTIVE_OPERATION_SPEC.md` into every repository
+  `AGENTS.md` as the `SDKWORK-DESTRUCTIVE-OPERATION-STANDARD` managed block. It
+  generates the in-block verification command with the correct relative path to
+  `sdkwork-specs` for each file, so nested component entrypoints stay runnable.
+  Use `--root` for one repository, `--workspace` for all child `sdkwork-*`
+  repositories, `--check` to fail on stale or missing blocks, and `--apply` to
+  refresh. `--recursive` additionally covers nested component `AGENTS.md` while
+  skipping tests, fixtures, snapshots, and generated output.
+- `check-destructive-operation-patterns.mjs` is the read-only audit for
+  pattern-driven deletion. It scans shell/PowerShell/cmd scripts under `bin/`,
+  `scripts/`, `tools/`, `deployments/`, and `docker/`, plus `run:` steps in
+  `.github/workflows/` and `package.json` scripts, and reports wildcard, glob,
+  brace-expansion, and positional-parameter `rm`, `find -delete`/`-exec rm`,
+  `xargs rm`, recursive `git rm`, `git clean -f*`, cmd/PowerShell recursive
+  delete, `rimraf`, and dynamic `shutil.rmtree`. Literal exact-path artifact
+  removal is not reported. Use `--json` for machine-readable output.
 - Tools must not embed application-specific secrets, local paths, or application-line behavior.

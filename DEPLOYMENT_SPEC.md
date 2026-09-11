@@ -253,6 +253,20 @@ Rules:
   `ENVIRONMENT_SPEC.md` section 5.1. Deployment and environment selection never
   relies on a one-dimensional `.env.production`, Vite mode, Flutter flavor,
   Spring profile, or native build variant.
+- `deployments/deploy.yaml` is a **deployment manifest**, not a materialized
+  runtime document, so its `profiles` map carries only *deployable* profiles:
+  `standalone|cloud` × `test|staging|production`. `development` and `demo`
+  remain valid lifecycle environments in topology and in
+  `etc/topology/<profile>.env`, but they `MUST NOT` appear as profile keys in
+  the manifest — the deploy toolchain only ever selects the three deployable
+  environments (`tools/deploy/init.mjs` remaps anything else to
+  `*.production`, and `tools/deploy/selection.mjs` rejects it). A generator that
+  materialises a manifest `MUST` filter to that set
+  (`tools/deploy/schema-validate.mjs` exports the rule).
+- Validate a manifest with `tools/check-deploy-standard.mjs`: `--root <repo>`
+  for a single module (what each repository's `deploy:validate` script runs), or
+  `--workspace <root>` for the fleet regression. The fleet mode must report zero
+  `FAIL` across every module that carries a manifest.
 - Public hostnames `MUST` follow the environment host formula registered in
   `APP_RUNTIME_TOPOLOGY_NAMING.md` section 9: `<role>[-<environment-suffix>].<base-domain>`
   for `development` (`-dev`), `test` (`-test`), and `staging` (`-staging`);

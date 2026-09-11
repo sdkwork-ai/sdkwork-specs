@@ -100,7 +100,7 @@ export function alignRepo(repoRoot, options = {}) {
   }
 
   const deployPath = path.join(repoRoot, 'deployments/deploy.yaml');
-  if (topology && writeIfMissing(deployPath, renderDeployYaml({ topology, appId }), dryRun)) {
+  if (topology && writeIfMissing(deployPath, renderDeployYaml({ topology, appId, moduleRoot: repoRoot }), dryRun)) {
     written.push('deployments/deploy.yaml');
   }
 

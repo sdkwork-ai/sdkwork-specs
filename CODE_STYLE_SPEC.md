@@ -1,8 +1,8 @@
 # Code Style Standard
 
-- Version: 1.1
-- Scope: cross-language code organization, module boundaries, public exports, generated code handling, errors, testing, build source integrity, and review expectations
-- Related: `SOUL.md`, `AGENTS_SPEC.md`, `NAMING_SPEC.md`, `RUST_CODE_SPEC.md`, `JAVA_CODE_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`, `FRONTEND_CODE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `TEST_SPEC.md`
+- Version: 1.2
+- Scope: cross-language code organization, module boundaries, public exports, generated code handling, errors, testing, build source integrity, destructive operation safety, and review expectations
+- Related: `SOUL.md`, `AGENTS_SPEC.md`, `NAMING_SPEC.md`, `DESTRUCTIVE_OPERATION_SPEC.md` (normative owner of deletion rules), `RUST_CODE_SPEC.md`, `JAVA_CODE_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`, `FRONTEND_CODE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines SDKWork rules that apply to all authored code. Language-specific standards are loaded only when that language is touched.
 
@@ -17,6 +17,7 @@ Rules:
 - Business code must not bypass generated SDKs with raw HTTP, manual auth headers, or local DTO forks when an SDK contract exists.
 - Runtime config, credentials, tokens, tenant, organization, user, request id, and trace context must flow through approved config or request-context boundaries.
 - Avoid broad refactors unless they are required to make the touched behavior correct and maintainable.
+- Delete by explicit enumerated path only. A wildcard, glob, brace expansion, recursive walk, or unbounded expansion in a mutating argument position is forbidden; see `DESTRUCTIVE_OPERATION_SPEC.md`.
 - New public names follow `NAMING_SPEC.md`.
 
 ## 2. Source Layout Principles
@@ -134,7 +135,20 @@ Build resilience follows the same architecture principles as authored code:
 - **Open-closed principle**: New build-critical source files are added to the verification list without modifying existing build logic. The verification check is extended, not the build command itself.
 - **Native generated-state ownership**: Build output and caches stay in the active tool's native ignored directory. Process state and one-process scratch files stay in private OS/CI temporary locations; repository/application `.runtime/` is forbidden.
 
-## 8. Acceptance Checklist
+## 8. Destructive Operation Safety
+
+`DESTRUCTIVE_OPERATION_SPEC.md` is the normative owner of deletion, move, overwrite, reset, and force-checkout rules. This section records only the code-organization consequences that belong to this standard.
+
+Rules:
+
+- Authored code, ad-hoc scripts, `bin/` scripts, `scripts/`, `tools/`, and `package.json` scripts `MUST NOT` delete by wildcard, glob, brace expansion, recursive walk, or unbounded expansion.
+- `git rm -r`, `git rm` over a directory or pattern, and `git clean -f*` `MUST NOT` appear in any SDKWork script, hook, workflow step, or agent-issued command.
+- Code that owns a deletion list `MUST` keep that list as literals or module-root-relative constants, `MUST` assert every resolved path stays inside its module root, and `MUST` fail closed when a path escapes the root.
+- Code `MUST NOT` compute a deletion root from an unvalidated argument, environment variable, or configuration value.
+- A deletion `MUST NOT` be composed in one shell invocation with a build, install, network, or publish step.
+- Cleanup tooling `MUST` satisfy section 7 of this standard in addition to section 1–6 of `DESTRUCTIVE_OPERATION_SPEC.md`.
+
+## 9. Acceptance Checklist
 
 - [ ] Code follows `NAMING_SPEC.md`.
 - [ ] Public exports are explicit and stable.
@@ -146,3 +160,6 @@ Build resilience follows the same architecture principles as authored code:
 - [ ] Build scripts verify build-critical source files before invoking build commands.
 - [ ] Build runners self-heal missing git-tracked source files from `git checkout HEAD`.
 - [ ] `pnpm clean` does not delete git-tracked build-critical source files.
+- [ ] No deletion used a wildcard, glob, brace expansion, recursive walk, or unbounded expansion.
+- [ ] No `git rm -r`, `git rm` over a directory or pattern, or `git clean -f*` was used.
+- [ ] Deleted paths were enumerated exactly, stayed inside the module root, and were reported.

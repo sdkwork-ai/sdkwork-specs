@@ -1,8 +1,8 @@
 # AGENTS.md Standard
 
-- Version: 1.1
+- Version: 1.2
 - Scope: repository, application, and component-level `AGENTS.md` files used by SDKWork agents and AI-assisted development tools, plus tool compatibility shims such as `CLAUDE.md`, `GEMINI.md`, and `CODEX.md`
-- Related: `SOUL.md`, `SDKWORK_WORKSPACE_SPEC.md`, `APP_MANIFEST_SPEC.md`, `COMPONENT_SPEC.md`, `DOCUMENTATION_SPEC.md`, `GOVERNANCE_SPEC.md`, `CODE_STYLE_SPEC.md`, `NAMING_SPEC.md`, `TEST_SPEC.md`
+- Related: `SOUL.md`, `SDKWORK_WORKSPACE_SPEC.md`, `APP_MANIFEST_SPEC.md`, `COMPONENT_SPEC.md`, `DOCUMENTATION_SPEC.md`, `GOVERNANCE_SPEC.md`, `CODE_STYLE_SPEC.md`, `DESTRUCTIVE_OPERATION_SPEC.md`, `NAMING_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines `AGENTS.md` as the execution entrypoint for SDKWork repositories and applications. `AGENTS.md` is the nearest human- and agent-readable index for the convention-based dictionary: local app identity, local specs, `.sdkwork/`, root `sdkwork-specs`, build commands, verification rules, and human review boundaries.
 
@@ -49,6 +49,8 @@ Sections may be brief, but they must be actionable and must use repository-relat
 `## HTTP API Response Envelope` is mandatory for every repository or application root that owns, serves, generates, or consumes SDKWork HTTP `app-api`, `backend-api`, or SDKWork-owned business `open-api` contracts. Omitted `x-sdkwork-wire-protocol` means SDKWork-owned custom API (`sdkwork-v3`); only operation-level `x-sdkwork-wire-protocol: external` plus `x-sdkwork-external-protocol-id` identifies a third-party compatibility `open-api` operation. The section must also reference the standard operation matrix for retrieve/list/search/create/update/delete/command/async/bulk patterns and the `check-api-operation-patterns.mjs` validator. Use `node ../sdkwork-specs/tools/align-agents-http-response-standard.mjs --workspace ..` to refresh the canonical section text from `API_SPEC.md` section 4.5 and sections 14-16. Do not paraphrase or weaken the input/output rules locally.
 
 `## App SDK Consumer Imports` is mandatory for every repository or application root that owns or consumes generated HTTP SDK clients in `apps/`, `packages/`, bootstrap, services, UI, or integration contract tests. Copy the canonical section text from `APP_SDK_INTEGRATION_SPEC.md` section 9. Do not paraphrase or weaken the scoped `@sdkwork/*-app-sdk` / `@sdkwork/*-backend-sdk` rules locally. Verify with `node ../sdkwork-specs/tools/check-app-sdk-consumer-imports.mjs --workspace ..`.
+
+Every repository and application root `AGENTS.md` `MUST` carry the `SDKWORK-DESTRUCTIVE-OPERATION-STANDARD` managed sync block defined by `DESTRUCTIVE_OPERATION_SPEC.md`. The block is tool-owned; do not hand-edit it and do not restate its rules in an authored section. It is exempt from the "do not copy root spec content into `AGENTS.md`" rule because it is a managed block under section 4.1 of this standard, not an authored copy.
 
 ## 3. Relative Path Rules
 
@@ -120,7 +122,7 @@ Some cross-repository disciplines are propagated into every repository `AGENTS.m
 - is idempotent: re-running the sync tool replaces the previous copy instead of duplicating it,
 - must not be hand-edited between markers; edit the owning sync tool (and its authority spec) and re-run the tool instead.
 
-Existing managed blocks include `SDKWORK-NAMING-STANDARD` (Rust naming and dependency declaration) and `SDKWORK-SDK-GENERATION-STANDARD` (generated SDK output is generator-owned; never hand-edit `sdks/` generated output). Validators and agents may rely on these markers to detect stale or missing disciplines.
+Existing managed blocks include `SDKWORK-NAMING-STANDARD` (Rust naming and dependency declaration), `SDKWORK-SDK-GENERATION-STANDARD` (generated SDK output is generator-owned; never hand-edit `sdks/` generated output), and `SDKWORK-DESTRUCTIVE-OPERATION-STANDARD` (deletion-by-explicit-path discipline; no `git rm -r`, no `git clean -f*`, no wildcard deletion in scripts or shell). Validators and agents may rely on these markers to detect stale or missing disciplines.
 
 ## 5. Required Specs By Task Type
 
@@ -131,6 +133,8 @@ Existing managed blocks include `SDKWORK-NAMING-STANDARD` (Rust naming and depen
 | Agent/workflow rules | `SOUL.md`, `AGENTS_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md` |
 | Any code change | `CODE_STYLE_SPEC.md`, `NAMING_SPEC.md`, plus only the touched language/framework spec |
 | Build scripts / dev runners / dependency preparation | `CODE_STYLE_SPEC.md` §7 (Build Source Integrity), `TYPESCRIPT_CODE_SPEC.md` §5 (Node Script Resilience), `PNPM_SCRIPT_SPEC.md` §11 (Clean Command Boundary) |
+| Delete, move, overwrite, reset, or force-check-out files, version-control state, or deployed artifacts | `DESTRUCTIVE_OPERATION_SPEC.md`, `CODE_STYLE_SPEC.md` §8 |
+| Operator-side shell/`bin/` script deletion behavior | `DESTRUCTIVE_OPERATION_SPEC.md`, `PORTABILITY_SPEC.md`, `MODULE_BIN_SPEC.md` |
 | Rust code | `RUST_CODE_SPEC.md`, plus `RUST_RPC_SPEC.md`, `RPC_FRAMEWORK_SPEC.md`, `DISCOVERY_SPEC.md`, and `RPC_RESILIENCE_SPEC.md` when RPC is touched |
 | Java/Spring code | `JAVA_CODE_SPEC.md`, `WEB_BACKEND_SPEC.md` when HTTP backend code is touched, `RPC_FRAMEWORK_SPEC.md` when gRPC is touched |
 | TypeScript/Node code | `TYPESCRIPT_CODE_SPEC.md` |
@@ -203,7 +207,7 @@ Code changes require `../sdkwork-specs/CODE_STYLE_SPEC.md`, `../sdkwork-specs/NA
 
 ## Build, Test, and Verification
 
-Use this repository's package manifest scripts. Record commands and outputs.
+Use this repository's package manifest scripts. Record commands and outputs. Deletion follows `../sdkwork-specs/DESTRUCTIVE_OPERATION_SPEC.md`: enumerate exact paths, never delete by wildcard, glob, or recursive walk, and never use `git rm -r` or `git clean -f*`. The canonical rules arrive as the tool-owned `SDKWORK-DESTRUCTIVE-OPERATION-STANDARD` managed block, so do not restate them here.
 
 ## Task-Specific Standards
 
@@ -250,6 +254,13 @@ Validation should check:
 - `AGENTS.md` references `CODE_STYLE_SPEC.md` §7 build source integrity rules
   when the repository owns build scripts, dev runners, or cross-repository
   dependency preparation tooling.
+- `AGENTS.md` carries the current `SDKWORK-DESTRUCTIVE-OPERATION-STANDARD`
+  managed block; verify with
+  `node ../sdkwork-specs/tools/sync-agent-destructive-operation-standard.mjs --root . --check`.
+- `AGENTS.md` and repository scripts contain no `git rm -r`, no `git rm` over a
+  directory or pattern, no `git clean -f*`, and no wildcard in a mutating
+  deletion argument position; audit with
+  `node ../sdkwork-specs/tools/check-destructive-operation-patterns.mjs --workspace ..`.
 - `AGENTS.md` uses a concise task-specific routing section and does not copy API,
   pagination, SDK integration, source config, or other global normative bodies.
 - Deployable roots reference `SOURCE_CONFIG_SPEC.md` and identify `etc/` as the
