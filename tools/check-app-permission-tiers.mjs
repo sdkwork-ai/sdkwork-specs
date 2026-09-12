@@ -195,6 +195,12 @@ function stripPermissionAnnotations(text) {
 function evaluateWorkspace(workspace) {
   const appApiDir = path.join(workspace, 'apis', 'app-api');
   const findings = [];
+  // Repositories without an app-api contract surface (no `apis/app-api/`) have no
+  // tier-3 candidates to audit; skipping keeps `--workspace` as forgiving as
+  // `listWorkspaceRoots`, which already filters roots by the same directory.
+  if (statSync(appApiDir, { throwIfNoEntry: false }) === undefined) {
+    return findings;
+  }
   for (const file of walkOpenApiAppApiFiles(appApiDir)) {
     const text = readFileSync(file, 'utf8');
     const rel = path.relative(workspace, file).split(path.sep).join('/');
