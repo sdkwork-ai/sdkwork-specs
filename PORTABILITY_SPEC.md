@@ -143,12 +143,51 @@ run_bounded() {
 
 | 类别 | 目录名 | 原因 |
 | --- | --- | --- |
-| 工具/依赖状态 | `node_modules` `.git` `target` `external` `vendor` | `external/` 是 vendored 第三方树（arduino-esp32 / esp-idf / mbedtls / openclaw …），修改会在下次 vendor 同步时丢失 |
-| 构建产物 | `dist` `build` `out` `bak` `coverage` `.next` | `dist/` 下的 bundle 是上面已审源码的副本 |
+| 工具/依赖状态 | `node_modules` `.git` `target` `external` `vendor` `.vs` | `external/` 是 vendored 第三方树（arduino-esp32 / esp-idf / mbedtls / openclaw …），修改会在下次 vendor 同步时丢失；`.vs/` 是 Visual Studio 的按用户 IDE 状态（2026-09-15 加入：`sdkwork-membership` 提交了 `.vs/**/DocumentLayout.json`，内含 `<workspace-root>/sdkwork-membership/` 形式的绝对路径，属编辑器状态而非产品源码） |
+| 构建产物 | `dist` `build` `out` `bak` `coverage` `.next` `obj` | `dist/` 下的 bundle 是上面已审源码的副本；`obj/` 是 .NET/MSBuild 的中间输出根，与 `target/` 同类（2026-09-15 加入：`sdkwork-iam` / `sdkwork-im` 提交了 `sdks/**/generated/server-openapi/obj/project.assets.json` 与 `*.csproj.nuget.dgspec.json`，NuGet restore 会把生成机的绝对路径写满这些文件） |
 | Agent/运行时暂存 | `.workbuddy` `.sdkwork` `.tmp` `tmp` `.wsl-tmp` | 一次性脚手架与运行时状态，不是产品源码。`.wsl-tmp` 是工作区根的 WSL 侧临时脚手架目录（2026-09-10 加入：65 个临时脚本，未被任何规范/工具引用） |
 
 未纳入该表的目录一律受审。若某个清单外的路径确实不该审，走"扩大排除表 + 在本文档说明理由"的流程，
 不要靠豁免标记逐行标注。
+
+### 5.2 工作区路径门禁的豁免标记（Exemption markers）
+
+`node sdkwork-specs/tools/check-workspace-path-portability.mjs --workspace <dir>` 按
+`DEPENDENCY_MANAGEMENT_SPEC.md` §1 / §9 执行"源码与构建配置不得绑定机器绝对路径"。它有**两级**标记，
+作用域不同，不要混用：
+
+| 标记 | 作用域 | 适用场景 |
+| --- | --- | --- |
+| `WORKSPACE-PATH:allow` | **行**级：标记所在行，或其后 8 行内 | 该字面量确实不是源码/构建绑定，例如文档化的运行时目标路径，或归一化断言所钉住的期望值 |
+| `WORKSPACE-PATH:allow-fixture` | **文件**级：必须出现在文件前 20 行内 | 整个测试文件就是"模拟一个外部检出根"的夹具 |
+
+行级窗口取 8 行而不是 1 行：rustfmt 与 prettier 会把**一条**调用折成多行，窗口若只覆盖物理行，
+作者明明写了的标记会被读成不存在（2026-09-15 实证：`provider_session_path.rs` 的 `assert_eq!` 已带标记，
+仍被报出 4 处）。
+
+文件级标记**只在测试文件生效**（文件名形如 `*.test.*` / `*.spec.*`，或路径含 `tests/`、`test/`、
+`__tests__/`）。夹具这一级豁免不可避免：测试要模拟一个外部检出根，就得在数据里写出那个根，而
+`sdkwork-<name>` 段往往**正是被断言的值**——按路径派生的分块名、按目录派生的应用代号、拼出的 surface
+目录、模拟的 PowerShell 提示符（形如 `<drive>:\sdkwork-terminal>`）——此时既不能把夹具中性化（会删掉
+测试所断言的东西），也不该逐行标注（`SIBLING-REPO-ABS` 本身分不清夹具与真实引用）。
+在非测试文件里写该标记**没有任何效果**：门禁把它当错误报出（`FIXTURE-MARKER-NOT-APPLICABLE`），
+所以它无法用来掩盖真实绑定。
+
+两类豁免都不静默：无论通过与否，门禁都会打印已声明的行级豁免数与**被豁免文件清单**。
+
+本节与 §5.1 末段不冲突：§5.1 管"整个目录本就不该审"（走排除表），本节管"受审文件里，某行或某个
+测试夹具是数据而非绑定"。
+
+#### English summary
+
+`WORKSPACE-PATH:allow` exempts a line, or any line within 8 lines below the marker — a statement, not a
+physical line, because rustfmt and prettier wrap one call across several rows. `WORKSPACE-PATH:allow-fixture`
+in the first 20 lines exempts a whole test file, and is honoured **only** in a test file: a fixture that
+simulates a foreign checkout root must name that root in its data, and the `sdkwork-<name>` segment is
+frequently the value under assertion, so neither genericizing the fixture nor marking it line by line is
+correct. Outside a test file the marker has no effect and is reported as `FIXTURE-MARKER-NOT-APPLICABLE`,
+so it cannot conceal a production binding. The gate always prints the declared line-exemption count and the
+list of fixture-exempt files.
 
 ## 6. 回归要求（Regression duty)
 
@@ -160,6 +199,10 @@ run_bounded() {
 全工作区（舰队）批量回归时追加 `--no-bash-n`：`bash -n` 会为**每个文件** fork 一个 bash，
 在 Windows/MSYS 上把一次全舰队扫描从数秒拖到 30 分钟以上。语法检查在模块级 CI 里跑即可；
 批量扫描只看静态 finding。
+
+另：任何**新增或修改**受版本控制的源码、配置或文档后，追加
+`node sdkwork-specs/tools/check-workspace-path-portability.mjs --workspace <dir>`（0 finding）。
+该门禁的作用域与豁免规则见 §5.1 / §5.2。
 
 After touching any governed script: run the portability gate (0 findings), the module-bin gate
 (0 findings per module), and at least one real read-only smoke command.

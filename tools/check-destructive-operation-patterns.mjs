@@ -20,14 +20,15 @@
 // are unvalidated by construction.
 //
 // Usage:
-//   node check-destructive-operation-patterns.mjs --workspace E:/sdkwork-space
-//   node check-destructive-operation-patterns.mjs --root E:/sdkwork-space/sdkwork-order
-//   node check-destructive-operation-patterns.mjs --workspace E:/sdkwork-space --json
+//   node check-destructive-operation-patterns.mjs --workspace <workspace-root>
+//   node check-destructive-operation-patterns.mjs --root <workspace-root>/sdkwork-order
+//   node check-destructive-operation-patterns.mjs --workspace <workspace-root> --json
 //
 // Exit codes: 0 = no violations, 1 = one or more violations found.
 
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, relative, extname, sep } from 'node:path';
+import { DEFAULT_WORKSPACE_ROOT } from './lib/workspace-root.mjs';
 
 const args = process.argv.slice(2);
 const getArg = (name, fallback = null) => {
@@ -39,7 +40,7 @@ const getArg = (name, fallback = null) => {
   return next && !next.startsWith('--') ? next : fallback;
 };
 
-const WORKSPACE = getArg('workspace', 'E:/sdkwork-space');
+const WORKSPACE = getArg('workspace', DEFAULT_WORKSPACE_ROOT);
 const ROOT = getArg('root', null);
 const AS_JSON = args.includes('--json');
 

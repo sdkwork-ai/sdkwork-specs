@@ -4,8 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { buildWebserverDocs, writeWebserverLayout } from './build-from-topology.mjs';
+import { DEFAULT_WORKSPACE_ROOT } from '../lib/workspace-root.mjs';
 
-const WORKSPACE = process.argv[2] ?? 'E:/sdkwork-space';
+const WORKSPACE = process.argv[2] ?? DEFAULT_WORKSPACE_ROOT;
 const SKIP = new Set(['sdkwork-webserver']);
 
 let aligned = 0;

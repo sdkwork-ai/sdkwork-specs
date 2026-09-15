@@ -2,7 +2,7 @@
 
 Status: active
 Owner: SDKWork standards maintainers
-Updated: 2026-07-30
+Updated: 2026-09-15
 Specs: ARCHITECTURE_DECISION_SPEC.md, DOCUMENTATION_SPEC.md, SDKWORK_WORKSPACE_SPEC.md, GOVERNANCE_SPEC.md
 
 ## 1. Architecture Overview
@@ -73,7 +73,10 @@ Inactive reserved directories may remain absent because this repository is a nar
 - [ADR-20260724 PostgreSQL Authority And SQLite Client-Local Storage](../decisions/ADR-20260724-postgresql-authority-sqlite-client-local.md)
 - [ADR-20260730 Repository Generated-State Boundary](../decisions/ADR-20260730-repository-generated-state-boundary.md)
 - Record future standards architecture changes under [../decisions/](../decisions/) as `ADR-*` documents.
-- Design shard: [TECH-desktop-dual-host-design.md](TECH-desktop-dual-host-design.md) — desktop dual-host (Tauri/Electron) design detail supporting `DESKTOP_APP_ARCHITECTURE_SPEC.md`.
+- Design shard: [TECH-desktop-host-profiles-design.md](TECH-desktop-host-profiles-design.md) — desktop host profile design detail (Tauri default, Electron, Capacitor), per-architecture host package separation, and the Capacitor desktop platform provider governance decision, supporting `DESKTOP_APP_ARCHITECTURE_SPEC.md`.
+- Design shard: [TECH-native-mobile-client-roots.md](TECH-native-mobile-client-roots.md) — iOS / Android / HarmonyOS native client root coverage, boundaries, and cross-spec touchpoint map supporting `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, and `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`.
+- Design shard: [TECH-h5-capacitor-platform-profiles-design.md](TECH-h5-capacitor-platform-profiles-design.md) — H5 multi-platform mobile packaging through one Capacitor host package, iOS / Android platform profiles, one-package-many-platform decision, non-adopted platform registry, and current implementation gaps supporting `APP_H5_ARCHITECTURE_SPEC.md`.
+- Design shard: [TECH-pnpm-command-surface-commercial-hardening.md](TECH-pnpm-command-surface-commercial-hardening.md) — the `PNPM_SCRIPT_SPEC.md` v1.1 audit and hardening pass: desktop/mobile host families, commercial distribution phases, tool namespace contracts, pnpm runtime and dependency-install policy, and the recorded fleet debt.
 
 ## 9. Verification
 

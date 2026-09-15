@@ -275,7 +275,7 @@ Rules:
 - Host config must not contain signing private keys, auth tokens, refresh tokens, API keys, database credentials, private service endpoints, SDK ownership, or business route constants.
 - `sdkwork.app.config.json` must include AppGallery/private distribution metadata, icons, screenshots, package ids, checksums where applicable, signing metadata references, SBOM/provenance, and release notes.
 - Publish platform should be `APP_HARMONY` for Harmony-only native roots. Generic `APP` or `APP_PLUS` may be listed only when the product actually supports a broader mobile app family.
-- Until `APP_MANIFEST_SPEC.md` and backend package format enums define Harmony-specific package formats, Harmony direct packages should use `OTHER` with explicit package metadata describing the HAP/APP artifact kind.
+- Harmony direct packages declare `packageFormat` as `HAP` for HarmonyOS module packages or `HARMONY_APP` for AppGallery APP Pack submissions, following `APP_MANIFEST_SPEC.md`. They must not fall back to `OTHER` for a plain HAP/APP artifact.
 
 ## 10. Standard Commands
 

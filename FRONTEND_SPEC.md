@@ -339,7 +339,7 @@ Rules:
 Rules:
 
 - Native host calls `MUST` go through host adapters.
-- Desktop hosts (Tauri and Electron) `MUST` expose the shared host adapter contract from `@sdkwork/desktop-host-contract`; feature packages consume injected host interfaces only and `MUST NOT` reference `window.__TAURI__`, `window.electron`, `ipcRenderer`, or import `@tauri-apps/api` / `electron` directly. Both hosts must satisfy the same `DesktopHost` interface so feature code compiles unchanged against either host.
+- Desktop hosts (Tauri, Electron, and Capacitor) `MUST` expose the shared host adapter contract from `@sdkwork/desktop-host-contract`, and each host adapter `MUST` live in its own per-architecture host package. Feature packages consume injected host interfaces only and `MUST NOT` reference `window.__TAURI__`, `window.electron`, `Capacitor.*`, `ipcRenderer`, or import `@tauri-apps/api` / `electron` / `@capacitor/core` directly. Every host must satisfy the same `DesktopHost` interface so feature code compiles unchanged against any host.
 - Capability availability is declared through the host `capabilities` set or a shared capability helper; hand-written platform branches on host globals are forbidden. Unsupported capabilities degrade through fallback adapters with stable error codes (`unsupported`, `permission-denied`, `unavailable`, `cancelled`, `invalid-state`).
 - Host adapters `MUST NOT` enforce business authorization in place of backend checks.
 - Secure storage for tokens `SHOULD` use host-provided secure storage where available.

@@ -6,11 +6,12 @@ import { fileURLToPath } from 'node:url';
 
 import { LAYOUT_V3_FILES } from './layout-v3.mjs';
 import { scanWebserverCompliance, validateWebserverDir } from './validate.mjs';
+import { DEFAULT_WORKSPACE_ROOT } from '../lib/workspace-root.mjs';
 
 const toolsRoot = path.dirname(fileURLToPath(import.meta.url));
 const specsRoot = path.resolve(toolsRoot, '../..');
 
-const workspace = process.argv[2] ?? 'E:/sdkwork-space';
+const workspace = process.argv[2] ?? DEFAULT_WORKSPACE_ROOT;
 const { modules } = scanWebserverCompliance(path.resolve(workspace));
 
 let ok = 0;

@@ -16,10 +16,10 @@
 ## Commands Run
 
 ```bash
-rg --files -g "**/dependency.composition.json" "E:/sdkwork-space" | Measure-Object | Select-Object -ExpandProperty Count
-rg --files -g "**/apps/**/pnpm-workspace.yaml" "E:/sdkwork-space" | Measure-Object | Select-Object -ExpandProperty Count
-rg -l "dependencyComposition" -g "**/component.spec.json" "E:/sdkwork-space" | Measure-Object | Select-Object -ExpandProperty Count
-rg -l "dependency\.composition\.json" -g "**/*.{ts,tsx,dart,mjs}" "E:/sdkwork-space" | Measure-Object | Select-Object -ExpandProperty Count
+rg --files -g "**/dependency.composition.json" "<workspace-root>" | Measure-Object | Select-Object -ExpandProperty Count
+rg --files -g "**/apps/**/pnpm-workspace.yaml" "<workspace-root>" | Measure-Object | Select-Object -ExpandProperty Count
+rg -l "dependencyComposition" -g "**/component.spec.json" "<workspace-root>" | Measure-Object | Select-Object -ExpandProperty Count
+rg -l "dependency\.composition\.json" -g "**/*.{ts,tsx,dart,mjs}" "<workspace-root>" | Measure-Object | Select-Object -ExpandProperty Count
 ```
 
 Observed counts: `80`, `33`, `124`, `120`.

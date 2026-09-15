@@ -16,14 +16,15 @@
 // is idempotent: re-running it replaces the previous copy instead of duplicating it.
 //
 // Usage:
-//   node sync-agent-language-code-standard.mjs --language typescript --workspace E:/sdkwork-space --check
-//   node sync-agent-language-code-standard.mjs --language dart --workspace E:/sdkwork-space --apply
-//   node sync-agent-language-code-standard.mjs --language frontend --root E:/sdkwork-space/sdkwork-order --apply
+//   node sync-agent-language-code-standard.mjs --language typescript --workspace <workspace-root> --check
+//   node sync-agent-language-code-standard.mjs --language dart --workspace <workspace-root> --apply
+//   node sync-agent-language-code-standard.mjs --language frontend --root <workspace-root>/sdkwork-order --apply
 //
 // Exit codes: 0 = aligned, 1 = one or more modules are out of date.
 
 import { readdirSync, readFileSync, existsSync, writeFileSync, statSync } from 'node:fs';
 import { join, basename } from 'node:path';
+import { DEFAULT_WORKSPACE_ROOT } from './lib/workspace-root.mjs';
 
 const args = process.argv.slice(2);
 const getArg = (name, fallback = null) => {
@@ -35,7 +36,7 @@ const getArg = (name, fallback = null) => {
   return next && !next.startsWith('--') ? next : fallback;
 };
 
-const WORKSPACE = getArg('workspace', 'E:/sdkwork-space');
+const WORKSPACE = getArg('workspace', DEFAULT_WORKSPACE_ROOT);
 const ROOT = getArg('root', null);
 const LANGUAGE = getArg('language', null);
 const APPLY = args.includes('--apply');

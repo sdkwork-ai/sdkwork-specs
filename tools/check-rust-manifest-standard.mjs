@@ -12,12 +12,13 @@
 // Exit codes: 0 = no errors, 1 = errors found (warnings do not fail).
 //
 // Usage:
-//   node check-rust-manifest-standard.mjs --workspace E:/sdkwork-space
-//   node check-rust-manifest-standard.mjs --root E:/sdkwork-space/sdkwork-order
-//   node check-rust-manifest-standard.mjs --workspace E:/sdkwork-space --json
+//   node check-rust-manifest-standard.mjs --workspace <workspace-root>
+//   node check-rust-manifest-standard.mjs --root <workspace-root>/sdkwork-order
+//   node check-rust-manifest-standard.mjs --workspace <workspace-root> --json
 
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
+import { DEFAULT_WORKSPACE_ROOT, toWorkspaceRelative } from './lib/workspace-root.mjs';
 
 const args = process.argv.slice(2);
 const getArg = (name, fallback = null) => {
@@ -30,7 +31,7 @@ const getArg = (name, fallback = null) => {
 };
 const hasFlag = (name) => args.includes(`--${name}`);
 
-const WORKSPACE = getArg('workspace', 'E:/sdkwork-space');
+const WORKSPACE = getArg('workspace', DEFAULT_WORKSPACE_ROOT);
 const ROOT = getArg('root', null);
 const AS_JSON = hasFlag('json');
 
@@ -189,7 +190,7 @@ const add = (repo, level, code, message, file) =>
     level,
     code,
     message,
-    file: file ? file.replace(/\\/g, '/').replace('E:/sdkwork-space/', '') : null,
+    file: file ? toWorkspaceRelative(WORKSPACE, file) : null,
   });
 
 for (const repo of repos) {

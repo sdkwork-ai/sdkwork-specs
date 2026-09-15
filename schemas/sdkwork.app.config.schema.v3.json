@@ -96,7 +96,7 @@
         "id": { "type": "string", "minLength": 1 },
         "name": { "type": "string", "minLength": 1 },
         "sourceType": { "enum": ["GIT_REPOSITORY", "BINARY_URL", "APP_STORE", "CONTAINER_IMAGE", "MINI_PROGRAM", "WEB_URL", "SCRIPT"] },
-        "packageFormat": { "enum": ["SOURCE_CODE", "JAR", "WAR", "ZIP", "TAR_GZ", "APK", "AAB", "IPA", "EXE", "MSI", "DMG", "APPIMAGE", "DEB", "RPM", "DOCKER_IMAGE", "MINI_PROGRAM_PACKAGE", "OTHER"] },
+        "packageFormat": { "enum": ["SOURCE_CODE", "JAR", "WAR", "ZIP", "TAR_GZ", "APK", "AAB", "IPA", "HAP", "HARMONY_APP", "EXE", "MSI", "DMG", "APPIMAGE", "DEB", "RPM", "DOCKER_IMAGE", "MINI_PROGRAM_PACKAGE", "OTHER"] },
         "platform": { "type": "string", "minLength": 1 },
         "architecture": { "type": "string", "minLength": 1 },
         "profileBinding": { "enum": ["fixed", "runtime-configurable", "non-deployable"] },

@@ -1,13 +1,14 @@
 /**
- * PC application packager (React + Tauri / React + Electron).
+ * PC application packager (React + Tauri / React + Electron / React + Capacitor).
  *
  * Build targets:
  *  - `web`:      `pnpm run _sdkwork:build` (Vite build + esbuild server) → `dist/`
  *  - `windows` / `macos` / `linux`: native desktop bundle via the app's
- *    `build:desktop:local` (Tauri host) or `build:desktop:electron:local`
- *    (Electron host) script when present. The host kind is read from the app
- *    manifest `artifacts.installConfig.packages[].clientArchitecture`
- *    (`tauri` | `electron`).
+ *    `build:desktop:local` (Tauri host), `build:desktop:electron:local`
+ *    (Electron host), or `build:desktop:capacitor:local` (Capacitor host)
+ *    script when present. The host kind is read from the app manifest
+ *    `artifacts.installConfig.packages[].clientArchitecture`
+ *    (`tauri` | `electron` | `capacitor`).
  *
  * Artifacts:
  *  - web:   `dist/` archived as `web-universal.zip`
@@ -15,9 +16,11 @@
  *    (`.exe`/`.msi`, `.dmg`, `.AppImage`/`.deb`).
  *  - desktop (Electron): installers under `release/`, `out/`, or `dist/`
  *    (`.exe`/`.msi`, `.dmg`, `.AppImage`/`.deb`, `.blockmap`).
+ *  - desktop (Capacitor): installers under the Capacitor host `electron/`
+ *    scaffold output (`electron/release`, `electron/dist`, `electron/out`).
  *
  * Authority: APP_PC_ARCHITECTURE_SPEC.md, APP_PC_REACT_UI_SPEC.md,
- * DESKTOP_APP_ARCHITECTURE_SPEC.md §5.2, RELEASE_SPEC.md §2.
+ * DESKTOP_APP_ARCHITECTURE_SPEC.md §5.1/§5.3/§5.4, RELEASE_SPEC.md §2.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,10 +32,19 @@ export const architecture = 'pc';
 export const defaultPlatforms = ['web', 'windows', 'macos', 'linux'];
 export const registry = 'github';
 
-const TAURI_DESKTOP_BUILD_SCRIPT = 'build:desktop:local';
-const ELECTRON_DESKTOP_BUILD_SCRIPT = 'build:desktop:electron:local';
+const DESKTOP_HOST_KINDS = new Set(['tauri', 'electron', 'capacitor']);
+const DESKTOP_BUILD_SCRIPTS = {
+  tauri: 'build:desktop:local',
+  electron: 'build:desktop:electron:local',
+  capacitor: 'build:desktop:capacitor:local',
+};
 const TAURI_BUNDLE_ROOT = path.join('src-tauri', 'target', 'release', 'bundle');
 const ELECTRON_BUNDLE_ROOTS = ['release', 'out', 'dist'];
+const CAPACITOR_BUNDLE_ROOTS = [
+  path.join('electron', 'release'),
+  path.join('electron', 'dist'),
+  path.join('electron', 'out'),
+];
 
 /** Resolve the desktop host kind from the app manifest, defaulting to tauri. */
 function desktopHostKind(appRoot, appConfig) {
@@ -41,17 +53,25 @@ function desktopHostKind(appRoot, appConfig) {
   if (Array.isArray(pkgs)) {
     for (const p of pkgs) {
       const kind = String(p?.clientArchitecture ?? p?.metadata?.clientArchitecture ?? '').toLowerCase();
-      if (kind === 'electron' || kind === 'tauri') return kind;
+      if (DESKTOP_HOST_KINDS.has(kind)) return kind;
     }
   }
   return 'tauri';
 }
 
-function electronBundleRoot(appRoot) {
-  const existing = ELECTRON_BUNDLE_ROOTS
+function firstExistingRoot(appRoot, candidates) {
+  const existing = candidates
     .map((dir) => path.join(appRoot, dir))
     .find((dir) => fs.existsSync(dir));
-  return existing ?? path.join(appRoot, ELECTRON_BUNDLE_ROOTS[0]);
+  return existing ?? path.join(appRoot, candidates[0]);
+}
+
+function electronBundleRoot(appRoot) {
+  return firstExistingRoot(appRoot, ELECTRON_BUNDLE_ROOTS);
+}
+
+function capacitorBundleRoot(appRoot) {
+  return firstExistingRoot(appRoot, CAPACITOR_BUNDLE_ROOTS);
 }
 
 /**
@@ -106,18 +126,17 @@ export function build(appRoot, { skipBuild, platform, env } = {}) {
 
   if (platform === 'windows' || platform === 'macos' || platform === 'linux') {
     // Desktop builds are native host builds; they run on the matching host
-    // runner. The app exposes `build:desktop:local` (Tauri) or
-    // `build:desktop:electron:local` (Electron) when desktop packaging is
-    // wired. Electron falls back to the Tauri script name when the app has
-    // not yet split its host scripts.
+    // runner. The app exposes `build:desktop:local` (Tauri),
+    // `build:desktop:electron:local` (Electron), or
+    // `build:desktop:capacitor:local` (Capacitor) when desktop packaging is
+    // wired. A host without its own script falls back to the Tauri script name.
     const pkg = readJson(path.join(appRoot, 'package.json')) ?? {};
     const scripts = (pkg.scripts ?? {});
-    const electron = desktopHostKind(appRoot) === 'electron';
-    const script = electron
-      ? (typeof scripts[ELECTRON_DESKTOP_BUILD_SCRIPT] === 'string'
-          ? ELECTRON_DESKTOP_BUILD_SCRIPT
-          : TAURI_DESKTOP_BUILD_SCRIPT)
-      : TAURI_DESKTOP_BUILD_SCRIPT;
+    const kind = desktopHostKind(appRoot);
+    const hostScript = DESKTOP_BUILD_SCRIPTS[kind];
+    const script = typeof scripts[hostScript] === 'string'
+      ? hostScript
+      : DESKTOP_BUILD_SCRIPTS.tauri;
     if (typeof scripts[script] !== 'string') {
       return { ok: false, detail: `no ${script} script for ${platform} desktop` };
     }
@@ -148,8 +167,12 @@ export function collectArtifacts(appRoot, { appKey, version, platform, appConfig
   }
 
   if (platform === 'windows' || platform === 'macos' || platform === 'linux') {
-    const electron = desktopHostKind(appRoot, appConfig) === 'electron';
-    const bundleRoot = electron ? electronBundleRoot(appRoot) : path.join(appRoot, TAURI_BUNDLE_ROOT);
+    const kind = desktopHostKind(appRoot, appConfig);
+    const bundleRoot = kind === 'electron'
+      ? electronBundleRoot(appRoot)
+      : kind === 'capacitor'
+        ? capacitorBundleRoot(appRoot)
+        : path.join(appRoot, TAURI_BUNDLE_ROOT);
     if (!fs.existsSync(bundleRoot)) return [];
     const patterns = {
       windows: /\.(exe|msi|blockmap)$/i,
@@ -164,7 +187,7 @@ export function collectArtifacts(appRoot, { appKey, version, platform, appConfig
       name: path.basename(p),
       platform,
       packageId: pkg?.id,
-      label: `${platform} desktop installer (${electron ? 'electron' : 'tauri'})`,
+      label: `${platform} desktop installer (${kind})`,
     }));
   }
 

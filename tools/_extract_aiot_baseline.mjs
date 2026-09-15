@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import { DEFAULT_WORKSPACE_ROOT } from './lib/workspace-root.mjs';
 
-const root = path.resolve('E:/sdkwork-space/sdkwork-aiot');
+const root = path.resolve(DEFAULT_WORKSPACE_ROOT, 'sdkwork-space');
 const src = fs.readFileSync(
   path.join(root, 'crates/sdkwork-aiot-storage-sqlx/src/lib.rs'),
   'utf8',

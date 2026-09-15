@@ -1,4 +1,4 @@
-# REVIEW-2026-0911 — 全舰队标准对齐审计（门禁矩阵 + bin/ 放置通道）
+# REVIEW-20260911 — 全舰队标准对齐审计（门禁矩阵 + bin/ 放置通道）
 
 Status: **in-progress**（标准侧缺陷已修，模块侧债务已度量并部分清偿）
 Date: 2026-09-11
@@ -146,7 +146,7 @@ guardrail 层其余 12 条均在基线内（`items ≤ baseline` 即为通过，
 | `scripts/restore.sh`（237 行） | 同上，`restore` 是 `bin/backup.sh` 的 action；生产恢复走 `--yes` 门禁 |
 | `scripts/migrate-database.sh`（225 行） | 迁移已由 `db:migrate` → `scripts/dev/sdkwork-im-database-cli.mjs` 与部署期 `migrationMode: apply` 承担 |
 | `scripts/verify-deployment.sh`（185 行） | 文件本身 GBK/UTF-8 **乱码损坏**；覆盖被 `bin/verify-server.sh` + `bin/doctor.sh` 取代 |
-| `tools/converge-repo.sh` | agent scratch：硬编码 `C:/Users/admin/AppData/Local/Temp/` 与 `E:/sdkwork-space/…`，零引用 |
+| `tools/converge-repo.sh` | agent scratch：硬编码 `<home>/AppData/Local/Temp/` 与 `<workspace-root>/…`，零引用 |
 | `docs/sites/scripts/run-docs-task.{sh,ps1,cmd}`、`run-node.cmd` | 零消费者启动垫片；`docs/sites/package.json` 直接调 `run-docs-task.mjs` |
 
 删除前已备份 14 个文件至 `.workbuddy/backup/im-placement-20260911/`（git 忽略的
@@ -231,7 +231,7 @@ birdcoder2 重跑 `tsdown` 后（exit 0）产物实测：preflight 特征 `-webk
 
 ### 8.3 `check:sdk-standard` 根因：`listWorkspaceRepos()` 把**工作区根**当成仓库
 
-- `isRepoRoot(repoRoot)` = `AGENTS.md || package.json || Cargo.toml || pnpm-workspace.yaml`；`E:\sdkwork-space` 同时具备
+- `isRepoRoot(repoRoot)` = `AGENTS.md || package.json || Cargo.toml || pnpm-workspace.yaml`；`<workspace-root>` 同时具备
   `AGENTS.md` 与 `package.json` ⇒ 被当作一个仓库根入列（实测 107 个根，第 1 个就是工作区根本身）。
 - **后果链**：工作区根把每个 `sdkwork-*` 声明为 **git submodule** ⇒ `git ls-files --others --ignored --exclude-standard --directory`
   在工作区根只返回 168 条**根目录自有的**垃圾（`.pnpm-store/`、`.pub-*.log`…），**永不包含 submodule 内部**
@@ -284,7 +284,7 @@ birdcoder2 重跑 `tsdown` 后（exit 0）产物实测：preflight 特征 `-webk
 
 - `.gitignore` 与两个 `tsconfig.json` 均为 **CRLF**：行级改动用 `split(/\r?\n/)` + 探测 eol 回写；Edit 直接匹配会失配。
 - `sdkwork-im` 执行 `git diff` 报 `fatal: unable to read <sha>` ⇒ 该整批索引里**有对象缺失**，索引本身不健康。
-- `git -C /e/sdkwork-space/...` 会触发 MSYS 路径改写而失败（`cannot change to '/e/...'`）；舰队循环里必须用 `cd`。
+- `git -C <workspace-root>/...` 会触发 MSYS 路径改写而失败（`cannot change to '/e/...'`）；舰队循环里必须用 `cd`。
 
 ## 9. 第五轮：`check:database-initialization` 的判据缺陷与收口（2026-09-11 续）
 

@@ -472,6 +472,8 @@ Declares client artifacts not hosted by `expose.web`.
 packages:
   - flutter-mobile
   - harmony-mobile
+  - android-mobile
+  - ios-mobile
   - mini-program-weixin
   - desktop-windows
   - desktop-macos

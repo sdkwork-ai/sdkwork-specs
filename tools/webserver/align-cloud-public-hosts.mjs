@@ -5,8 +5,9 @@ import path from 'node:path';
 
 import { alignCloudPublicHosts } from './host-registry.mjs';
 import { productionHostsForSurface } from './build-from-topology.mjs';
+import { DEFAULT_WORKSPACE_ROOT } from '../lib/workspace-root.mjs';
 
-const workspace = path.resolve(process.argv[2] ?? 'E:/sdkwork-space');
+const workspace = path.resolve(process.argv[2] ?? DEFAULT_WORKSPACE_ROOT);
 const write = process.argv.includes('--write');
 
 let scanned = 0;

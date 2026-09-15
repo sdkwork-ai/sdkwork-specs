@@ -1,10 +1,12 @@
 # H5 Application Architecture Standard
 
-- Version: 1.0
-- Scope: SDKWork phone-first H5 application roots, mobile browser applications, WeChat-H5 style browser runtimes, embedded WebView mobile runtimes, and Capacitor iOS/Android apps that reuse the same H5 renderer
-- Related: `SDKWORK_WORKSPACE_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `TEST_SPEC.md`
+- Version: 1.1
+- Scope: SDKWork phone-first H5 application roots, mobile browser applications, WeChat-H5 style browser runtimes, embedded WebView mobile runtimes, and multi-platform mobile app packaging (iOS and Android) through one Capacitor host that reuses the same H5 renderer
+- Related: `SDKWORK_WORKSPACE_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `GOVERNANCE_SPEC.md`, `TEST_SPEC.md`
 
-This standard defines the application-root architecture for SDKWork H5 applications. H5 is the canonical phone-first mobile web runtime. Capacitor is an optional native host and release shape for iOS and Android, not a separate application architecture. H5 browser mode, WeChat-H5 mode, embedded WebView mode, and Capacitor iOS/Android mode reuse one mobile renderer, one route contribution model, one generated TypeScript app SDK composition layer, one appbase IAM runtime, and one package taxonomy.
+This standard defines the application-root architecture for SDKWork H5 applications. H5 is the canonical phone-first mobile web runtime. Capacitor is one optional native host that packages the H5 renderer as installable iOS and Android applications; it is not a separate application architecture. H5 browser mode, WeChat-H5 mode, embedded WebView mode, Capacitor iOS mode, and Capacitor Android mode reuse one mobile renderer, one route contribution model, one generated TypeScript app SDK composition layer, one appbase IAM runtime, and one package taxonomy.
+
+One Capacitor host package serves every shipped mobile platform. Platform differences — native project layout, permission manifests, deep-link mechanism, push service, secure storage, signing, and release channel — live inside that one host package and in `config/host/native/<platform>/` as **platform profiles**. They `MUST NOT` become forked hosts, forked renderers, duplicated business packages, or a second appbase IAM runtime. Section 8 owns the platform profile registry and the per-platform rules.
 
 This file is the H5 application root standard and the single authoritative entrypoint for SDKWork H5/Capacitor application architecture. `APP_MOBILE_REACT_UI_SPEC.md` remains the detailed mobile React UI package standard.
 
@@ -69,10 +71,15 @@ apps/sdkwork-<application-code>-h5/
     browser/
       runtime-env.<deployment-profile>.<environment>.example.json
     host/
-      capacitor.development.example.json
-      capacitor.test.example.json
-      capacitor.staging.example.json
-      capacitor.production.example.json
+      README.md
+      capacitor.<environment>.example.json
+      native/
+        ios/
+          ios.<environment>.example.json
+          deep-link-capabilities.snippet.plist
+        android/
+          android.<environment>.example.json
+          deep-link-intent-filter.snippet.xml
     server/
       <application-code>.<deployment-profile>.<environment>.toml.example
     container/
@@ -110,12 +117,45 @@ apps/sdkwork-<application-code>-h5/
     sdkwork-<application-code>-h5-admin-shell/
     sdkwork-<application-code>-h5-admin-<capability>/
     sdkwork-<application-code>-h5-capacitor/
+      package.json
       capacitor.config.ts
       src/
         host/
+          registry.ts
+          browser/
+          ios/
+          android/
         plugins/
+          sdkwork-host.ts
+          sdkwork-host.ios.ts
+          sdkwork-host.android.ts
+      resources/
+        icons/
+        splash/
       ios/
+        App/
+          App.xcodeproj/
+          App/
+            Info.plist
+            AppDelegate.swift
+            Assets.xcassets/
+          CapApp-SPM/
+            Package.swift
+          App.entitlements
+          debug.xcconfig
       android/
+        app/
+          build.gradle
+          src/main/
+            AndroidManifest.xml
+            res/
+        variables.gradle
+        build.gradle
+        settings.gradle
+        gradle/
+          libs.versions.toml
+        gradlew
+        gradlew.bat
   tests/
   index.html
   package.json
@@ -142,6 +182,10 @@ Directory rules:
 - `packages/` contains all reusable runtime, shell, app, console, admin, and native host packages.
 - `packages/sdkwork-<application-code>-h5-capacitor` is the only package that may own Capacitor configuration, plugin implementation, generated native project directories, and platform-specific host implementations.
 - Generated Capacitor `ios/` and `android/` directories must not contain product business logic or app SDK transport.
+- `bin/ios/` and `bin/android/` own platform build, signing, and store-submission helper entrypoints. They call package and native toolchain commands; they must not become a second build system.
+- `config/host/native/ios/` and `config/host/native/android/` own per-platform profile templates and native snippet fragments. Snippets are reviewable templates for what must appear in the generated native project, not generated output.
+- Platform subtrees `packages/sdkwork-<application-code>-h5-capacitor/ios/` and `.../android/` are the only place platform-specific native code may live. One platform subtree `MUST NOT` contain another platform's code, and neither may contain business screens, business services, or app SDK construction.
+- `ios/App/CapApp-SPM/Package.swift` and `ios/App/debug.xcconfig` are Capacitor-generated output and `MUST NOT` be hand-edited.
 - `tests/` contains application-level integration, runtime, route, package-boundary, host-adapter, config, and release verification tests.
 
 ## 2.1 Configuration And Environment Matrix
@@ -162,6 +206,11 @@ Standard config ownership:
 | --- | --- | --- | --- |
 | Vite/browser build env | `.env.<deployment-profile>.<environment>` | public `VITE_*` profile identity, SDK base URLs, public flags | secrets, tokens, database/Redis config, Capacitor packaging metadata |
 | Browser public runtime | `config/browser/runtime-env.<deployment-profile>.<environment>.example.json`, `/runtime-env.js` | public SDK base URLs, public feature flags, public app metadata, H5 host capability flags | secrets, database URLs, Redis URLs, tokens, refresh tokens, private service endpoints |
+| Shared host runtime | `config/host/capacitor.<environment>.example.json`, `capacitor.config.ts` | Capacitor `appId` / `appName` / `webDir`, server allow-navigation entries, shared plugin flags, capability enablement | signing private keys, API keys, auth tokens, business API paths, SDK ownership |
+| iOS host platform runtime | `config/host/native/ios/ios.<environment>.example.json`, `config/host/native/ios/*.snippet.plist`, `ios/App/App/Info.plist` | iOS bundle id reference, associated domains, URL schemes, `Info.plist` usage-description references, APNs profile reference, signing reference names, store profile references | secrets, signing private keys, provisioning profiles, business API paths, SDK ownership |
+| Android host platform runtime | `config/host/native/android/android.<environment>.example.json`, `config/host/native/android/*.snippet.xml`, `android/app/src/main/AndroidManifest.xml` | Android application id reference, App Links, manifest permission references, FCM profile reference, min/target SDK references, signing reference names, store profile references | secrets, keystore files, `keystore.properties`, business API paths, SDK ownership |
+| Server runtime | `config/server/<application-code>.<deployment-profile>.<environment>.toml.example`, `/etc/sdkwork/<application-code>/<process>.toml` | bind address, API gateway, PostgreSQL, Redis, reverse proxy trust, service paths when the app owns server runtime | browser-only `VITE_*`, Capacitor packaging metadata |
+| Container runtime | `config/container/<application-code>.<deployment-profile>.<environment>.toml.example`, mounted `/etc/sdkwork/...` | container service config, mounted secrets, external service endpoints, volumes | image-baked secrets or mutable database state |
 
 The browser runtime source matrix is one file per supported
 `<deployment-profile>.<environment>` combination (all ten when both
@@ -171,9 +220,12 @@ environment-only or profile-only names. Value rules per profile follow
 `ENVIRONMENT_SPEC.md` §5.1.0.1: `standalone` sources use the same-origin root
 `/` for every SDK base URL; `cloud` sources use the unified `cloudApiBaseUrl`
 origin for the environment (`api-dev.<domain>` … `api-demo.<domain>` … `api.<domain>`).
-| Host platform runtime | `config/host/capacitor.<environment>.example.json`, `capacitor.config.ts`, platform config references | bundle id/package id references, schemes, app links, associated domains, permissions, plugin flags, store metadata references | signing private keys, API keys, auth tokens, business API paths, SDK ownership |
-| Server runtime | `config/server/<application-code>.<deployment-profile>.<environment>.toml.example`, `/etc/sdkwork/<application-code>/<process>.toml` | bind address, API gateway, PostgreSQL, Redis, reverse proxy trust, service paths when the app owns server runtime | browser-only `VITE_*`, Capacitor packaging metadata |
-| Container runtime | `config/container/<application-code>.<deployment-profile>.<environment>.toml.example`, mounted `/etc/sdkwork/...` | container service config, mounted secrets, external service endpoints, volumes | image-baked secrets or mutable database state |
+
+Host config is keyed by `<environment>` only — `config/host/capacitor.<environment>.example.json` and
+`config/host/native/<platform>/<platform>.<environment>.example.json`. This is deliberate: a native
+package identity, a signing identity, and a store lane are environment-scoped, so the deployment
+profile is recorded as a field inside the host profile rather than as a file-name segment. It is not
+a licence to use environment-only names for `config/browser/`, `config/server/`, or `config/container/`.
 
 Rules:
 
@@ -208,6 +260,24 @@ H5 applications share one mobile renderer and one package taxonomy across browse
 | iOS Capacitor app | `capacitor-ios` | `sdkwork-<application-code>-h5-capacitor` | Same renderer, iOS bundle id, universal links, push, secure storage, IPA/TestFlight/App Store or private distribution workflow |
 | Android Capacitor app | `capacitor-android` | `sdkwork-<application-code>-h5-capacitor` | Same renderer, Android package id, app links, push, secure storage, APK/AAB/Google Play or private distribution workflow |
 
+Per-platform contract for the one Capacitor host. Every shipped platform `MUST` satisfy every row for its column:
+
+| Concern | iOS (`capacitor-ios`) | Android (`capacitor-android`) |
+| --- | --- | --- |
+| Platform identity field | `app.identifiers.bundleId` (reverse-DNS) | `app.identifiers.packageName` (reverse-DNS, Gradle `applicationId`) |
+| Native project root | `ios/App/` | `android/app/` plus `android/variables.gradle` |
+| Dependency manager | Swift Package Manager (`ios/App/CapApp-SPM/Package.swift`, generated) | Gradle wrapper plus `gradle/libs.versions.toml` |
+| Permission declaration | `ios/App/App/Info.plist` usage-description keys | `android/app/src/main/AndroidManifest.xml` plus runtime permission flow |
+| Deep-link mechanism | Universal Links (associated domains) primary; custom URL scheme secondary | Android App Links (`android:autoVerify`) primary; custom URL scheme secondary |
+| Push service | APNs | FCM |
+| Secure storage | Keychain behind the secure-storage adapter | Android Keystore behind the secure-storage adapter |
+| Release artifact | `.ipa` (App Store, TestFlight, or private) | `.aab` (Play) or `.apk` (private or enterprise) |
+| Platform profile template | `config/host/native/ios/ios.<environment>.example.json` | `config/host/native/android/android.<environment>.example.json` |
+| Platform snippet fragments | `config/host/native/ios/*.snippet.plist` | `config/host/native/android/*.snippet.xml` |
+| iOS deployment target | 15.0 | n/a |
+| Android SDK floors | n/a | `minSdkVersion` 24; `compileSdkVersion` = `targetSdkVersion` = 36 |
+| Build toolchain floor | macOS with Xcode 26.0+ | Android Studio Otter (2025.2.1)+, AGP 8.13.0, Gradle wrapper 8.14.3, Kotlin 2.2.20, Java 21 |
+
 Rules:
 
 - The H5 renderer `MUST` be the source of truth for H5 browser, WeChat-H5, embedded WebView, and Capacitor targets.
@@ -216,6 +286,12 @@ Rules:
 - H5 public runtime config must load before SDK clients are constructed.
 - H5 browser fallback adapters must represent unavailable native capability with stable user-safe errors.
 - iOS builds require macOS and Apple tooling. Android builds require Android SDK/JDK/Gradle tooling. CI and release runbooks must document runner requirements.
+- A platform `MAY` be unshipped only if it declares no build commands, no config checker, no manifest publish entry, and no `config/host/native/<platform>/` profile. A half-wired platform is a defect, not a partial state.
+- Platform identity `MUST` have exactly one authority: `sdkwork.app.config.json`. The `capacitor.config.ts` `appId`, the Xcode bundle identifier, and the Gradle `applicationId` are projections of that authority and `MUST` agree; a mismatch `MUST` fail release preflight.
+- The SDK and toolchain floors track the declared Capacitor major. Raising the Android target SDK `MUST` be done by upgrading the Capacitor major, never by editing `targetSdkVersion` alone: Capacitor binds the target SDK to its major version and does not support custom target SDK values.
+- New iOS projects `MUST` use Swift Package Manager. CocoaPods is maintenance-mode only and `MUST NOT` be selected for new roots; Swift Package Manager and CocoaPods `MUST NOT` be mixed in one project.
+- `ios/App/CapApp-SPM/Package.swift` and `ios/App/debug.xcconfig` are generated by the Capacitor CLI on `cap sync`. They `MUST NOT` be hand-edited; native customization belongs in `Info.plist`, `AppDelegate.swift`, entitlements, `Assets.xcassets/`, or the Gradle and manifest files.
+- Capacitor 8 removed `adjustMarginsForEdgeToEdge`; safe-area and system-bar inset handling `MUST` use the System Bars plugin instead of that removed option.
 
 ## 2.3 Required Application Capabilities
 
@@ -234,18 +310,19 @@ A complete H5 application standard covers more than mobile screens and package n
 | IAM/session | appbase packages and `h5-core` | Login, registration, refresh, logout, current session, TokenManager propagation |
 | Permissions | surface shells and services | Frontend hints only; app-api/backend-api remains authoritative |
 | Drive/media/files | domain packages plus generated Drive SDKs | Camera/file selection, Drive-backed upload/download, media contracts |
-| Realtime/notifications | appbase/product service packages plus host adapters | Websocket/SSE/realtime clients, push adapter, logout clearing |
+| Realtime/notifications | appbase/product service packages plus host adapters | Websocket/SSE/realtime clients, push adapter over APNs (iOS) and FCM (Android), logout clearing |
 | Deep links | shell packages, host package | Route id hydration, OAuth/QR/password-reset callbacks, state/nonce validation |
-| Secure storage | `h5-core`, `h5-capacitor` | Browser fallback and native secure-storage adapter, logout clearing |
+| Secure storage | `h5-core`, `h5-capacitor` | One adapter contract with a browser fallback, a Keychain implementation (iOS), and an Android Keystore implementation (Android); logout clearing |
 | Mobile resilience | `h5-core`, domain services | Network status, retry/reconnect, background/foreground behavior, safe offline cache |
 | Diagnostics and support | `h5-core`, host package | Safe diagnostics bundle, user-safe error reports, no secret logging |
-| Release channels | `scripts/`, `h5-capacitor`, app manifest | H5 asset release, IPA/APK/AAB metadata, rollback notes, staged rollout |
+| Release channels | `scripts/`, `h5-capacitor`, app manifest | H5 asset release, per-platform `.ipa` and `.aab`/`.apk` metadata, rollback notes, staged rollout |
 
 Rules:
 
 - An H5 application is incomplete if it defines screens but omits SDK/IAM bootstrap, route ownership, host adapter boundaries, runtime config, release commands, or architecture verification.
 - Every capability `MUST` have an owner package or owner layer. Shared capabilities `MUST` use public exports and service ports; they `MUST NOT` use deep imports or copied runtime singletons.
 - Capability implementation order should start from runtime/bootstrap, SDK/IAM, shell routing, then domain packages, then host packaging. Host packaging must not force a redesign of SDK or auth boundaries.
+- A capability implemented on one mobile platform `MUST` degrade on the other platform with a stable `unsupported` adapter error. It `MUST NOT` throw, silently no-op, or be feature-detected by UI packages.
 
 ## 3. Package Taxonomy
 
@@ -263,7 +340,7 @@ H5 package directory names `MUST` include the application code and the `h5` surf
 | Admin core | `sdkwork-<application-code>-h5-admin-core` | `backend-admin` runtime, approved only | backend SDK provider, admin permission/audit helpers, admin route guards, operator context | user login UI, app-api session creation |
 | Admin shell | `sdkwork-<application-code>-h5-admin-shell` | internal mobile admin, approved only | internal staff navigation, route composition, audit-sensitive transitions | app or console navigation |
 | Admin capability | `sdkwork-<application-code>-h5-admin-<capability>` | internal mobile admin, approved only | internal operator workflows through backend-api | user app workflows, app SDK login/session creation |
-| Capacitor host | `sdkwork-<application-code>-h5-capacitor` | native host | Capacitor config, plugins, permissions, iOS/Android package metadata, typed host implementations | business API calls, business authorization, SDK generation |
+| Capacitor host | `sdkwork-<application-code>-h5-capacitor` | native host, one package for every mobile platform | Shared Capacitor config and plugin bridge, per-platform native subtrees (`ios/`, `android/`), per-platform profiles, permission declarations, package metadata, typed host implementations plus their platform-specific variants | business API calls, business authorization, SDK generation, forked renderers, forked business screens |
 
 Rules:
 
@@ -276,6 +353,7 @@ Rules:
 - `h5-console-<capability>` packages are the user-facing mobile management console family. They follow the same package-internal shape as `h5-<capability>` packages, but their routes, i18n, services, and state are scoped to customer, tenant, app-owner, or app-user management workflows.
 - `h5-admin-<capability>` packages are approved internal operations admin packages and map to `backend-admin`; they must not be used for user-facing management console workflows.
 - The `<capability>` segment is the concrete business module token. It `MUST NOT` be a placeholder such as `console`, `admin`, `manager`, `backend`, `common`, or `misc`.
+- The Capacitor host package is exactly one package per H5 root and `MUST` serve every shipped mobile platform. Platform-split host packages such as `sdkwork-<application-code>-h5-capacitor-ios` or `-h5-capacitor-android` `MUST NOT` be introduced; platform differences belong in subtrees of the one package, not in a second package.
 
 Examples:
 
@@ -359,18 +437,60 @@ packages/sdkwork-<application-code>-h5-core/
     storage/
 ```
 
-Capacitor host package shape:
+Capacitor host package shape (one package, per-platform subtrees):
 
 ```text
 packages/sdkwork-<application-code>-h5-capacitor/
   package.json
   capacitor.config.ts
   src/
+    index.ts
     host/
+      registry.ts
+      browser/
+      ios/
+      android/
     plugins/
+      sdkwork-host.ts
+      sdkwork-host.ios.ts
+      sdkwork-host.android.ts
+  resources/
+    icons/
+    splash/
   ios/
+    App/
+      App.xcodeproj/
+      App/
+        Info.plist
+        AppDelegate.swift
+        Assets.xcassets/
+      CapApp-SPM/
+        Package.swift
+      App.entitlements
+      debug.xcconfig
   android/
+    app/
+      build.gradle
+      src/main/
+        AndroidManifest.xml
+        res/
+    variables.gradle
+    build.gradle
+    settings.gradle
+    gradle/
+      libs.versions.toml
+    gradlew
+    gradlew.bat
+  tests/
 ```
+
+Rules:
+
+- `src/index.ts` is the only public export boundary, exactly as in capability packages.
+- `src/host/<platform>/` holds that platform's adapter implementations; `src/host/browser/` holds the browser fallbacks. A platform directory `MUST NOT` import another platform's directory.
+- `src/plugins/` holds the one SDKWork Capacitor plugin carrying the shared method table plus its per-platform files. Additional ad-hoc plugins `MUST NOT` be added for individual capabilities.
+- `ios/` and `android/` are the only platform subtrees. Adding a third mobile platform means adding a third subtree plus its profile, not restructuring the package.
+- `tests/` `MUST` cover the adapter parity gate, the browser fallback path, and the profile/identity agreement checks.
 
 ## 6. Dependency Direction
 
@@ -414,26 +534,124 @@ Rules:
 - Verification-code delivery must use the generated messaging app SDK surface or an approved appbase wrapper that delegates to an injected messaging client.
 - UI and services must not assemble auth headers, parse JWTs for authorization, call raw HTTP, or construct SDK clients.
 
-## 8. H5, WebView, And Capacitor Runtime
+## 8. Mobile Host Profiles
+
+An H5 root is one renderer plus a registry of mobile host profiles. Profiles differ in how the renderer is loaded, which platform facts exist, and which artifact is distributed. They `MUST NOT` differ in business screens, route ids, SDK clients, IAM runtime, or permission model.
+
+| Profile | Host package | Loads the renderer as | Platform facts source | Distinct artifact | Shipped |
+| --- | --- | --- | --- | --- | --- |
+| Mobile H5 browser | none (root Vite build) | mobile browser document, optionally installed as PWA | browser APIs behind typed fallbacks | Web URL or static package | Always |
+| WeChat H5 browser | none (root Vite build) | WeChat in-app browser | WeChat JSSDK behind adapter | Web URL | When declared |
+| Embedded WebView | none (container owned by the embedding host) | host-owned WebView | host-injected adapter | Host-owned package | When declared |
+| Capacitor iOS | `sdkwork-<application-code>-h5-capacitor` | Capacitor iOS runtime (`WKWebView`) | `@capacitor/*` plugins behind adapter | `.ipa` | When declared |
+| Capacitor Android | `sdkwork-<application-code>-h5-capacitor` | Capacitor Android runtime (WebView plus local asset server) | `@capacitor/*` plugins behind adapter | `.aab` / `.apk` | When declared |
+
+Rules:
+
+- One Capacitor host package `MUST` serve every shipped mobile platform. Per-platform subtrees inside one package is the model; two host packages split by mobile platform is forbidden.
+- Shipped profiles `MUST` be declared in `sdkwork.app.config.json` (`publish.platforms`, `runtime.runtimes`) and `MUST` match the artifacts actually produced.
+- Adding a mobile platform profile is configuration plus native platform subtrees inside the existing host package. It is not a new application architecture and `MUST NOT` create a second renderer, a second route tree, or a second appbase IAM runtime.
+- Browser profiles `MUST` keep working with no native host present. A native-only assumption inside a shared package is a defect.
+
+### 8.1 Browser Runtime Profiles
 
 Rules:
 
 - `pnpm dev` starts the default standalone H5 browser renderer/topology.
-- `pnpm dev:browser:standalone` and `pnpm dev:browser:cloud` select the
-  explicit H5 browser profile.
-- `pnpm dev:capacitor-ios:standalone`, `pnpm dev:capacitor-ios:cloud`,
-  `pnpm dev:capacitor-android:standalone`, and
-  `pnpm dev:capacitor-android:cloud` select Capacitor targets when packaging is
-  enabled.
-- Capacitor builds `MUST` use the H5 mobile renderer build output.
-- Browser web mode `MUST` degrade gracefully when native host adapters are unavailable.
-- Native host commands expose OS capability only. They `MUST NOT` own login, permission evaluation, business authorization, app-api/backend-api calls, or direct database access for feature workflows.
+- `pnpm dev:browser:standalone` and `pnpm dev:browser:cloud` select the explicit H5 browser profile.
+- WeChat-H5 and embedded-WebView modes are load-time variants of the same renderer. They inject host facts through adapters and `MUST NOT` fork routes, screens, or SDK wiring.
+- Browser web mode `MUST` degrade gracefully when native host adapters are unavailable, using the fallback adapter set described in section 8.6.
+- Installable PWA is the mobile H5 browser profile plus a web app manifest and a service worker. It is not a separate architecture and `MUST NOT` be recorded as a native platform.
+
+### 8.2 Capacitor Host Profile
+
+One Capacitor host package, one Capacitor config, one plugin bridge, and one adapter surface serve every shipped mobile platform.
+
+Rules:
+
+- `capacitor.config.ts` `MUST` be the single Capacitor runtime configuration. Its `appId` is a projection of the manifest identity authority described in section 2.2.
+- `src/host/registry.ts` `MUST` resolve the platform-appropriate adapter implementation at runtime. Feature packages `MUST NOT` branch on the Capacitor platform string themselves.
+- Capacitor builds `MUST` use the H5 mobile renderer build output. `webDir` `MUST` point at that output, and the host package `MUST NOT` build a second web bundle.
+- Platform code belongs in the per-platform subtrees (`ios/`, `android/`) and the per-platform adapter or plugin files. Shared code lives in `src/` and `MUST NOT` import platform-only globals.
+- The Capacitor dev commands `dev:capacitor-ios:standalone`, `dev:capacitor-ios:cloud`, `dev:capacitor-android:standalone`, and `dev:capacitor-android:cloud` select the Capacitor targets when packaging is enabled.
+- A root owning a single mobile host `MAY` also expose the `mobile:*` host family from `PNPM_SCRIPT_SPEC.md` section 4.1.2 (`mobile:dev`, `mobile:dev:ios`, `mobile:build:android`) as a top-level alias of the action-first `dev:capacitor-ios` / `build:capacitor-android` commands, with the same default profile (`standalone`, `development`). The action-first names remain canonical, and a root owning more than one mobile host `MUST NOT` expose the family.
+- Capacitor ownership is split by client root and `MUST NOT` overlap. This standard owns the Capacitor **iOS/Android** host of an H5 root (`h5-capacitor`, `runtime_target = "capacitor-ios" | "capacitor-android"`). The Capacitor **desktop** host of a PC root (`pc-capacitor`, `clientArchitecture = "capacitor"`, `runtimeTarget = "desktop"`) is owned by `APP_PC_ARCHITECTURE_SPEC.md` and `DESKTOP_APP_ARCHITECTURE_SPEC.md`. An H5 root `MUST NOT` own the desktop Capacitor host, and a PC root `MUST NOT` own mobile Capacitor targets.
+
+### 8.3 iOS Platform Profile
+
+`capacitor-ios` packages the shared renderer as an installable iOS application.
+
+| Concern | Rule |
+| --- | --- |
+| Identity | The bundle identifier comes from `app.identifiers.bundleId` and `MUST` agree with the `capacitor.config.ts` `appId` and the Xcode project bundle identifier. |
+| Native project | `ios/App/` is source-controlled. It contains the Capacitor scaffold plus reviewed native customization; generated package-manager wiring is excluded from review. |
+| Dependency manager | Swift Package Manager. `ios/App/CapApp-SPM/Package.swift` and `ios/App/debug.xcconfig` are generated on `cap sync` and `MUST NOT` be hand-edited. CocoaPods `MUST NOT` be selected for new roots and `MUST NOT` be mixed with Swift Package Manager inside one project. |
+| Deployment target | iOS 15.0 is the floor for the declared Capacitor major. Raising it requires a recorded decision. |
+| Toolchain | Xcode 26.0+ on macOS. iOS builds `MUST NOT` run on a non-macOS runner, and release runbooks `MUST` name the macOS runner and Xcode version. |
+| Permissions | Every enabled native capability `MUST` declare its `Info.plist` usage-description key. An adapter `MUST NOT` be enabled without its usage string, and purpose strings `MUST` be localized through package i18n instead of hard-coded in one language. |
+| Deep links | Universal Links through associated domains are primary. A custom URL scheme is secondary, for development and OAuth return only. |
+| Push | APNs. The adapter only obtains or refreshes the device token; server-side registration stays an app-api workflow. |
+| Secure storage | Keychain behind the secure-storage adapter, cleared on logout. The keychain accessibility class `MUST` be documented per stored item. |
+| Signing and distribution | Certificates and provisioning profiles are machine or CI credentials and `MUST NOT` be committed. The declared distribution lane (App Store, TestFlight, or private) is recorded in the manifest. |
+
+### 8.4 Android Platform Profile
+
+`capacitor-android` packages the shared renderer as an installable Android application.
+
+| Concern | Rule |
+| --- | --- |
+| Identity | The application id comes from `app.identifiers.packageName` and `MUST` agree with the `capacitor.config.ts` `appId` and the Gradle `applicationId`. |
+| Native project | `android/` is source-controlled, including `android/variables.gradle`, `gradle/libs.versions.toml`, and the Gradle wrapper. |
+| SDK floors | `minSdkVersion` 24, and `compileSdkVersion` = `targetSdkVersion` = 36 for the declared Capacitor major. Custom target SDK values are not supported: the target SDK is bound to the Capacitor major, so raising it means upgrading Capacitor. |
+| Toolchain | Android Studio Otter (2025.2.1)+, Android Gradle Plugin 8.13.0, Gradle wrapper 8.14.3, Kotlin 2.2.20, and Java 21 source and target levels. |
+| Permissions | Declared in `android/app/src/main/AndroidManifest.xml` together with the runtime request flow, including the rationale and permanent-denial paths. A denied permission `MUST` surface as `permission-denied`, never as a crash or an unbounded prompt loop. |
+| Manifest hygiene | Exported components `MUST` be declared explicitly, cleartext traffic `MUST` be disabled in production, and secure-storage state `MUST` be excluded from backup through `dataExtractionRules`. |
+| Deep links | Android App Links with `android:autoVerify` are primary. A custom URL scheme is secondary, for development and OAuth return only. |
+| Push | FCM. `google-services.json` is app-specific and `MUST` be supplied by the environment or CI rather than committed when it carries project-specific keys; the platform profile references it by name. |
+| Secure storage | Android Keystore behind the secure-storage adapter, cleared on logout and excluded from backup. |
+| Edge-to-edge | System-bar inset handling `MUST` use the System Bars plugin. The removed `adjustMarginsForEdgeToEdge` option `MUST NOT` be reintroduced. |
+| Signing and distribution | Keystore files and `keystore.properties` are credential material and `MUST NOT` be committed. Upload-key and app-signing-key ownership `MUST` be documented, `versionCode` `MUST` increase monotonically per uploaded artifact, and `versionName` `MUST` stay aligned with the manifest version. |
+
+### 8.5 Non-Adopted Mobile Platform Profiles
+
+Platforms outside this standard are registered here so that a root does not silently assume support.
+
+| Platform | Status | Reason | Correct route instead |
+| --- | --- | --- | --- |
+| HarmonyOS / OpenHarmony through Capacitor | Not adopted | Capacitor upstream supports iOS, Android, and the web. Harmony support exists only as a community port outside the upstream platform set, so it carries no upstream compatibility or security guarantee. | Use `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md` and a native Harmony root. |
+| Desktop operating systems through Capacitor | Out of scope here | Desktop packaging belongs to the PC client root, which owns the Capacitor desktop host. | `APP_PC_ARCHITECTURE_SPEC.md` and `DESKTOP_APP_ARCHITECTURE_SPEC.md` section 5.4. |
+| Installable PWA | Not a platform profile | It is the mobile H5 browser profile plus a web app manifest and a service worker. | Section 8.1. |
+
+Rules:
+
+- Adding a platform outside the upstream Capacitor platform set `MUST` go through `GOVERNANCE_SPEC.md` as a recorded exception, `MUST` name the provider and its maintenance status, and `MUST` register its supply-chain risk before any root depends on it.
+- A root `MUST NOT` claim a non-adopted platform in `publish.platforms`, build commands, or store metadata.
+
+### 8.6 Host Adapter Contract
+
+Rules:
+
+- Every adapter in the section 9 catalog `MUST` have one shared TypeScript interface, one browser fallback implementation, and one implementation per shipped native platform.
+- Per-platform implementations `MUST` live in the platform subtree or in the platform-specific adapter and plugin files of the host package. They `MUST NOT` fork the shared interface and `MUST NOT` be duplicated inside feature packages.
+- Parity is a compile-time gate: each platform implementation `MUST` satisfy the shared adapter interface, so a missing method fails typecheck instead of failing on a device at runtime.
+- Adapter errors `MUST` be the stable user-safe set: `unsupported`, `permission-denied`, `unavailable`, `cancelled`, `invalid-state`, and `timeout`.
+- Feature packages depend on adapter interfaces only. They `MUST NOT` import Capacitor packages, Capacitor globals, WeChat globals, or browser globals for business workflows.
+- Native host commands expose OS capability only. They `MUST NOT` own login, permission evaluation, business authorization, app-api or backend-api calls, or direct database access for feature workflows.
+
+### 8.7 Mobile Bridge Protocol
+
+Rules:
+
+- The host package `MUST` expose exactly one SDKWork Capacitor plugin carrying the shared method table, with platform-specific implementations in the per-platform plugin files. Scattering capabilities across many ad-hoc plugins is forbidden.
+- The plugin method table is the mobile analogue of the desktop bridge allowlist: a method absent from the table `MUST NOT` be reachable from the renderer.
+- The browser fallback `MUST` register the same method table on the web platform so that a single call site works across browser, iOS, and Android.
+- Platform detection belongs in the host package. Shared code `MUST NOT` read the platform string, `MUST NOT` import `@capacitor/core`, and `MUST NOT` assume a native method exists because one platform implements it.
 - Mobile-local files, runtime paths, SQLite usage when approved, logs, cache, temp files, and secrets follow `RUNTIME_DIRECTORY_SPEC.md`.
 - Release builds `MUST NOT` hard-code localhost service endpoints, developer directories, tokens, private keys, or signing secrets.
 
 ## 9. Host Adapter Catalog
 
-The Capacitor package implements host adapter interfaces defined by core or capability packages. H5 browser mode supplies fallback adapters.
+The Capacitor package implements host adapter interfaces defined by core or capability packages. H5 browser mode supplies fallback adapters. This catalog is the mobile H5/Capacitor catalog; the PC desktop Capacitor host uses the `@sdkwork/desktop-host-contract` capability set and the bridge protocol defined by `DESKTOP_APP_ARCHITECTURE_SPEC.md` sections 5.5 and 5.6.
 
 Standard adapters:
 
@@ -506,6 +724,10 @@ Rules:
 - `app.identifiers.bundleId` owns iOS bundle identity. `app.identifiers.packageName` owns Android application id.
 - Production manifests must declare governed icons, screenshots, previews, checksums, signing metadata, SBOM/provenance references, and release notes according to `APP_MANIFEST_SPEC.md`.
 - Store screenshots must show the actual mobile app, not desktop screenshots or marketing-only banners.
+- `app.identifiers.packageName` is the Android application id authority and `app.identifiers.bundleId` is the iOS bundle identity authority. A shipped platform `MUST` project them into `capacitor.config.ts` `appId`, the Xcode bundle identifier, and the Gradle `applicationId` without divergence.
+- A shipped platform `MUST` declare its platform profile, and an unshipped platform `MUST NOT` appear in `publish.platforms`, in `artifacts.installConfig.packages[]`, or in store metadata.
+- Per-platform store metadata `MUST` be declared separately: iOS privacy declarations and screenshot sets differ from Google Play data-safety and content-rating declarations. One platform's metadata `MUST NOT` be reused for the other.
+- Platform SDK and toolchain floors declared by the manifest `MUST` match the section 2.2 platform contract for the declared Capacitor major.
 
 ## 13. Standard Commands
 
@@ -542,6 +764,9 @@ pnpm dev:capacitor-ios:standalone
 pnpm dev:capacitor-ios:cloud
 pnpm dev:capacitor-android:standalone
 pnpm dev:capacitor-android:cloud
+pnpm check:capacitor-config
+pnpm check:capacitor-config:ios
+pnpm check:capacitor-config:android
 ```
 
 Package filters should be stable:
@@ -565,6 +790,9 @@ Rules:
   implementation.
 - Capacitor synchronization/copy/open commands remain internal runner details
   behind action-first public commands and use the same renderer output.
+- Per-platform build and config-check variants `MUST` exist for every shipped platform and `MUST NOT` exist for an unshipped one. A platform with build commands but no config checker, or the reverse, is a defect.
+- `check:capacitor-config` `MUST` validate the shared Capacitor config, every shipped platform profile, identity agreement across the manifest, `capacitor.config.ts`, Xcode, and Gradle, and the absence of secrets. The per-platform variants `MUST` add that platform's native project and profile checks.
+- Platform build commands `MUST` fail fast when the platform toolchain floor is unmet — Xcode version, `compileSdkVersion` or `targetSdkVersion`, or Java level — instead of producing an unbuildable native project.
 - Production browser and Capacitor builds must run release preflight for
   public runtime config, host config, manifest, media, signing references,
   package metadata, and secret absence.
@@ -600,6 +828,11 @@ Required verification for H5 application architecture changes:
 | Push lifecycle | Tests cover permission denied, token registration, token refresh, logout unregister/clear, and foreground/background handling. |
 | Config boundary | Tests prove browser public runtime config and host/platform config contain no secrets and load before SDK construction. |
 | Release preflight | Checks validate H5 URL, IPA/App Store metadata, APK/AAB/Google Play metadata, icons, screenshots, checksums, SBOM/provenance, and signing references. |
+| Platform profile coverage | Static check proves every shipped platform has its native subtree, platform profile, permission declaration, adapter implementations, and build command, and that no unshipped platform has any of them. |
+| Platform identity agreement | Static check proves `app.identifiers.bundleId` and `app.identifiers.packageName` agree with the `capacitor.config.ts` `appId`, the Xcode bundle identifier, and the Gradle `applicationId`. |
+| Platform adapter parity | Typecheck proves each platform adapter implementation satisfies the shared adapter interface, and tests prove a browser fallback exists for every adapter in the section 9 catalog. |
+| Platform toolchain and SDK floors | Static check proves the iOS deployment target and the Android `minSdkVersion`, `compileSdkVersion`, and `targetSdkVersion` match the section 2.2 contract for the declared Capacitor major. |
+| Generated-output discipline | Static check proves `ios/App/CapApp-SPM/Package.swift` and `ios/App/debug.xcconfig` were not hand-edited, and that no keystore, provisioning profile, certificate, or `google-services.json` carrying project keys is committed. |
 | Package build | Changed packages pass typecheck, tests, and build or smoke commands. |
 
 Acceptance checklist:
@@ -616,6 +849,10 @@ Acceptance checklist:
 - [ ] SDK clients and appbase IAM runtime are created in bootstrap/core and injected.
 - [ ] Native capabilities use typed host adapters with H5 fallbacks.
 - [ ] Browser public runtime config, host platform config, server config, and container config are separated and secret-free.
+- [ ] Every shipped mobile platform has its own native subtree, platform profile, permission declaration, adapter implementations, and build command inside the one Capacitor host package.
+- [ ] No platform-split Capacitor host package exists, and no unshipped platform has build commands, a config checker, or manifest publish entries.
+- [ ] Platform identity agrees across `sdkwork.app.config.json`, `capacitor.config.ts`, Xcode, and Gradle.
+- [ ] iOS uses Swift Package Manager with no CocoaPods project and no mixed package-manager setup.
 - [ ] Test profile isolates database/schema, Redis key prefix, logs, cache, runtime, and temp directories.
 - [ ] Appbase IAM runtime and one global TokenManager are wired by bootstrap/core.
 - [ ] Release metadata, screenshots, checksums, signing references, SBOM/provenance, and package artifacts are validated.

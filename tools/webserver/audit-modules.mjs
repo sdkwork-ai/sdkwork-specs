@@ -7,12 +7,13 @@ import { DEFAULT_PRODUCT_BASE_DOMAINS } from './host-registry.mjs';
 import { buildWebserverDocs, webserverSurfaces } from './build-from-topology.mjs';
 import { validateWebserverDir } from './validate.mjs';
 import { LAYOUT_V3_FILES } from './layout-v3.mjs';
+import { DEFAULT_WORKSPACE_ROOT } from '../lib/workspace-root.mjs';
 
 const workspaceArg = process.argv.slice(2).find((arg) => !arg.startsWith('-'));
 const workspace = path.resolve(
   workspaceArg && fs.existsSync(workspaceArg) && fs.statSync(workspaceArg).isDirectory()
     ? workspaceArg
-    : 'E:/sdkwork-space',
+    : DEFAULT_WORKSPACE_ROOT,
 );
 const verbose = process.argv.includes('--verbose');
 const expectedBases = DEFAULT_PRODUCT_BASE_DOMAINS.length;

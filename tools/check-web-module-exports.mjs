@@ -6,8 +6,9 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { DEFAULT_WORKSPACE_ROOT } from './lib/workspace-root.mjs';
 
-const WORKSPACE = process.argv[2] || 'E:/sdkwork-space';
+const WORKSPACE = process.argv[2] || DEFAULT_WORKSPACE_ROOT;
 
 function* walk(dir) {
   let entries;

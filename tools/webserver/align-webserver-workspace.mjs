@@ -15,6 +15,7 @@ import { isPublicHostCompliant, normalizeHost } from './host-registry.mjs';
 import { scanWebserverCompliance } from './validate.mjs';
 import { renderModuleNginxSidecars } from './render-nginx-sidecars.mjs';
 import { auditCommercialReadiness } from './audit-commercial-readiness.mjs';
+import { DEFAULT_WORKSPACE_ROOT } from '../lib/workspace-root.mjs';
 
 let yaml = null;
 try {
@@ -26,7 +27,7 @@ try {
 const workspace = path.resolve(
   process.argv.find((arg) => arg.startsWith('--workspace='))?.slice('--workspace='.length)
   ?? process.argv[2]
-  ?? 'E:/sdkwork-space',
+  ?? DEFAULT_WORKSPACE_ROOT,
 );
 
 const CLIENT_ONLY_MODULES = {

@@ -15,14 +15,15 @@
 // third-party imports are never reported as naming violations.
 //
 // Usage:
-//   node check-rust-crate-naming-standard.mjs --workspace E:/sdkwork-space
-//   node check-rust-crate-naming-standard.mjs --root E:/sdkwork-space/sdkwork-order
-//   node check-rust-crate-naming-standard.mjs --workspace E:/sdkwork-space --json
+//   node check-rust-crate-naming-standard.mjs --workspace <workspace-root>
+//   node check-rust-crate-naming-standard.mjs --root <workspace-root>/sdkwork-order
+//   node check-rust-crate-naming-standard.mjs --workspace <workspace-root> --json
 //
 // Exit codes: 0 = clean, 1 = violations found.
 
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, basename, dirname, relative, resolve } from 'node:path';
+import { DEFAULT_WORKSPACE_ROOT, toWorkspaceRelative } from './lib/workspace-root.mjs';
 
 const args = process.argv.slice(2);
 const getArg = (name, fallback = null) => {
@@ -35,7 +36,7 @@ const getArg = (name, fallback = null) => {
 };
 const hasFlag = (name) => args.includes(`--${name}`);
 
-const WORKSPACE = getArg('workspace', 'E:/sdkwork-space');
+const WORKSPACE = getArg('workspace', DEFAULT_WORKSPACE_ROOT);
 const ROOT = getArg('root', null);
 const AS_JSON = hasFlag('json');
 
@@ -366,13 +367,13 @@ const add = (repo, level, code, message, file) =>
     level,
     code,
     message,
-    file: file ? file.replace(/\\/g, '/').replace('E:/sdkwork-space/', '') : null,
+    file: file ? toWorkspaceRelative(WORKSPACE, file) : null,
   });
 
 for (const summary of summaries) {
   const repo = repos.find((r) => summary.file.replace(/\\/g, '/').startsWith(r + '/')) || dirname(summary.file);
   const crateDir = summary.dir;
-  const relManifest = summary.file.replace(/\\/g, '/').replace('E:/sdkwork-space/', '');
+  const relManifest = toWorkspaceRelative(WORKSPACE, summary.file);
   const { pkg, libName, manifest } = summary;
 
   // 3.1.1 package name must be kebab-case
@@ -521,7 +522,7 @@ for (const summary of summaries) {
     }
     if (!knownCrateNames.has(name) && !knownCrateNames.has(name.replace(/_/g, '-'))) return;
     if (!undeclared.has(name)) undeclared.set(name, new Set());
-    undeclared.get(name).add(file.replace(/\\/g, '/').replace('E:/sdkwork-space/', ''));
+    undeclared.get(name).add(toWorkspaceRelative(WORKSPACE, file));
   };
 
   // `use` statements: only the first path segment can name an external crate.

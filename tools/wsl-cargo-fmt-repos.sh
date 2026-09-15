@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs `cargo fmt -- --check` over selected SDKWork application repositories
-# under /mnt/e/sdkwork-space.
+# under <workspace-root>.
 #
 # Deliberately NOT `cargo fmt --all`: SDKWork application workspaces declare
 # optional foundation paths that resolve sibling application workspaces outside
@@ -19,8 +19,10 @@ export PATH="$HOME/.cargo/bin:$PATH"
 
 LIST="$1"
 REPO_TIMEOUT="${2:-300}"
-ROOT=/mnt/e/sdkwork-space
-OUT_DIR=/mnt/e/sdkwork-space/sdkwork-specs/.wm-cargo-check
+# Self-locating workspace root (this script lives in <workspace-root>/sdkwork-specs/tools).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd -P)"
+OUT_DIR="${ROOT}/sdkwork-specs/.wm-cargo-check"
 SUMMARY="$OUT_DIR/fmt-summary.log"
 mkdir -p "$OUT_DIR"
 : > "$SUMMARY"

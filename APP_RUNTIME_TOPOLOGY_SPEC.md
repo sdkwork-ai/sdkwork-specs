@@ -799,13 +799,14 @@ with `clientArchitecture = pc-web` or `h5`; H5 is not a new runtime target.
 Processes without `clientArchitectures` remain shared. The default browser
 architecture is `pc-web` and the default desktop architecture is `tauri` for
 backward-compatible public commands; other architectures are explicit. For
-desktop hosts, `clientArchitecture = "electron"` selects the Electron host and
-`clientArchitecture = "tauri"` selects the Tauri host; both use
+desktop hosts, `clientArchitecture = "tauri"`, `"electron"`, and `"capacitor"`
+select the Tauri, Electron, and Capacitor host respectively; all three use
 `runtimeTarget = "desktop"` and share the same `client` orchestration process
-while the runtime plan records the selected architecture so package and
-artifact selection stays deterministic. An application that ships both hosts
-`MUST` declare both values in its orchestration `clientArchitectures` and its
-manifest `clientArchitectures`.
+while the runtime plan records the selected architecture so host package and
+artifact selection stays deterministic. An application that ships more than one
+desktop host `MUST` declare every shipped value in its orchestration
+`clientArchitectures` and its manifest `clientArchitectures`. Tablet runtime
+targets remain Tauri-only and `MUST NOT` declare `electron` or `capacitor`.
 
 `cloud.development` plans `MUST` report zero local standalone gateway,
 platform gateway, API listener, edge runtime, database, Redis, migration, seed,

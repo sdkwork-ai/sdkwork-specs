@@ -28,7 +28,7 @@ const CLIENT_ARCHITECTURES = new Set([
 const TARGET_PLATFORM_PATTERN = /^(?:web|h5|h5-weixin|windows|macos|linux|ios|ipados|android|android-tablet|harmony|mp-[a-z0-9-]+)$/u;
 const TARGET_RULES = {
   browser: { platforms: new Set(['web', 'h5', 'h5-weixin']), architectures: new Set(['pc-web', 'h5']) },
-  desktop: { platforms: new Set(['windows', 'macos', 'linux']), architectures: new Set(['tauri', 'electron']) },
+  desktop: { platforms: new Set(['windows', 'macos', 'linux']), architectures: new Set(['tauri', 'electron', 'capacitor']) },
   'tablet-ipados': { platforms: new Set(['ipados']), architectures: new Set(['tauri', 'ios-native']) },
   'tablet-android': { platforms: new Set(['android-tablet']), architectures: new Set(['tauri', 'android-native']) },
   'capacitor-ios': { platforms: new Set(['ios']), architectures: new Set(['capacitor']) },

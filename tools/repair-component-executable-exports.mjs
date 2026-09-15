@@ -13,12 +13,13 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { validateApiAssemblyIntegrationClosure } from './lib/api-assembly-integration-closure.mjs';
+import { DEFAULT_WORKSPACE_ROOT } from './lib/workspace-root.mjs';
 
 const SPECS_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const { values } = parseArgs({
   options: {
-    workspace: { type: 'string', default: 'E:\\sdkwork-space' },
+    workspace: { type: 'string', default: DEFAULT_WORKSPACE_ROOT },
     apply: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
   },

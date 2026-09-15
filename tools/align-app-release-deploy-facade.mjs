@@ -8,7 +8,12 @@ import { parseArgs } from 'node:util';
 const SPECS_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_WORKSPACE = path.resolve(SPECS_ROOT, '..');
 const PROFILES = ['standalone', 'cloud'];
-const RELEASE_PHASES = new Set(['preflight', 'plan', 'build', 'stage', 'package', 'validate', 'publish']);
+// Mirrors PNPM_SCRIPT_SPEC.md section 8. Kept identical to
+// check-pnpm-script-standard.mjs and audit-pnpm-lifecycle-framework.mjs so the
+// three tools cannot drift into disagreeing about what a release phase is.
+const RELEASE_PHASES = new Set([
+  'preflight', 'plan', 'build', 'stage', 'package', 'sign', 'notarize', 'validate', 'publish', 'submit',
+]);
 const DEPLOY_PHASES = new Set(['plan', 'apply', 'rollback', 'validate']);
 
 function readJson(file) {

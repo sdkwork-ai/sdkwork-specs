@@ -6,8 +6,8 @@
  * Only the exact offending rule line is removed: no other entry, comment, blank line, or line
  * ending changes. Files are matched CRLF-aware and written back with their original EOL.
  *
- *   node tools/align-gitignore-standard.mjs --workspace E:/sdkwork-space            # plan
- *   node tools/align-gitignore-standard.mjs --workspace E:/sdkwork-space --fix      # apply
+ *   node tools/align-gitignore-standard.mjs --workspace <workspace-root>            # plan
+ *   node tools/align-gitignore-standard.mjs --workspace <workspace-root> --fix      # apply
  */
 import fs from 'node:fs';
 import path from 'node:path';

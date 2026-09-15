@@ -23,10 +23,12 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { DEFAULT_WORKSPACE_ROOT, SPECS_ROOT } from "./lib/workspace-root.mjs";
+
 function parseArgs(argv) {
   const args = {
-    logs: "E:/sdkwork-space/sdkwork-specs/.wm-cargo-check",
-    workspace: "E:/sdkwork-space",
+    logs: path.join(SPECS_ROOT, ".wm-cargo-check"),
+    workspace: DEFAULT_WORKSPACE_ROOT,
     dryRun: false,
   };
   for (let i = 0; i < argv.length; i += 1) {

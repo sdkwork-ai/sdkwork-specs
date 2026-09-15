@@ -286,7 +286,7 @@ Examples:
 | Standalone Flutter iOS | `ios` | omitted | `universal` | `ipa` | `ios-universal-standalone-mobile-ipa` |
 | Standalone mobile phone | `android` | omitted | `arm64` | `aab` | `android-arm64-standalone-mobile-aab` |
 | Standalone mobile phone | `ios` | omitted | `universal` | `ipa` | `ios-universal-standalone-mobile-ipa` |
-| Standalone Harmony mobile | `harmony` | omitted | `arm64` | `other` | `harmony-arm64-standalone-mobile-other` |
+| Standalone Harmony mobile | `harmony` | omitted | `arm64` | `hap` | `harmony-arm64-standalone-mobile-hap` |
 | Standalone tablet | `ipados` | omitted | `universal` | `ipa` | `ipados-universal-standalone-tablet-ipa` |
 | Standalone Android tablet | `android-tablet` | omitted | `arm64` | `aab` | `android-tablet-arm64-standalone-tablet-aab` |
 | Standalone tablet | `windows-tablet` | omitted | `x64` | `msix` | `windows-tablet-x64-standalone-tablet-msix` |

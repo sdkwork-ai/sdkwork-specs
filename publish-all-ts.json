@@ -1,7 +1,7 @@
 {
   "runId": "2026-08-15T08:40:30.080Z",
   "mode": "publish",
-  "workspace": "E:/sdkwork-space",
+  "workspace": "<workspace-root>",
   "startedAt": "2026-08-15T08:40:30.080Z",
   "finishedAt": "2026-08-15T09:02:41.984Z",
   "summary": {
@@ -22,7 +22,7 @@
       "registry": "npm",
       "durationMs": 7475,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-account/sdks/sdkwork-account-app-sdk/sdkwork-account-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-account/sdks/sdkwork-account-app-sdk/sdkwork-account-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-account",
@@ -34,7 +34,7 @@
       "registry": "npm",
       "durationMs": 7086,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-account/sdks/sdkwork-account-backend-sdk/sdkwork-account-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-account/sdks/sdkwork-account-backend-sdk/sdkwork-account-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-agents",
@@ -46,7 +46,7 @@
       "registry": "npm",
       "durationMs": 7861,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-agents/sdks/sdkwork-agents-app-sdk/sdkwork-agents-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-agents/sdks/sdkwork-agents-app-sdk/sdkwork-agents-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-agents",
@@ -58,7 +58,7 @@
       "registry": "npm",
       "durationMs": 7612,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-agents/sdks/sdkwork-agents-backend-sdk/sdkwork-agents-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-agents/sdks/sdkwork-agents-backend-sdk/sdkwork-agents-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-agents",
@@ -70,7 +70,7 @@
       "registry": "npm",
       "durationMs": 6661,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-agents/sdks/sdkwork-agents-sdk/sdkwork-agents-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-agents/sdks/sdkwork-agents-sdk/sdkwork-agents-sdk-typescript"
     },
     {
       "repo": "sdkwork-aiot",
@@ -82,7 +82,7 @@
       "registry": "npm",
       "durationMs": 7545,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-aiot/sdks/sdkwork-aiot-app-sdk/sdkwork-aiot-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-aiot/sdks/sdkwork-aiot-app-sdk/sdkwork-aiot-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-aiot",
@@ -94,7 +94,7 @@
       "registry": "npm",
       "durationMs": 8348,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-aiot/sdks/sdkwork-aiot-backend-sdk/sdkwork-aiot-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-aiot/sdks/sdkwork-aiot-backend-sdk/sdkwork-aiot-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-appbase",
@@ -106,7 +106,7 @@
       "registry": "npm",
       "durationMs": 14711,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-appbase/sdks/sdkwork-base-data-backend-sdk/sdkwork-base-data-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-appbase/sdks/sdkwork-base-data-backend-sdk/sdkwork-base-data-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-appbase",
@@ -118,7 +118,7 @@
       "registry": "npm",
       "durationMs": 5046,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-appbase/sdks/sdkwork-edu-data-backend-sdk/sdkwork-edu-data-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-appbase/sdks/sdkwork-edu-data-backend-sdk/sdkwork-edu-data-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-appbase",
@@ -130,7 +130,7 @@
       "registry": "npm",
       "durationMs": 6322,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-appbase/sdks/sdkwork-med-data-backend-sdk/sdkwork-med-data-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-appbase/sdks/sdkwork-med-data-backend-sdk/sdkwork-med-data-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-appstore",
@@ -142,7 +142,7 @@
       "registry": "npm",
       "durationMs": 15021,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-appstore/sdks/sdkwork-appstore-app-sdk/sdkwork-appstore-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-appstore/sdks/sdkwork-appstore-app-sdk/sdkwork-appstore-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-appstore",
@@ -154,7 +154,7 @@
       "registry": "npm",
       "durationMs": 12716,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-appstore/sdks/sdkwork-appstore-backend-sdk/sdkwork-appstore-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-appstore/sdks/sdkwork-appstore-backend-sdk/sdkwork-appstore-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-appstore",
@@ -166,7 +166,7 @@
       "registry": "npm",
       "durationMs": 11382,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-appstore/sdks/sdkwork-appstore-sdk/sdkwork-appstore-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-appstore/sdks/sdkwork-appstore-sdk/sdkwork-appstore-sdk-typescript"
     },
     {
       "repo": "sdkwork-audio",
@@ -177,7 +177,7 @@
       "status": "skipped",
       "durationMs": 0,
       "reason": "no publishable package detected",
-      "languageRoot": "E:/sdkwork-space/sdkwork-audio/sdks/sdkwork-audio-app-sdk/sdkwork-audio-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-audio/sdks/sdkwork-audio-app-sdk/sdkwork-audio-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-birdcoder",
@@ -187,8 +187,8 @@
       "version": "0.1.0",
       "status": "failed",
       "durationMs": 4827,
-      "reason": "npm publish exit 1 at E:/sdkwork-space/sdkwork-birdcoder/sdks/sdkwork-birdcoder-app-sdk/sdkwork-birdcoder-app-sdk-typescript",
-      "languageRoot": "E:/sdkwork-space/sdkwork-birdcoder/sdks/sdkwork-birdcoder-app-sdk/sdkwork-birdcoder-app-sdk-typescript"
+      "reason": "npm publish exit 1 at <workspace-root>/sdkwork-birdcoder/sdks/sdkwork-birdcoder-app-sdk/sdkwork-birdcoder-app-sdk-typescript",
+      "languageRoot": "<workspace-root>/sdkwork-birdcoder/sdks/sdkwork-birdcoder-app-sdk/sdkwork-birdcoder-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-browser",
@@ -200,7 +200,7 @@
       "registry": "npm",
       "durationMs": 6596,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-browser/sdks/sdkwork-browser-app-sdk/sdkwork-browser-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-browser/sdks/sdkwork-browser-app-sdk/sdkwork-browser-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-browser",
@@ -212,7 +212,7 @@
       "registry": "npm",
       "durationMs": 6339,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-browser/sdks/sdkwork-browser-backend-sdk/sdkwork-browser-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-browser/sdks/sdkwork-browser-backend-sdk/sdkwork-browser-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-canvas",
@@ -224,7 +224,7 @@
       "registry": "npm",
       "durationMs": 2928,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-canvas/sdks/sdkwork-canvas-app-sdk/sdkwork-canvas-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-canvas/sdks/sdkwork-canvas-app-sdk/sdkwork-canvas-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-canvas",
@@ -236,7 +236,7 @@
       "registry": "npm",
       "durationMs": 3161,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-canvas/sdks/sdkwork-canvas-backend-sdk/sdkwork-canvas-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-canvas/sdks/sdkwork-canvas-backend-sdk/sdkwork-canvas-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-canvas",
@@ -248,7 +248,7 @@
       "registry": "npm",
       "durationMs": 3425,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-canvas/sdks/sdkwork-canvas-sdk/sdkwork-canvas-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-canvas/sdks/sdkwork-canvas-sdk/sdkwork-canvas-sdk-typescript"
     },
     {
       "repo": "sdkwork-catalog",
@@ -260,7 +260,7 @@
       "registry": "npm",
       "durationMs": 6352,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-catalog/sdks/sdkwork-catalog-app-sdk/sdkwork-catalog-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-catalog/sdks/sdkwork-catalog-app-sdk/sdkwork-catalog-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-cloudrouter",
@@ -272,7 +272,7 @@
       "registry": "npm",
       "durationMs": 29885,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-cloudrouter/sdks/cloudrouter-app-sdk/cloudrouter-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-cloudrouter/sdks/cloudrouter-app-sdk/cloudrouter-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-cloudrouter",
@@ -284,7 +284,7 @@
       "registry": "npm",
       "durationMs": 37464,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-cloudrouter/sdks/cloudrouter-backend-sdk/cloudrouter-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-cloudrouter/sdks/cloudrouter-backend-sdk/cloudrouter-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-cloudrouter",
@@ -296,7 +296,7 @@
       "registry": "npm",
       "durationMs": 26572,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-cloudrouter/sdks/cloudrouter-open-sdk/cloudrouter-open-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-cloudrouter/sdks/cloudrouter-open-sdk/cloudrouter-open-sdk-typescript"
     },
     {
       "repo": "sdkwork-comments",
@@ -308,7 +308,7 @@
       "registry": "npm",
       "durationMs": 6139,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-comments/sdks/sdkwork-comments-app-sdk/sdkwork-comments-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-comments/sdks/sdkwork-comments-app-sdk/sdkwork-comments-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-comments",
@@ -320,7 +320,7 @@
       "registry": "npm",
       "durationMs": 6731,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-comments/sdks/sdkwork-comments-backend-sdk/sdkwork-comments-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-comments/sdks/sdkwork-comments-backend-sdk/sdkwork-comments-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-community",
@@ -332,7 +332,7 @@
       "registry": "npm",
       "durationMs": 6473,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-community/sdks/sdkwork-community-app-sdk/sdkwork-community-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-community/sdks/sdkwork-community-app-sdk/sdkwork-community-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-community",
@@ -344,7 +344,7 @@
       "registry": "npm",
       "durationMs": 6584,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-community/sdks/sdkwork-community-backend-sdk/sdkwork-community-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-community/sdks/sdkwork-community-backend-sdk/sdkwork-community-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-community",
@@ -356,7 +356,7 @@
       "registry": "npm",
       "durationMs": 6452,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-community/sdks/sdkwork-community-sdk/sdkwork-community-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-community/sdks/sdkwork-community-sdk/sdkwork-community-sdk-typescript"
     },
     {
       "repo": "sdkwork-company",
@@ -368,7 +368,7 @@
       "registry": "npm",
       "durationMs": 6384,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-company/sdks/sdkwork-company-app-sdk/sdkwork-company-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-company/sdks/sdkwork-company-app-sdk/sdkwork-company-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-company",
@@ -380,7 +380,7 @@
       "registry": "npm",
       "durationMs": 6361,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-company/sdks/sdkwork-company-backend-sdk/sdkwork-company-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-company/sdks/sdkwork-company-backend-sdk/sdkwork-company-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-company",
@@ -392,7 +392,7 @@
       "registry": "npm",
       "durationMs": 6996,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-company/sdks/sdkwork-company-sdk/sdkwork-company-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-company/sdks/sdkwork-company-sdk/sdkwork-company-sdk-typescript"
     },
     {
       "repo": "sdkwork-course",
@@ -404,7 +404,7 @@
       "registry": "npm",
       "durationMs": 7063,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-course/sdks/sdkwork-course-app-sdk/sdkwork-course-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-course/sdks/sdkwork-course-app-sdk/sdkwork-course-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-course",
@@ -416,7 +416,7 @@
       "registry": "npm",
       "durationMs": 6530,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-course/sdks/sdkwork-course-backend-sdk/sdkwork-course-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-course/sdks/sdkwork-course-backend-sdk/sdkwork-course-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-customerservice",
@@ -428,7 +428,7 @@
       "registry": "npm",
       "durationMs": 6413,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-customerservice/sdks/sdkwork-customerservice-app-sdk/sdkwork-customerservice-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-customerservice/sdks/sdkwork-customerservice-app-sdk/sdkwork-customerservice-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-customerservice",
@@ -440,7 +440,7 @@
       "registry": "npm",
       "durationMs": 6525,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-customerservice/sdks/sdkwork-customerservice-backend-sdk/sdkwork-customerservice-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-customerservice/sdks/sdkwork-customerservice-backend-sdk/sdkwork-customerservice-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-customerservice",
@@ -452,7 +452,7 @@
       "registry": "npm",
       "durationMs": 6441,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-customerservice/sdks/sdkwork-customerservice-internal-sdk/sdkwork-customerservice-internal-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-customerservice/sdks/sdkwork-customerservice-internal-sdk/sdkwork-customerservice-internal-sdk-typescript"
     },
     {
       "repo": "sdkwork-deployments",
@@ -464,7 +464,7 @@
       "registry": "npm",
       "durationMs": 21754,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-deployments/sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-deployments/sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-deployments",
@@ -476,7 +476,7 @@
       "registry": "npm",
       "durationMs": 10763,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-deployments/sdks/sdkwork-deployments-backend-sdk/sdkwork-deployments-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-deployments/sdks/sdkwork-deployments-backend-sdk/sdkwork-deployments-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-dezhou",
@@ -488,7 +488,7 @@
       "registry": "npm",
       "durationMs": 6015,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-dezhou/sdks/sdkwork-dezhou-app-sdk/sdkwork-dezhou-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-dezhou/sdks/sdkwork-dezhou-app-sdk/sdkwork-dezhou-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-dezhou",
@@ -500,7 +500,7 @@
       "registry": "npm",
       "durationMs": 6188,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-dezhou/sdks/sdkwork-dezhou-backend-sdk/sdkwork-dezhou-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-dezhou/sdks/sdkwork-dezhou-backend-sdk/sdkwork-dezhou-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-discovery",
@@ -511,7 +511,7 @@
       "status": "failed",
       "durationMs": 1500,
       "reason": "build failed (status 1)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-discovery/sdks/sdkwork-discovery-rpc-sdk/sdkwork-discovery-rpc-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-discovery/sdks/sdkwork-discovery-rpc-sdk/sdkwork-discovery-rpc-sdk-typescript"
     },
     {
       "repo": "sdkwork-documents",
@@ -523,7 +523,7 @@
       "registry": "npm",
       "durationMs": 6289,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-documents/sdks/sdkwork-documents-app-sdk/sdkwork-documents-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-documents/sdks/sdkwork-documents-app-sdk/sdkwork-documents-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-documents",
@@ -535,7 +535,7 @@
       "registry": "npm",
       "durationMs": 6066,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-documents/sdks/sdkwork-documents-backend-sdk/sdkwork-documents-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-documents/sdks/sdkwork-documents-backend-sdk/sdkwork-documents-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-documents",
@@ -547,7 +547,7 @@
       "registry": "npm",
       "durationMs": 6669,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-documents/sdks/sdkwork-documents-sdk/sdkwork-documents-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-documents/sdks/sdkwork-documents-sdk/sdkwork-documents-sdk-typescript"
     },
     {
       "repo": "sdkwork-doudizhu",
@@ -559,7 +559,7 @@
       "registry": "npm",
       "durationMs": 6037,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-doudizhu/sdks/sdkwork-doudizhu-app-sdk/sdkwork-doudizhu-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-doudizhu/sdks/sdkwork-doudizhu-app-sdk/sdkwork-doudizhu-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-doudizhu",
@@ -571,7 +571,7 @@
       "registry": "npm",
       "durationMs": 7836,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-doudizhu/sdks/sdkwork-doudizhu-backend-sdk/sdkwork-doudizhu-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-doudizhu/sdks/sdkwork-doudizhu-backend-sdk/sdkwork-doudizhu-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-drive",
@@ -583,7 +583,7 @@
       "registry": "npm",
       "durationMs": 15708,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-drive/sdks/sdkwork-drive-admin-storage-sdk/sdkwork-drive-admin-storage-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-drive/sdks/sdkwork-drive-admin-storage-sdk/sdkwork-drive-admin-storage-sdk-typescript"
     },
     {
       "repo": "sdkwork-drive",
@@ -595,7 +595,7 @@
       "registry": "npm",
       "durationMs": 16006,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-drive",
@@ -607,7 +607,7 @@
       "registry": "npm",
       "durationMs": 12109,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-drive/sdks/sdkwork-drive-backend-sdk/sdkwork-drive-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-drive/sdks/sdkwork-drive-backend-sdk/sdkwork-drive-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-drive",
@@ -618,7 +618,7 @@
       "status": "skipped",
       "durationMs": 0,
       "reason": "no publishable package detected",
-      "languageRoot": "E:/sdkwork-space/sdkwork-drive/sdks/sdkwork-drive-internal-sdk/sdkwork-drive-internal-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-drive/sdks/sdkwork-drive-internal-sdk/sdkwork-drive-internal-sdk-typescript"
     },
     {
       "repo": "sdkwork-drive",
@@ -630,7 +630,7 @@
       "registry": "npm",
       "durationMs": 7575,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-drive/sdks/sdkwork-drive-sdk/sdkwork-drive-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-drive/sdks/sdkwork-drive-sdk/sdkwork-drive-sdk-typescript"
     },
     {
       "repo": "sdkwork-feeds",
@@ -642,7 +642,7 @@
       "registry": "npm",
       "durationMs": 3849,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-feeds/sdks/sdkwork-feeds-app-sdk/sdkwork-feeds-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-feeds/sdks/sdkwork-feeds-app-sdk/sdkwork-feeds-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-feeds",
@@ -654,7 +654,7 @@
       "registry": "npm",
       "durationMs": 3759,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-feeds/sdks/sdkwork-feeds-backend-sdk/sdkwork-feeds-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-feeds/sdks/sdkwork-feeds-backend-sdk/sdkwork-feeds-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-feeds",
@@ -666,7 +666,7 @@
       "registry": "npm",
       "durationMs": 6547,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-feeds/sdks/sdkwork-feeds-sdk/sdkwork-feeds-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-feeds/sdks/sdkwork-feeds-sdk/sdkwork-feeds-sdk-typescript"
     },
     {
       "repo": "sdkwork-forum",
@@ -677,7 +677,7 @@
       "status": "skipped",
       "durationMs": 0,
       "reason": "no publishable package detected",
-      "languageRoot": "E:/sdkwork-space/sdkwork-forum/sdks/sdkwork-forum-app-sdk/sdkwork-forum-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-forum/sdks/sdkwork-forum-app-sdk/sdkwork-forum-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-forum",
@@ -688,7 +688,7 @@
       "status": "skipped",
       "durationMs": 0,
       "reason": "no publishable package detected",
-      "languageRoot": "E:/sdkwork-space/sdkwork-forum/sdks/sdkwork-forum-backend-sdk/sdkwork-forum-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-forum/sdks/sdkwork-forum-backend-sdk/sdkwork-forum-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-gameengine",
@@ -700,7 +700,7 @@
       "registry": "npm",
       "durationMs": 6003,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-gameengine/sdks/sdkwork-gameengine-app-sdk/sdkwork-gameengine-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-gameengine/sdks/sdkwork-gameengine-app-sdk/sdkwork-gameengine-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-gameengine",
@@ -712,7 +712,7 @@
       "registry": "npm",
       "durationMs": 5942,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-gameengine/sdks/sdkwork-gameengine-backend-sdk/sdkwork-gameengine-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-gameengine/sdks/sdkwork-gameengine-backend-sdk/sdkwork-gameengine-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-generations",
@@ -724,7 +724,7 @@
       "registry": "npm",
       "durationMs": 6088,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-generations/sdks/sdkwork-generations-app-sdk/sdkwork-generations-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-generations/sdks/sdkwork-generations-app-sdk/sdkwork-generations-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-generations",
@@ -736,7 +736,7 @@
       "registry": "npm",
       "durationMs": 3017,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-generations/sdks/sdkwork-generations-backend-sdk/sdkwork-generations-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-generations/sdks/sdkwork-generations-backend-sdk/sdkwork-generations-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-github",
@@ -748,7 +748,7 @@
       "registry": "npm",
       "durationMs": 6399,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-github/sdks/sdkwork-github-app-sdk/sdkwork-github-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-github/sdks/sdkwork-github-app-sdk/sdkwork-github-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-iam",
@@ -760,7 +760,7 @@
       "registry": "npm",
       "durationMs": 6905,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-iam/sdks/sdkwork-iam-app-sdk/sdkwork-iam-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-iam/sdks/sdkwork-iam-app-sdk/sdkwork-iam-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-iam",
@@ -772,7 +772,7 @@
       "registry": "npm",
       "durationMs": 6485,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-iam/sdks/sdkwork-iam-backend-sdk/sdkwork-iam-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-iam/sdks/sdkwork-iam-backend-sdk/sdkwork-iam-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-iam",
@@ -784,7 +784,7 @@
       "registry": "npm",
       "durationMs": 6042,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-iam/sdks/sdkwork-iam-open-sdk/sdkwork-iam-open-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-iam/sdks/sdkwork-iam-open-sdk/sdkwork-iam-open-sdk-typescript"
     },
     {
       "repo": "sdkwork-im",
@@ -796,7 +796,7 @@
       "registry": "npm",
       "durationMs": 6518,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-im/sdks/sdkwork-im-app-sdk/sdkwork-im-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-im/sdks/sdkwork-im-app-sdk/sdkwork-im-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-im",
@@ -808,7 +808,7 @@
       "registry": "npm",
       "durationMs": 6836,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-im/sdks/sdkwork-im-backend-sdk/sdkwork-im-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-im/sdks/sdkwork-im-backend-sdk/sdkwork-im-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-im",
@@ -820,7 +820,7 @@
       "registry": "npm",
       "durationMs": 3912,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-im/sdks/sdkwork-im-rpc-sdk/sdkwork-im-rpc-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-im/sdks/sdkwork-im-rpc-sdk/sdkwork-im-rpc-sdk-typescript"
     },
     {
       "repo": "sdkwork-im",
@@ -831,7 +831,7 @@
       "status": "skipped",
       "durationMs": 0,
       "reason": "already published on npm",
-      "languageRoot": "E:/sdkwork-space/sdkwork-im/sdks/sdkwork-im-sdk/sdkwork-im-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-im/sdks/sdkwork-im-sdk/sdkwork-im-sdk-typescript"
     },
     {
       "repo": "sdkwork-image",
@@ -843,7 +843,7 @@
       "registry": "npm",
       "durationMs": 6587,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-image/sdks/sdkwork-image-app-sdk/sdkwork-image-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-image/sdks/sdkwork-image-app-sdk/sdkwork-image-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-image",
@@ -855,7 +855,7 @@
       "registry": "npm",
       "durationMs": 6664,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-image/sdks/sdkwork-image-backend-sdk/sdkwork-image-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-image/sdks/sdkwork-image-backend-sdk/sdkwork-image-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-image",
@@ -867,7 +867,7 @@
       "registry": "npm",
       "durationMs": 6560,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-image/sdks/sdkwork-image-sdk/sdkwork-image-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-image/sdks/sdkwork-image-sdk/sdkwork-image-sdk-typescript"
     },
     {
       "repo": "sdkwork-integration",
@@ -878,7 +878,7 @@
       "status": "skipped",
       "durationMs": 0,
       "reason": "no publishable package detected",
-      "languageRoot": "E:/sdkwork-space/sdkwork-integration/sdks/sdkwork-integration-backend-sdk/sdkwork-integration-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-integration/sdks/sdkwork-integration-backend-sdk/sdkwork-integration-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-inventory",
@@ -890,7 +890,7 @@
       "registry": "npm",
       "durationMs": 6518,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-inventory/sdks/sdkwork-inventory-app-sdk/sdkwork-inventory-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-inventory/sdks/sdkwork-inventory-app-sdk/sdkwork-inventory-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-inventory",
@@ -902,7 +902,7 @@
       "registry": "npm",
       "durationMs": 6440,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-inventory/sdks/sdkwork-inventory-backend-sdk/sdkwork-inventory-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-inventory/sdks/sdkwork-inventory-backend-sdk/sdkwork-inventory-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-invoice",
@@ -914,7 +914,7 @@
       "registry": "npm",
       "durationMs": 6304,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-invoice/sdks/sdkwork-invoice-app-sdk/sdkwork-invoice-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-invoice/sdks/sdkwork-invoice-app-sdk/sdkwork-invoice-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-kernel",
@@ -926,7 +926,7 @@
       "registry": "npm",
       "durationMs": 6733,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-kernel/sdks/sdkwork-agent-internal-sdk/sdkwork-agent-internal-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-kernel/sdks/sdkwork-agent-internal-sdk/sdkwork-agent-internal-sdk-typescript"
     },
     {
       "repo": "sdkwork-knowledgebase",
@@ -938,7 +938,7 @@
       "registry": "npm",
       "durationMs": 10537,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-knowledgebase/sdks/sdkwork-knowledgebase-app-sdk/sdkwork-knowledgebase-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-knowledgebase/sdks/sdkwork-knowledgebase-app-sdk/sdkwork-knowledgebase-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-knowledgebase",
@@ -950,7 +950,7 @@
       "registry": "npm",
       "durationMs": 6382,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-knowledgebase/sdks/sdkwork-knowledgebase-backend-sdk/sdkwork-knowledgebase-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-knowledgebase/sdks/sdkwork-knowledgebase-backend-sdk/sdkwork-knowledgebase-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-knowledgebase",
@@ -960,8 +960,8 @@
       "version": "0.1.0",
       "status": "failed",
       "durationMs": 8728,
-      "reason": "npm publish exit 1 at E:/sdkwork-space/sdkwork-knowledgebase/sdks/sdkwork-knowledgebase-internal-sdk/sdkwork-knowledgebase-internal-sdk-typescript",
-      "languageRoot": "E:/sdkwork-space/sdkwork-knowledgebase/sdks/sdkwork-knowledgebase-internal-sdk/sdkwork-knowledgebase-internal-sdk-typescript"
+      "reason": "npm publish exit 1 at <workspace-root>/sdkwork-knowledgebase/sdks/sdkwork-knowledgebase-internal-sdk/sdkwork-knowledgebase-internal-sdk-typescript",
+      "languageRoot": "<workspace-root>/sdkwork-knowledgebase/sdks/sdkwork-knowledgebase-internal-sdk/sdkwork-knowledgebase-internal-sdk-typescript"
     },
     {
       "repo": "sdkwork-knowledgebase",
@@ -973,7 +973,7 @@
       "registry": "npm",
       "durationMs": 2971,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-knowledgebase/sdks/sdkwork-knowledgebase-rpc-sdk/sdkwork-knowledgebase-rpc-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-knowledgebase/sdks/sdkwork-knowledgebase-rpc-sdk/sdkwork-knowledgebase-rpc-sdk-typescript"
     },
     {
       "repo": "sdkwork-knowledgebase",
@@ -985,7 +985,7 @@
       "registry": "npm",
       "durationMs": 2984,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-knowledgebase/sdks/sdkwork-knowledgebase-sdk/sdkwork-knowledgebase-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-knowledgebase/sdks/sdkwork-knowledgebase-sdk/sdkwork-knowledgebase-sdk-typescript"
     },
     {
       "repo": "sdkwork-llm",
@@ -997,7 +997,7 @@
       "registry": "npm",
       "durationMs": 3009,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-llm/sdks/sdkwork-llm-app-sdk/sdkwork-llm-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-llm/sdks/sdkwork-llm-app-sdk/sdkwork-llm-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-llm",
@@ -1009,7 +1009,7 @@
       "registry": "npm",
       "durationMs": 2885,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-llm/sdks/sdkwork-llm-backend-sdk/sdkwork-llm-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-llm/sdks/sdkwork-llm-backend-sdk/sdkwork-llm-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-llm",
@@ -1021,7 +1021,7 @@
       "registry": "npm",
       "durationMs": 3043,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-llm/sdks/sdkwork-llm-sdk/sdkwork-llm-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-llm/sdks/sdkwork-llm-sdk/sdkwork-llm-sdk-typescript"
     },
     {
       "repo": "sdkwork-log",
@@ -1033,7 +1033,7 @@
       "registry": "npm",
       "durationMs": 21378,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-log/sdks/sdkwork-log-backend-sdk/sdkwork-log-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-log/sdks/sdkwork-log-backend-sdk/sdkwork-log-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-mail",
@@ -1045,7 +1045,7 @@
       "registry": "npm",
       "durationMs": 6345,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-mail/sdks/sdkwork-mail-app-sdk/sdkwork-mail-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-mail/sdks/sdkwork-mail-app-sdk/sdkwork-mail-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-mail",
@@ -1057,7 +1057,7 @@
       "registry": "npm",
       "durationMs": 5948,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-mail/sdks/sdkwork-mail-backend-sdk/sdkwork-mail-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-mail/sdks/sdkwork-mail-backend-sdk/sdkwork-mail-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-mail",
@@ -1069,7 +1069,7 @@
       "registry": "npm",
       "durationMs": 3375,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-mail/sdks/sdkwork-mail-sdk/sdkwork-mail-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-mail/sdks/sdkwork-mail-sdk/sdkwork-mail-sdk-typescript"
     },
     {
       "repo": "sdkwork-mall",
@@ -1081,7 +1081,7 @@
       "registry": "npm",
       "durationMs": 6909,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-mall/sdks/sdkwork-commerce-app-sdk/sdkwork-commerce-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-mall/sdks/sdkwork-commerce-app-sdk/sdkwork-commerce-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-mall",
@@ -1093,7 +1093,7 @@
       "registry": "npm",
       "durationMs": 10196,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-mall/sdks/sdkwork-commerce-backend-sdk/sdkwork-commerce-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-mall/sdks/sdkwork-commerce-backend-sdk/sdkwork-commerce-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-manager",
@@ -1105,7 +1105,7 @@
       "registry": "npm",
       "durationMs": 7393,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-manager/sdks/sdkwork-manager-app-sdk/sdkwork-manager-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-manager/sdks/sdkwork-manager-app-sdk/sdkwork-manager-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-manager",
@@ -1117,7 +1117,7 @@
       "registry": "npm",
       "durationMs": 7130,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-manager/sdks/sdkwork-manager-backend-sdk/sdkwork-manager-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-manager/sdks/sdkwork-manager-backend-sdk/sdkwork-manager-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-mcp",
@@ -1129,7 +1129,7 @@
       "registry": "npm",
       "durationMs": 6102,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-mcp/sdks/sdkwork-mcp-app-sdk/sdkwork-mcp-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-mcp/sdks/sdkwork-mcp-app-sdk/sdkwork-mcp-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-mcp",
@@ -1141,7 +1141,7 @@
       "registry": "npm",
       "durationMs": 6021,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-mcp/sdks/sdkwork-mcp-backend-sdk/sdkwork-mcp-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-mcp/sdks/sdkwork-mcp-backend-sdk/sdkwork-mcp-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-membership",
@@ -1153,7 +1153,7 @@
       "registry": "npm",
       "durationMs": 19472,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-membership/sdks/sdkwork-membership-app-sdk/sdkwork-membership-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-membership/sdks/sdkwork-membership-app-sdk/sdkwork-membership-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-membership",
@@ -1165,7 +1165,7 @@
       "registry": "npm",
       "durationMs": 6031,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-membership/sdks/sdkwork-membership-backend-sdk/sdkwork-membership-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-membership/sdks/sdkwork-membership-backend-sdk/sdkwork-membership-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-memory",
@@ -1177,7 +1177,7 @@
       "registry": "npm",
       "durationMs": 6141,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-memory/sdks/sdkwork-memory-app-sdk/sdkwork-memory-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-memory/sdks/sdkwork-memory-app-sdk/sdkwork-memory-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-memory",
@@ -1189,7 +1189,7 @@
       "registry": "npm",
       "durationMs": 6772,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-memory/sdks/sdkwork-memory-backend-sdk/sdkwork-memory-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-memory/sdks/sdkwork-memory-backend-sdk/sdkwork-memory-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-memory",
@@ -1201,7 +1201,7 @@
       "registry": "npm",
       "durationMs": 2998,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-memory/sdks/sdkwork-memory-sdk/sdkwork-memory-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-memory/sdks/sdkwork-memory-sdk/sdkwork-memory-sdk-typescript"
     },
     {
       "repo": "sdkwork-messaging",
@@ -1213,7 +1213,7 @@
       "registry": "npm",
       "durationMs": 6417,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-messaging/sdks/sdkwork-messaging-app-sdk/sdkwork-messaging-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-messaging/sdks/sdkwork-messaging-app-sdk/sdkwork-messaging-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-messaging",
@@ -1225,7 +1225,7 @@
       "registry": "npm",
       "durationMs": 2881,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-messaging/sdks/sdkwork-messaging-backend-sdk/sdkwork-messaging-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-messaging/sdks/sdkwork-messaging-backend-sdk/sdkwork-messaging-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-models",
@@ -1237,7 +1237,7 @@
       "registry": "npm",
       "durationMs": 13188,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-models/sdks/sdkwork-models-app-sdk/sdkwork-models-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-models/sdks/sdkwork-models-app-sdk/sdkwork-models-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-models",
@@ -1249,7 +1249,7 @@
       "registry": "npm",
       "durationMs": 10753,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-models/sdks/sdkwork-models-backend-sdk/sdkwork-models-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-models/sdks/sdkwork-models-backend-sdk/sdkwork-models-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-models",
@@ -1261,7 +1261,7 @@
       "registry": "npm",
       "durationMs": 25052,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-models/sdks/sdkwork-models-sdk/sdkwork-models-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-models/sdks/sdkwork-models-sdk/sdkwork-models-sdk-typescript"
     },
     {
       "repo": "sdkwork-music",
@@ -1273,7 +1273,7 @@
       "registry": "npm",
       "durationMs": 6083,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-music/sdks/sdkwork-music-app-sdk/sdkwork-music-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-music/sdks/sdkwork-music-app-sdk/sdkwork-music-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-music",
@@ -1285,7 +1285,7 @@
       "registry": "npm",
       "durationMs": 6028,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-music/sdks/sdkwork-music-backend-sdk/sdkwork-music-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-music/sdks/sdkwork-music-backend-sdk/sdkwork-music-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-news",
@@ -1297,7 +1297,7 @@
       "registry": "npm",
       "durationMs": 5897,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-news/sdks/sdkwork-news-app-sdk/sdkwork-news-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-news/sdks/sdkwork-news-app-sdk/sdkwork-news-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-news",
@@ -1309,7 +1309,7 @@
       "registry": "npm",
       "durationMs": 6824,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-news/sdks/sdkwork-news-backend-sdk/sdkwork-news-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-news/sdks/sdkwork-news-backend-sdk/sdkwork-news-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-news",
@@ -1321,7 +1321,7 @@
       "registry": "npm",
       "durationMs": 7511,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-news/sdks/sdkwork-news-sdk/sdkwork-news-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-news/sdks/sdkwork-news-sdk/sdkwork-news-sdk-typescript"
     },
     {
       "repo": "sdkwork-notary",
@@ -1333,7 +1333,7 @@
       "registry": "npm",
       "durationMs": 23893,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-notary/sdks/sdkwork-notary-app-sdk/sdkwork-notary-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-notary/sdks/sdkwork-notary-app-sdk/sdkwork-notary-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-notary",
@@ -1345,7 +1345,7 @@
       "registry": "npm",
       "durationMs": 33787,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-notary/sdks/sdkwork-notary-backend-sdk/sdkwork-notary-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-notary/sdks/sdkwork-notary-backend-sdk/sdkwork-notary-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-notes",
@@ -1357,7 +1357,7 @@
       "registry": "npm",
       "durationMs": 6802,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-notes/sdks/sdkwork-notes-app-sdk/sdkwork-notes-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-notes/sdks/sdkwork-notes-app-sdk/sdkwork-notes-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-notes",
@@ -1369,7 +1369,7 @@
       "registry": "npm",
       "durationMs": 3020,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-notes/sdks/sdkwork-notes-backend-sdk/sdkwork-notes-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-notes/sdks/sdkwork-notes-backend-sdk/sdkwork-notes-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-notes",
@@ -1381,7 +1381,7 @@
       "registry": "npm",
       "durationMs": 3026,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-notes/sdks/sdkwork-notes-sdk/sdkwork-notes-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-notes/sdks/sdkwork-notes-sdk/sdkwork-notes-sdk-typescript"
     },
     {
       "repo": "sdkwork-order",
@@ -1393,7 +1393,7 @@
       "registry": "npm",
       "durationMs": 7435,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-order/sdks/sdkwork-order-app-sdk/sdkwork-order-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-order/sdks/sdkwork-order-app-sdk/sdkwork-order-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-order",
@@ -1405,7 +1405,7 @@
       "registry": "npm",
       "durationMs": 6736,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-order/sdks/sdkwork-order-backend-sdk/sdkwork-order-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-order/sdks/sdkwork-order-backend-sdk/sdkwork-order-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-partner",
@@ -1417,7 +1417,7 @@
       "registry": "npm",
       "durationMs": 6997,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-partner/sdks/sdkwork-partner-app-sdk/sdkwork-partner-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-partner/sdks/sdkwork-partner-app-sdk/sdkwork-partner-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-partner",
@@ -1429,7 +1429,7 @@
       "registry": "npm",
       "durationMs": 10129,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-partner/sdks/sdkwork-partner-backend-sdk/sdkwork-partner-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-partner/sdks/sdkwork-partner-backend-sdk/sdkwork-partner-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-payment",
@@ -1441,7 +1441,7 @@
       "registry": "npm",
       "durationMs": 9742,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-payment/sdks/sdkwork-payment-app-sdk/sdkwork-payment-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-payment/sdks/sdkwork-payment-app-sdk/sdkwork-payment-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-payment",
@@ -1453,7 +1453,7 @@
       "registry": "npm",
       "durationMs": 7008,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-payment/sdks/sdkwork-payment-backend-sdk/sdkwork-payment-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-payment/sdks/sdkwork-payment-backend-sdk/sdkwork-payment-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-portal",
@@ -1465,7 +1465,7 @@
       "registry": "npm",
       "durationMs": 2973,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-portal/sdks/sdkwork-portal-app-sdk/sdkwork-portal-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-portal/sdks/sdkwork-portal-app-sdk/sdkwork-portal-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-portal",
@@ -1477,7 +1477,7 @@
       "registry": "npm",
       "durationMs": 2935,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-portal/sdks/sdkwork-portal-backend-sdk/sdkwork-portal-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-portal/sdks/sdkwork-portal-backend-sdk/sdkwork-portal-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-promotion",
@@ -1489,7 +1489,7 @@
       "registry": "npm",
       "durationMs": 6462,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-promotion/sdks/sdkwork-promotion-app-sdk/sdkwork-promotion-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-promotion/sdks/sdkwork-promotion-app-sdk/sdkwork-promotion-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-promotion",
@@ -1501,7 +1501,7 @@
       "registry": "npm",
       "durationMs": 6251,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-promotion/sdks/sdkwork-promotion-backend-sdk/sdkwork-promotion-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-promotion/sdks/sdkwork-promotion-backend-sdk/sdkwork-promotion-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-prompts",
@@ -1513,7 +1513,7 @@
       "registry": "npm",
       "durationMs": 10112,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-prompts/sdks/sdkwork-prompts-app-sdk/sdkwork-prompts-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-prompts/sdks/sdkwork-prompts-app-sdk/sdkwork-prompts-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-prompts",
@@ -1525,7 +1525,7 @@
       "registry": "npm",
       "durationMs": 7002,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-prompts/sdks/sdkwork-prompts-backend-sdk/sdkwork-prompts-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-prompts/sdks/sdkwork-prompts-backend-sdk/sdkwork-prompts-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-prompts",
@@ -1537,7 +1537,7 @@
       "registry": "npm",
       "durationMs": 2892,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-prompts/sdks/sdkwork-prompts-sdk/sdkwork-prompts-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-prompts/sdks/sdkwork-prompts-sdk/sdkwork-prompts-sdk-typescript"
     },
     {
       "repo": "sdkwork-rtc",
@@ -1549,7 +1549,7 @@
       "registry": "npm",
       "durationMs": 6464,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-rtc/sdks/sdkwork-rtc-app-sdk/sdkwork-rtc-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-rtc/sdks/sdkwork-rtc-app-sdk/sdkwork-rtc-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-rtc",
@@ -1561,7 +1561,7 @@
       "registry": "npm",
       "durationMs": 7799,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-rtc/sdks/sdkwork-rtc-backend-sdk/sdkwork-rtc-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-rtc/sdks/sdkwork-rtc-backend-sdk/sdkwork-rtc-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-rtc",
@@ -1573,7 +1573,7 @@
       "registry": "npm",
       "durationMs": 2891,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-rtc/sdks/sdkwork-rtc-sdk/sdkwork-rtc-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-rtc/sdks/sdkwork-rtc-sdk/sdkwork-rtc-sdk-typescript"
     },
     {
       "repo": "sdkwork-search",
@@ -1585,7 +1585,7 @@
       "registry": "npm",
       "durationMs": 6633,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-search/sdks/sdkwork-search-app-sdk/sdkwork-search-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-search/sdks/sdkwork-search-app-sdk/sdkwork-search-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-search",
@@ -1597,7 +1597,7 @@
       "registry": "npm",
       "durationMs": 6190,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-search/sdks/sdkwork-search-backend-sdk/sdkwork-search-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-search/sdks/sdkwork-search-backend-sdk/sdkwork-search-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-shop",
@@ -1609,7 +1609,7 @@
       "registry": "npm",
       "durationMs": 6281,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-shop/sdks/sdkwork-shop-app-sdk/sdkwork-shop-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-shop/sdks/sdkwork-shop-app-sdk/sdkwork-shop-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-shop",
@@ -1621,7 +1621,7 @@
       "registry": "npm",
       "durationMs": 8891,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-shop/sdks/sdkwork-shop-backend-sdk/sdkwork-shop-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-shop/sdks/sdkwork-shop-backend-sdk/sdkwork-shop-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-skills",
@@ -1633,7 +1633,7 @@
       "registry": "npm",
       "durationMs": 24887,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-skills/sdks/sdkwork-skills-app-sdk/sdkwork-skills-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-skills/sdks/sdkwork-skills-app-sdk/sdkwork-skills-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-skills",
@@ -1645,7 +1645,7 @@
       "registry": "npm",
       "durationMs": 10311,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-skills/sdks/sdkwork-skills-backend-sdk/sdkwork-skills-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-skills/sdks/sdkwork-skills-backend-sdk/sdkwork-skills-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-terminal",
@@ -1657,7 +1657,7 @@
       "registry": "npm",
       "durationMs": 20380,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-terminal/apps/sdkwork-terminal-pc/sdks/sdkwork-terminal-app-sdk/sdkwork-terminal-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-terminal/apps/sdkwork-terminal-pc/sdks/sdkwork-terminal-app-sdk/sdkwork-terminal-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-voice",
@@ -1668,7 +1668,7 @@
       "status": "skipped",
       "durationMs": 0,
       "reason": "already published on npm",
-      "languageRoot": "E:/sdkwork-space/sdkwork-voice/sdks/sdkwork-voice-app-sdk/sdkwork-voice-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-voice/sdks/sdkwork-voice-app-sdk/sdkwork-voice-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-voice",
@@ -1680,7 +1680,7 @@
       "registry": "npm",
       "durationMs": 7274,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-voice/sdks/sdkwork-voice-backend-sdk/sdkwork-voice-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-voice/sdks/sdkwork-voice-backend-sdk/sdkwork-voice-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-webserver",
@@ -1692,7 +1692,7 @@
       "registry": "npm",
       "durationMs": 14706,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-webserver/sdks/sdkwork-web-app-sdk/sdkwork-web-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-webserver/sdks/sdkwork-web-app-sdk/sdkwork-web-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-webserver",
@@ -1704,7 +1704,7 @@
       "registry": "npm",
       "durationMs": 11292,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-webserver/sdks/sdkwork-web-backend-sdk/sdkwork-web-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-webserver/sdks/sdkwork-web-backend-sdk/sdkwork-web-backend-sdk-typescript"
     },
     {
       "repo": "sdkwork-webserver",
@@ -1714,8 +1714,8 @@
       "version": "0.1.0",
       "status": "failed",
       "durationMs": 10031,
-      "reason": "npm publish exit 1 at E:/sdkwork-space/sdkwork-webserver/sdks/sdkwork-web-internal-sdk/sdkwork-web-internal-sdk-typescript",
-      "languageRoot": "E:/sdkwork-space/sdkwork-webserver/sdks/sdkwork-web-internal-sdk/sdkwork-web-internal-sdk-typescript"
+      "reason": "npm publish exit 1 at <workspace-root>/sdkwork-webserver/sdks/sdkwork-web-internal-sdk/sdkwork-web-internal-sdk-typescript",
+      "languageRoot": "<workspace-root>/sdkwork-webserver/sdks/sdkwork-web-internal-sdk/sdkwork-web-internal-sdk-typescript"
     },
     {
       "repo": "sdkwork-xiangqi",
@@ -1727,7 +1727,7 @@
       "registry": "npm",
       "durationMs": 6726,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-xiangqi/sdks/sdkwork-xiangqi-app-sdk/sdkwork-xiangqi-app-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-xiangqi/sdks/sdkwork-xiangqi-app-sdk/sdkwork-xiangqi-app-sdk-typescript"
     },
     {
       "repo": "sdkwork-xiangqi",
@@ -1739,7 +1739,7 @@
       "registry": "npm",
       "durationMs": 6566,
       "reason": "published to npm (latest)",
-      "languageRoot": "E:/sdkwork-space/sdkwork-xiangqi/sdks/sdkwork-xiangqi-backend-sdk/sdkwork-xiangqi-backend-sdk-typescript"
+      "languageRoot": "<workspace-root>/sdkwork-xiangqi/sdks/sdkwork-xiangqi-backend-sdk/sdkwork-xiangqi-backend-sdk-typescript"
     }
   ]
 }

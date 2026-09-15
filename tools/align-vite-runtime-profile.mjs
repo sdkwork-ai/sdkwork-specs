@@ -9,8 +9,8 @@
  * lucide-react entry filenames with the probing resolver.
  *
  * Usage:
- *   node align-vite-runtime-profile.mjs --workspace E:/sdkwork-space           # dry-run report
- *   node align-vite-runtime-profile.mjs --workspace E:/sdkwork-space --write   # apply
+ *   node align-vite-runtime-profile.mjs --workspace <workspace-root>           # dry-run report
+ *   node align-vite-runtime-profile.mjs --workspace <workspace-root> --write   # apply
  */
 
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';

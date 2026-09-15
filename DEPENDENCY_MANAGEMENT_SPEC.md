@@ -30,7 +30,8 @@ SDKWork distinguishes these dependency concerns:
 Rules:
 
 - Source/build dependency paths `MUST` be repository-relative, workspace-relative, or native package-manager coordinates. They must be portable across Windows, macOS, and Linux.
-- Source/build dependency paths `MUST NOT` be machine-specific absolute paths such as `D:\workspace\...`, `/home/<user>/...`, `/Users/<user>/...`, or `/mnt/<drive>/...`.
+- Source/build dependency paths `MUST NOT` be machine-specific absolute paths such as `<drive>:\workspace\...`, `/home/<user>/...`, `/Users/<user>/...`, or `/mnt/<drive>/...`.
+- Workspace path portability is enforced by `node sdkwork-specs/tools/check-workspace-path-portability.mjs --workspace <checkout-root>` (zero findings). It reports `WORKSPACE-ABS` for an absolute path whose segment chain names the relocatable workspace root, `SIBLING-REPO-ABS` for an absolute path naming a `sdkwork-<name>` checkout that §3 resolves through the consuming workspace mechanism instead, and `MACHINE-ABS` for any other machine-rooted absolute path — a drive-rooted toolchain or installer-cache directory, a POSIX home directory, a Windows profile directory, or an MSYS-style drive mount. `MACHINE-ABS` is in scope by default, because a hardcoded home directory, toolchain root, or installer cache is exactly what breaks when the same tree is built on another machine or another operating system; `--workspace-only` narrows a run to the two workspace rules. Scan scope is `PORTABILITY_SPEC.md` §5.1; the line-scope `WORKSPACE-PATH:allow` and the fixture-scope exemptions (`WORKSPACE-PATH:allow-fixture` for a test file, `.workspace-path-fixture` for a test-scoped directory, `WORKSPACE-PATH:allow-fixture-block` for a file's own `#[cfg(test)]` module) are §5.2.
 - JSON, YAML, TOML, package manifests, workspace manifests, and SDKWork config files `MUST` use POSIX-style `/` separators for source/build paths unless a native tool format requires otherwise.
 - Runtime install paths may be OS-specific when they are the actual target system contract, for example `/etc/sdkwork/...`, `/var/lib/sdkwork/...`, `%ProgramFiles%/...`, or `%USERPROFILE%/...`; they must not be reused as source dependency paths.
 - Documentation `MUST` use placeholders such as `<workspace-root>`, `<repository-root>`, `<application-root>`, `<release-root>`, and `<dependency-id>` when describing variable local or release paths.
@@ -505,7 +506,7 @@ Rules:
 
 Rules:
 
-- Documentation examples for source/build dependency paths `MUST` use relative paths or placeholders.
+- Documentation examples for source/build dependency paths `MUST` use relative paths or placeholders. Documentation is inside the `tools/check-workspace-path-portability.mjs` scan scope, so a documented absolute path is a finding like a source one; use `<workspace-root>`/`<checkout-root>` and the other placeholders §1 requires.
 - Documentation `MUST NOT` tell developers to edit source manifests with one person's absolute path.
 - Cross-platform command examples `SHOULD` use extensionless commands such as `pnpm`, `node`, `cargo`, and `python`; a Windows note may document `pnpm.cmd` when PowerShell script execution policy blocks `pnpm.ps1`.
 - OS-specific runtime install paths are allowed only when documenting target installation layout, not local source dependency layout.
@@ -516,7 +517,7 @@ Rules:
 Rules:
 
 - Repositories that declare release dependencies `MUST` include static verification that `sdkwork.workflow.json`, workflow YAML, native build-tool workspace manifests, and path mappings use portable source dependency paths.
-- Tests `MUST` fail on source/build dependency paths containing machine-specific absolute paths.
+- Tests `MUST` fail on source/build dependency paths containing machine-specific absolute paths; enforce with `node sdkwork-specs/tools/check-workspace-path-portability.mjs --workspace <checkout-root>` (zero findings). Scope and exemption markers follow §1 and `PORTABILITY_SPEC.md` §5.1/§5.2; the gate's own behaviour is pinned by `tools/check-workspace-path-portability.test.mjs` (`pnpm test:workspace-path-portability`, 12 tests).
 - Tests `MUST` fail when native build-tool files consume undeclared SDKWork release dependencies for a packaged application.
 - Tests `MUST` fail when stale dependencies remain in `sdkwork.workflow.json`.
 - Tests `MUST` verify dependency path and version declarations are centralized through native workspace mechanisms where the build tool supports them.
@@ -580,7 +581,7 @@ Rules:
 - [ ] Flutter/Dart: every SDKWork cross-workspace source is declared exactly once at the workspace root or app entry; member packages consume by package name.
 - [ ] `sdkwork.workflow.json dependencies[]` ids match the workspace root's declared sibling paths by basename.
 - [ ] pnpm, Cargo, Flutter/Dart, Gradle, Maven, Python, and other toolchains use their native workspace, dependency management, and lockfile mechanisms where applicable.
-- [ ] Source/build config contains no machine-specific absolute paths.
+- [ ] Source/build config contains no machine-specific absolute paths (`node sdkwork-specs/tools/check-workspace-path-portability.mjs --workspace <checkout-root>`, zero findings).
 - [ ] External SDKWork source paths in native build-tool files resolve to known SDKWork repositories, packages, crates, modules, SDK families, or approved generated SDK outputs.
 - [ ] Upstream source under `external/`, `third_party/`, or `vendor/` is consumed through native build-tool declarations and remains unchanged from its pinned revision.
 - [ ] Consumers use the upstream public facade/protocol; thin SDKWork adapters do not copy upstream behavior or access provider-private persistence as an integration API.

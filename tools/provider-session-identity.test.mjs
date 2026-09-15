@@ -78,18 +78,16 @@ describe('provider Session identity terminology', () => {
   });
 
   it('preserves unrelated native authentication and vault terminology', () => {
-    assert.equal(
-      isProviderSessionIdentityExemptPath(
-        'E:/sdkwork-space/sdkwork-birdcoder/apps/sdkwork-birdcoder-h5/packages/sdkwork-birdcoder-h5-capacitor/src/adapters/capacitorSecureStorageAdapter.ts',
-      ),
-      true,
-    );
-    assert.equal(
-      isProviderSessionIdentityExemptPath(
-        'E:/sdkwork-space/sdkwork-kernel/sdkwork-agent-kernel/src/secret_vault.rs',
-      ),
-      true,
-    );
+    // Absolute fixtures on purpose: the unit under test classifies absolute file
+    // paths by their repository-relative suffix, so the drive prefix is test data
+    // rather than a source/build binding.
+    // WORKSPACE-PATH:allow
+    const birdcoderAdapter = 'E:/sdkwork-space/sdkwork-birdcoder/apps/sdkwork-birdcoder-h5/packages/sdkwork-birdcoder-h5-capacitor/src/adapters/capacitorSecureStorageAdapter.ts';
+    // WORKSPACE-PATH:allow — same absolute-fixture rationale as above.
+    const kernelVault = 'E:/sdkwork-space/sdkwork-kernel/sdkwork-agent-kernel/src/secret_vault.rs';
+
+    assert.equal(isProviderSessionIdentityExemptPath(birdcoderAdapter), true);
+    assert.equal(isProviderSessionIdentityExemptPath(kernelVault), true);
   });
 
   it('renames provider Session identity filenames in every naming style', () => {

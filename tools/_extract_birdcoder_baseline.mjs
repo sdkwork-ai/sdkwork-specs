@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import { DEFAULT_WORKSPACE_ROOT } from './lib/workspace-root.mjs';
 
-const root = path.resolve('E:/sdkwork-space/sdkwork-birdcoder');
+const root = path.resolve(DEFAULT_WORKSPACE_ROOT, 'sdkwork-space');
 const files = [
   'crates/sdkwork-birdcoder-coding-sessions-repository-sqlx/src/db/schema.rs',
   'crates/sdkwork-birdcoder-workspace-repository-sqlx/src/db/schema.rs',

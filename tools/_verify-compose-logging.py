@@ -5,6 +5,9 @@ import sys
 
 import yaml
 
+# Self-locating workspace root: <workspace-root>/sdkwork-specs/tools/<this file>.
+SPACE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).replace(os.sep, '/')
+
 ROOTS = [
     'sdkwork-agentstudio/deployments/docker',
     'sdkwork-audio/deployments/docker',
@@ -26,8 +29,8 @@ EXTRA = [
 
 files = []
 for r in ROOTS:
-    files += sorted(glob.glob(f'/mnt/e/sdkwork-space/{r}/*.yml'))
-files += [f'/mnt/e/sdkwork-space/{p}' for p in EXTRA]
+    files += sorted(glob.glob(f'{SPACE}/{r}/*.yml'))
+files += [f'{SPACE}/{p}' for p in EXTRA]
 
 bad = 0
 for f in files:
@@ -44,6 +47,6 @@ for f in files:
     flag = 'OK ' if not missing else 'BAD'
     if missing:
         bad += 1
-    print(f'{flag} {os.path.relpath(f, "/mnt/e/sdkwork-space")} services={len(svcs)} missing={missing}')
+    print(f'{flag} {os.path.relpath(f, SPACE)} services={len(svcs)} missing={missing}')
 print('failures:', bad)
 sys.exit(1 if bad else 0)

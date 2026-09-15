@@ -10,8 +10,9 @@ import { detectBrowserSurfacesForWebserver } from './adaptive-web.mjs';
 import { ADAPTIVE_SNIPPET_PATHS } from './adaptive-web-snippets.mjs';
 import { GATEWAY_SNIPPET_PATHS } from './gateway-snippets.mjs';
 import { validateWebserverDir } from './validate.mjs';
+import { DEFAULT_WORKSPACE_ROOT } from '../lib/workspace-root.mjs';
 
-const workspace = path.resolve(process.argv[2] ?? 'E:/sdkwork-space');
+const workspace = path.resolve(process.argv[2] ?? DEFAULT_WORKSPACE_ROOT);
 const critical = [];
 const warnings = [];
 const optimizations = [];

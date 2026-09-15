@@ -209,7 +209,7 @@ Client runtime metadata may additionally declare:
 ```json
 {
   "targetPlatforms": ["windows", "macos", "linux", "ios", "android"],
-  "clientArchitectures": ["tauri", "h5", "capacitor", "flutter", "ios-native", "android-native"]
+  "clientArchitectures": ["tauri", "h5", "capacitor", "flutter", "ios-native", "android-native", "harmony-native"]
 }
 ```
 
@@ -276,8 +276,9 @@ Rules:
 - Unity roots should use `runtime.framework = "unity"` with `runtime.family` per delivery lane: `"mobile"` for app-store builds, `"desktop"` for standalone builds, `"web"` for WebGL, and `"mini-program"` for mini-game delivery (`MP_*_GAME` platforms with `runtimeTarget = "mini-program"`).
 - Static web roots should use `runtime.family = "web"`, `runtime.framework = "static-html"`, and `clientArchitectures = ["static-web"]`.
 - Package ids and artifact names in the manifest follow `NAMING_SPEC.md`; source package names follow the matching architecture standard and are not copied into release package ids unless they are also the release artifact identity.
-- PC desktop hosts map `clientArchitecture` values to host packages: `tauri` -> `sdkwork-<application-code>-pc-desktop`, `electron` -> `sdkwork-<application-code>-pc-electron`. A desktop package entry `MUST` declare exactly one `clientArchitecture` value and `MUST` agree with the host package that produced the artifact.
-- When an application ships both desktop hosts, its manifest `clientArchitectures` `MUST` include both `tauri` and `electron`, and each `artifacts.installConfig.packages[]` entry `MUST` pin its own `clientArchitecture` so release lookup and artifact collection stay deterministic.
+- PC desktop hosts map `clientArchitecture` values to host packages: `tauri` -> `sdkwork-<application-code>-pc-tauri`, `electron` -> `sdkwork-<application-code>-pc-electron`, `capacitor` -> `sdkwork-<application-code>-pc-capacitor`, one host package per architecture. A desktop package entry `MUST` declare exactly one `clientArchitecture` value and `MUST` agree with the host package that produced the artifact.
+- When an application ships more than one desktop host, its manifest `clientArchitectures` `MUST` include every shipped host value (`tauri`, `electron`, `capacitor`), and each `artifacts.installConfig.packages[]` entry `MUST` pin exactly one `clientArchitecture` naming its own per-architecture host package so release lookup and artifact collection stay deterministic.
+- `clientArchitecture = "capacitor"` is valid only for `runtimeTarget = "desktop"`. Tablet runtime targets (`tablet-ipados`, `tablet-android`) `MUST NOT` declare `electron` or `capacitor`; they are Tauri-only.
 - `publish.platforms` must list only actually supported platforms. Do not list `APP_IOS`, `APP_ANDROID`, `APP_HARMONY`, or `MP_*` values just because the source architecture could support them later.
 
 ## 7. Media Assets
@@ -432,8 +433,8 @@ WEB_URL, SCRIPT
 Allowed package formats:
 
 ```text
-SOURCE_CODE, JAR, WAR, ZIP, TAR_GZ, APK, AAB, IPA, EXE, MSI, DMG,
-APPIMAGE, DEB, RPM, DOCKER_IMAGE, MINI_PROGRAM_PACKAGE, OTHER
+SOURCE_CODE, JAR, WAR, ZIP, TAR_GZ, APK, AAB, IPA, HAP, HARMONY_APP, EXE,
+MSI, DMG, APPIMAGE, DEB, RPM, DOCKER_IMAGE, MINI_PROGRAM_PACKAGE, OTHER
 ```
 
 Package ids must follow `NAMING_SPEC.md`:
@@ -455,7 +456,7 @@ Package ids must follow `NAMING_SPEC.md`:
 | Flutter Android mobile app | `android-arm64-dual-mobile-aab` | `BINARY_URL` or `APP_STORE` | `AAB`, `APK`, or `OTHER` when the store owns the final artifact | `APP_ANDROID` |
 | Android native mobile app | `android-arm64-dual-mobile-aab` | `BINARY_URL` or `APP_STORE` | `AAB`, `APK`, or `OTHER` when the store owns the final artifact | `APP_ANDROID` |
 | iOS native mobile app | `ios-universal-dual-mobile-ipa` | `BINARY_URL` or `APP_STORE` | `IPA` or `OTHER` when the store owns the final artifact | `APP_IOS` |
-| Harmony mobile app package | `harmony-arm64-dual-mobile-other` | `BINARY_URL` or `APP_STORE` | `OTHER` until a backend package format enum for Harmony package artifacts is available; metadata must state the HAP/APP artifact kind | `APP_HARMONY` |
+| Harmony mobile app package | `harmony-arm64-dual-mobile-hap` | `BINARY_URL` or `APP_STORE` | `HAP` for HarmonyOS module packages, or `HARMONY_APP` for AppGallery APP Pack submissions | `APP_HARMONY` |
 | WeChat mini program package | `mp-weixin-universal-cloud-mini-program-mini-program-package` | `MINI_PROGRAM` | `MINI_PROGRAM_PACKAGE` | `MP_WEIXIN` |
 
 The package id profile segment is an artifact taxonomy segment, not

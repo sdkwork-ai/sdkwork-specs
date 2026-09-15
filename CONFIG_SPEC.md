@@ -202,14 +202,16 @@ export interface SdkworkServerConfig {
 }
 
 export interface SdkworkDesktopConfig {
-  nativeHost: "tauri" | "electron" | "browser-installed" | "custom";
+  nativeHost: "tauri" | "electron" | "capacitor" | "browser-installed" | "custom";
   /**
    * Optional bridge transport override; defaults to "auto". Tauri hosts use
-   * invoke/commands, Electron hosts use contextBridge/ipcRenderer, and browser
-   * hosts use the fallback adapter. Feature code MUST NOT select the transport
-   * directly; it consumes only `@sdkwork/desktop-host-contract` interfaces.
+   * invoke/commands, Electron hosts use contextBridge/ipcRenderer, Capacitor
+   * hosts use the SDKWork host plugin on the Capacitor desktop platform, and
+   * browser hosts use the fallback adapter. Feature code MUST NOT select the
+   * transport directly; it consumes only `@sdkwork/desktop-host-contract`
+   * interfaces.
    */
-  bridgeTransport?: "auto" | "invoke" | "ipc" | "none";
+  bridgeTransport?: "auto" | "invoke" | "ipc" | "capacitor-plugin" | "none";
   localServiceEnabled?: boolean;
   localServiceBind?: string;
   userConfigFile?: string;
@@ -420,8 +422,8 @@ invent alternate deployment-mode values.
 | `desktop` | PC desktop host | desktop user config and native host config | OS secure storage or approved user-private secrets | Signed desktop installer or app bundle; defaults to standalone. |
 | `tablet-ipados` | PC tablet host | PC renderer config plus iPadOS/Tauri host config | iPadOS secure storage or approved host adapter | IPA/TestFlight/App Store/private package for large-screen tablet behavior. |
 | `tablet-android` | PC tablet host | PC renderer config plus Android/Tauri host config | Android secure storage or approved host adapter | APK/AAB/Play/private package for large-screen tablet behavior. |
-| `capacitor-ios` | H5 mobile host | H5 browser config plus Capacitor iOS host config | iOS secure storage through Capacitor adapter | IPA/TestFlight/App Store/private package. |
-| `capacitor-android` | H5 mobile host | H5 browser config plus Capacitor Android host config | Android secure storage through Capacitor adapter | APK/AAB/Play/private package. |
+| `capacitor-ios` | H5 mobile host | H5 browser config plus the Capacitor iOS host profile (`config/host/native/ios/`) | iOS Keychain through the Capacitor secure-storage adapter | IPA/TestFlight/App Store/private package. |
+| `capacitor-android` | H5 mobile host | H5 browser config plus the Capacitor Android host profile (`config/host/native/android/`) | Android Keystore through the Capacitor secure-storage adapter | APK/AAB/Play/private package. |
 | `flutter-ios` | Flutter mobile host | Flutter app config plus iOS host config | Flutter secure storage adapter backed by iOS facilities | IPA/TestFlight/App Store/private package. |
 | `flutter-android` | Flutter mobile host | Flutter app config plus Android host config | Flutter secure storage adapter backed by Android facilities | APK/AAB/Play/private package. |
 | `android-native` | native Android app | Android app config plus Gradle/manifest host config | Android secure storage or approved platform adapter | APK/AAB/Play/private package. |

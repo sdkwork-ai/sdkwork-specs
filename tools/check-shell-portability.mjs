@@ -88,6 +88,10 @@ const DEFAULT_EXCLUDES = Object.freeze([
   'node_modules', '.git', 'target',
   'external', 'vendor',
   'dist', 'build', 'out', 'bak', 'coverage', '.next',
+  // See PORTABILITY_SPEC.md section 5.1: `obj/` is the .NET/MSBuild
+  // intermediate output root (counterpart of `target/`) and `.vs/` is Visual
+  // Studio per-user IDE state. Both are regenerated locally.
+  'obj', '.vs',
   '.workbuddy', '.sdkwork', '.tmp', 'tmp', '.wsl-tmp',
 ]);
 

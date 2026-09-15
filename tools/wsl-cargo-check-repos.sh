@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compiles selected SDKWork application repositories under /mnt/e/sdkwork-space.
+# Compiles selected SDKWork application repositories under <workspace-root>.
 #
 # The naive serial sweep stalled: `cargo check` on some repos blocks on /mnt/e
 # (9p) I/O without consuming CPU, so a wall-clock timeout is required. Each repo
@@ -24,8 +24,10 @@ export PATH="$HOME/.cargo/bin:$PATH"
 LIST="$1"
 PARALLEL="${2:-3}"
 REPO_TIMEOUT="${3:-1500}"
-ROOT=/mnt/e/sdkwork-space
-OUT_DIR=/mnt/e/sdkwork-space/sdkwork-specs/.wm-cargo-check
+# Self-locating workspace root (this script lives in <workspace-root>/sdkwork-specs/tools).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd -P)"
+OUT_DIR="${ROOT}/sdkwork-specs/.wm-cargo-check"
 SUMMARY="$OUT_DIR/summary.log"
 mkdir -p "$OUT_DIR"
 : > "$SUMMARY"

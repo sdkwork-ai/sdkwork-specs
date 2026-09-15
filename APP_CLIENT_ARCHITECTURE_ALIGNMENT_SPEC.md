@@ -377,7 +377,7 @@ Rules:
 
 ## 9. Host Adapter Boundary
 
-Host adapters are local or platform capability boundaries. For PC desktop roots with multiple native hosts (Tauri and Electron), the adapter interfaces and bridge protocol are defined once by the shared contract package `@sdkwork/desktop-host-contract` and detailed in `DESKTOP_APP_ARCHITECTURE_SPEC.md` sections 5.3 and 5.4; every host implementation satisfies the same `DesktopHost` interface.
+Host adapters are local or platform capability boundaries. For PC desktop roots with multiple native hosts (Tauri, Electron, and Capacitor), the adapter interfaces and bridge protocol are defined once by the shared contract package `@sdkwork/desktop-host-contract` and detailed in `DESKTOP_APP_ARCHITECTURE_SPEC.md` sections 5.5 and 5.6. Every host implementation lives in its own per-architecture host package and satisfies the same `DesktopHost` interface.
 
 Standard host adapter categories:
 
@@ -404,13 +404,14 @@ Host capability declaration and degradation:
 
 - Every host exposes a `capabilities` set (for example `window`, `deepLinks`, `secureStorage`, `filePicker`, `filesystemSandbox`, `updater`, `localRuntime`). Renderer code routes through the declared set or a shared capability helper (`hasCapability`/`withCapability`); hand-written platform branches on host globals are forbidden.
 - Browser-only and platform-native modes must provide fallback adapters for unsupported capabilities. The browser fallback exposes an empty `capabilities` set and returns `unsupported` outcomes.
-- When the same workflow exists under Tauri and Electron, both implementations must expose the same capability set and method signatures so feature code compiles unchanged against either host.
+- When the same workflow exists under more than one host, every implementation must expose the same capability set and method signatures so feature code compiles unchanged against any host.
 
 Rules:
 
 - Host adapters expose typed methods and stable errors such as `unsupported`, `permission-denied`, `unavailable`, `cancelled`, and `invalid-state`.
 - Feature packages depend on host adapter interfaces or injected services, not platform globals.
-- Feature packages `MUST NOT` reference `window.__TAURI__`, `window.electron`, `ipcRenderer`, or import `@tauri-apps/api` / `electron` directly; they consume host adapter contracts only.
+- Feature packages `MUST NOT` reference `window.__TAURI__`, `window.electron`, `Capacitor.*`, `ipcRenderer`, or import `@tauri-apps/api` / `electron` / `@capacitor/core` directly; they consume host adapter contracts only.
+- A PC root `MUST` keep one host package per desktop architecture. Two architectures `MUST NOT` share a host package, and `pc-core` `MUST NOT` implement a native host adapter or depend on a native host package.
 - Host adapters may obtain platform facts such as push tokens or selected files, but business registration, upload, and binding workflows must call generated SDKs through services.
 - Host adapters must not own login, token refresh, permission evaluation, business authorization, direct database access, or raw business API transport.
 

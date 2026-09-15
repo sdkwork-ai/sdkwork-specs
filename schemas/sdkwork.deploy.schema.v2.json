@@ -184,17 +184,31 @@
       "oneOf": [
         {
           "type": "array",
-          "items": { "type": "string", "minLength": 1 },
+          "items": { "$ref": "#/$defs/clientPackageName" },
           "uniqueItems": true
         },
         {
           "type": "object",
           "additionalProperties": {
             "type": "array",
-            "items": { "type": "string", "minLength": 1 },
+            "items": { "$ref": "#/$defs/clientPackageName" },
             "uniqueItems": true
           }
         }
+      ]
+    },
+    "clientPackageName": {
+      "type": "string",
+      "enum": [
+        "flutter-mobile",
+        "harmony-mobile",
+        "android-mobile",
+        "ios-mobile",
+        "mini-program-weixin",
+        "mini-program-alipay",
+        "desktop-windows",
+        "desktop-macos",
+        "desktop-linux"
       ]
     },
     "overrides": {

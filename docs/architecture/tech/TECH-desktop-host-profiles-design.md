@@ -1,12 +1,19 @@
-# SDKWork PC 双宿主架构设计与优化（Tauri + Electron）
+# SDKWork PC 桌面宿主架构设计（Tauri / Electron / Capacitor）
 
-- Version: 1.0 (Design Proposal)
-- Status: Proposed — pending `DESKTOP_APP_ARCHITECTURE_SPEC.md` and tooling adoption
+- Version: 1.1
+- Status: Implemented for Tauri + Electron (merged into `DESKTOP_APP_ARCHITECTURE_SPEC.md` §5.3/§5.5/§5.6, `packagers/pc.mjs`, and `check-pnpm-script-standard.mjs`); Capacitor 第三宿主的设计决策见 §13
 - Related: `APP_PC_ARCHITECTURE_SPEC.md`, `DESKTOP_APP_ARCHITECTURE_SPEC.md`,
   `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_RUNTIME_TOPOLOGY_SPEC.md`,
-  `APP_MANIFEST_SPEC.md`, `CONFIG_SPEC.md`, `FRONTEND_SPEC.md`,
-  `TYPESCRIPT_CODE_SPEC.md`, `APP_COMPOSITION_SPEC.md`,
-  `tools/lib/app-publish/packagers/pc.mjs`
+  `APP_MANIFEST_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `CONFIG_SPEC.md`,
+  `FRONTEND_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`,
+  `APP_COMPOSITION_SPEC.md`, `tools/lib/app-publish/packagers/pc.mjs`
+
+> **阅读顺序**：§1–§12 是 v1.0 **双宿主（Tauri + Electron）** 的设计记录，其中的包名、
+> Gap 清单、迁移阶段与验收项都停留在当时的状态（例如 Tauri 宿主包被写作
+> `sdkwork-<application-code>-pc-desktop`）。v1.1 引入 Capacitor 第三宿主并把宿主包命名
+> 统一为架构显式（`-pc-tauri` / `-pc-electron` / `-pc-capacitor`），差异集中在 **§13**。
+> 正文与 §13 冲突时 **以 §13 为准**；对外规范效力一律以
+> `DESKTOP_APP_ARCHITECTURE_SPEC.md` 与 `APP_PC_ARCHITECTURE_SPEC.md` 为准。
 
 ---
 
@@ -773,3 +780,68 @@ function desktopBundleRoot(appRoot, clientArchitecture) {
 | 契约归属 | 独立仓库 vs 并入 utils | 独立 `sdkwork-desktop-host` 契约包 | 契约独立演进、被多应用引用 |
 | IPC 形态 | invoke 直接透传 vs 统一协议 | 统一协议（§5） | 双宿主同一语义，能力方法白名单可静态校验 |
 | 渲染层宿主访问 | 全局单例 vs 注入 | 注入（bootstrap 组装，`APP_SDK_INTEGRATION_SPEC.md` 对齐） | 可测试、可降级、可替换 |
+
+---
+
+## 13. 第三宿主扩展：Capacitor（v1.1）
+
+### 13.1 背景与定位
+
+PC 桌面端在 Tauri 与 Electron 之外新增 Capacitor 宿主，目的是让 PC 桌面应用与 H5 移动应用**共用同一套 Capacitor 插件面与 `capacitor.config` 组装模型**。
+
+`clientArchitecture = "capacitor"` 是**能力平台无关**的声明：它表示"用 Capacitor 插件与桥接层承载 PC 渲染层"，底层 provider 由宿主包内声明指定。这样未来 Capacitor 搭配其他桌面平台（例如系统 WebView 方案）无需改动架构标识。
+
+唯一宿主包：`sdkwork-<application-code>-pc-capacitor`。移动端 Capacitor 仍归 H5 根（`h5-capacitor`），两者所有权不重叠。
+
+### 13.2 Provider 治理（关键结论）
+
+Capacitor 官方平台只有 iOS / Android / Web，**桌面端不属于官方平台**，必须依赖第三方 provider。因此规范把 provider 作为**受治理依赖**而非固定标识：
+
+| Provider | 状态 | 结论 |
+| --- | --- | --- |
+| `@capacitor-community/electron` | 维护者已声明 unmaintained；把整套 Electron 工程生成进应用仓库；锁死旧 Electron 版本 | **不予采用** |
+| `@capawesome/capacitor-electron` | MIT、在维护；要求 Capacitor ≥6 / Electron ≥28 且不设上限；默认强制沙箱渲染器 + context isolation + 严格 CSP + 校验 IPC 且不可削弱；electron-builder 打包；内置 Live Updates（失败回滚） | **当前采用** |
+
+规范要求 provider 版本固定、写入发布证据，并在 provider 每次 Electron 大版本发布时复核 currency。provider 可替换是硬约束：任何 provider 标识出现在 `pc-core`、feature 包或另一个宿主包中，都按缺陷处理。
+
+### 13.3 每架构独立分包（本次结构结论）
+
+三宿主各自独立成包，且**渲染层适配器一并按架构拆分**：
+
+```text
+packages/
+  sdkwork-<app>-pc-core/           # 契约再导出 + 宿主注册表 + 浏览器降级
+  sdkwork-<app>-pc-tauri/          # Tauri 适配器 + src-tauri/
+  sdkwork-<app>-pc-electron/       # Electron 适配器 + src-electron/
+  sdkwork-<app>-pc-capacitor/      # Capacitor 适配器 + electron/ 脚手架
+```
+
+- 一个架构 = 一个宿主包 = 一个 `clientArchitecture`；同一包内出现两套原生脚手架（`src-tauri/` 与 `src-electron/`）属禁止项。
+- `pc-core/src/host/` 只保留契约再导出、宿主注册与解析、浏览器降级，且不得依赖任何原生宿主包或 `@tauri-apps/api` / `electron` / `@capacitor/core`。
+- 宿主包之间不得互相依赖；跨架构共享一律走 `pc-core` / `pc-commons`。
+- 命名架构显式：`-pc-tauri` / `-pc-electron` / `-pc-capacitor`。`-pc-desktop` 退为 Tauri 宿主的迁移别名（v1.0 双宿主时期的遗留名），新包禁用。
+
+### 13.4 桥接与安全
+
+- Capacitor 宿主沿用 §5.6 桥协议：由**唯一一个 SDKWork 宿主插件**承载方法表并拒绝未知方法，语义与 Electron preload 白名单一致。
+- 安全基线继承 Electron 宿主，并额外要求 provider 强制的沙箱 / context isolation / 严格 CSP / 校验 IPC **不得被削弱**（包括自定义 `windowFactory` 路径）。
+- 开发期 `server.url` 指向渲染层 dev server，端口冲突必须失败；发布配置不得残留开发 `server.url`。
+- 桌面 Live Updates 必须走 provider 的 serving API 与失败回滚，签名并遵循 `SUPPLY_CHAIN_SECURITY_SPEC.md`。
+- iPadOS / Android 平板目标保持 Tauri 独占，Capacitor 与 Electron 不得声明为平板架构。
+
+### 13.5 已落地的触点（v1.1）
+
+| 层 | 变更 |
+| --- | --- |
+| 主规格 | `DESKTOP_APP_ARCHITECTURE_SPEC.md` 新增 §5 宿主注册表与 §5.4 Capacitor Host Profile；契约与桥协议顺延为 §5.5 / §5.6 |
+| PC 根 | `APP_PC_ARCHITECTURE_SPEC.md` 平台矩阵、包分类、宿主包形状、命令、验证与清单 |
+| 对齐与声明 | `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §9、`APP_MANIFEST_SPEC.md`、`APP_RUNTIME_TOPOLOGY_SPEC.md`、`CONFIG_SPEC.md`、`NAMING_SPEC.md` |
+| 脚本 / 前端 / 测试 | `PNPM_SCRIPT_SPEC.md` §4 / §4.1 与别名表、`FRONTEND_SPEC.md` §8、`TEST_SPEC.md` |
+| 工具 | `tools/check-app-manifest-deployment-standard.mjs`（desktop 架构集合）、`tools/check-pnpm-script-standard.mjs`（宿主轴与别名）、`tools/lib/app-publish/packagers/pc.mjs`（宿主分派与产物目录） |
+| 边界 | `APP_H5_ARCHITECTURE_SPEC.md` §8 / §9 划清移动端与桌面端 Capacitor 所有权 |
+
+### 13.6 仍待补齐
+
+- 三宿主各自的静态检查器（`check:tauri-config` / `check:electron-config` / `check:capacitor-config`）目前只有规范文本与脚本名登记，`tools/` 下尚无对应实现。
+- `@sdkwork/desktop-host-contract` 契约包与三宿主适配器 parity 测试尚未落地。
+- 工作区尚无真实的三宿主 app root，属规范先行。

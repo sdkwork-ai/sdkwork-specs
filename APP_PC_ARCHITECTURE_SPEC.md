@@ -1,12 +1,12 @@
 # PC Application Architecture Standard
 
 - Version: 1.0
-- Scope: SDKWork PC application roots that support PC browser web, desktop, and large-screen tablet native packaging, including app modules, user-facing console modules, internal admin modules, shared renderer packages, Tauri/native host packages, and iPadOS/Android tablet runtime/package targets
+- Scope: SDKWork PC application roots that support PC browser web, desktop, and large-screen tablet native packaging, including app modules, user-facing console modules, internal admin modules, shared renderer packages, one host package per desktop architecture (Tauri, Electron, Capacitor), and iPadOS/Android tablet runtime/package targets
 - Related: `SDKWORK_WORKSPACE_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `APPLICATION_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `DESKTOP_APP_ARCHITECTURE_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `BACKEND_UI_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
-This standard defines the application-root architecture for SDKWork PC applications. A PC application is one application root that can run as a browser web application and, when required, as a desktop or large-screen tablet native application through a host such as Tauri.
+This standard defines the application-root architecture for SDKWork PC applications. A PC application is one application root that can run as a browser web application and, when required, as a desktop or large-screen tablet native application through one or more per-architecture native host packages.
 
-This file is the PC application root standard. `APP_PC_REACT_UI_SPEC.md` remains the detailed React UI package standard, and `DESKTOP_APP_ARCHITECTURE_SPEC.md` remains the detailed desktop/Tauri host standard. New SDKWork application architecture standards for H5, Flutter, WeChat Mini Program, iOS, Android, and HarmonyOS should keep a similar root layout, package taxonomy, SDK boundary, appbase IAM boundary, and app/console/admin separation.
+This file is the PC application root standard. `APP_PC_REACT_UI_SPEC.md` remains the detailed React UI package standard, and `DESKTOP_APP_ARCHITECTURE_SPEC.md` remains the detailed desktop host standard for the Tauri, Electron, and Capacitor host profiles. New SDKWork application architecture standards for H5, Flutter, WeChat Mini Program, iOS, Android, and HarmonyOS should keep a similar root layout, package taxonomy, SDK boundary, appbase IAM boundary, and app/console/admin separation.
 
 Reference inputs:
 
@@ -99,7 +99,7 @@ apps/sdkwork-<application-code>-pc/
     sdkwork-<application-code>-pc-admin-core/
     sdkwork-<application-code>-pc-admin-shell/
     sdkwork-<application-code>-pc-admin-<capability>/
-    sdkwork-<application-code>-pc-desktop/
+    sdkwork-<application-code>-pc-tauri/
       src-tauri/
         tauri.conf.json
         tauri.windows.conf.json
@@ -110,6 +110,10 @@ apps/sdkwork-<application-code>-pc/
         gen/
           apple/
           android/
+    sdkwork-<application-code>-pc-electron/     # Electron host: separate package, only when shipped
+      src-electron/
+    sdkwork-<application-code>-pc-capacitor/    # Capacitor host: separate package, only when shipped
+      electron/
   tests/
   index.html
   package.json
@@ -130,7 +134,7 @@ Directory rules:
 - `sdks/` contains application-root SDK workspaces and generator inputs according to `SDK_WORKSPACE_GENERATION_SPEC.md`.
 - `specs/` contains local component/application specs that extend, but do not contradict, this canonical specs directory.
 - `src/` is the root shell entry and composition boundary only.
-- `packages/` contains all reusable runtime, shell, app, console, admin, and native host packages.
+- `packages/` contains all reusable runtime, shell, app, console, admin, and native host packages. Each shipped desktop architecture has exactly one native host package (`-pc-tauri`, `-pc-electron`, `-pc-capacitor`); one package `MUST NOT` carry two architectures.
 - `tests/` contains application-level integration, runtime, route, package-boundary, and architecture verification tests.
 
 ## 2.0 Tailwind CSS Shell Entry
@@ -259,16 +263,17 @@ PC applications share one renderer and one package taxonomy across large-screen 
 | Target | Standard mode | Host/package | Required behavior |
 | --- | --- | --- | --- |
 | PC browser web | `web` | root Vite/browser build | Full app/console/admin route composition, no native host dependency, graceful host-adapter fallback |
-| Windows desktop | `desktop-windows` | `sdkwork-<application-code>-pc-desktop` (Tauri) or `sdkwork-<application-code>-pc-electron` (Electron) | Native desktop bundle, WebView2 (Tauri) / Chromium (Electron) runtime boundary, Windows scripts in `bin/windows/` |
-| macOS desktop | `desktop-macos` | `sdkwork-<application-code>-pc-desktop` (Tauri) or `sdkwork-<application-code>-pc-electron` (Electron) | Native desktop bundle, signed/notarized release when distributed outside development |
-| Linux desktop | `desktop-linux` | `sdkwork-<application-code>-pc-desktop` (Tauri) or `sdkwork-<application-code>-pc-electron` (Electron) | Native desktop bundle, distro/runtime dependency documentation |
-| iPadOS native tablet | `tablet-ipados` | `sdkwork-<application-code>-pc-desktop` Tauri iOS target | Same PC renderer, adaptive tablet layout, iPad split/multi-window awareness, Apple signing and IPA workflow |
-| Android tablet native | `tablet-android` | `sdkwork-<application-code>-pc-desktop` Tauri Android target | Same PC renderer, adaptive tablet layout, Android large-screen/windowing behavior, APK/AAB workflow |
+| Windows desktop | `desktop-windows` | `sdkwork-<application-code>-pc-tauri`, `-pc-electron`, or `-pc-capacitor` | Native desktop bundle, WebView2 (Tauri) / Chromium (Electron, Capacitor) runtime boundary, Windows scripts in `bin/windows/` |
+| macOS desktop | `desktop-macos` | `sdkwork-<application-code>-pc-tauri`, `-pc-electron`, or `-pc-capacitor` | Native desktop bundle, signed/notarized release when distributed outside development |
+| Linux desktop | `desktop-linux` | `sdkwork-<application-code>-pc-tauri`, `-pc-electron`, or `-pc-capacitor` | Native desktop bundle, distro/runtime dependency documentation |
+| iPadOS native tablet | `tablet-ipados` | `sdkwork-<application-code>-pc-tauri` Tauri iOS target | Same PC renderer, adaptive tablet layout, iPad split/multi-window awareness, Apple signing and IPA workflow |
+| Android tablet native | `tablet-android` | `sdkwork-<application-code>-pc-tauri` Tauri Android target | Same PC renderer, adaptive tablet layout, Android large-screen/windowing behavior, APK/AAB workflow |
 
 Rules:
 
 - The PC renderer `MUST` be the source of truth for web, desktop, iPadOS, and Android tablet targets.
-- Desktop native hosts (Tauri and Electron) `MUST` follow `DESKTOP_APP_ARCHITECTURE_SPEC.md`: both consume the same renderer output and the same host adapter contract and bridge protocol, and feature packages `MUST NOT` reference host globals (`window.__TAURI__`, `window.electron`) directly.
+- Desktop native hosts (Tauri, Electron, and Capacitor) `MUST` follow `DESKTOP_APP_ARCHITECTURE_SPEC.md`: each ships its own per-architecture host package, and all of them consume the same renderer output, host adapter contract, and bridge protocol. Feature packages `MUST NOT` reference host globals (`window.__TAURI__`, `window.electron`, `Capacitor.*`) directly.
+- Tablet targets (`tablet-ipados`, `tablet-android`) are Tauri-only; `clientArchitecture = "electron"` or `"capacitor"` `MUST NOT` be declared for them.
 - Tablet native packaging `MUST NOT` create phone-first H5 pages, mobile-only business services, or a separate auth/runtime model inside the PC root.
 - iPadOS and Android tablet targets `MUST` use adaptive large-screen UI patterns: navigation rail/sidebar, split panes, tabs, drawers, resizable detail panels, keyboard shortcuts where available, touch/stylus support, and safe-area handling.
 - iPadOS and Android tablet targets `MUST` keep app, console, and admin route ownership identical to web/desktop mode unless a local component spec documents a platform-specific route exclusion.
@@ -300,12 +305,12 @@ A complete PC application standard covers more than pages and package names.
 | Offline and resilience | `pc-core`, domain services | Local cache policy, retry, reconnect, optimistic state boundaries, offline-safe messaging where approved |
 | Background jobs | `pc-core`, desktop host, server profile | Upload/download queue, sync queue, cancellation, pause/resume, foreground/background behavior |
 | Deep links and routing handoff | shell packages, desktop host | URL scheme handling, route hydration, tenant/workspace context restore, unsafe-link rejection |
-| Update and release channels | `pc-desktop`, `scripts/`, `bin/` | Web asset version, desktop updater, tablet release channel, rollback notes, staged rollout |
+| Update and release channels | per-architecture host package, `scripts/`, `bin/` | Web asset version, desktop updater, tablet release channel, rollback notes, staged rollout |
 | Diagnostics and support | `pc-core`, desktop host, admin/console packages | Safe diagnostics bundle, log export, health checks, support context without secrets |
-| Local/native host capability | `pc-desktop` and `pc-core/src/host/` | Window/tray, deep links, clipboard, file dialogs, updater, local service lifecycle |
-| Tablet packaging | `pc-desktop/src-tauri/` | iPadOS/Android tablet config, safe areas, split/multi-window behavior, signing/build workflow |
+| Local/native host capability | per-architecture host package and `pc-core/src/host/` | Window/tray, deep links, clipboard, file dialogs, updater, local service lifecycle |
+| Tablet packaging | `pc-tauri/src-tauri/` | iPadOS/Android tablet config, safe areas, split/multi-window behavior, signing/build workflow |
 | Observability | bootstrap, services, host package | Logs, traces, diagnostics, user-safe error reporting, no secret logging |
-| Release/update | `pc-desktop`, `bin/`, `scripts/` | Web build, desktop bundles, IPA/APK/AAB where enabled, versioning, signing, runbooks |
+| Release/update | per-architecture host package, `bin/`, `scripts/` | Web build, desktop bundles, IPA/APK/AAB where enabled, versioning, signing, runbooks |
 
 Rules:
 
@@ -329,7 +334,9 @@ PC package directory names `MUST` include the application code and the `pc` surf
 | Admin core | `sdkwork-<application-code>-pc-admin-core` | `backend-admin` runtime | backend SDK provider, admin permission/audit helpers, admin route guards, operator context | user login UI, app-api session creation, customer console workflows |
 | Admin shell | `sdkwork-<application-code>-pc-admin-shell` | `backend-admin` shell | internal management layout, admin menus, admin route composition | app user navigation, user console navigation, business data transport |
 | Admin capability | `sdkwork-<application-code>-pc-admin-<capability>` | `backend-admin` | internal staff operation pages, backend services, permissions, audit-facing workflows | app-api user workflows, user console workflows, raw HTTP bypasses |
-| Native host | `sdkwork-<application-code>-pc-desktop` | desktop and tablet native host | Tauri config, native commands, permissions, capabilities, icons, desktop bundles, iPadOS IPA workflow, Android tablet APK/AAB workflow | business authorization, app/domain services, generated SDK edits |
+| Tauri native host | `sdkwork-<application-code>-pc-tauri` | Tauri desktop and tablet native host | Tauri CLI and config, Rust shell commands, permissions, capabilities, icons, desktop bundles, iPadOS IPA workflow, Android tablet APK/AAB workflow | business authorization, app/domain services, generated SDK edits, another architecture's scaffold |
+| Electron native host | `sdkwork-<application-code>-pc-electron` | Electron desktop native host | Electron main/preload/shared source, electron-builder or Electron Forge config, icons, entitlements, signing references, asar policy, desktop bundles | business authorization, app/domain services, generated SDK edits, another architecture's scaffold |
+| Capacitor native host | `sdkwork-<application-code>-pc-capacitor` | Capacitor desktop native host | `capacitor.config.ts`, typed provider platform config, provider-scaffolded `electron/` scaffold, pinned Capacitor desktop platform provider reference, plugin allow-list, icons, signing references, desktop bundles | business authorization, app/domain services, generated SDK edits, another architecture's scaffold |
 
 Rules:
 
@@ -351,7 +358,9 @@ sdkwork-shop-pc-console-settings
 sdkwork-shop-pc-console-settlements
 sdkwork-shop-pc-admin-monitor
 sdkwork-shop-pc-admin-inventory
-sdkwork-shop-pc-desktop
+sdkwork-shop-pc-tauri
+sdkwork-shop-pc-electron
+sdkwork-shop-pc-capacitor
 ```
 
 ### 3.1 Forbidden Anti-Patterns
@@ -455,10 +464,10 @@ packages/sdkwork-<application-code>-pc-core/
     session/
 ```
 
-Native host package shape:
+Native host package shapes (one package per architecture):
 
 ```text
-packages/sdkwork-<application-code>-pc-desktop/
+packages/sdkwork-<application-code>-pc-tauri/
   package.json
   src/
     host/
@@ -476,7 +485,37 @@ packages/sdkwork-<application-code>-pc-desktop/
     gen/
       apple/
       android/
+
+packages/sdkwork-<application-code>-pc-electron/
+  package.json
+  src/
+    host/
+  electron-builder.yml
+  src-electron/
+    main/
+    preload/
+    shared/
+  resources/
+    icons/
+
+packages/sdkwork-<application-code>-pc-capacitor/
+  package.json
+  src/
+    host/
+  capacitor.config.ts
+  capacitor.electron.config.ts
+  electron/
+    package.json
+    electron-builder.config.js
+    src/
+      index.ts
+      plugins/
+        sdkwork-host.ts
+  resources/
+    icons/
 ```
+
+Host packages `MUST NOT` depend on another host package. Cross-architecture code sharing goes through shared packages such as `pc-core` and `pc-commons`, never through a host package.
 
 ## 6. Dependency Direction
 
@@ -488,7 +527,7 @@ pc-core, pc-commons
   -> pc-console-shell, pc-admin-shell
   -> app/console/admin capability packages
   -> root src composition
-  -> optional pc-desktop host
+  -> optional per-architecture host package (pc-tauri / pc-electron / pc-capacitor)
 ```
 
 Rules:
@@ -553,7 +592,7 @@ PC browser, desktop, and tablet native modes share the renderer.
 Rules:
 
 - `pnpm dev` should start the default PC browser renderer for the application root.
-- `pnpm dev:desktop` should start the default desktop host when `sdkwork-<application-code>-pc-desktop` exists.
+- `pnpm dev:desktop` should start the default desktop host when the Tauri host package `sdkwork-<application-code>-pc-tauri` exists.
 - `pnpm dev:tablet-ipados` should start the iOS/iPadOS Tauri development target when tablet packaging is enabled.
 - `pnpm dev:tablet-android` should start the Android tablet Tauri development target when tablet packaging is enabled.
 - Tauri `devUrl` `MUST` point to the renderer dev server, and `frontendDist` `MUST` point to the renderer build output.
@@ -612,8 +651,12 @@ Desktop-enabled roots should also provide:
 
 ```text
 pnpm dev:desktop
+pnpm dev:desktop:electron
+pnpm dev:desktop:capacitor
 pnpm build:desktop
 pnpm build:desktop:prod
+pnpm build:desktop:electron:prod
+pnpm build:desktop:capacitor:prod
 ```
 
 Tablet-enabled roots should also provide:
@@ -633,9 +676,11 @@ Package filters should be stable:
 pnpm --filter @sdkwork/<application-code>-pc-core typecheck
 pnpm --filter @sdkwork/<application-code>-pc-console-settings test
 pnpm --filter @sdkwork/<application-code>-pc-admin-monitor test
-pnpm --filter @sdkwork/<application-code>-pc-desktop build:desktop
-pnpm --filter @sdkwork/<application-code>-pc-desktop build:tablet-ipados
-pnpm --filter @sdkwork/<application-code>-pc-desktop build:tablet-android
+pnpm --filter @sdkwork/<application-code>-pc-tauri build:desktop
+pnpm --filter @sdkwork/<application-code>-pc-tauri build:tablet-ipados
+pnpm --filter @sdkwork/<application-code>-pc-tauri build:tablet-android
+pnpm --filter @sdkwork/<application-code>-pc-electron build:desktop:electron
+pnpm --filter @sdkwork/<application-code>-pc-capacitor build:desktop:capacitor
 ```
 
 Rules:
@@ -682,10 +727,11 @@ Required verification for PC application architecture changes:
 | SDK boundary | Static scan proves app/console use app SDKs, `backend-admin` packages use backend SDKs, protected open-api uses declared open-api credential provider, and no raw HTTP/manual auth headers were introduced. |
 | SDK export boundary | Static scan proves `pc-core` exports app SDK/appbase app SDK wrappers and no backend SDK wrappers, while backend SDK/appbase backend SDK wrappers are exported only from `pc-admin-core` or another `backend-admin` boundary. |
 | IAM boundary | Tests prove appbase IAM runtime, global TokenManager, logout clearing, session restore, and route guards behave across app, console, and admin surfaces. |
-| Config profile boundary | Static and runtime tests prove `development/test/staging/demo/production`, profile aliases, deployment profile, build mode, and runtime target are separated; browser, desktop, server, container, and Tauri platform config files do not leak into each other. |
+| Config profile boundary | Static and runtime tests prove `development/test/staging/demo/production`, profile aliases, deployment profile, build mode, and runtime target are separated; browser, desktop, server, container, and each host config family (Tauri, Electron, Capacitor) do not leak into each other. |
 | Environment file hygiene | Static scan proves checked-in files are safe examples only and ignored host-local files include `.env.local`, `.env.<profile>.local`, `.env.postgres`, `.env.release.local`, and `config/*.local.toml`. |
 | Root thinness | Static scan or code review proves root `src/` owns bootstrap/composition only, not business services or mock data. |
-| Desktop and tablet parity | When native targets exist, Tauri config, platform config files, host adapters, web fallback, renderer reuse, iPadOS packaging, and Android tablet packaging pass `DESKTOP_APP_ARCHITECTURE_SPEC.md`. |
+| Desktop and tablet parity | When native targets exist, each shipped host's config, platform config files, host adapter, web fallback, and renderer reuse pass `DESKTOP_APP_ARCHITECTURE_SPEC.md`; iPadOS and Android tablet packaging pass the Tauri-only tablet rules. |
+| Host package separation | Static scan proves each shipped desktop architecture has its own host package with its own adapter, config family, and native dependencies, and that no host package contains a second architecture's scaffold, dependencies, or config. |
 | Package build | Changed packages pass typecheck, tests, and build or smoke commands. |
 
 Acceptance checklist:
@@ -699,9 +745,10 @@ Acceptance checklist:
 - [ ] `pc-core` exports the application-owned app SDK and appbase app SDK wrappers needed by the frontend app, and does not export backend SDK wrappers.
 - [ ] Backend SDK and appbase backend SDK wrappers are available only from `pc-admin-core` or an equivalent `backend-admin` boundary.
 - [ ] Root `src/` remains thin.
-- [ ] Browser public runtime config, desktop user config, server config, container config, and Tauri platform config are separated and validated for dev/test/staging/prod.
+- [ ] Browser public runtime config, desktop user config, server config, container config, and each host config family (Tauri, Electron, Capacitor) are separated and validated for dev/test/staging/prod.
 - [ ] Test profile isolates database/schema, Redis key prefix, logs, cache, runtime, and temp directories.
 - [ ] Appbase IAM runtime and one global TokenManager are wired by bootstrap/core.
 - [ ] Desktop and tablet native modes, when present, reuse the PC renderer and keep native host code local-only.
-- [ ] iPadOS and Android tablet packaging rules are documented and verified when tablet native targets are enabled.
+- [ ] Each shipped desktop architecture has its own host package (`pc-tauri`, `pc-electron`, `pc-capacitor`) with its own adapter, config family, and native dependencies.
+- [ ] iPadOS and Android tablet packaging rules are documented and verified when tablet native targets are enabled, and tablet targets declare the Tauri architecture only.
 - [ ] Verification evidence is recorded in the application PR or change note.

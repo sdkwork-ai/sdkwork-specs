@@ -108,9 +108,9 @@ describe('check-pnpm-script-standard', () => {
       path.resolve(path.dirname(CHECKER), '..', 'PNPM_SCRIPT_SPEC.md'),
       'utf8',
     );
-    const block = spec.match(/Allowed command or namespace first segments:\s*```text\n([\s\S]*?)```/u);
+    const block = spec.match(/Allowed command or namespace first segments:\s*```text\r?\n([\s\S]*?)```/u);
     assert.ok(block, 'PNPM_SCRIPT_SPEC.md must list the allowed first segments in a text fence');
-    const specSegments = block[1].split('\n').map((entry) => entry.trim()).filter(Boolean);
+    const specSegments = block[1].split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
 
     // A name allowed by only the standard or only the checker is how a rule ends
     // up occupying the contract slot while enforcing something unauthorized, or
@@ -949,11 +949,11 @@ describe('check-pnpm-script-standard', () => {
     assert.notEqual(result.status, 0);
     assert.match(
       result.stderr,
-      /desktop:foo: use action-first runtime target script names such as foo:desktop/,
+      /desktop:foo: "foo" is not a desktop host family action/,
     );
     assert.match(
       result.stderr,
-      /desktop:dev:native-host: use action-first runtime target script names such as dev:desktop/,
+      /desktop:dev:native-host: "native-host" is not a desktop host family axis/,
     );
     assert.match(
       result.stderr,
@@ -1870,5 +1870,244 @@ describe('check-pnpm-script-standard', () => {
 
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /must be pinned to a workspace or release version/u);
+  });
+
+  it('keeps the release phase list identical to PNPM_SCRIPT_SPEC.md', async () => {
+    const { RELEASE_PHASES } = await import('./check-pnpm-script-standard.mjs');
+    const spec = readFileSync(
+      path.resolve(path.dirname(CHECKER), '..', 'PNPM_SCRIPT_SPEC.md'),
+      'utf8',
+    );
+    const block = spec.match(
+      /Release scripts `MUST` use lifecycle phases:\s*```text\r?\n([\s\S]*?)```/u,
+    );
+    assert.ok(block, 'PNPM_SCRIPT_SPEC.md must list release phases in a text fence');
+    const specPhases = block[1]
+      .split(/\r?\n/)
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .map((entry) => entry.replace(/^release:/u, ''));
+
+    // A phase that only one side knows about is either a gate nobody can
+    // satisfy or a command no gate reads. Commercial distribution added
+    // sign/notarize/submit, so the two lists have to move together.
+    assert.deepEqual(
+      [...RELEASE_PHASES].sort(),
+      specPhases.sort(),
+      'the checker and PNPM_SCRIPT_SPEC.md release phase lists must match',
+    );
+    for (const phase of ['sign', 'notarize', 'submit']) {
+      assert.ok(RELEASE_PHASES.has(phase), `${phase} must be a release phase`);
+    }
+  });
+
+  it('keeps the browser build environment aliases identical to PNPM_SCRIPT_SPEC.md', async () => {
+    const { BROWSER_BUILD_ENV_ALIASES } = await import('./check-pnpm-script-standard.mjs');
+    const spec = readFileSync(
+      path.resolve(path.dirname(CHECKER), '..', 'PNPM_SCRIPT_SPEC.md'),
+      'utf8',
+    );
+    const block = spec.match(
+      /Environment profile aliases accepted on browser build commands \(section 4\.2\):\s*```text\r?\n([\s\S]*?)```/u,
+    );
+    assert.ok(block, 'PNPM_SCRIPT_SPEC.md must list the browser build environment aliases in a text fence');
+    const specAliases = block[1].split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
+
+    assert.deepEqual(
+      [...BROWSER_BUILD_ENV_ALIASES],
+      specAliases,
+      'the checker and PNPM_SCRIPT_SPEC.md environment alias lists must match in content and order',
+    );
+    // §4.2 accepts demo for repositories that declare the tier, so the enum the
+    // checker mirrors must carry it too.
+    assert.ok(BROWSER_BUILD_ENV_ALIASES.has('demo'), 'demo is a declared lifecycle alias');
+  });
+
+  it('accepts mobile host family commands', () => {
+    const root = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'node scripts/sdkwork-command.mjs dev',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+        'mobile:dev': 'pnpm dev:capacitor-ios',
+        'mobile:dev:ios': 'pnpm dev:capacitor-ios',
+        'mobile:dev:android:standalone': 'pnpm dev:capacitor-android',
+        'mobile:build:ios:prod': 'pnpm build:capacitor-ios:prod',
+        'mobile:check:android': 'pnpm check:capacitor-config:android',
+        'mobile:release:android': 'pnpm release:package:capacitor-android:standalone',
+      },
+    });
+
+    const result = runChecker(root);
+
+    assert.equal(result.status, 0, result.stderr);
+  });
+
+  it('rejects nonstandard mobile host family actions and axes', () => {
+    const root = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'node scripts/sdkwork-command.mjs dev',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+        'mobile:deploy': 'pnpm dev:capacitor-ios',
+        'mobile:dev:sqlite': 'pnpm dev:capacitor-ios',
+      },
+    });
+
+    const result = runChecker(root);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /mobile:deploy: "deploy" is not a mobile host family action/,
+    );
+    // §4.1.2 keeps the database axis off the mobile family: a mobile host has no
+    // client-local SQLite profile, so this is an axis mistake, not a store.
+    assert.match(
+      result.stderr,
+      /mobile:dev:sqlite: "sqlite" is not a mobile host family axis/,
+    );
+  });
+
+  it('rejects axis-first tool namespace names while keeping their real actions', () => {
+    const rejected = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'node scripts/sdkwork-command.mjs dev',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+        'app-store:standalone:seed': 'node scripts/seed.mjs',
+        'nginx:cloud:plan': 'node scripts/plan.mjs',
+      },
+    });
+
+    const rejectedResult = runChecker(rejected);
+    assert.notEqual(rejectedResult.status, 0);
+    assert.match(
+      rejectedResult.stderr,
+      /app-store:standalone:seed: tool namespaces are action-first; "standalone" is a deployment profile/,
+    );
+    assert.match(
+      rejectedResult.stderr,
+      /nginx:cloud:plan: tool namespaces are action-first; "cloud" is a deployment profile/,
+    );
+
+    // §4.5 deliberately keeps quality tiers and environment aliases out of the
+    // forbidden set: these are real scripts whose action token collides with an
+    // axis vocabulary.
+    const accepted = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'node scripts/sdkwork-command.mjs dev',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+        'docs:dev': 'node scripts/docs.mjs dev',
+        'docs:check': 'node scripts/docs.mjs check',
+        'docs:debug': 'node scripts/docs.mjs debug',
+        'sbom:check': 'node scripts/sbom.mjs check',
+        'app-store:seed:check': 'node scripts/seed.mjs check',
+        'nginx:import:toml': 'node scripts/import.mjs toml',
+        'models:align:pricing': 'node scripts/models.mjs align pricing',
+        'skills:seed:mirror-cloudhub': 'node scripts/skills.mjs seed mirror',
+      },
+    });
+
+    const acceptedResult = runChecker(accepted);
+    assert.equal(acceptedResult.status, 0, acceptedResult.stderr);
+  });
+
+  it('rejects a release-lane helper that shadows a lifecycle phase', () => {
+    const root = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'node scripts/sdkwork-command.mjs dev',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+        'release:sign-installers': 'node scripts/sign-installers.mjs',
+        'release:package-sbom': 'node scripts/package-sbom.mjs',
+      },
+    });
+
+    const result = runChecker(root);
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /release:sign-installers: "sign-installers" starts with the lifecycle phase "sign" plus a modifier/,
+    );
+    assert.match(
+      result.stderr,
+      /release:package-sbom: "package-sbom" starts with the lifecycle phase "package" plus a modifier/,
+    );
+  });
+
+  it('accepts free-form release-lane helpers and the distribution phase grammar', () => {
+    const root = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'node scripts/sdkwork-command.mjs dev',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+        'release:assert-ready': 'node scripts/assert-ready.mjs',
+        'release:sbom-evidence': 'node scripts/sbom-evidence.mjs',
+        'release:sign:standalone': 'node scripts/sign.mjs',
+        'release:sign:cloud': 'node scripts/sign.mjs',
+        'release:notarize:desktop:runtime-configurable': 'node scripts/notarize.mjs',
+        'release:submit:ios:runtime-configurable': 'node scripts/submit.mjs',
+      },
+    });
+
+    const result = runChecker(root);
+
+    assert.equal(result.status, 0, result.stderr);
+  });
+
+  it('ignores generated native host projects while scanning package scripts', () => {
+    const root = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'node scripts/sdkwork-command.mjs dev',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+      },
+    });
+    // Upstream-tool output: the approved Capacitor Electron provider scaffolds
+    // this project and its script names are not SDKWork-authored, so holding the
+    // root accountable for them would be an unactionable finding.
+    for (const dir of ['electron', 'src-tauri', 'ios', 'android']) {
+      const target = path.join(root, dir);
+      mkdirSync(target, { recursive: true });
+      writeFileSync(
+        path.join(target, 'package.json'),
+        `${JSON.stringify({ name: `${dir}-generated`, scripts: { 'tauri:dev': 'tauri dev', 'docker:build': 'docker build .' } }, null, 2)}\n`,
+      );
+    }
+
+    const result = runChecker(root);
+
+    assert.equal(result.status, 0, result.stderr);
   });
 });

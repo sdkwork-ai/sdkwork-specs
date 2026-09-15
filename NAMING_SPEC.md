@@ -131,10 +131,11 @@ Rules:
 | PC app package | `sdkwork-<application-code>-pc-<capability>` | `sdkwork-shop-pc-merchandise` |
 | PC user console package | `sdkwork-<application-code>-pc-console-<capability>` | `sdkwork-shop-pc-console-order` |
 | PC internal admin package | `sdkwork-<application-code>-pc-admin-<capability>` | `sdkwork-shop-pc-admin-audit` |
+| PC desktop host package | `sdkwork-<application-code>-pc-<architecture>` | `sdkwork-shop-pc-tauri`, `sdkwork-shop-pc-electron`, `sdkwork-shop-pc-capacitor` |
 | H5 mobile app package | `sdkwork-<application-code>-h5-<capability>` | `sdkwork-shop-h5-order` |
 | H5 mobile user console package | `sdkwork-<application-code>-h5-console-<capability>` | `sdkwork-shop-h5-console-order` |
 | H5 mobile internal admin package | `sdkwork-<application-code>-h5-admin-<capability>` | `sdkwork-shop-h5-admin-audit` |
-| H5 mobile Capacitor host package | `sdkwork-<application-code>-h5-capacitor` | `sdkwork-shop-h5-capacitor` |
+| H5 mobile Capacitor host package (one package for every shipped mobile platform) | `sdkwork-<application-code>-h5-capacitor` | `sdkwork-shop-h5-capacitor` |
 | Flutter mobile Dart package | `sdkwork_<application_code>_flutter_mobile_<capability>` | `sdkwork_commerce_flutter_mobile_order` |
 | Flutter mobile user console Dart package | `sdkwork_<application_code>_flutter_mobile_console_<capability>` | `sdkwork_commerce_flutter_mobile_console_order` |
 | Flutter mobile internal admin Dart package | `sdkwork_<application_code>_flutter_mobile_admin_<capability>` | `sdkwork_commerce_flutter_mobile_admin_audit` |
@@ -500,7 +501,7 @@ Examples:
 | WeChat H5 mobile URL package | `h5-weixin-universal-cloud-mobile-web-url` | `sdkwork-drive-h5-weixin-universal-cloud-mobile-web-url` |
 | Phone Android app bundle | `android-arm64-standalone-mobile-aab` | `sdkwork-drive-android-arm64-standalone-mobile-aab` |
 | Phone iOS app archive | `ios-universal-standalone-mobile-ipa` | `sdkwork-drive-ios-universal-standalone-mobile-ipa` |
-| Phone Harmony app package | `harmony-arm64-standalone-mobile-other` | `sdkwork-drive-harmony-arm64-standalone-mobile-other` |
+| Phone Harmony app package | `harmony-arm64-standalone-mobile-hap` | `sdkwork-drive-harmony-arm64-standalone-mobile-hap` |
 | Tablet iPadOS app archive | `ipados-universal-standalone-tablet-ipa` | `sdkwork-drive-ipados-universal-standalone-tablet-ipa` |
 | Tablet Windows package | `windows-tablet-x64-standalone-tablet-msix` | `sdkwork-drive-windows-tablet-x64-standalone-tablet-msix` |
 | WeChat mini program package | `mp-weixin-universal-cloud-mini-program-mini-program-package` | `sdkwork-drive-mp-weixin-universal-cloud-mini-program-mini-program-package` |
@@ -511,11 +512,12 @@ Rules:
 
 - Client application root packages `MUST` include the architecture segment required by `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` and the matching root architecture standard.
 - PC packages use kebab-case names under `sdkwork-<application-code>-pc-*`, with `pc-console` reserved for user-facing console surfaces and `pc-admin` reserved for `backend-admin` company-internal admin surfaces.
+- PC desktop host packages `MUST` name the native architecture explicitly as `sdkwork-<application-code>-pc-<architecture>`, where `<architecture>` is `tauri`, `electron`, or `capacitor`. One host architecture `MUST` have exactly one host package. The retired `sdkwork-<application-code>-pc-desktop` name is a migration-only alias for the Tauri host package and `MUST NOT` be used for new packages or a second architecture.
 - Packages without `console` or `admin` are the default app/user-facing package family for the selected architecture.
 - Console packages insert the `console` role after the architecture segment and before the concrete capability. They are user-facing management console packages for customers, tenants, app owners, or app users managing their own resources, and they remain app-api/app SDK consumers unless a more specific approved contract says otherwise.
 - Admin packages insert the `admin` role after the architecture segment and before the concrete capability. They map to `backend-admin` company-internal admin surfaces for staff, operators, support, auditors, platform administrators, or trusted backend services acting for those workflows.
 - `backend-admin` is the canonical surface term for admin-only backend UI, backend SDK, and backend API consumption. `*-admin-*` client packages and standalone backend/admin packages map to `backend-admin`; `*-console-*`, default app packages, app auth runtime packages, and shared frontend core packages do not.
-- H5/Capacitor packages use kebab-case names under `sdkwork-<application-code>-h5-*`; user console packages use `sdkwork-<application-code>-h5-console-*`; internal admin packages use `sdkwork-<application-code>-h5-admin-*`; the Capacitor host package is exactly `sdkwork-<application-code>-h5-capacitor`.
+- H5/Capacitor packages use kebab-case names under `sdkwork-<application-code>-h5-*`; user console packages use `sdkwork-<application-code>-h5-console-*`; internal admin packages use `sdkwork-<application-code>-h5-admin-*`; the Capacitor host package is exactly `sdkwork-<application-code>-h5-capacitor`. It is exactly one package per H5 root and `MUST` serve every shipped mobile platform (iOS and Android) through per-platform subtrees and platform profiles. Platform-split hosts such as `sdkwork-<application-code>-h5-capacitor-ios` or `sdkwork-<application-code>-h5-capacitor-android` `MUST NOT` be introduced.
 - Flutter mobile packages use Dart lower snake case names under `sdkwork_<application_code>_flutter_mobile_*`; user console packages use `sdkwork_<application_code>_flutter_mobile_console_*`; internal admin packages use `sdkwork_<application_code>_flutter_mobile_admin_*`; do not publish Flutter app-root packages with hyphenated Dart package names.
 - Mini program source packages use kebab-case names under `sdkwork-<application-code>-mp-*`; user console packages use `sdkwork-<application-code>-mp-console-*`; internal admin packages use `sdkwork-<application-code>-mp-admin-*`; shared mini program packages use `sdkwork-<capability>-mini-program`; platform subpackages, pages, and platform config files must not replace SDKWork source package naming.
 - Android native packages use kebab-case names under `sdkwork-<application-code>-android-mobile-*`; user console packages use `sdkwork-<application-code>-android-mobile-console-*`; internal admin packages use `sdkwork-<application-code>-android-mobile-admin-*`; shared Android native packages use `sdkwork-<capability>-android-native`.

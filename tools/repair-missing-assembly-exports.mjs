@@ -21,9 +21,11 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { DEFAULT_WORKSPACE_ROOT, SPECS_ROOT } from "./lib/workspace-root.mjs";
+
 function parseArgs(argv) {
   const args = {
-    logs: "E:/sdkwork-space/sdkwork-specs/.wm-cargo-check",
+    logs: path.join(SPECS_ROOT, ".wm-cargo-check"),
     dryRun: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -143,7 +145,7 @@ let skipped = 0;
 
 for (const [key, names] of missing) {
   const [repo, crate] = key.split("|");
-  const repoDir = path.join("E:/sdkwork-space", repo);
+  const repoDir = path.join(DEFAULT_WORKSPACE_ROOT, repo);
   if (!fs.existsSync(repoDir)) {
     console.log(`[skip] ${repo}: ${crate} — repo not found`);
     continue;
@@ -170,7 +172,7 @@ for (const [key, names] of missing) {
     continue;
   }
   fixed += 1;
-  const rel = path.relative("E:/sdkwork-space", libPath).replace(/\\/g, "/");
+  const rel = path.relative(DEFAULT_WORKSPACE_ROOT, libPath).replace(/\\/g, "/");
   console.log(`[${args.dryRun ? "dry" : "fix"}] ${rel} += ${result.added.join(", ")}`);
 }
 

@@ -9,8 +9,9 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { DEFAULT_WORKSPACE_ROOT } from './lib/workspace-root.mjs';
 
-const WORKSPACE = process.argv[2] || 'E:/sdkwork-space';
+const WORKSPACE = process.argv[2] || DEFAULT_WORKSPACE_ROOT;
 const APPLY = process.env.WM_REPAIR_APPLY !== '0';
 
 function git(repo, args) {

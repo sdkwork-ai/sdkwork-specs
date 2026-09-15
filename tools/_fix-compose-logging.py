@@ -11,7 +11,9 @@ import re
 import subprocess
 import sys
 
-SPACE = 'E:/sdkwork-space'
+# Self-locating workspace root: <workspace-root>/sdkwork-specs/tools/<this file>.
+# Never bake in one machine's checkout path (`DEPENDENCY_MANAGEMENT_SPEC.md` §1).
+SPACE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).replace(os.sep, '/')
 MODS = ['agentstudio', 'aiot', 'audio', 'birdcoder', 'customerservice', 'deployments',
         'dezhou', 'drive', 'forum', 'games', 'kernel', 'knowledgebase', 'local-router',
         'prompts', 'rtc', 'tts']

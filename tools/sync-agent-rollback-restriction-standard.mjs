@@ -14,15 +14,16 @@
 // component entrypoints stay runnable.
 //
 // Usage:
-//   node sync-agent-rollback-restriction-standard.mjs --workspace E:/sdkwork-space --check
-//   node sync-agent-rollback-restriction-standard.mjs --workspace E:/sdkwork-space --apply
-//   node sync-agent-rollback-restriction-standard.mjs --root E:/sdkwork-space/sdkwork-order --apply
-//   node sync-agent-rollback-restriction-standard.mjs --workspace E:/sdkwork-space --recursive --check
+//   node sync-agent-rollback-restriction-standard.mjs --workspace <workspace-root> --check
+//   node sync-agent-rollback-restriction-standard.mjs --workspace <workspace-root> --apply
+//   node sync-agent-rollback-restriction-standard.mjs --root <workspace-root>/sdkwork-order --apply
+//   node sync-agent-rollback-restriction-standard.mjs --workspace <workspace-root> --recursive --check
 //
 // Exit codes: 0 = aligned, 1 = one or more AGENTS.md files are out of date.
 
 import { readdirSync, readFileSync, existsSync, writeFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
+import { DEFAULT_WORKSPACE_ROOT } from './lib/workspace-root.mjs';
 
 const args = process.argv.slice(2);
 const getArg = (name, fallback = null) => {
@@ -34,7 +35,7 @@ const getArg = (name, fallback = null) => {
   return next && !next.startsWith('--') ? next : fallback;
 };
 
-const WORKSPACE = getArg('workspace', 'E:/sdkwork-space');
+const WORKSPACE = getArg('workspace', DEFAULT_WORKSPACE_ROOT);
 const ROOT = getArg('root', null);
 const APPLY = args.includes('--apply');
 const CHECK = args.includes('--check');

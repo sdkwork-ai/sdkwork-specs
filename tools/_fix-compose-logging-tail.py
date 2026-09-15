@@ -4,13 +4,17 @@ Keys are order-independent in YAML, so placing the key immediately after the
 service header is safe and avoids block-boundary arithmetic. Processing runs
 bottom-up so insertions never shift the indices still to be handled.
 """
+import os
 import re
 import sys
 
+# Self-locating workspace root: <workspace-root>/sdkwork-specs/tools/<this file>.
+SPACE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).replace(os.sep, '/')
+
 FILES = [
-    '/mnt/e/sdkwork-space/sdkwork-birdcoder/deployments/docker/docker-compose.yml',
-    '/mnt/e/sdkwork-space/sdkwork-forum/deployments/docker/docker-compose.yml',
-    '/mnt/e/sdkwork-space/sdkwork-knowledgebase/docker-compose.yml',
+    f'{SPACE}/sdkwork-birdcoder/deployments/docker/docker-compose.yml',
+    f'{SPACE}/sdkwork-forum/deployments/docker/docker-compose.yml',
+    f'{SPACE}/sdkwork-knowledgebase/docker-compose.yml',
 ]
 
 
@@ -43,6 +47,6 @@ for path in FILES:
         out = out.replace('\n', '\r\n')
     with open(path, 'w', encoding='utf-8', newline='') as fh:
         fh.write(out)
-    print(f'{path.split("sdkwork-space/")[-1]}: added to {[a.strip() for a in added]}')
+    print(f'{os.path.relpath(path, SPACE).replace(os.sep, "/")}: added to {[a.strip() for a in added]}')
 
 sys.exit(0)

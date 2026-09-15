@@ -8,6 +8,7 @@
  *   2. The manifest must stay a valid registry: real tools, valid scopes, documented tiers,
  *      and a `check:`-prefixed id so the entries can be promoted into root scripts verbatim.
  */
+// WORKSPACE-PATH:allow-fixture: fixtures name a foreign checkout root, drive, or home directory to exercise path handling, so the literal is the value under assertion rather than a binding this build resolves
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -62,14 +63,16 @@ test('countItems takes the maximum reading rather than double counting', () => {
 });
 
 test('looksLikeCrash detects an unhandled exception dump', () => {
-  // Real capture: check-sdk-standard died on a missing build artifact and its stack trace was
-  // miscounted as 486 items, which would have been recorded as a debt baseline.
+  // Real capture, with the checkout path redacted: check-sdk-standard died on a missing build
+  // artifact and its stack trace was miscounted as 486 items, which would have been recorded as
+  // a debt baseline. `looksLikeCrash` keys on the version banner and the Node stack frame plus
+  // errno block, never on the path text, so redacting it keeps the fixture faithful.
   const realCrash = [
     'node:internal/modules/cjs/loader:1215',
     '  throw err;',
     '  ^',
     '',
-    "Error: ENOENT: no such file or directory, open 'E:\\\\sdkwork-space\\\\a\\\\lib\\\\types\\\\client\\\\platform.js'",
+    "Error: ENOENT: no such file or directory, open '<workspace>/a/lib/types/client/platform.js'",
     '    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)',
     '    at Module.load (node:internal/modules/cjs/loader:1207:32)',
     '  errno: -4058,',

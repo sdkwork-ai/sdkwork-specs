@@ -1,7 +1,7 @@
 # SDKWork pnpm Script Standard
 
-- Version: 1.0
-- Scope: public `package.json#scripts` command names for SDKWork application repositories, application roots, app surface roots, and TypeScript/JavaScript packages
+- Version: 1.1
+- Scope: public `package.json#scripts` command names for SDKWork application repositories, application roots, app surface roots, and TypeScript/JavaScript packages, plus the pnpm runtime and dependency-install policy those commands run under
 - Related: `README.md`, `SOUL.md`, `SDKWORK_WORKSPACE_SPEC.md`, `NAMING_SPEC.md`, `APPLICATION_GATEWAY_SPEC.md`, `APP_RUNTIME_TOPOLOGY_SPEC.md`, `APP_RUNTIME_TOPOLOGY_NAMING.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `DEPLOYMENT_SPEC.md`, `RELEASE_SPEC.md`, `APP_MANIFEST_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `SDKWORK_DEPLOY_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `TEST_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`
 
 This standard defines the public `pnpm` command surface for SDKWork. It prevents each application from inventing application-code-prefixed or locally ordered commands such as `drive:dev`, `cloudrouter:dev`, or `im:dev`.
@@ -243,6 +243,7 @@ When the capability exists, the repository root `MUST` expose the matching comma
 | Gateway operations | `gateway:run`, `gateway:plan`, `gateway:build`, `gateway:package`, `gateway:validate`, `gateway:matrix` |
 | Topology | `topology:validate`, `topology:plan` as applicable |
 | Supply-chain evidence | `sbom:generate`, `sbom:check` as applicable |
+| Commercial distribution | `release:sign`, `release:notarize`, `release:submit` as applicable |
 
 ## 4. Script Name Grammar
 
@@ -279,6 +280,7 @@ up
 down
 import
 desktop
+mobile
 db
 api
 sdk
@@ -322,8 +324,11 @@ Rules:
 - Runtime targets `MUST` be exposed through action-first scripts such as `dev:browser`,
   `dev:desktop`, `build:desktop`, `build:container`, `build:android-native`,
   `build:ios-native`, `dev:flutter-android`, and `release:package:mini-program`.
-  Desktop hosts additionally expose the `desktop:*` host family (section 4.1) as
-  equivalent aliases.
+  Desktop and mobile hosts additionally expose the `desktop:*` and `mobile:*`
+  host families (section 4.1) as equivalent aliases.
+- A host family is a top-level developer entry, not a second naming system. The
+  action-first runtime-target names remain canonical, and every family command
+  `MUST` resolve to exactly one of them.
 - Root `dev:browser` and `dev:desktop` are normalized development defaults.
   When present, each `MUST` resolve to `database = postgres`,
   `deploymentProfile = standalone`, and `environment = development`,
@@ -350,6 +355,11 @@ Rules:
   and `build:desktop:electron` (and optional `build:desktop:electron:prod`);
   these select the Electron host while keeping the same renderer dev server,
   profile defaults, and PostgreSQL database rules as the Tauri host.
+- Desktop hosts with Capacitor packaging `SHOULD` expose `dev:desktop:capacitor`
+  and `build:desktop:capacitor` (and optional
+  `build:desktop:capacitor:prod`); these select the Capacitor host while
+  keeping the same renderer dev server, profile defaults, and PostgreSQL
+  database rules as the Tauri host.
 - Client build commands are profile-neutral by default, such as
   `build:desktop`, `build:capacitor-ios`, `build:flutter-android`, and
   `build:ios-native`. A profile-specific client build is allowed only when
@@ -360,23 +370,61 @@ Rules:
   be public root, app surface, or package-local script names when they represent
   a runtime target or tool. The tool remains an internal runner detail behind the
   standard action-first script or the `desktop:*` host family.
-- `desktop:*` is the reserved desktop host-family prefix (section 4.1). It `MUST`
-  be followed by an allowed action and optional host/profile axes; other
-  `desktop:*` forms are rejected.
-- `tauri` and `electron` `MUST NOT` appear as public script runtime target
-  suffixes such as `dev:tauri` or `dev:electron`; use `dev:desktop`, `build:desktop`,
-  or `desktop:dev` instead. When a specific native host must be selected, use an
-  explicit host suffix such as `dev:desktop:electron`, `build:desktop:electron`,
-  or `desktop:dev:electron`; the default `dev:desktop` / `desktop:dev` remains
+- `desktop:*` is the reserved desktop host-family prefix (section 4.1.1). It
+  `MUST` be followed by an allowed action and optional host/profile axes; other
+  `desktop:*` forms are rejected. `mobile:*` is the parallel mobile host-family
+  prefix (section 4.1.2) with the same rule.
+- `tauri`, `electron`, and `capacitor` `MUST NOT` appear as public script
+  runtime target suffixes such as `dev:tauri`, `dev:electron`, or
+  `dev:capacitor`; use `dev:desktop`, `build:desktop`, or `desktop:dev` instead.
+  When a specific native host must be selected, use an explicit host suffix such
+  as `dev:desktop:electron`, `dev:desktop:capacitor`, `build:desktop:electron`,
+  or `desktop:dev:capacitor`; the default `dev:desktop` / `desktop:dev` remains
   the Tauri host.
 - Docker-compatible runtime artifacts `MUST` map to `runtimeTarget = container`,
   not to a public `docker:*` command family.
+- Tool namespaces (`nginx`, `docs`, `perf`, `migrate`, `models`, `downloads`,
+  `skills`, `app-store`, `workflow`, `schema-registry`, `topology`, `sbom`,
+  `admin`) are action-first. Their second segment `MUST NOT` be a deployment
+  profile, runtime target, database alias, environment alias, or quality tier,
+  because these namespaces select an operation rather than a runtime. Their
+  action vocabularies are normative in section 4.5.
+- `app-store:*` is the SDKWork application-store catalog namespace (catalog
+  seed, catalog update, catalog verification). It `MUST NOT` be used for
+  third-party store submission: shipping a signed artifact to the Apple App
+  Store, Google Play, Huawei AGC, or Microsoft Store is the release lifecycle's
+  `release:submit` phase (section 8).
+- Release and deploy second segments come in two accepted shapes. The
+  canonical shape is a lifecycle phase (`release:<phase>[:runtimeTarget]:
+  <deploymentProfile>`). The second is a free-form release-lane helper such as
+  `release:assert-ready`, `release:sbom-evidence`, or
+  `release:verify-packed-install`, which exists because a repository needs a
+  release-lane operation that is not one of the seven lifecycle phases.
+- A free-form release-lane helper `MUST NOT` begin with a lifecycle phase name
+  followed by `-`. Such a name is ambiguous to automation, which can no longer
+  tell the phase from the helper: use `release:sign:desktop`, not
+  `release:sign-installers`, and `release:package:sbom`, not
+  `release:package-sbom`.
 
-### 4.1 Desktop Host Family
+### 4.1 Host Families
+
+Two host families provide the top-level developer entry for native hosts:
+`desktop:*` for PC desktop roots (section 4.1.1) and `mobile:*` for mobile
+roots (section 4.1.2). Both are host-aware: the family selects the concrete
+host or platform through an explicit axis, and the omitted axis value is the
+owning root's declared default host for that class.
+
+A root `MUST NOT` expose a host family for a host class it does not own. A root
+that owns more than one host inside the same class `MUST` use the action-first
+runtime-target names (section 4) instead of that family, because a single
+omitted axis value can no longer identify the host.
+
+#### 4.1.1 Desktop Host Family
 
 PC desktop roots expose a `desktop:*` command family as the top-level developer
 entry for native desktop hosts. The family is host-aware: it defaults to the
-Tauri host and selects the Electron host with an explicit `electron` axis.
+Tauri host and selects the Electron or Capacitor host with an explicit
+`electron` or `capacitor` axis.
 
 Grammar:
 
@@ -387,17 +435,18 @@ desktop:<action>[:<host>][:<deploymentProfile>]
 Allowed actions: `dev`, `build`, `check`, `test`, `release`, `package`,
 `preview`, and `smoke`.
 
-Allowed host axes: `tauri` (default) and `electron`.
+Allowed host axes: `tauri` (default), `electron`, and `capacitor`.
 
 Allowed profile axes: `standalone` and `cloud` (plus `postgres`/`sqlite`
-database and `development`/`staging`/`prod`/`local` environment suffixes where
-the action accepts them).
+database and `development`/`test`/`staging`/`demo`/`prod`/`production`/`local`
+environment suffixes where the action accepts them).
 
 Examples:
 
 ```text
 pnpm desktop:dev                 # 默认宿主 tauri，等价 pnpm dev:desktop
 pnpm desktop:dev:electron        # Electron 宿主，等价 pnpm dev:desktop:electron
+pnpm desktop:dev:capacitor       # Capacitor 宿主，等价 pnpm dev:desktop:capacitor
 pnpm desktop:dev:standalone      # standalone profile（默认宿主 tauri）
 pnpm desktop:dev:cloud
 pnpm desktop:build               # 默认宿主 tauri，等价 pnpm build:desktop
@@ -413,12 +462,75 @@ Rules:
 - `desktop:dev` / `desktop:build` `MUST` resolve to the same defaults as
   `dev:desktop` / `build:desktop` (PostgreSQL, standalone, development) and are
   their equivalent aliases, not separate semantics.
-- `desktop:*` commands with no host axis use the Tauri host; the Electron host
-  is always explicit (`desktop:dev:electron`).
+- `desktop:*` commands with no host axis use the Tauri host; the Electron and
+  Capacitor hosts are always explicit (`desktop:dev:electron`,
+  `desktop:dev:capacitor`).
 - The `desktop:*` family applies to root, app-surface, and package-local scripts
   under the same constraints as `dev:desktop` / `build:desktop`.
 - `desktop:*` is a native-host family. It is not a web/browser alias; use
   `dev:browser` for browser development.
+
+#### 4.1.2 Mobile Host Family
+
+Mobile roots expose a `mobile:*` command family as the top-level developer
+entry for mobile hosts. The family is platform-aware and mirrors the desktop
+host family: it selects the platform with an explicit `ios`, `ipados`, or
+`android` axis, and omitting the axis selects the owning root's declared
+default platform.
+
+Grammar:
+
+```text
+mobile:<action>[:<platform>][:<deploymentProfile>]
+```
+
+Allowed actions: `dev`, `build`, `check`, `test`, `release`, `package`,
+`preview`, and `smoke`.
+
+Allowed platform axes: `ios`, `ipados`, and `android`.
+
+Allowed profile axes: `standalone` and `cloud` (plus
+`development`/`test`/`staging`/`demo`/`prod`/`production`/`local`
+environment suffixes where the action accepts them).
+
+Examples (H5 Capacitor root):
+
+```text
+pnpm mobile:dev                  # 默认平台的移动开发入口
+pnpm mobile:dev:ios              # 等价 pnpm dev:capacitor-ios
+pnpm mobile:dev:android          # 等价 pnpm dev:capacitor-android
+pnpm mobile:build:ios:prod       # 等价 pnpm build:capacitor-ios:prod
+pnpm mobile:check:android        # 等价 pnpm check:capacitor-config:android
+pnpm mobile:release:android
+```
+
+Rules:
+
+- A `mobile:*` command `MUST` resolve to the runtime target that the owning
+  root's mobile host profile declares for the selected platform. The mapping is
+  fixed by the host: an H5 Capacitor root maps `ios` to `capacitor-ios` and
+  `android` to `capacitor-android`; a Flutter root maps them to `flutter-ios`
+  and `flutter-android`; a native mobile root maps `android` to
+  `android-native` and `ios` to `ios-native`; a PC root's tablet targets map
+  `ipados` to `tablet-ipados` and `android` to `tablet-android`.
+- A root `MUST NOT` expose `mobile:*` when it owns more than one mobile host
+  (for example both a Capacitor and a Flutter mobile host). Such a root uses
+  action-first runtime-target names such as `dev:capacitor-ios` and
+  `build:flutter-android`, because the platform axis no longer identifies the
+  host.
+- `mobile:dev` and `mobile:build` `MUST` resolve to the same defaults as the
+  equivalent action-first command for their platform (`deploymentProfile =
+  standalone`, `environment = development`) and are equivalent aliases, not
+  separate semantics.
+- The action-first runtime-target names remain canonical: `dev:capacitor-ios`,
+  `build:capacitor-android`, `build:flutter-ios`, `build:android-native`,
+  `build:tablet-ipados`, and their siblings. The `mobile:*` family is a
+  top-level convenience entry, not a replacement, and a root `MAY` expose
+  either or both.
+- `mobile:*` is a native-host family. It is not a browser alias; use
+  `dev:browser` for browser development.
+- Store submission is not a `mobile:*` action. Shipping a signed mobile
+  artifact to a store lane belongs to the release lifecycle (section 8).
 
 ### 4.2 Browser Client Build Family (PC And H5)
 
@@ -663,6 +775,56 @@ Rules:
 - Bundle artifacts are immutable release outputs (`release:package:*` phase
   semantics); they `MUST NOT` rebuild a different image during deployment.
 
+### 4.5 Tool Namespace Contracts
+
+Section 4 lists tool namespaces in the allowed first-segment set. A name that
+passes the first-segment check is not automatically governed: unless the
+namespace carries a contract, `<namespace>:<any-suffix>` passes with no rule
+behind it. This section supplies that contract.
+
+Every tool namespace is action-first. The action vocabularies below are
+normative; adding an action requires updating this table in the same change.
+Reworded actions are not additions: prefer the existing action and put the
+discriminator in a trailing axis.
+
+| Namespace | Owning authority | Purpose | Recognized actions |
+| --- | --- | --- | --- |
+| `docs` | `DOCUMENTATION_SPEC.md` | Documentation site and API-reference generation and delivery | `dev`, `start`, `serve`, `preview`, `watch`, `build`, `generate`, `gen-files`, `catalog`, `api`, `check`, `verify`, `clear`, `deploy`, `install`, `debug`, `lunaria` |
+| `nginx` | `NGINX_SPEC.md` | nginx plan, render, config import, and operator deployment | `plan`, `render`, `import`, `normalize-toml`, `validate`, `deploy` |
+| `perf` | the owning repository's performance workflow | Performance baselines, benchmarks, and capacity evidence | `baseline`, `benchmark`, `report`, `compare`, `check` |
+| `models` | the model catalog authority | Model catalog synchronization, validation, and evidence | `sync`, `check`, `validate`, `audit`, `diff`, `align`, `seed`, `evidence`, `freshness`, `migrate` |
+| `downloads` | the download catalog authority | Download catalog refresh and verification | `check`, `update`, `seed` |
+| `skills` | the skills catalog authority | Skills catalog seeding and mirroring | `seed`, `check`, `update` |
+| `app-store` | the application-store catalog authority | SDKWork application-store catalog seeding and update | `seed`, `update`, `update-create`, `check` |
+| `workflow` | `GITHUB_WORKFLOW_SPEC.md` | Workflow matrix, client-surface materialization, host binding | `matrix`, `hosts`, `build-agents-app-sdk`, `build-client-surfaces`, `align-client-composition`, `materialize-client-env`, `materialize-client-surfaces` |
+| `migrate` | `MIGRATION_SPEC.md` | Repository-local data or fixture migration helpers | repository-declared verb |
+| `schema-registry` | `SCHEMA_REGISTRY_SPEC.md` | Table, frontend, and API registry composition and verification | `compose`, `validate`, `check`, `render` |
+| `topology` | `APP_RUNTIME_TOPOLOGY_SPEC.md` | Topology validation and resolved runtime plans | `validate`, `plan` |
+| `sbom` | `SUPPLY_CHAIN_SECURITY_SPEC.md` | SBOM generation and verification | `generate`, `check` |
+| `admin` | `IAM_APPLICATION_BOOTSTRAP_SPEC.md` | IAM application bootstrap and inspection | `bootstrap`, `check` |
+
+Rules:
+
+- The second segment of a tool-namespace script `MUST NOT` be a deployment
+  profile (`standalone`, `cloud`), a runtime target (`browser`, `desktop`,
+  `server`, `container`, ...), a database alias (`postgres`, `sqlite`), an
+  environment alias (`development`, `test`, `staging`, `demo`, `production`,
+  `prod`, `local`), or a quality tier. These namespaces select an operation,
+  not a runtime. A name such as `app-store:standalone:seed` or
+  `nginx:cloud:plan` is rejected.
+- Trailing segments after the action carry the discriminator, such as
+  `nginx:import:toml`, `models:align:pricing`, or
+  `skills:seed:mirror-cloudhub`. A trailing segment `MAY` be a repository-local
+  opaque token; it `MUST NOT` be a runtime axis.
+- A tool-namespace action token `MUST NOT` encode process history. A step
+  number, sprint number, or task id in the script name makes the name expire and
+  forces the next reader to archaeology: use a stable action plus a suite id
+  (`perf:baseline:video-cut-capacity`), not `perf:materialize-step-11-...`.
+- A tool namespace owns exactly the capability its owning authority declares.
+  `MUST` not be used as a general-purpose escape hatch: a repository that needs
+  a durable, reusable action outside the table adds a namespace through this
+  standard rather than inventing a private one.
+
 ## 5. Axis Values
 
 Script suffixes use canonical values from `APP_RUNTIME_TOPOLOGY_NAMING.md`, `CONFIG_SPEC.md`, and `ENVIRONMENT_SPEC.md`.
@@ -732,7 +894,24 @@ Environment profile aliases accepted on browser build commands (section 4.2):
 dev
 test
 staging
+demo
 prod
+```
+
+Mobile host family platform axes (host family only; section 4.1.2):
+
+```text
+ios
+ipados
+android
+```
+
+Build variant tokens accepted after a runtime target on
+`build:<runtimeTarget>:<variant>`:
+
+```text
+debug
+release
 ```
 
 Rules:
@@ -745,8 +924,9 @@ Rules:
 - Public script names and command values `MUST NOT` include internal process
   layout values. Process decomposition is selected by the active topology
   profile and deployment manifests behind `standalone` or `cloud`.
-- `web`, `mobile`, `native`, and `docker` `MUST NOT` be used as deployment profile or runtime-target aliases.
-- `dev`, `test`, `staging`, and `prod` may appear only as script/file profile aliases. Runtime config must normalize them to `development`, `test`, `staging`, and `production`.
+- `web`, `mobile`, `native`, and `docker` `MUST NOT` be used as deployment profile or runtime-target aliases. `mobile` remains valid as the section 4.1.2 host-family prefix and is not a runtime target.
+- `dev`, `test`, `staging`, `demo`, and `prod` may appear only as script/file profile aliases. Runtime config must normalize them to `development`, `test`, `staging`, `demo`, and `production`. `demo` is normalized to the `demo` lifecycle tier and is valid only for repositories that declare it (`ENVIRONMENT_SPEC.md`, section 4.2).
+- On `build:<runtimeTarget>:<variant>`, `debug` and `release` select the build variant of that runtime target's artifact (for example `build:desktop:debug`). The token `release` here is a build variant, not the `release:*` lifecycle namespace, and it `MUST NOT` appear as a phase or profile on a `release:*` script.
 
 ## 6. Forbidden Application-Code Prefixes
 
@@ -782,6 +962,8 @@ Migration examples:
 | `dev:tauri` | `dev:desktop` |
 | `electron:dev` | `dev:desktop:electron` |
 | `dev:electron` | `dev:desktop:electron` |
+| `capacitor:dev` | `dev:desktop:capacitor` |
+| `dev:capacitor` | `dev:desktop:capacitor` |
 | `docker:build` | `build:container` |
 | `android:build` | `build:android-native` |
 | `ios:build` | `build:ios-native` |
@@ -868,11 +1050,23 @@ release:plan
 release:build
 release:stage
 release:package
-release:package:check
+release:sign
+release:notarize
 release:validate
 release:publish
+release:submit
 release:preflight
 ```
+
+Phase order is the order above: an artifact is planned, built, staged,
+packaged, signed, notarized, validated, published to its distribution channel,
+and submitted to a store lane. `release:preflight` may run before any of them.
+
+The list is the normative phase-token set and is mirrored verbatim by
+`tools/check-pnpm-script-standard.mjs`. `release:package` additionally accepts a
+`:check` detail segment (`release:package:check`) for the dry-run verification of
+the packaging step; it is the only phase-detail form the lifecycle defines, and
+every other phase takes a runtime target or deployment profile in that position.
 
 Profile-aware release scripts use:
 
@@ -923,6 +1117,58 @@ Rules:
   must not infer a target from `runtime.defaultDeploymentProfile`.
 - `release:<deploymentProfile>:<phase>` is forbidden. Lifecycle phase always
   precedes runtime target and deployment profile.
+
+Commercial distribution phases:
+
+```text
+release:sign
+release:notarize
+release:submit
+```
+
+They follow the same grammar as every other release phase:
+`release:<phase>[:runtimeTarget]:<deploymentProfile>`, or
+`release:<phase>:<runtimeTarget>:runtime-configurable` for a client artifact
+that supports both profiles.
+
+Examples:
+
+```text
+release:sign:standalone
+release:sign:desktop:runtime-configurable
+release:notarize:desktop:runtime-configurable
+release:sign:capacitor-ios:standalone
+release:submit:ios:runtime-configurable
+release:submit:android:standalone
+```
+
+Rules:
+
+- `release:sign` produces and attaches the signature evidence for an already
+  packaged immutable artifact. It `MUST NOT` rebuild, patch, or re-package the
+  artifact it signs. Signing key custody, decoded-material handling, and
+  signature verification instructions follow `SUPPLY_CHAIN_SECURITY_SPEC.md`
+  §5.
+- `release:notarize` produces the platform notarization or equivalent
+  OS-approval evidence for the artifact a `release:sign` phase produced. A
+  platform that has no notarization step `MUST NOT` expose this phase.
+- `release:submit` submits a signed, validated artifact to a distribution
+  store lane (Apple App Store, Google Play, Huawei AGC, Microsoft Store, or a
+  private enterprise track). It is the only phase that talks to a store. It
+  `MUST` consume an already validated artifact identity and `MUST NOT`
+  rebuild one.
+- The store lane, track, and rollout percentage are deployment inputs, not
+  script-name segments: select them with explicit flags such as
+  `--store <lane>` and `--track <name>`, or through the application's declared
+  store configuration. The canonical command order is unchanged. A
+  `release:submit:app-store` style lane-in-the-name form is forbidden, because
+  `app-store` is the application-store catalog namespace (section 4).
+- `release:sign`, `release:notarize`, and `release:submit` are the release
+  lifecycle's distribution phases. A root that does not ship a distributable
+  artifact `MUST NOT` expose them.
+- Per-runtime-target evidence obligations for these phases follow
+  `SUPPLY_CHAIN_SECURITY_SPEC.md` §5.1 and the artifact formats and package ids
+  follow `GITHUB_WORKFLOW_SPEC.md` §5. Neither list is restated here.
 
 Deploy scripts `MUST` use:
 
@@ -1025,6 +1271,24 @@ pnpm script validation `MUST` check:
   `development` defaults, and fail when they resolve to SQLite, cloud, retired
   process-layout flags, or retired `--hosting` flags.
 
+- Host family commands use only their section 4.1 actions and axes:
+  `desktop:*` accepts the desktop host axes and `mobile:*` accepts the mobile
+  platform axes. A root that owns more than one host inside a class does not
+  expose that class's family.
+- A tool-namespace script's second segment is not an axis value (deployment
+  profile, runtime target, database alias, environment alias, or quality tier),
+  per section 4.5.
+- A free-form release-lane helper does not begin with a lifecycle phase name
+  followed by `-`, which would make the phase unreadable to automation.
+- Commercial distribution phases (`release:sign`, `release:notarize`,
+  `release:submit`) follow the release grammar and appear only where the root
+  ships a distributable artifact.
+- Generated native host projects (`src-tauri/`, `electron/`, `ios/`,
+  `android/`, `CapacitorApp/`, `Pods/`, `.gradle/`, `DerivedData/`) are
+  upstream-tool output, not SDKWork-authored scripts, and are out of scope for
+  script-name validation. Hand-written wrappers around them stay in scope at
+  their owning root.
+
 Validation SHOULD provide a migration suggestion for every rejected script name.
 
 ## 11. Clean Command Boundary
@@ -1050,7 +1314,57 @@ Rules:
 - When `clean` deletes a directory, it `MUST NOT` use patterns that could match a `build/` directory containing git-tracked source files.
 - Build runners invoked after `clean` `MUST` be able to recover without manual intervention through the self-healing pattern in `CODE_STYLE_SPEC.md` §7.3.
 
-## 12. Acceptance Checklist
+## 12. pnpm Runtime And Dependency Policy
+
+Command names are only half of a reproducible install. This section fixes the
+pnpm runtime and dependency-install policy that makes the command surface behave
+the same on a fresh machine, in CI, and in a release job.
+
+Rules:
+
+- The repository root `package.json` `MUST` declare `packageManager` with an
+  exact pnpm version (`pnpm@<major>.<minor>.<patch>`), and the workspace `MUST`
+  be usable through Corepack so the declared version is the version that runs.
+  `pnpm@latest`, a floating range, and an undeclared machine-global pnpm are
+  forbidden: a build whose package manager is whatever the machine happens to
+  have installed is not reproducible.
+- The lockfile (`pnpm-lock.yaml`) `MUST` be committed and `MUST` be the only
+  dependency-resolution authority. A dependency change `MUST` land with its
+  lockfile update in the same commit.
+- CI and release jobs `MUST` install with a frozen lockfile
+  (`pnpm install --frozen-lockfile`), so a drifted lockfile fails the job
+  instead of silently resolving different versions. A release artifact's
+  dependency set `MUST NOT` come from an unfrozen local install.
+- The root `pnpm-workspace.yaml` `MUST` declare the workspace package globs,
+  and `MUST` declare `onlyBuiltDependencies` when any dependency ships a native
+  build or postinstall step. Dependency build scripts `MUST` be approved
+  explicitly, by name, rather than by disabling the approval mechanism: pnpm
+  blocks unreviewed dependency build scripts by default, and a blanket bypass
+  turns a supply-chain control into a formality
+  (`SUPPLY_CHAIN_SECURITY_SPEC.md` §2).
+- `ignore-scripts` `MUST NOT` be set globally as a shortcut. When scripts are
+  disabled, the dependencies that genuinely need their build step `MUST` be
+  listed and built through an explicit, reviewed path.
+- Registry selection `MUST` come from repository `.npmrc` or the shared
+  workspace configuration, never from a developer's machine-global config. A
+  repository `.npmrc` `MUST NOT` contain credentials; tokens belong to the
+  environment (`SUPPLY_CHAIN_SECURITY_SPEC.md` §5).
+- The runtime Node.js version `MUST` be declared in the repository root
+  `engines` field and `MUST` match the version the CI and release workflows
+  use. Pinning pnpm but not Node is not reproducible either.
+- Local dependencies `MUST` use the workspace protocol (`workspace:*`) rather
+  than a relative file path or a registry version of a sibling repository
+  (`PNPM_WORKSPACE_DEPENDENCY_SPEC.md`).
+
+Validation:
+
+- These rules are audited across the workspace. Per-repository enforcement is a
+  declared follow-up rather than a same-day gate, so that no repository is
+  blocked by a policy whose own fleet baseline has not been aligned yet. The
+  audit result and the roll-out order are recorded with the design note under
+  `docs/architecture/tech/`.
+
+## 13. Acceptance Checklist
 
 - [ ] Repository root exposes `dev`, `dev:standalone`, `dev:cloud`, `build`, `test`, `check`, `verify`, and `clean`.
 - [ ] Each public lifecycle verb that delegates to `pnpm exec sdkwork-app` has its matching `_sdkwork:<verb>` hook, and no `_sdkwork:<verb>` hook exists without the public verb that selects it.
@@ -1077,4 +1391,19 @@ Rules:
       delegation, including `api:assembly:*`.
 - [ ] App surface/package scripts remain package-local and do not become a second root automation standard.
 - [ ] `pnpm clean` does not delete git-tracked build-critical source files (see `CODE_STYLE_SPEC.md` §7).
+- [ ] Host families are used only for host classes the root owns: `desktop:*`
+      uses only section 4.1.1 actions and host axes, `mobile:*` uses only
+      section 4.1.2 actions and platform axes, and a root owning more than one
+      host in a class uses action-first runtime-target names instead.
+- [ ] Tool namespaces follow section 4.5: the second segment is an action, not a
+      deployment profile, runtime target, database alias, environment alias, or
+      quality tier.
+- [ ] A free-form release-lane helper does not begin with a lifecycle phase name
+      followed by `-`.
+- [ ] Commercial distribution phases (`release:sign`, `release:notarize`,
+      `release:submit`) select their store lane and track through flags or
+      declared store configuration, not through script-name segments.
+- [ ] The repository pins pnpm through `packageManager`, commits its lockfile,
+      installs with `--frozen-lockfile` in CI, and declares
+      `onlyBuiltDependencies` for dependencies that require a build step.
 - [ ] `README.md`, related architecture specs, and `TEST_SPEC.md` reference this standard.

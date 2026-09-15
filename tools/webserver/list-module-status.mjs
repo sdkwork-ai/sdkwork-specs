@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import { DEFAULT_WORKSPACE_ROOT } from '../lib/workspace-root.mjs';
 
-const workspace = path.resolve(process.argv[2] ?? 'E:/sdkwork-space');
+const workspace = path.resolve(process.argv[2] ?? DEFAULT_WORKSPACE_ROOT);
 const names = fs.readdirSync(workspace).filter((n) => n.startsWith('sdkwork-')).sort();
 
 for (const name of names) {

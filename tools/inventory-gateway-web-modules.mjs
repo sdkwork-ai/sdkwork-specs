@@ -5,8 +5,9 @@
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { DEFAULT_WORKSPACE_ROOT } from './lib/workspace-root.mjs';
 
-const WORKSPACE = 'E:/sdkwork-space';
+const WORKSPACE = DEFAULT_WORKSPACE_ROOT;
 
 function findRepo(code) {
   const direct = path.join(WORKSPACE, code);

@@ -32,6 +32,7 @@
     "check:script-placement": "node tools/check-script-placement.mjs --workspace ..",
     "check:deploy-standard": "node tools/check-deploy-standard.mjs --workspace ..",
     "test:shell-portability": "node --test tools/check-shell-portability.test.mjs",
+    "test:workspace-path-portability": "node --test tools/check-workspace-path-portability.test.mjs",
     "test:deploy-layout": "node --test tools/upsert-layout-section.test.mjs tools/render-deploy-yaml.test.mjs",
     "release:sdk:publish": "node tools/publish-sdk.mjs --workspace ..",
     "release:sdk:publish:dry-run": "node tools/publish-sdk.mjs --workspace .. --dry-run",

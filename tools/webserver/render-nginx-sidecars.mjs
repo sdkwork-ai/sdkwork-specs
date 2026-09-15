@@ -17,6 +17,7 @@ import {
 import { applyAdaptiveWebFolding } from './adaptive-web.mjs';
 import { parseTomlSubset } from './toml.mjs';
 import { renderNginxConf, validateWebserverDir } from './validate.mjs';
+import { DEFAULT_WORKSPACE_ROOT } from '../lib/workspace-root.mjs';
 
 const LEGACY_SIDECAR_PATTERN = /^nginx\.(standalone|cloud)(\..*)?\.conf$/u;
 
@@ -141,7 +142,7 @@ function parseCli(argv) {
   return {
     workspace: path.resolve(
       workspaceFlag?.slice('--workspace='.length)
-      ?? (argv[2] && !argv[2].startsWith('-') ? argv[2] : 'E:/sdkwork-space'),
+      ?? (argv[2] && !argv[2].startsWith('-') ? argv[2] : DEFAULT_WORKSPACE_ROOT),
     ),
     module: moduleFlag?.slice('--module='.length) ?? null,
     validate: argv.includes('--validate'),

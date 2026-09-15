@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-# Compiles every SDKWork application repository under /mnt/e/sdkwork-space that
+# Compiles every SDKWork application repository under <workspace-root> that
 # carries a Cargo workspace, recording per-repo pass/fail into a summary file.
 set -u
 
-ROOT=/mnt/e/sdkwork-space
-OUT=/mnt/e/sdkwork-space/sdkwork-specs/.wm-cargo-check.log
+# Self-locating: this script lives in <workspace-root>/sdkwork-specs/tools, so the
+# workspace root is two levels up. Never bake in an absolute checkout path
+# (`DEPENDENCY_MANAGEMENT_SPEC.md` section 1).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd -P)"
+OUT="${ROOT}/sdkwork-specs/.wm-cargo-check.log"
 : > "$OUT"
 
 for repo in $(ls -1 "$ROOT"); do

@@ -3,10 +3,10 @@
 - Date: 2026-06-29
 - Scope: Workspace-wide read-only baseline for Phase A kickoff
 - Commands:
-  - `rg --files -g "**/dependency.composition.json" "E:/sdkwork-space" | Measure-Object`
-  - `rg --files -g "**/apps/**/pnpm-workspace.yaml" "E:/sdkwork-space" | Measure-Object`
-  - `rg -l "dependencyComposition" -g "**/component.spec.json" "E:/sdkwork-space" | Measure-Object`
-  - `rg -l "dependency\.composition\.json" -g "**/*.{ts,tsx,dart,mjs}" "E:/sdkwork-space" | Measure-Object`
+  - `rg --files -g "**/dependency.composition.json" "<workspace-root>" | Measure-Object`
+  - `rg --files -g "**/apps/**/pnpm-workspace.yaml" "<workspace-root>" | Measure-Object`
+  - `rg -l "dependencyComposition" -g "**/component.spec.json" "<workspace-root>" | Measure-Object`
+  - `rg -l "dependency\.composition\.json" -g "**/*.{ts,tsx,dart,mjs}" "<workspace-root>" | Measure-Object`
 
 ## Baseline Counts
 

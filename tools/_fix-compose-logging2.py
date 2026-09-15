@@ -4,13 +4,17 @@ The services region is the span from `services:` to the next top-level key
 (`volumes:` / `networks:` / `secrets:` / `configs:` or end of file), so volume
 and network entries can never be mistaken for services.
 """
+import os
 import re
 import sys
 
+# Self-locating workspace root: <workspace-root>/sdkwork-specs/tools/<this file>.
+SPACE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).replace(os.sep, '/')
+
 FILES = [
-    '/mnt/e/sdkwork-space/sdkwork-birdcoder/deployments/docker/docker-compose.yml',
-    '/mnt/e/sdkwork-space/sdkwork-forum/deployments/docker/docker-compose.yml',
-    '/mnt/e/sdkwork-space/sdkwork-knowledgebase/docker-compose.yml',
+    f'{SPACE}/sdkwork-birdcoder/deployments/docker/docker-compose.yml',
+    f'{SPACE}/sdkwork-forum/deployments/docker/docker-compose.yml',
+    f'{SPACE}/sdkwork-knowledgebase/docker-compose.yml',
 ]
 
 ANCHOR = [
@@ -67,6 +71,6 @@ for path in FILES:
         out = out.replace('\n', '\r\n')
     with open(path, 'w', encoding='utf-8', newline='') as fh:
         fh.write(out)
-    print(f'{path.split("sdkwork-space/")[-1]}: services={len(headers)} added={added} anchor={"keep" if has_anchor else "inserted"}')
+    print(f'{os.path.relpath(path, SPACE).replace(os.sep, "/")}: services={len(headers)} added={added} anchor={"keep" if has_anchor else "inserted"}')
 
 sys.exit(0)

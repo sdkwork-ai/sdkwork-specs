@@ -7,8 +7,11 @@ import { parseArgs } from 'node:util';
 
 const REQUIRED_SCRIPTS = ['dev', 'stop', 'build', 'test', 'check', 'verify', 'clean'];
 const DELEGATED_REQUIRED_SCRIPTS = ['dev', 'stop'];
+// Mirrors PNPM_SCRIPT_SPEC.md section 8. Kept identical to
+// check-pnpm-script-standard.mjs and align-app-release-deploy-facade.mjs so the
+// three tools cannot drift into disagreeing about what a release phase is.
 const RELEASE_PHASES = new Set([
-  'preflight', 'plan', 'build', 'stage', 'package', 'validate', 'publish',
+  'preflight', 'plan', 'build', 'stage', 'package', 'sign', 'notarize', 'validate', 'publish', 'submit',
 ]);
 const IGNORED_DIRECTORIES = new Set([
   '.git', '.pnpm-store', '.runtime', 'node_modules', 'target', 'dist', 'build',

@@ -3,9 +3,14 @@
 // installs dependency-owned `WebModule`s instead of raw contributions.
 
 import { readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 
-const FILE =
-  'E:/sdkwork-space/sdkwork-api-cloud-gateway/crates/sdkwork-api-cloud-gateway/src/embedded_dependency_routes.rs';
+import { DEFAULT_WORKSPACE_ROOT } from './lib/workspace-root.mjs';
+
+const FILE = path.join(
+  DEFAULT_WORKSPACE_ROOT,
+  'sdkwork-api-cloud-gateway/crates/sdkwork-api-cloud-gateway/src/embedded_dependency_routes.rs',
+);
 
 let source = readFileSync(FILE, 'utf8');
 

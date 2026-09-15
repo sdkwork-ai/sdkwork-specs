@@ -15,8 +15,8 @@
  * warning per member, so a root-only pass makes the fleet strictly worse.
  *
  * Usage:
- *   node tools/align-rust-manifest-baseline.mjs --workspace E:/sdkwork-space [--dry-run] [--json]
- *   node tools/align-rust-manifest-baseline.mjs --root E:/sdkwork-space/sdkwork-order [--dry-run]
+ *   node tools/align-rust-manifest-baseline.mjs --workspace <workspace-root> [--dry-run] [--json]
+ *   node tools/align-rust-manifest-baseline.mjs --root <workspace-root>/sdkwork-order [--dry-run]
  *
  * --dry-run reports the planned edits and writes nothing.
  */

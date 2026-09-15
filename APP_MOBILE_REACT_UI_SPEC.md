@@ -54,7 +54,7 @@ Rules:
 | mobile foundation | `sdkwork-<application-code>-h5-commons` or `sdkwork-<foundation>-mobile-react` | appbase, client navigation, command palette, search, workspace primitives for mobile | business-domain shortcuts |
 | mobile domain package | `sdkwork-<application-code>-h5-<capability>` or `sdkwork-<capability>-mobile-react` | screens, components, hooks, services, i18n, navigation metadata | concrete SDK construction, backend admin logic |
 | mobile user console package | `sdkwork-<application-code>-h5-console-<capability>` | user-facing management console screens, components, hooks, services, i18n, navigation metadata | company-internal admin workflows, backend-only operation center behavior |
-| host adapter package | `sdkwork-<application-code>-h5-capacitor` or `sdkwork-<host>-mobile-react` when needed | native bridge abstraction and permissions | API business logic |
+| host adapter package | `sdkwork-<application-code>-h5-capacitor` or `sdkwork-<host>-mobile-react` when needed | native bridge abstraction, per-platform adapter and plugin implementations inside the one package, and permissions | API business logic, platform-split host packages |
 
 Rules:
 

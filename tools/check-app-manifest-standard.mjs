@@ -23,8 +23,8 @@ const RUNTIME_FAMILIES = new Set([
   'web', 'mobile', 'desktop', 'server', 'cli', 'mini-program', 'library', 'plugin',
 ]);
 const PACKAGE_FORMATS = new Set([
-  'SOURCE_CODE', 'JAR', 'WAR', 'ZIP', 'TAR_GZ', 'APK', 'AAB', 'IPA', 'EXE',
-  'MSI', 'DMG', 'APPIMAGE', 'DEB', 'RPM', 'DOCKER_IMAGE',
+  'SOURCE_CODE', 'JAR', 'WAR', 'ZIP', 'TAR_GZ', 'APK', 'AAB', 'IPA', 'HAP',
+  'HARMONY_APP', 'EXE', 'MSI', 'DMG', 'APPIMAGE', 'DEB', 'RPM', 'DOCKER_IMAGE',
   'MINI_PROGRAM_PACKAGE', 'OTHER',
 ]);
 const PLATFORM_VALUES = new Set([
