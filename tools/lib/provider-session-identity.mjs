@@ -8,6 +8,13 @@ const SKIP_DIRECTORIES = new Set([
   '.runtime',
   '.sdkwork',
   '.tmp',
+  // Agent scratch, the same class the portability and shell-portability gates
+  // already exclude. It has to be listed here separately: this walker keeps its
+  // own set, and without it an agent's own gate-health report — which by
+  // construction quotes the very terminology this check forbids — is reported as
+  // a product violation and pushes the repository over its registered baseline.
+  '.workbuddy',
+  '__pycache__',
   'artifacts',
   'build',
   'coverage',
