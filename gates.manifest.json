@@ -207,6 +207,18 @@
       "note": "REPOSITORY_BASELINE_SPEC.md section 2: a root .gitignore must not ignore directories the standards designate as authored content. The rule protects `bin/` (MODULE_BIN_SPEC.md section 2 makes it the module's only authored-script channel and defines no ignore provision) and `sdks/**/generated/` (SDK_WORKSPACE_GENERATION_SPEC.md regulates committed generated output). Measured 2026-09-11 before the aligner ran: 77 of 100 governed repositories ignored canonical content (75 the root `bin/` directory as `/bin/` or `/bin/*`, 9 `sdks/**/generated/`). 73 of those repositories shipped the nine canonical bin/ entrypoint scripts on disk and 69 of them were entirely untracked -- the standard's mandated entrypoints could not be committed while every other gate stayed green, because no gate reads the ignore file and `git status` looks clean. The `align:gitignore-standard` fixer removed 84 over-reaching entries from 77 files; the fleet is now 100/100 and the baseline is therefore 0."
     },
     {
+      "id": "check:client-host-packages",
+      "tool": "check-client-host-packages.mjs",
+      "scope": "repo",
+      "argv": [
+        "--root",
+        "{repo}"
+      ],
+      "tier": "guardrail",
+      "baseline": 6,
+      "note": "APP_PC_ARCHITECTURE_SPEC.md section 11 and APP_H5_ARCHITECTURE_SPEC.md section 8 own the native host package rules; this gate is their executable form. It proves every native host package under a client root is architecture-explicit, is owned by the matching client root, keeps exactly one package per architecture, and carries its own ecosystem manifest - package.json for a PC, H5 or mini program root, and oh-package.json5, pubspec.yaml, build.gradle.kts or Package.swift for a Harmony, Flutter, native Android or native iOS root (HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md section 4) - rather than a package.json that ohpm, Gradle, pub and SwiftPM never read. An earlier revision demanded package.json of every root and reported five false findings against the Harmony roots of sdkwork-agents, sdkwork-appstore, sdkwork-cloudrouter, sdkwork-knowledgebase and sdkwork-webserver. The retired -pc-desktop alias for the Tauri host, and an inert package.json inside a native host package, are reported as migration debt and fail only under --strict. MEASURED 2026-09-17: 6 items, and all six are real host-name defects - sdkwork-appstore-pc-host and sdkwork-appstore-h5-host are generic architecture-free names, and sdkwork-autocut-desktop is not named after its sdkwork-video-cut-pc root. The 11 migration-debt items (ten -pc-desktop aliases plus the inert manifest on sdkwork-im-harmony-mobile-host) do not contribute to this baseline because debt is non-fatal without --strict. Lower the baseline to 0 once those three packages are renamed."
+    },
+    {
       "id": "check:workspace-path-portability",
       "tool": "check-workspace-path-portability.mjs",
       "scope": "workspace",
