@@ -173,6 +173,7 @@ packages/sdkwork-<application-code>-harmony-mobile-<capability>/
 
 Rules:
 
+- Every package carries its own ohpm manifest: `oh-package.json5` plus `build-profile.json5`. A host package `MUST NOT` carry a `package.json` - ohpm does not read it, no SDKWork standard defines it, and `tools/check-client-host-packages.mjs` reports it as migration debt. The `package.json` that `check-frontend-composition` reads as the composition contract belongs to the core package only, where it is marked with an `sdkwork.role` and the note that it is not a pnpm workspace member.
 - `Index.ets` or equivalent package root export file is the public integration boundary.
 - `pages/` owns route-level UI. `components/` owns reusable or domain-specific UI components.
 - `presentation/` owns view models, controllers, intents, effects, and UI state mapping.

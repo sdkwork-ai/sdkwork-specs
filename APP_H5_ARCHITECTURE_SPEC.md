@@ -820,7 +820,7 @@ Required verification for H5 application architecture changes:
 | --- | --- |
 | Root layout | Static check proves the root path uses `apps/sdkwork-<application-code>-h5/` and `.sdkwork/`, `config/browser`, `config/host`, `src/bootstrap`, `packages/`, `sdks/`, `scripts/`, and tests exist for application roots. |
 | Package naming | Static check proves new packages use `sdkwork-<application-code>-h5-*`, including reserved console/admin/host forms. |
-| Host package naming | `node <sdkwork-specs>/tools/check-client-host-packages.mjs --root .` proves the H5 root carries at most the single `sdkwork-<application-code>-h5-capacitor` host package, that no generic `-h5-host` exists, and that the host package carries a `package.json`. |
+| Host package naming | `node <sdkwork-specs>/tools/check-client-host-packages.mjs --root .` proves the H5 root carries at most the single `sdkwork-<application-code>-h5-capacitor` host package, that no generic `-h5-host` exists, and that the host package carries the manifest of the H5 root ecosystem, which is `package.json` (`NAMING_SPEC.md` section 3.1). |
 | Renderer sharing | Tests or static checks prove H5, WebView, iOS, and Android targets reuse the same renderer, route contributions, SDK clients, IAM runtime, and TokenManager. |
 | Surface split | Static scan proves app, console, and admin packages do not deep import each other or share hidden route/service internals. |
 | SDK boundary | Static scan proves app/console packages use app SDKs, approved `backend-admin` packages use backend SDKs, protected open-api uses declared open-api credential provider, and no raw HTTP/manual auth headers/generated SDK edits were introduced. |
