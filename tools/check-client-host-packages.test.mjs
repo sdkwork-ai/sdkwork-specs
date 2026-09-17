@@ -1,10 +1,35 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { checkClientHostPackages } from './check-client-host-packages.mjs';
+
+/**
+ * Ecosystem manifest of a client root, keyed by the root directory suffix.
+ *
+ * A client root uses the package manager of its target ecosystem, so the fixture
+ * must not hand every package a `package.json`: doing that is what made an earlier
+ * revision of the gate report five false findings against Harmony roots, which
+ * have no `package.json` at all.
+ */
+const MANIFEST_BY_SUFFIX = [
+  ['-harmony-mobile', 'oh-package.json5'],
+  ['-flutter-mobile', 'pubspec.yaml'],
+  ['-android-mobile', 'build.gradle.kts'],
+  ['-ios-mobile', 'Package.swift'],
+];
+
+/** Manifest filename a client root of this name expects in each of its packages. */
+function manifestNameOf(appRoot) {
+  for (const [suffix, manifest] of MANIFEST_BY_SUFFIX) {
+    if (appRoot.endsWith(suffix)) return manifest;
+  }
+  return 'package.json';
+}
 
 /**
  * Build a throwaway workspace from a `repo -> client root -> host package` spec
@@ -12,7 +37,9 @@ import { checkClientHostPackages } from './check-client-host-packages.mjs';
  *
  * @param {Record<string, Record<string, string[]>>} spec
  *   e.g. { 'sdkwork-shop': { 'sdkwork-shop-pc': ['sdkwork-shop-pc-tauri'] } }
- *   A package name wrapped in `( )` is created without a package.json.
+ *   A package name wrapped in `( )` is created with no ecosystem manifest at all.
+ *   A package name prefixed with `+` is created with its ecosystem manifest plus an
+ *   extra `package.json`, modelling the inert duplicate manifest case.
  */
 function fixture(spec) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'client-host-'));
@@ -21,11 +48,20 @@ function fixture(spec) {
     for (const [appRoot, hosts] of Object.entries(roots)) {
       for (const declared of hosts) {
         const bare = declared.startsWith('(') && declared.endsWith(')');
-        const name = bare ? declared.slice(1, -1) : declared;
+        const extraManifest = declared.startsWith('+');
+        const name = bare
+          ? declared.slice(1, -1)
+          : extraManifest
+            ? declared.slice(1)
+            : declared;
         const dir = path.join(root, repo, 'apps', appRoot, 'packages', name);
         fs.mkdirSync(dir, { recursive: true });
+        const payload = JSON.stringify({ name });
         if (!bare) {
-          fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name }), 'utf8');
+          fs.writeFileSync(path.join(dir, manifestNameOf(appRoot)), payload, 'utf8');
+        }
+        if (extraManifest) {
+          fs.writeFileSync(path.join(dir, 'package.json'), payload, 'utf8');
         }
       }
     }
@@ -81,9 +117,37 @@ test('rejects a host package owned by a client root that defines no host', () =>
   assert.ok(messages(result, 'error').some((m) => /defines no native host/u.test(m)));
 });
 
-test('rejects a host package without a package.json', () => {
-  const result = scan({ 'sdkwork-shop': { 'sdkwork-shop-harmony-mobile': ['(sdkwork-shop-harmony-mobile-host)'] } });
-  assert.ok(messages(result, 'error').some((m) => /has no package\.json/u.test(m)));
+test('requires the manifest of the root ecosystem, not package.json', () => {
+  // A Harmony root has no `package.json` at all; `oh-package.json5` is its manifest.
+  const missing = scan({
+    'sdkwork-shop': { 'sdkwork-shop-harmony-mobile': ['(sdkwork-shop-harmony-mobile-host)'] },
+  });
+  assert.ok(messages(missing, 'error').some((m) => /has no oh-package\.json5/u.test(m)));
+  // `/package\.json/` alone would also match the tail of `oh-package.json5`, which is
+  // exactly the substring confusion this whole rule exists to avoid.
+  assert.equal(messages(missing, 'error').some((m) => /has no package\.json$/u.test(m)), false);
+
+  // A JavaScript-family root is still held to `package.json`.
+  const pcMissing = scan({
+    'sdkwork-shop': { 'sdkwork-shop-pc': ['(sdkwork-shop-pc-tauri)'] },
+  });
+  assert.ok(messages(pcMissing, 'error').some((m) => /has no package\.json/u.test(m)));
+});
+
+test('accepts a Harmony host package that carries only oh-package.json5', () => {
+  const result = scan({
+    'sdkwork-shop': { 'sdkwork-shop-harmony-mobile': ['sdkwork-shop-harmony-mobile-host'] },
+  });
+  assert.deepEqual(result.violations, []);
+});
+
+test('reports an inert package.json inside a native host package as migration debt', () => {
+  const result = scan({
+    'sdkwork-shop': { 'sdkwork-shop-harmony-mobile': ['+sdkwork-shop-harmony-mobile-host'] },
+  });
+  assert.equal(messages(result, 'error').length, 0);
+  assert.equal(messages(result, 'debt').length, 1);
+  assert.match(messages(result, 'debt')[0], /inert 'package\.json'/u);
 });
 
 test('rejects two host packages for the same architecture in one client root', () => {
@@ -123,5 +187,29 @@ test('scans a single repository passed as --root', () => {
     assert.equal(result.violations.length, 1);
   } finally {
     fs.rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('exits 2 instead of reporting a clean run for a workspace root with no repository', () => {
+  const cli = fileURLToPath(new URL('./check-client-host-packages.mjs', import.meta.url));
+  const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'client-host-empty-'));
+  try {
+    let status = 0;
+    let output = '';
+    try {
+      execFileSync(process.execPath, [cli, '--workspace', emptyRoot], { encoding: 'utf8', stdio: 'pipe' });
+    } catch (error) {
+      status = error.status;
+      output = `${error.stdout ?? ''}${error.stderr ?? ''}`;
+    }
+    assert.equal(status, 2);
+    assert.match(output, /no governed repository found/u);
+
+    // The same root passes once it actually holds a governed repository.
+    fs.mkdirSync(path.join(emptyRoot, 'sdkwork-shop', '.git'), { recursive: true });
+    const ok = execFileSync(process.execPath, [cli, '--workspace', emptyRoot], { encoding: 'utf8', stdio: 'pipe' });
+    assert.match(ok, /OK \(0 client host package/u);
+  } finally {
+    fs.rmSync(emptyRoot, { recursive: true, force: true });
   }
 });
