@@ -57,6 +57,10 @@ SDKWork uses a two-layer source layout:
   Architecture-local `src/`, `lib/`, `App/`, `entry/`, `packages/`, `config/`, and platform
   directories belong inside that child root.
 
+`apps/` is owned in-tree by default. It `MAY` be promoted to a standalone sibling repository
+consumed as a git submodule, but only on an explicit per-repository owner instruction; see
+section 1.1.4.
+
 Top-level `src/`, `packages/`, and `config/` are not generic SDKWork project-root directories.
 
 Repository-root `packages/` rules:
@@ -584,6 +588,81 @@ Rules for `<domain-multi-surface-repository>`:
   tests/
 ```
 
+### 1.1.4 Application Surfaces Subtree Ownership
+
+`apps/` is owned **in-tree by default**: an ordinary tracked directory of the owning application
+repository, versioned, branched, reviewed, and released with the rest of that repository. The
+in-tree shape is the assumed shape for every SDKWork application repository and is never changed
+implicitly.
+
+A repository `MAY` instead own `apps/` as a **standalone sibling repository consumed as a git
+submodule**. The opt-in shape exists so that one module's application-surface family can be
+developed, staffed, permissioned, and released on its own cadence — for example when a separate
+team owns the client surfaces of a single module — without splitting the rest of the repository.
+It is an ownership-and-allocation decision, not a technical default.
+
+| Shape | Default | `apps/` in the owning repository | Versioned by |
+| --- | --- | --- | --- |
+| In-tree (default) | Yes | Ordinary tracked directory | The owning application repository |
+| Standalone subtree repository (opt-in) | No | Gitlink (mode `160000`) registered in `.gitmodules` | The `<application-code>-apps` sibling repository |
+
+Rules:
+
+- The in-tree shape is the default. A repository `MUST NOT` be switched to the standalone shape by
+  a template, generator, migration, alignment pass, or any automated sweep, and `MUST NOT` be
+  switched on the initiative of a contributor or an agent.
+- The standalone shape `MUST` be adopted only on an **explicit, per-repository owner instruction**
+  that names the owning repository and the `apps/` subtree to be extracted. Absence of such an
+  instruction means the in-tree shape.
+- The instruction `MUST NOT` be inferred from repository size, client-surface count, file count,
+  release cadence, or any other measured property.
+- The standalone repository `MUST` be named `<application-code>-apps` — for example
+  `sdkwork-agents-apps` for `sdkwork-agents` — and `MUST` hold the former `apps/` subtree at its
+  repository root. The subtree `README.md` becomes that repository root `README.md` and `MUST`
+  continue to index every direct child application root. The standalone repository `MUST NOT` be
+  onboarded as an independent SDKWork application repository: it declares no `apis/`, `crates/`,
+  `sdks/`, or repository-root `sdkwork.app.config.json` of its own.
+- The owning repository `MUST` register the subtree in `.gitmodules` with `path = apps` and the
+  standalone repository URL, and that path `MUST` be a gitlink (mode `160000`) in the current
+  index, under the same gitlink discipline section 6 requires of `external/` submodules.
+- The `apps/` path `MUST NOT` change when the shape changes. Every consumer reference — including
+  `pnpm-workspace.yaml` entries, nested `package.json#workspaces`, `tsconfig*.json` paths, package
+  scripts, and documentation — keeps using `apps/sdkwork-<application-code>-<client-arch>/…`
+  unchanged and `MUST NOT` be rewritten to a sibling-repository path.
+- Direct children under the standalone `apps/` root `MUST` keep the same
+  `apps/sdkwork-<application-code>-<client-arch>/` names and the same `README.md`, `AGENTS.md`,
+  `.sdkwork/`, and `specs/component.spec.json` obligations that section 1.1 and section 2 require
+  of in-tree application roots.
+- The submodule `MUST` use the standard absorbed gitdir layout: `apps/.git` is a file resolving to
+  `<superproject-gitdir>/modules/apps`, never a nested repository directory. A promotion produced
+  with `git submodule add` `MUST` be completed with `git submodule absorbgitdirs apps`.
+- Ignore rules the owning repository root previously applied to the subtree `MUST` be
+  re-established at the standalone repository root before the extraction is committed, so that
+  `node_modules/`, `dist/`, `build/`, `.dart_tool/`, `oh_modules/`, and equivalent dependency and
+  build-output directories remain ignored. Rules that matched the subtree only through an
+  `apps/`-prefixed pattern `MUST` be re-expressed without that prefix.
+- The extraction `MUST` carry over the complete former subtree content. Any intentionally dropped
+  path `MUST` be recorded in the extraction commit message.
+- The decision is per-repository. Promoting one repository's `apps/` subtree `MUST NOT` be
+  propagated to, assumed for, or cited as precedent for any other repository.
+- Reverting to the in-tree shape `MAY` be performed on the same explicit owner instruction, and
+  `MUST` restore tracked files under `apps/`, remove the `.gitmodules` entry, and remove the
+  absorbed `modules/apps` gitdir.
+- Continuous integration for a repository whose `apps/` is a standalone subtree `MUST` check that
+  repository out recursively. Jobs that build only the owning repository `MUST NOT` assume an empty
+  or absent `apps/`.
+
+Verification:
+
+```bash
+node ../sdkwork-specs/tools/check-external-submodule-rule.mjs --workspace ..
+git -C <repo> ls-files -s apps
+git -C <repo> config -f .gitmodules --get submodule.apps.path
+```
+
+In-tree remains the baseline for onboarding and review. An `apps/` gitlink is read as a deliberate,
+documented allocation decision, never as an expected default.
+
 ## 2. Required Workspace Shape
 
 Every git repository root and every SDKWork application root `MUST` have:
@@ -768,6 +847,14 @@ Rules:
 - Any script under `.sdkwork/` that contacts external services `MUST` document the service, credential source, dry-run behavior when available, and verification command.
 - Security reviews may scan `.sdkwork/` as source. Sensitive local state must never be placed there in committed form.
 - Vendored upstream content under `external/` in any repository `MUST` be referenced as git submodules (gitlink, mode `160000`), never committed as regular files. Every path registered in `.gitmodules` `MUST` be a gitlink in the current index. Allowed tracked content under `external/` is limited to the `external/README.md` marker and documented exceptions. Repositories with `external/` submodules `MUST` keep them shallow (`git submodule update --depth 1`) and `MUST` configure `fetch.recurseSubmodules=false` and `push.recurseSubmodules=false` so full upstream history is never pulled into `.git/modules`. Enforcement: `node sdkwork-specs/tools/check-external-submodule-rule.mjs --workspace <workspace-root>`.
+- A standalone `apps/` subtree repository registered in `.gitmodules` follows the same gitlink
+  discipline: every `.gitmodules` path `MUST` be a gitlink in the current index, and reverting the
+  subtree `MUST` remove both the entry and the absorbed `modules/apps` gitdir. Unlike `external/`,
+  a standalone `apps/` subtree is SDKWork-owned source, so it `MUST NOT` be checked out shallow
+  (`--depth 1`) and `MUST NOT` set `fetch.recurseSubmodules=false`; it is consumed like any other
+  SDKWork sibling repository. Adopting the shape requires an explicit owner instruction per
+  section 1.1.4. The `check-external-submodule-rule.mjs` registered-path-is-gitlink check above is
+  path-independent and therefore covers this case.
 
 ## 7. Discovery And Precedence
 
@@ -826,6 +913,16 @@ Repository/application workspace verification `MUST` check:
 - Every maintained repository/application root `MUST` pass `node ../sdkwork-specs/tools/check-workspace-layout.mjs --root .` or the workspace sweep equivalent.
 - Repository/application README files link to specs and contracts; README prose is not treated as normative standards authority.
 - `docs/adr/` is a retired layout. New ADRs `MUST` use `docs/architecture/decisions/`.
+- An in-tree `apps/` directory is the default shape and `MUST NOT` be reported as a violation for
+  being in-tree; a repository whose `apps/` is in-tree has no `.gitmodules` entry whose `path` is
+  `apps`.
+- A standalone `apps/` subtree is a gitlink (mode `160000`) whose `.gitmodules` entry resolves to
+  the `<application-code>-apps` sibling repository, and the owning repository contains no tracked
+  regular files under `apps/`.
+- A promoted subtree keeps every `apps/sdkwork-<application-code>-<client-arch>/…` reference
+  unchanged in `pnpm-workspace.yaml`, nested `package.json#workspaces`, `tsconfig*.json`, package
+  scripts, and documentation, and its own repository root re-establishes the former
+  owning-repository ignore rules.
 
 ## 9. Acceptance Checklist
 
@@ -853,3 +950,5 @@ Repository/application workspace verification `MUST` check:
 - [ ] API contract sources, generated SDK workspaces, application/runtime plugins, agent plugins, source config templates, deployment descriptors, job definitions, worker implementations, and runtime private config are placed in their distinct standard directories.
 - [ ] Active `docs/` layouts provide Canon `docs/product/prd/PRD.md` and `docs/architecture/tech/TECH_ARCHITECTURE.md`, and new ADRs use `docs/architecture/decisions/`.
 - [ ] New repositories bootstrap `docs/` with `tools/bootstrap-repository-docs.mjs` or an equivalent tracked skeleton.
+- [ ] `apps/` is in-tree unless an explicit per-repository owner instruction promoted it to a standalone `<application-code>-apps` submodule, and no template, generator, migration, or alignment pass changed the shape.
+- [ ] A standalone `apps/` subtree is a gitlink registered in `.gitmodules`, uses the absorbed gitdir layout, keeps every `apps/` consumer path unchanged, and re-establishes the former owning-repository ignore rules at its own repository root.
