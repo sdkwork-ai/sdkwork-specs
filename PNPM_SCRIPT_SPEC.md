@@ -801,7 +801,7 @@ discriminator in a trailing axis.
 | `schema-registry` | `SCHEMA_REGISTRY_SPEC.md` | Table, frontend, and API registry composition and verification | `compose`, `validate`, `check`, `render` |
 | `topology` | `APP_RUNTIME_TOPOLOGY_SPEC.md` | Topology validation and resolved runtime plans | `validate`, `plan` |
 | `sbom` | `SUPPLY_CHAIN_SECURITY_SPEC.md` | SBOM generation and verification | `generate`, `check` |
-| `admin` | `IAM_APPLICATION_BOOTSTRAP_SPEC.md` | IAM application bootstrap and inspection | `bootstrap`, `check` |
+| `admin` | `IAM_APPLICATION_BOOTSTRAP_SPEC.md` | IAM application bootstrap, administrator credential recovery, and inspection | `bootstrap`, `reset`, `check` |
 
 Rules:
 

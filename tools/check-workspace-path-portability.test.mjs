@@ -35,6 +35,12 @@ const MACHINE_ONLY = 'D:' + '\\' + 'toolchains' + '\\' + 'node';
 const RUNTIME_ROOT = 'C:/Program Files/sdkwork-tts';
 const FILE_URL = ['file:', '', '', 'D:', 'sdkwork-space', 'sdkwork-im', 'x.js'].join('/');
 
+const BACKSLASH = '\\';
+const WIN_MACHINE = 'D:' + BACKSLASH + 'toolchains' + BACKSLASH + 'node';
+const WIN_PLACEHOLDER = 'C:' + '/' + 'Users' + '/' + '<user>' + '/...';
+const ELLIPSIS_DRIVE = 'E:' + BACKSLASH + 'toolchains' + BACKSLASH + 'node' + BACKSLASH + '...';
+const ELLIPSIS_MOUNT = '/mnt' + '/e' + '/...';
+
 function makeRoot(files) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'port-gate-'));
   for (const [relative, text] of Object.entries(files)) {
@@ -193,4 +199,197 @@ test('fails when the root does not exist', () => {
   const { code, output } = runGate(path.join(os.tmpdir(), 'port-gate-does-not-exist-' + Date.now()));
   assert.equal(code, 1);
   assert.match(output, /root does not exist/);
+});
+
+test('reads an angle-bracket placeholder as one segment instead of cutting it at the bracket', () => {
+  // The candidate body class excludes `>`, so the scan used to stop inside the
+  // placeholder and the truncated final segment failed the template test. The gate
+  // then reported the very form `DEPENDENCY_MANAGEMENT_SPEC.md` section 1 tells
+  // authors to write — it was the only finding the gate produced against itself.
+  const root = makeRoot({ 'src/a.ts': 'const p = "' + WIN_PLACEHOLDER + '";\n' });
+  const { code, output } = runGate(root);
+  assert.equal(code, 0, output);
+});
+
+test('reads an ellipsis segment as a documentation truncation', () => {
+  const root = makeRoot({
+    'docs/a.md': 'Toolchain: ' + ELLIPSIS_DRIVE + '\nMount: ' + ELLIPSIS_MOUNT + '\n',
+  });
+  const { code, output } = runGate(root);
+  assert.equal(code, 0, output);
+});
+
+test('still reports a two-dot path component, which is not an ellipsis', () => {
+  const root = makeRoot({
+    'src/a.ts': 'const p = "C:' + '/' + 'a' + '/' + '..' + '/' + 'b";\n',
+  });
+  const { code, output } = runGate(root);
+  assert.equal(code, 1);
+  assert.match(output, /MACHINE-ABS/);
+});
+
+test('does not mistake a later regular-expression alternative for a home path', () => {
+  // A backslash-escaped slash cannot occur in a path literal, and the escaped
+  // alternation is what the leading-token guard cannot see: the pattern opens with
+  // `\b`, so `/home\/[^/\s` was handed to the scanner as a POSIX home path.
+  const root = makeRoot({
+    'src/a.ts': 'const p = /\\b[A-Z]:[\\\\/]|\\/home\\/[^/\\s]+/u;\n',
+  });
+  const { code, output } = runGate(root);
+  assert.equal(code, 0, output);
+});
+
+test('does not mistake an octal escape in a byte literal for a drive path', () => {
+  // A generated protobuf descriptor spells non-printable bytes as `\002`-style
+  // escapes, which normalise into something drive-rooted.
+  const root = makeRoot({
+    'gen/Context.java':
+      'String s = "e:' + BACKSLASH + '0028' + BACKSLASH + '001' + BACKSLASH + '"k";\n',
+  });
+  const { code, output } = runGate(root);
+  assert.equal(code, 0, output);
+});
+
+test('a directory-scope marker exempts a fixture whose format has no comment syntax', () => {
+  const root = makeRoot({
+    'tests/fixtures/corpus/conformance.json': '{"root": "' + WIN_WORKSPACE + '"}\n',
+    'tests/fixtures/corpus/.workspace-path-fixture': 'a .json corpus cannot carry a comment\n',
+  });
+  const { code, output } = runGate(root);
+  assert.equal(code, 0, output);
+  assert.match(output, /1 fixture-exempt test file\(s\)/);
+  assert.match(output, /conformance\.json/);
+});
+
+test('a directory-scope marker buys nothing outside a test-scoped directory', () => {
+  const root = makeRoot({
+    'src/data/conformance.json': '{"root": "' + WIN_WORKSPACE + '"}\n',
+    'src/data/.workspace-path-fixture': 'placed where it would exempt production source\n',
+  });
+  const { code, output } = runGate(root);
+  assert.equal(code, 1);
+  assert.match(output, /WORKSPACE-ABS/);
+});
+
+test('a block-scope marker exempts the file own cfg(test) module', () => {
+  const root = makeRoot({
+    'src/a.rs': [
+      'pub fn normalize(p: &str) -> String { p.to_string() }',
+      '',
+      '#[cfg(test)] // WORKSPACE-PATH:allow-fixture-block: the module below is fixture data',
+      'mod tests {',
+      '    #[test]',
+      '    fn keeps_a_windows_path() {',
+      '        let p = "' + WIN_MACHINE + '";',
+      '    }',
+      '}',
+      '',
+    ].join('\n'),
+  });
+  const { code, output } = runGate(root);
+  assert.equal(code, 0, output);
+  assert.doesNotMatch(output, /FIXTURE-MARKER-NOT-APPLICABLE/);
+});
+
+test('a block-scope marker without its cfg(test) anchor exempts nothing', () => {
+  const root = makeRoot({
+    'src/a.rs': [
+      '// WORKSPACE-PATH:allow-fixture-block: no cfg(test) anchor shares this line',
+      'pub const ROOT: &str = "' + WIN_MACHINE + '";',
+      '',
+    ].join('\n'),
+  });
+  const { code, output } = runGate(root);
+  assert.equal(code, 1);
+  assert.match(output, /MACHINE-ABS/);
+});
+
+test('a block-scope marker written inside the module still exempts it', () => {
+  // The marker's line is where the declaration is written, NOT where the exempted
+  // region begins. `paths.rs` is the attested case: its marker sits on a fixture
+  // expression 33 lines inside its test module rather than on the `#[cfg(test)]`
+  // attribute. An intermediate revision required the marker to share the anchor's
+  // line, which rejected that file and turned three ordinary
+  // `PathBuf::from("C:/Users/<user>")` test values into findings.
+  const root = makeRoot({
+    'src/a.rs': [
+      'pub fn normalize(p: &str) -> String { p.to_string() }',
+      '',
+      '#[cfg(test)]',
+      'mod tests {',
+      '    #[test]',
+      '    fn keeps_a_windows_path() {',
+      '        let p = "' + WIN_MACHINE + '"; // WORKSPACE-PATH:allow-fixture-block: the trailing module is fixture data',
+      '    }',
+      '}',
+      '',
+    ].join('\n'),
+  });
+  const { code, output } = runGate(root);
+  assert.equal(code, 0, output);
+});
+
+test('a block-scope marker on a production line exempts no production code', () => {
+  // The shape the committed gate got wrong, and the one five fleet files carry: a
+  // marker on a `.split("#[cfg(test)]")` expression. The committed gate accepted a
+  // substring match, so the literal satisfied the anchor, and it started the block
+  // at the marker's own line — between them that exempted every line below,
+  // including the production constant here, which sits ABOVE the test module. The
+  // finding must survive.
+  const root = makeRoot({
+    'src/a.rs': [
+      'pub fn production_half() -> &\'static str {',
+      '    let source = include_str!("a.rs");',
+      '    source.split("#[cfg(test)]").next().unwrap() // WORKSPACE-PATH:allow-fixture-block: the trailing module is fixture data',
+      '}',
+      '',
+      'pub const ROOT: &str = "' + WIN_MACHINE + '";',
+      '',
+      '#[cfg(test)]',
+      'mod tests {',
+      '    #[test]',
+      '    fn keeps_a_windows_path() {',
+      '        let p = "' + WIN_MACHINE + '";',
+      '    }',
+      '}',
+      '',
+    ].join('\n'),
+  });
+  const { code, output } = runGate(root);
+  assert.equal(code, 1, output);
+  assert.match(output, /:6: MACHINE-ABS/);
+});
+
+test('a block-scope marker spelled inside a string literal is not a declaration', () => {
+  // The file does have a trailing test module, so the exemption is refused by the
+  // comment requirement alone. This is the shape that made a bare `includes` unsafe:
+  // five fleet files carry a marker on `.split("#[cfg(test)]")`, production code
+  // that quotes the attribute inside a literal.
+  const root = makeRoot({
+    'src/a.rs': [
+      'pub const NOTE: &str = "WORKSPACE-PATH:allow-fixture-block";',
+      'pub const ROOT: &str = "' + WIN_MACHINE + '";',
+      '',
+      '#[cfg(test)]',
+      'mod tests {',
+      '    #[test]',
+      '    fn keeps_a_windows_path() {',
+      '        let p = "' + WIN_MACHINE + '";',
+      '    }',
+      '}',
+      '',
+    ].join('\n'),
+  });
+  const { code, output } = runGate(root);
+  assert.equal(code, 1, output);
+  assert.match(output, /:2: MACHINE-ABS/);
+});
+
+test('documentation that quotes the file-scope marker is not an error', () => {
+  // This rule is documented in prose, so the prose has to be able to name it.
+  const root = makeRoot({
+    'docs/a.md': 'Outside a test file `WORKSPACE-PATH:allow-fixture` has no effect.\n',
+  });
+  const { code, output } = runGate(root);
+  assert.equal(code, 0, output);
 });

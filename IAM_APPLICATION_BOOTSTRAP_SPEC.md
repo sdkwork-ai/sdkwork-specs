@@ -315,6 +315,35 @@ Rules:
 - Public script first segment `MUST` be `admin` per `PNPM_SCRIPT_SPEC.md` for application repositories; workspace `bin/` utilities `MAY` use neutral names such as `bootstrap-all-apps`.
 - Database seed/bootstrap scripts `MUST NOT` be confused with IAM application bootstrap; database lifecycle remains under `db:*`.
 
+### 6.1 Administrator Credential Recovery
+
+An application repository that can only be unlocked with an authenticated console `SHOULD` expose
+an offline recovery script for the bootstrap administrator credential, named
+`admin:reset:<target>` where `<target>` identifies the environment:
+
+```text
+pnpm admin:reset:dev -- --password <new-password>
+pnpm admin:reset:release -- --password <new-password>
+```
+
+Rules:
+
+- The replacement password `MUST` reach the application process through an environment variable
+  (`SDKWORK_<APP>_ADMIN_RESET_PASSWORD`), never through `argv`, so process listings cannot observe
+  it.
+- The recovery `MUST` target the same canonical tenant and administrator subject that
+  `sdkwork-iam-bootstrap` provisions, and `MUST` write the password credential with the same
+  Argon2id parameters IAM uses to verify it.
+- The recovery `MUST` read the stored credential back and verify it against the requested password
+  before reporting success; a reset that reports success `MUST` already prove the credential is
+  usable.
+- The recovery `MUST` be idempotent and `MUST` clear the failed-attempt and lockout state, so a
+  locked-out administrator can be recovered without manual SQL.
+- The recovery `MUST NOT` create tenants, users, memberships, or roles. Provisioning stays with
+  bootstrap.
+- Recovery authorization is deployment access (configuration file plus database reachability); it
+  `MUST NOT` invent a second credential store or a backdoor token.
+
 ## 7. Verification
 
 Every repository that owns application bootstrap behavior `MUST` run:

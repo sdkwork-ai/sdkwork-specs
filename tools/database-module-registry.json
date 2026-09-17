@@ -298,9 +298,9 @@
   },
   {
     "repo": "sdkwork-web-framework",
-    "moduleId": "webstore",
+    "moduleId": "framework",
     "serviceCode": "WEB_STORE",
-    "tablePrefix": "webstore_",
+    "tablePrefix": "framework_",
     "ownerTeam": "web-framework-platform",
     "legacySqlGlobs": ["crates/sdkwork-web-store-sqlx/migrations/*.sql"]
   },

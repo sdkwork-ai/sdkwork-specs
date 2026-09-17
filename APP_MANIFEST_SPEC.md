@@ -93,12 +93,17 @@ Legacy manifests may retain an `environments` object. New manifests governed by
 
 `app.officialWebsiteUrl` is the canonical public website for the application. It is required for every app, must be an HTTP/HTTPS URL, and is the default landing page used by SDKWork catalog surfaces, store marketing fallback fields, and `platform_app.config.standard.officialWebsiteUrl`. Do not use environment runtime URLs, CDN download URLs, or app-store listing URLs here. Those belong in `environments`, `artifacts.installConfig.packages[]`, and `publish.stores[]`.
 
-`app.appType` must be one of the backend `PlusProjectType` values:
+`app.appType` must be one of the SDKWork client application type values:
 
 ```text
 NONE, SDK, PPT, APP_HTML, APP_VUE, APP_FLUTTER, APP_UNIAPP,
-APP_REACT, APP_UNITY, VIDEO, POSTER
+APP_REACT, APP_UNITY, APP_HARMONY, VIDEO, POSTER
 ```
+
+These values mirror the backend `PlusProjectType` vocabulary. `APP_HARMONY` is
+the app type of a native HarmonyOS root (`APP_HARMONY_NATIVE_UI_SPEC.md`); it is
+distinct from the `publish.platforms = APP_HARMONY` delivery lane, which any app
+with a HarmonyOS package may declare (section 6.1).
 
 Identifiers:
 
@@ -276,7 +281,7 @@ Rules:
 - Unity roots should use `runtime.framework = "unity"` with `runtime.family` per delivery lane: `"mobile"` for app-store builds, `"desktop"` for standalone builds, `"web"` for WebGL, and `"mini-program"` for mini-game delivery (`MP_*_GAME` platforms with `runtimeTarget = "mini-program"`).
 - Static web roots should use `runtime.family = "web"`, `runtime.framework = "static-html"`, and `clientArchitectures = ["static-web"]`.
 - Package ids and artifact names in the manifest follow `NAMING_SPEC.md`; source package names follow the matching architecture standard and are not copied into release package ids unless they are also the release artifact identity.
-- `clientArchitecture` host values `MUST` be resolved together with the declaring client root and the entry `runtimeTarget`; the value alone `MUST NOT` be used to look up a host package. PC desktop hosts map `tauri` -> `sdkwork-<application-code>-pc-tauri`, `electron` -> `sdkwork-<application-code>-pc-electron`, and `capacitor` -> `sdkwork-<application-code>-pc-capacitor`, each paired with `runtimeTarget = "desktop"` and one host package per architecture. An H5 root maps `capacitor` -> `sdkwork-<application-code>-h5-capacitor`, paired with `runtimeTarget = "capacitor-ios"` or `"capacitor-android"`, where the one host package serves every shipped mobile platform. A package entry `MUST` declare exactly one `clientArchitecture` value and `MUST` agree with the host package that produced the artifact.
+- PC desktop hosts map `clientArchitecture` values to host packages: `tauri` -> `sdkwork-<application-code>-pc-tauri`, `electron` -> `sdkwork-<application-code>-pc-electron`, `capacitor` -> `sdkwork-<application-code>-pc-capacitor`, one host package per architecture. A desktop package entry `MUST` declare exactly one `clientArchitecture` value and `MUST` agree with the host package that produced the artifact.
 - When an application ships more than one desktop host, its manifest `clientArchitectures` `MUST` include every shipped host value (`tauri`, `electron`, `capacitor`), and each `artifacts.installConfig.packages[]` entry `MUST` pin exactly one `clientArchitecture` naming its own per-architecture host package so release lookup and artifact collection stay deterministic.
 - `clientArchitecture = "capacitor"` `MUST` be paired with exactly one Capacitor `runtimeTarget`: `"desktop"` for the PC desktop host, or `"capacitor-ios"` / `"capacitor-android"` for the one H5 mobile host. A `runtimeTarget = "desktop"` entry `MUST NOT` be declared by an H5 root, and `"capacitor-ios"` / `"capacitor-android"` entries `MUST NOT` be declared by a PC root. Tablet runtime targets (`tablet-ipados`, `tablet-android`) `MUST NOT` declare `electron` or `capacitor`; their desktop host is Tauri, and the matching `ios-native` / `android-native` value is also accepted for the same target platform.
 - `publish.platforms` must list only actually supported platforms. Do not list `APP_IOS`, `APP_ANDROID`, `APP_HARMONY`, or `MP_*` values just because the source architecture could support them later.

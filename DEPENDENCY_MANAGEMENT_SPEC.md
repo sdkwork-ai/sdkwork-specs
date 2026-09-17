@@ -517,7 +517,7 @@ Rules:
 Rules:
 
 - Repositories that declare release dependencies `MUST` include static verification that `sdkwork.workflow.json`, workflow YAML, native build-tool workspace manifests, and path mappings use portable source dependency paths.
-- Tests `MUST` fail on source/build dependency paths containing machine-specific absolute paths; enforce with `node sdkwork-specs/tools/check-workspace-path-portability.mjs --workspace <checkout-root>` (zero findings). Scope and exemption markers follow §1 and `PORTABILITY_SPEC.md` §5.1/§5.2; the gate's own behaviour is pinned by `tools/check-workspace-path-portability.test.mjs` (`pnpm test:workspace-path-portability`, 12 tests).
+- Tests `MUST` fail on source/build dependency paths containing machine-specific absolute paths; enforce with `node sdkwork-specs/tools/check-workspace-path-portability.mjs --workspace <checkout-root>` (zero findings). The gate audits the workspace root, sibling checkouts, and machine-rooted paths outside the workspace by default; `--workspace-only` narrows it to the first two. Scope and exemption markers follow §1 and `PORTABILITY_SPEC.md` §5.1/§5.2; the gate's own behaviour is pinned by `tools/check-workspace-path-portability.test.mjs` (`pnpm test:workspace-path-portability`, 23 tests).
 - Tests `MUST` fail when native build-tool files consume undeclared SDKWork release dependencies for a packaged application.
 - Tests `MUST` fail when stale dependencies remain in `sdkwork.workflow.json`.
 - Tests `MUST` verify dependency path and version declarations are centralized through native workspace mechanisms where the build tool supports them.

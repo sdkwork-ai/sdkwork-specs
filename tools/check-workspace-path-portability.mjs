@@ -113,11 +113,15 @@ const FIXTURE_DIR_MARKER = '.workspace-path-fixture';
 // Those modules are fixtures by construction — measured 2026-09-15, 205 of the
 // fleet's 218 `.rs` findings sit below a `#[cfg(test)]` attribute — and the file
 // is not a test file by path, so neither the file-scope nor the directory-scope
-// marker reaches them. This marker is honoured ONLY on a line that also carries
-// `#[cfg(test)]`, and exempts that line to end of file, so it cannot be dropped
-// into production code to buy silence.
+// marker reaches them. This marker declares that the file's trailing `#[cfg(test)]`
+// module is fixture data: it exempts that module and nothing above it. See
+// fixtureBlockRange for why the region is located from the file's last real
+// `#[cfg(test)]` rather than from the marker's own line.
 const FIXTURE_BLOCK_MARKER = 'WORKSPACE-PATH:allow-fixture-block';
-const FIXTURE_BLOCK_ANCHOR = '#[cfg(test)]';
+// `#[cfg(test)]` with optional interior whitespace: Rust accepts `#[cfg( test )]`,
+// and rustfmt never reflows an attribute, so the looser form costs nothing and
+// avoids a marker that silently stops working under a hand-edit.
+const FIXTURE_BLOCK_ANCHOR_RE = /#\[\s*cfg\s*\(\s*test\s*\)\s*\]/;
 // The file-scope marker belongs in the header, so a reviewer reads the reason
 // next to the file's own description instead of next to one fixture line.
 const FIXTURE_MARKER_HEADER_LINES = 20;
@@ -270,6 +274,16 @@ const RUNTIME_ROOT_RE = new RegExp(
 // requires documentation to use exactly this form.
 const TEMPLATE_SEGMENT_RE = /^<[^<>]+>$/;
 
+// An ellipsis segment is the other spelling of the same idea: a drive-rooted path
+// or an MSYS mount truncated with `...`. A segment of nothing but dots is a
+// documentation truncation — no filesystem resolves a three-dot name as a child,
+// and a path written with one is incomplete by construction, so it can never be
+// the working binding this gate exists to catch. Measured 2026-09-15: this
+// spelling, not the angle-bracket one, was the residual form in the fleet's
+// tool-catalog prompt text and snapshot files after the concrete paths had been
+// fixed. Three dots minimum so a genuine two-dot path component is still scanned.
+const ELLIPSIS_SEGMENT_RE = /^(?:\.{3,}|…)$/;
+
 function isScannable(fileName) {
   const lower = fileName.toLowerCase();
   if (LOCKFILE_NAMES.has(lower)) return false;
@@ -358,15 +372,98 @@ function isTestFile(file) {
 }
 
 /**
- * Index of the line that opens a marker-declared fixture block, or -1. The
- * marker is honoured only where it shares a line with `#[cfg(test)]`, which is
- * what keeps it from exempting a production region.
+ * Split one source line into the text that executes and the text that is
+ * comment. Only the two delimiters that decide whether `#[cfg(test)]` is code or
+ * prose are modelled: a `//` outside a double-quoted literal opens a comment, and
+ * a `"` outside a comment opens a literal. Char literals and multi-line raw
+ * strings are deliberately NOT modelled — nothing here depends on them.
  */
-function fixtureBlockStart(lines) {
-  for (let i = 0; i < lines.length; i += 1) {
-    if (lines[i].includes(FIXTURE_BLOCK_MARKER) && lines[i].includes(FIXTURE_BLOCK_ANCHOR)) return i;
+function splitExecutableAndComment(line) {
+  let code = '';
+  let comment = '';
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (comment) { comment += ch; continue; }
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === '/' && line[i + 1] === '/') { comment = '//'; i += 1; continue; }
+    code += ch;
   }
-  return -1;
+  return { code, comment };
+}
+
+/**
+ * True when `line` declares the block marker inside a comment, rather than merely
+ * spelling it inside a string literal.
+ *
+ * The marker's own position in the file is deliberately unconstrained. It is a
+ * declaration ABOUT the file's trailing test module, and authors place it wherever
+ * the declaration reads best: on the `#[cfg(test)]` attribute (55 files), and, in
+ * `paths.rs`, on the fixture expression inside the module. A first revision
+ * required the marker to share the anchor's line; that rejected `paths.rs` and
+ * turned three ordinary `PathBuf::from("C:/Users/<user>")` test values into
+ * findings, so the requirement was dropped. What the marker may not be is a
+ * string literal, which is the one shape that lets a passing mention act as a
+ * declaration.
+ */
+function declaresFixtureBlock(line) {
+  const { comment } = splitExecutableAndComment(line);
+  return comment.includes(FIXTURE_BLOCK_MARKER);
+}
+
+/**
+ * Line indices of the file's real `#[cfg(test)]` declarations, ignoring any that
+ * appear only inside a string literal or a comment.
+ */
+function realAnchorLines(lines) {
+  const hits = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (FIXTURE_BLOCK_ANCHOR_RE.test(splitExecutableAndComment(lines[i]).code)) hits.push(i);
+  }
+  return hits;
+}
+
+/**
+ * Extent of a marker-declared fixture block, or null.
+ *
+ * The block is the file's own trailing `#[cfg(test)]` module, located as the
+ * file's LAST real `#[cfg(test)]` declaration — NOT as the marker's own line. The
+ * distinction is the whole point. The committed gate anchored the block to the
+ * marker line, so a marker written anywhere exempted everything below it; it took
+ * only a marker on line 100 of a file whose test module opens at line 900 to put
+ * 800 lines of production out of scope. Anchoring to the last real declaration
+ * makes that impossible: the exemption can never begin above the trailing fixture
+ * region, whatever line the marker sits on.
+ *
+ * Last rather than first for the mirror-image reason: a file may carry an interior
+ * `#[cfg(test)]` (an attribute on a single item) above its test module, and
+ * anchoring to the first would start the exemption too high. `paths.rs` does
+ * exactly this — real declarations at 435 and 748.
+ *
+ * A brace-counting revision of this function was withdrawn as unsound. A line-based
+ * scanner counts braces inside multi-line raw strings (`r#"..."#`) and char
+ * literals, and the two ways of counting disagree with each other AND with the
+ * files. Measured 2026-09-15 on three files that provably do end with their test
+ * module: `layout.rs` raw 0 / string-masked -2, `policy.rs` 0 / -4, `parser.rs`
+ * +3 / -5. Raw is wrong because it counts `set $brace a\{b;` inside a raw string;
+ * masked is worse, because masking a lone `"` (a char literal) opens a phantom
+ * literal that then swallows real code. Locating the last declaration needs no
+ * brace accounting at all.
+ */
+function fixtureBlockRange(lines) {
+  let last = lines.length - 1;
+  while (last >= 0 && lines[last].trim() === '') last -= 1;
+  const anchors = realAnchorLines(lines);
+  if (!anchors.length) return null;
+  if (!lines.some((line) => declaresFixtureBlock(line))) return null;
+  return { start: anchors[anchors.length - 1], end: last };
 }
 
 /**
@@ -477,6 +574,7 @@ function classifyCandidate(raw, workspaceName) {
   // are recognised as the placeholders the spec asks for rather than flagged as
   // the machine paths they stand in for.
   if (segments.some((s) => TEMPLATE_SEGMENT_RE.test(s))) return null;
+  if (segments.some((s) => ELLIPSIS_SEGMENT_RE.test(s))) return null;
 
   // Order matters. WORKSPACE-ABS is tested first and unconditionally, so a
   // path that names the relocatable workspace root is reported even when it also
@@ -541,17 +639,32 @@ function lintFile(file, workspaceName, includeMachinePaths, markedDirs = []) {
     return result;
   }
 
-  // Block-scope form: the file's own `#[cfg(test)]` module.
-  const blockStart = fixtureBlockStart(lines);
-  if (blockStart >= 0 && lines.slice(blockStart).some((l) => {
-    CANDIDATE_RE.lastIndex = 0;
-    return CANDIDATE_RE.test(l);
-  })) {
-    result.fixtureExempt = true;
+  // Block-scope form: the file's own `#[cfg(test)]` module, bounded by
+  // fixtureBlockRange so a production region that follows the test module is
+  // still scanned. The exemption is granted only when the block actually hides a
+  // finding — that is, when a candidate inside it survives classifyCandidate.
+  // Testing CANDIDATE_RE alone is not enough: its bare-slash branch matches every
+  // URL and route string, so a Rust unit test full of `"/downloads/report.pdf"`
+  // or `"/app/v3/api/..."` used to exempt the whole file while containing no
+  // machine path at all. Measured 2026-09-15: six production `src/*.rs` files
+  // were exempt on exactly that basis, with zero real absolute paths between them.
+  const block = fixtureBlockRange(lines);
+  const blockStart = block ? block.start : -1;
+  if (block) {
+    const hidesAFinding = lines.slice(block.start, block.end + 1).some((l) => {
+      CANDIDATE_RE.lastIndex = 0;
+      let candidate;
+      while ((candidate = CANDIDATE_RE.exec(l)) !== null) {
+        if (candidate[0].length < 4) continue;
+        if (classifyCandidate(candidate[0], workspaceName)) return true;
+      }
+      return false;
+    });
+    if (hidesAFinding) result.fixtureExempt = true;
   }
 
   lines.forEach((line, idx) => {
-    if (blockStart >= 0 && idx > blockStart) return;
+    if (block && idx >= block.start && idx <= block.end) return;
     if (isExempt(lines, idx)) return;
     CANDIDATE_RE.lastIndex = 0;
     let match;

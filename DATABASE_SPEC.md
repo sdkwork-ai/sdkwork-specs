@@ -306,7 +306,8 @@ Rules:
 
 - Table and column names `MUST` use lowercase `snake_case`.
 - New business table names `MUST` follow `<module_prefix>_<entity_name>`.
-- `<module_prefix>` `MUST` be a registered business module or bounded-context prefix, not a product name, company name, deployment name, programming language, framework, or legacy project prefix.
+- `<module_prefix>` `MUST` be a registered business module or bounded-context prefix, not a product name, company name, deployment name, programming language, or legacy project prefix.
+- A platform infrastructure layer that owns a bounded context `MAY` register a descriptive prefix naming that context (for example `framework_` for the web framework layer). Such a prefix `MUST` be registered in `tools/database-module-registry.json` before first use, and that registry entry is the sole authority for ownership. See `docs/architecture/decisions/ADR-20260917-web-framework-table-prefix.md`.
 - Entity names `SHOULD` use singular nouns. Collection semantics should be represented by relation tables or child entities.
 - Standard suffixes include `_history`, `_event`, `_snapshot`, `_detail`, `_item`, `_relation`, `_binding`, `_assignment`, `_outbox`, `_inbox`, `_read_model`, and `_audit`.
 - Foreign key-like fields `SHOULD` use `<entity>_id` or a domain-specific subject field name such as `tenant_id` and `organization_id`.

@@ -55,7 +55,7 @@ Three layers exist, in this order. Only the first is in source config.
 | --- | --- | --- | --- |
 | 1 | Static exact allowlist | `SDKWORK_CORS_ALLOWED_ORIGINS` in `etc/topology/<profile>.<environment>.env`; the `[cors]` table of a gateway TOML | this spec §4 |
 | 2 | Registered console host pattern | `SDKWORK_CORS_CONSOLE_HOST_{LABELS,SUFFIX,SCHEMES,BASE_DOMAINS}` | this spec §5 |
-| 3 | Runtime web CORS policy | `sdkwork-web-store-sqlx` migration `004_web_cors_policy.sql` + admin API | `WEB_FRAMEWORK_SPEC.md` §12 |
+| 3 | Runtime web CORS policy | `sdkwork-web-store-sqlx` migration `004_framework_cors_policy.sql` + admin API | `WEB_FRAMEWORK_SPEC.md` §12 |
 
 Layer 3 is a runtime data-plane override for operators; it `MUST NOT` be used to
 repair a source-config defect. A source profile that passes this spec must work

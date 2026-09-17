@@ -30,7 +30,7 @@
         "name": { "type": "string", "minLength": 1 },
         "displayName": { "type": "string", "minLength": 1 },
         "officialWebsiteUrl": { "type": "string", "format": "uri" },
-        "appType": { "enum": ["NONE", "SDK", "PPT", "APP_HTML", "APP_VUE", "APP_FLUTTER", "APP_UNIAPP", "APP_REACT", "APP_UNITY", "VIDEO", "POSTER"] }
+        "appType": { "enum": ["NONE", "SDK", "PPT", "APP_HTML", "APP_VUE", "APP_FLUTTER", "APP_UNIAPP", "APP_REACT", "APP_UNITY", "APP_HARMONY", "VIDEO", "POSTER"] }
       }
     },
     "backend": { "type": "object" },

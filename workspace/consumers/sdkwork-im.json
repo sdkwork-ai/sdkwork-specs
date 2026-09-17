@@ -130,7 +130,21 @@
       "../sdkwork-sdk-commons/sdkwork-sdk-common-typescript",
       "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-application-bootstrap",
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-react",
-      "../sdkwork-iam/sdks/sdkwork-iam-open-sdk/sdkwork-iam-open-sdk-typescript"
+      "../sdkwork-iam/sdks/sdkwork-iam-open-sdk/sdkwork-iam-open-sdk-typescript",
+      "../sdkwork-agents/apps/sdkwork-agents-h5/packages/sdkwork-agents-h5-agents",
+      "../sdkwork-company/apps/sdkwork-company-common/packages/sdkwork-company-mobile-react-enterprise",
+      "../sdkwork-company/apps/sdkwork-company-common/packages/sdkwork-company-runtime",
+      "../sdkwork-company/apps/sdkwork-company-common/packages/sdkwork-company-sdk-ports",
+      "../sdkwork-company/apps/sdkwork-company-pc/packages/sdkwork-company-pc-company",
+      "../sdkwork-company/sdks/sdkwork-company-app-sdk/sdkwork-company-app-sdk-typescript",
+      "../sdkwork-course/apps/sdkwork-course-common/packages/sdkwork-course-runtime",
+      "../sdkwork-course/apps/sdkwork-course-common/packages/sdkwork-course-sdk-ports",
+      "../sdkwork-feeds/sdks/sdkwork-feeds-sdk/sdkwork-feeds-sdk-typescript",
+      "../sdkwork-iam/apps/sdkwork-iam-h5/packages/sdkwork-iam-h5-auth",
+      "../sdkwork-order/apps/sdkwork-order-h5/packages/sdkwork-order-h5-subscription",
+      "../sdkwork-order/apps/sdkwork-order-h5/packages/sdkwork-order-h5-withdraw",
+      "../sdkwork-rtc/apps/sdkwork-rtc-h5/packages/sdkwork-rtc-h5-call",
+      "../sdkwork-voice/apps/sdkwork-voice-common/packages/sdkwork-voice-mobile-my-voices"
     ]
   },
   "catalog": {

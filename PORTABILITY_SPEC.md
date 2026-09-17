@@ -143,7 +143,7 @@ run_bounded() {
 
 | 类别 | 目录名 | 原因 |
 | --- | --- | --- |
-| 工具/依赖状态 | `node_modules` `.git` `target` `external` `vendor` `.vs` | `external/` 是 vendored 第三方树（arduino-esp32 / esp-idf / mbedtls / openclaw …），修改会在下次 vendor 同步时丢失；`.vs/` 是 Visual Studio 的按用户 IDE 状态（2026-09-15 加入：`sdkwork-membership` 提交了 `.vs/**/DocumentLayout.json`，内含 `<workspace-root>/sdkwork-membership/` 形式的绝对路径，属编辑器状态而非产品源码） |
+| 工具/依赖状态 | `node_modules` `.git` `target` `external` `vendor` `.vs` `.dart_tool` | `external/` 是 vendored 第三方树（arduino-esp32 / esp-idf / mbedtls / openclaw …），修改会在下次 vendor 同步时丢失；`.vs/` 是 Visual Studio 的按用户 IDE 状态（2026-09-15 加入：`sdkwork-membership` 提交了 `.vs/**/DocumentLayout.json`，内含 `<workspace-root>/sdkwork-membership/` 形式的绝对路径，属编辑器状态而非产品源码）；`.dart_tool/` 是 Dart/Flutter 的 pub 解析缓存（2026-09-15 加入：`sdkwork-agents` 提交了 3 份 `package_config.json`，内含 113 条生成机 pub cache 的绝对路径，与 NuGet 的 `obj/` 同类） |
 | 构建产物 | `dist` `build` `out` `bak` `coverage` `.next` `obj` | `dist/` 下的 bundle 是上面已审源码的副本；`obj/` 是 .NET/MSBuild 的中间输出根，与 `target/` 同类（2026-09-15 加入：`sdkwork-iam` / `sdkwork-im` 提交了 `sdks/**/generated/server-openapi/obj/project.assets.json` 与 `*.csproj.nuget.dgspec.json`，NuGet restore 会把生成机的绝对路径写满这些文件） |
 | Agent/运行时暂存 | `.workbuddy` `.sdkwork` `.tmp` `tmp` `.wsl-tmp` | 一次性脚手架与运行时状态，不是产品源码。`.wsl-tmp` 是工作区根的 WSL 侧临时脚手架目录（2026-09-10 加入：65 个临时脚本，未被任何规范/工具引用） |
 
@@ -153,42 +153,69 @@ run_bounded() {
 ### 5.2 工作区路径门禁的豁免标记（Exemption markers）
 
 `node sdkwork-specs/tools/check-workspace-path-portability.mjs --workspace <dir>` 按
-`DEPENDENCY_MANAGEMENT_SPEC.md` §1 / §9 执行"源码与构建配置不得绑定机器绝对路径"。它有**两级**标记，
-作用域不同，不要混用：
+`DEPENDENCY_MANAGEMENT_SPEC.md` §1 / §9 执行“源码与构建配置不得绑定机器绝对路径”。它有**四级**标记，
+作用域不同，不要混用。四级都只豁免“数据”，都不豁免“绑定”本身；每一级都配了“不得掩盖生产绑定”的兜底。
 
 | 标记 | 作用域 | 适用场景 |
 | --- | --- | --- |
 | `WORKSPACE-PATH:allow` | **行**级：标记所在行，或其后 8 行内 | 该字面量确实不是源码/构建绑定，例如文档化的运行时目标路径，或归一化断言所钉住的期望值 |
-| `WORKSPACE-PATH:allow-fixture` | **文件**级：必须出现在文件前 20 行内 | 整个测试文件就是"模拟一个外部检出根"的夹具 |
+| `WORKSPACE-PATH:allow-fixture` | **文件**级：必须在文件前 20 行内，且**仅测试文件生效** | 整个测试文件就是“模拟一个外部检出根”的夹具 |
+| `.workspace-path-fixture`（同名的标记**文件**） | **目录**级：该标记文件所在的测试作用域目录及其子树 | 夹具的格式本身容不下注释——`.json` 一致性语料、`.txt` 期望输出快照——此时理由写在文件系统里，而不是塞进一个没有注释语法的格式 |
+| `WORKSPACE-PATH:allow-fixture-block` | **块**级：标记须写在注释里；效果只及于**文件末尾那个 `#[cfg(test)]` 模块**——区域起点是文件中**最后一条真实的 `#[cfg(test)]` 声明**，不是标记所在行，从该声明豁免到文件末尾 | Rust 把单元测试放在生产文件里，这类模块按路径既不是 `*.test.*` 也不在 `tests/` 下，前面三级都够不着。区域锚在最后一条真实声明上，因此标记即便写在生产代码里，也跳不过它上方的生产代码 |
 
 行级窗口取 8 行而不是 1 行：rustfmt 与 prettier 会把**一条**调用折成多行，窗口若只覆盖物理行，
 作者明明写了的标记会被读成不存在（2026-09-15 实证：`provider_session_path.rs` 的 `assert_eq!` 已带标记，
 仍被报出 4 处）。
 
-文件级标记**只在测试文件生效**（文件名形如 `*.test.*` / `*.spec.*`，或路径含 `tests/`、`test/`、
-`__tests__/`）。夹具这一级豁免不可避免：测试要模拟一个外部检出根，就得在数据里写出那个根，而
-`sdkwork-<name>` 段往往**正是被断言的值**——按路径派生的分块名、按目录派生的应用代号、拼出的 surface
-目录、模拟的 PowerShell 提示符（形如 `<drive>:\sdkwork-terminal>`）——此时既不能把夹具中性化（会删掉
-测试所断言的东西），也不该逐行标注（`SIBLING-REPO-ABS` 本身分不清夹具与真实引用）。
+文件级标记**只在测试文件生效**（文件名形如 `*.test.*` / `*.spec.*`，路径含 `tests/`、`test/`、
+`__tests__/`，或 Rust 约定的 `tests.rs` / `test_<subject>.rs`）。夹具这一级豁免不可避免：测试要模拟
+一个外部检出根，就得在数据里写出那个根，而 `sdkwork-<name>` 段往往**正是被断言的值**——按路径派生的
+分块名、按目录派生的应用代号、拼出的 surface 目录、模拟的 PowerShell 提示符——此时既不能把夹具中性化
+（会删掉测试所断言的东西），也不该逐行标注（`SIBLING-REPO-ABS` 本身分不清夹具与真实引用）。
 在非测试文件里写该标记**没有任何效果**：门禁把它当错误报出（`FIXTURE-MARKER-NOT-APPLICABLE`），
-所以它无法用来掩盖真实绑定。
+并**继续扫描**该文件，所以它无法用来掩盖真实绑定。文档文件豁免这条检查，理由是本规范必须能写出这个标记名。
 
-两类豁免都不静默：无论通过与否，门禁都会打印已声明的行级豁免数与**被豁免文件清单**。
+目录级与块级同样带兜底。目录级要求该目录本身是测试作用域：把标记文件放在仓库根或生产源码目录下，
+一个文件也豁免不了（2026-09-15 实证）。块级要求标记**与 `#[cfg(test)]` 在同一行**：把标记单独写一行、
+或写在生产代码行上，都不生效（2026-09-15 实证；两个正反用例都在门禁回归测试里）。
 
-本节与 §5.1 末段不冲突：§5.1 管"整个目录本就不该审"（走排除表），本节管"受审文件里，某行或某个
-测试夹具是数据而非绑定"。
+四级豁免都不静默：无论通过与否，门禁都会打印已声明的行级豁免数与**被豁免文件清单**。
+
+本节与 §5.1 末段不冲突：§5.1 管“整个目录本就不该审”（走排除表），本节管“受审文件里，某行、某个
+测试夹具、某个测试作用域目录、或某个 `#[cfg(test)]` 块是数据而非绑定”。
+
+#### 不是绑定的四种字面量（不作为 finding）
+
+门禁把“路径形态”与“路径绑定”分开，以下四种形态**按设计**不报，理由是它们不可能是可解析的绑定：
+
+| 形态 | 例子 | 依据 |
+| --- | --- | --- |
+| 模板段 | `<workspace-root>/sub`、`C:/Users/<user>/sub` | 没有任何文件系统接受 `<` 作名字，§1 要求文档就用这个形式 |
+| 省略号段 | 盘符根或挂载根后面接一个三点省略号 | 省略号永远不是子目录名，写它的路径按构造就是不完整的；下限三个点，真正的两点 `..` 分量仍受审 |
+| 正则字面量 | 以 `\` 或“单字母 + `\`”开头的正则转义，以及含转义斜杠的正则分支 | 转义斜杠不出现在任何平台的路径字面量里 |
+| 八进制转义 | 形如 C/Java 字符串里的三位八进制字节转义（生成的 protobuf 描述符会写出这种形态） | 那是不打印字符的转义，不是盘符 |
+
+四条都是 2026-09-15 实测出来的假阳性类别，各自在门禁回归测试里有一正一反两个用例。
 
 #### English summary
 
 `WORKSPACE-PATH:allow` exempts a line, or any line within 8 lines below the marker — a statement, not a
 physical line, because rustfmt and prettier wrap one call across several rows. `WORKSPACE-PATH:allow-fixture`
-in the first 20 lines exempts a whole test file, and is honoured **only** in a test file: a fixture that
-simulates a foreign checkout root must name that root in its data, and the `sdkwork-<name>` segment is
-frequently the value under assertion, so neither genericizing the fixture nor marking it line by line is
-correct. Outside a test file the marker has no effect and is reported as `FIXTURE-MARKER-NOT-APPLICABLE`,
-so it cannot conceal a production binding. The gate always prints the declared line-exemption count and the
-list of fixture-exempt files.
+in the first 20 lines exempts a whole test file, and is honoured **only** in a test file. A marker *file* named
+`.workspace-path-fixture` exempts the test-scoped directory it sits in, for fixtures whose format has nowhere to
+put a comment. `WORKSPACE-PATH:allow-fixture-block` must be written in a comment, and exempts from the file's
+**last real `#[cfg(test)]` declaration** to end of file, for Rust's in-file unit-test modules. The region is
+anchored to that declaration rather than to the marker's own line, so a marker written in production code cannot
+skip the production code above the test module. Outside a test file — or, for the directory and block forms,
+outside a test-scoped directory, or with no `#[cfg(test)]` anywhere in the file — a marker has no effect and is
+reported as `FIXTURE-MARKER-NOT-APPLICABLE`, so it cannot conceal a production binding. A fixture that simulates
+a foreign checkout root must name that root in its data, and the `sdkwork-<name>` segment is frequently the value
+under assertion, so neither genericizing the fixture nor marking it line by line is correct. The gate always
+prints the declared line-exemption count and the list of fixture-exempt files.
 
+Four literal shapes are not bindings and are never reported: an angle-bracket template segment, an ellipsis
+segment, a regular-expression fragment (a backslash-escaped slash), and a C/Java octal escape in a byte
+literal. None can resolve to a path on any platform, and each has a positive and a negative regression test.
 ## 6. 回归要求（Regression duty)
 
 修改任何受约束脚本后必须：
@@ -202,9 +229,21 @@ list of fixture-exempt files.
 
 另：任何**新增或修改**受版本控制的源码、配置或文档后，追加
 `node sdkwork-specs/tools/check-workspace-path-portability.mjs --workspace <dir>`（0 finding）。
-该门禁的作用域与豁免规则见 §5.1 / §5.2。
+该门禁默认审三类规则：工作区根（`WORKSPACE-ABS`）、兄弟仓（`SIBLING-REPO-ABS`）、以及工作区之外的
+机器根路径（`MACHINE-ABS`——盘符化的工具链/安装缓存、POSIX 家目录、Windows 用户目录、MSYS 盘挂载）。
+第三类**默认开启**：写死的家目录、工具链根、安装缓存正是换机器或换操作系统就会失效的东西。只想快速
+看一眼某次改动是否碰到工作区根与兄弟仓时，用 `--workspace-only` 收窄。作用域与豁免规则见 §5.1 / §5.2，
+门禁自身行为由 `tools/check-workspace-path-portability.test.mjs`（`pnpm test:workspace-path-portability`）钉住。
 
 After touching any governed script: run the portability gate (0 findings), the module-bin gate
 (0 findings per module), and at least one real read-only smoke command.
 For a whole-fleet sweep add `--no-bash-n` — one `bash -n` fork per file turns a few seconds into
 30+ minutes on Windows/MSYS, while module CI still runs the syntax check.
+
+The portability gate audits three rules by default — the workspace root (`WORKSPACE-ABS`), sibling checkouts
+(`SIBLING-REPO-ABS`), and machine-rooted paths outside the workspace (`MACHINE-ABS`: drive-rooted toolchain and
+installer-cache directories, POSIX home directories, Windows profile directories, MSYS drive mounts). The third
+is on by default because a hardcoded home directory, toolchain root, or installer cache is exactly what breaks
+when the same tree is built on another machine or another operating system; `--workspace-only` narrows a run to
+the two workspace rules. Scope and exemption rules are §5.1 / §5.2; the gate's own behaviour is pinned by
+`tools/check-workspace-path-portability.test.mjs` (`pnpm test:workspace-path-portability`).

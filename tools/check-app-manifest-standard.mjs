@@ -17,7 +17,7 @@ const REQUIRED_SECTIONS = [
 ];
 const APP_TYPES = new Set([
   'NONE', 'SDK', 'PPT', 'APP_HTML', 'APP_VUE', 'APP_FLUTTER', 'APP_UNIAPP',
-  'APP_REACT', 'APP_UNITY', 'VIDEO', 'POSTER',
+  'APP_REACT', 'APP_UNITY', 'APP_HARMONY', 'VIDEO', 'POSTER',
 ]);
 const RUNTIME_FAMILIES = new Set([
   'web', 'mobile', 'desktop', 'server', 'cli', 'mini-program', 'library', 'plugin',

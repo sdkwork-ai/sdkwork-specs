@@ -81,6 +81,28 @@ test('accepts an etc deployment index instead of a legacy environment map', () =
   assert.ok(validateAppManifest(manifest).some((issue) => issue.includes('metadata.deploymentConfig')));
 });
 
+test('keeps the app type vocabulary aligned with the published schema', () => {
+  const schema = JSON.parse(fs.readFileSync(
+    path.join(import.meta.dirname, '..', 'schemas', 'sdkwork.app.config.schema.v3.json'),
+    'utf8',
+  ));
+  const declared = schema.properties.app.properties.appType.enum;
+  assert.ok(declared.includes('APP_HARMONY'));
+
+  for (const appType of declared) {
+    const manifest = validManifest();
+    manifest.app.appType = appType;
+    assert.ok(
+      !validateAppManifest(manifest).some((issue) => issue.includes('app.appType')),
+      `schema-declared appType ${appType} must be accepted by the validator`,
+    );
+  }
+
+  const unknown = validManifest();
+  unknown.app.appType = 'APP_ARKTS';
+  assert.ok(validateAppManifest(unknown).some((issue) => issue.includes('app.appType')));
+});
+
 test('rejects unknown top-level fields, secrets, and broken release references', () => {
   const manifest = validManifest();
   manifest.environments.production = { apiKey: 'secret-value' };
