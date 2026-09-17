@@ -865,4 +865,121 @@ const localRootRefRoot = rootWithScript(
 const localRootRef = validateDatabaseFramework(localRootRefRoot);
 assert.equal(localRootRef.ok, true, 'a command using --app-root . must remain valid');
 
+// Section 5.3: a bounded module under `database/modules/{module-id}/` holds its own
+// manifest, so it is a module root in its own right. Checking only `database/` reported
+// the parent as clean while every bounded module went unread.
+function scaffoldBoundedModule(appRoot, moduleId) {
+  const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-db-bounded-'));
+  scaffoldValidDatabaseRoot(staging);
+  const target = path.join(appRoot, 'database', 'modules', moduleId);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.cpSync(path.join(staging, 'database'), target, { recursive: true });
+  fs.rmSync(staging, { recursive: true, force: true });
+
+  // A bounded module owns its own module id and prefix. The contract check requires
+  // the manifest tablePrefix, the schema table_prefix and the prefix registry to agree,
+  // so all three move together.
+  const prefix = moduleId.replace(/-/gu, '_') + '_';
+  const manifestPath = path.join(target, 'database.manifest.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  manifest.moduleId = moduleId;
+  manifest.serviceCode = moduleId.replace(/-/gu, '_').toUpperCase();
+  manifest.tablePrefix = prefix;
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+  const schemaPath = path.join(target, 'contract', 'schema.yaml');
+  fs.writeFileSync(
+    schemaPath,
+    fs
+      .readFileSync(schemaPath, 'utf8')
+      .replace('module_id: demo', 'module_id: ' + moduleId)
+      .replace('table_prefix: demo_', 'table_prefix: ' + prefix),
+    'utf8',
+  );
+  writeJson(
+    'database/modules/' + moduleId + '/contract/prefix-registry.json',
+    {
+      schemaVersion: 1,
+      kind: 'sdkwork.database.prefix-registry',
+      prefixes: [{ prefix, owner: moduleId + '-platform', domain: moduleId }],
+    },
+    appRoot,
+  );
+  // The contract check requires every registered table name to start with the
+  // manifest tablePrefix, so the registry moves with the prefix.
+  writeJson(
+    'database/modules/' + moduleId + '/contract/table-registry.json',
+    {
+      schemaVersion: 1,
+      kind: 'sdkwork.database.table-registry',
+      tables: [
+        {
+          table_name: prefix + 'probe',
+          owner: moduleId + '-platform',
+          compliance_level: 'L2',
+          lifecycle_status: 'active',
+        },
+      ],
+    },
+    appRoot,
+  );
+  return target;
+}
+
+const boundedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-db-framework-'));
+scaffoldValidDatabaseRoot(boundedRoot);
+const boundedModuleDir = scaffoldBoundedModule(boundedRoot, 'billing');
+const completeBounded = validateDatabaseFramework(boundedRoot);
+assert.equal(
+  completeBounded.ok,
+  true,
+  'a complete bounded module must pass: ' + JSON.stringify(completeBounded.failures),
+);
+
+// A missing required path inside the bounded module is reported and attributed to it,
+// otherwise the reader cannot tell which of several roots is broken.
+fs.rmSync(path.join(boundedModuleDir, 'fixtures'), { recursive: true, force: true });
+const brokenBounded = validateDatabaseFramework(boundedRoot);
+assert.equal(brokenBounded.ok, false, 'a bounded module missing fixtures must fail');
+assert.ok(
+  brokenBounded.failures.some(
+    (item) => item.startsWith('database/modules/billing: ') && item.endsWith('fixtures must exist'),
+  ),
+  'the bounded module failure must name its own root: ' + JSON.stringify(brokenBounded.failures),
+);
+
+// The contract checks apply to a bounded root too, not only the layout checks. An
+// invalid contractVersion is reported by the contract check alone, so this assertion
+// cannot be satisfied by the layout required-path list.
+const boundedContractRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-db-framework-'));
+scaffoldValidDatabaseRoot(boundedContractRoot);
+const boundedContractModuleDir = scaffoldBoundedModule(boundedContractRoot, 'billing');
+const boundedContractManifestPath = path.join(boundedContractModuleDir, 'database.manifest.json');
+const boundedContractManifest = JSON.parse(fs.readFileSync(boundedContractManifestPath, 'utf8'));
+boundedContractManifest.contractVersion = 'not-a-version';
+fs.writeFileSync(
+  boundedContractManifestPath,
+  JSON.stringify(boundedContractManifest, null, 2) + '\n',
+  'utf8',
+);
+const brokenBoundedContract = validateDatabaseFramework(boundedContractRoot);
+assert.ok(
+  brokenBoundedContract.failures.some((item) =>
+    item.startsWith('database/modules/billing: ')
+    && item.includes('contractVersion must be valid SemVer')),
+  'the bounded module contract must be checked too: ' + JSON.stringify(brokenBoundedContract.failures),
+);
+
+// A directory under database/modules/ without a manifest is not a module root, so it
+// must not be reported: discovery follows the manifest, not the directory name.
+const notAModuleRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-db-framework-'));
+scaffoldValidDatabaseRoot(notAModuleRoot);
+fs.mkdirSync(path.join(notAModuleRoot, 'database', 'modules', 'scratch'), { recursive: true });
+const noManifestInModules = validateDatabaseFramework(notAModuleRoot);
+assert.equal(
+  noManifestInModules.ok,
+  true,
+  'a directory without a manifest is not a bounded module root: '
+    + JSON.stringify(noManifestInModules.failures),
+);
+
 process.stdout.write('check-database-framework-standard.test.mjs passed\n');

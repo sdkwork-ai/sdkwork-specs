@@ -862,14 +862,55 @@ export function validateDatabaseModuleLayout(moduleRootDir, requiredRole = null)
   return { ok: failures.length === 0, failures, databaseRole };
 }
 
+/**
+ * Discovers the bounded module roots under `database/modules/` (section 5.3).
+ *
+ * DATABASE_FRAMEWORK_SPEC.md section 5.3 lets an application root carry additional
+ * bounded database modules under `database/modules/{module-id}/`. Each one holds its
+ * own `database.manifest.json`, so each one is a module root in its own right and
+ * carries the required paths, engine directories, contract and seed manifest of its
+ * role.
+ *
+ * A bounded module may itself carry bounded modules, so the walk recurses.
+ */
+export function discoverBoundedModuleRoots(moduleRootDir) {
+  const modulesDir = path.join(moduleRootDir, 'modules');
+  if (!fs.existsSync(modulesDir)) return [];
+  const roots = [];
+  for (const entry of fs.readdirSync(modulesDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const candidate = path.join(modulesDir, entry.name);
+    if (!fs.existsSync(path.join(candidate, 'database.manifest.json'))) continue;
+    roots.push(candidate, ...discoverBoundedModuleRoots(candidate));
+  }
+  return roots.sort();
+}
+
 export function validateDatabaseFramework(rootDir) {
   if (!directoryContainsFiles(path.join(rootDir, 'database'))) {
     return { ok: true, skipped: true, failures: [] };
   }
 
-  const moduleResult = validateDatabaseModuleLayout(path.join(rootDir, 'database'));
-  const contractResult = validateDatabaseModuleContract(path.join(rootDir, 'database'));
+  const databaseRoot = path.join(rootDir, 'database');
+  const moduleResult = validateDatabaseModuleLayout(databaseRoot);
+  const contractResult = validateDatabaseModuleContract(databaseRoot);
   const failures = [...moduleResult.failures, ...contractResult.failures];
+
+  // A bounded module is a module root, so it is validated as one. Checking only
+  // `database/` reported the parent root as clean while every `database/modules/*`
+  // root went unread: five of cloudrouter's seven bounded modules carried missing
+  // paths, a missing contract registry and baseline columns that violate the
+  // organization_id contract, and no gate ever said so.
+  for (const boundedRoot of discoverBoundedModuleRoots(databaseRoot)) {
+    const label = path.relative(rootDir, boundedRoot).split(path.sep).join('/');
+    const boundedFailures = [
+      ...validateDatabaseModuleLayout(boundedRoot).failures,
+      ...validateDatabaseModuleContract(boundedRoot).failures,
+    ];
+    for (const failure of boundedFailures) {
+      failures.push(`${label}: ${failure}`);
+    }
+  }
   const packageJsonPath = path.join(rootDir, 'package.json');
   if (fs.existsSync(packageJsonPath)) {
     const packageJson = parseJsonFile(packageJsonPath);
