@@ -222,7 +222,7 @@ Use this repository's package manifest scripts. Record commands and outputs. Del
 
 ## Task-Specific Standards
 
-Keep task triggers concise. API work loads `API_SPEC.md`; list/search work loads `PAGINATION_SPEC.md`; source config work loads `SOURCE_CONFIG_SPEC.md`. Link the authority and validator instead of copying its normative body into `AGENTS.md`.
+Keep task triggers concise. API work loads `API_SPEC.md`; list/search work loads `PAGINATION_SPEC.md`; source config work loads `SOURCE_CONFIG_SPEC.md`. Client root work loads `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` plus the matching root architecture standard, and `DESKTOP_APP_ARCHITECTURE_SPEC.md` for any Tauri, Electron, or Capacitor desktop host. Link the authority and validator instead of copying its normative body into `AGENTS.md`.
 ```
 
 ## 8. Compatibility Shim Templates

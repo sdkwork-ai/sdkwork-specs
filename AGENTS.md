@@ -161,7 +161,7 @@ Those authorities define the permission-inheritance and normalized route-collisi
 
 ## Task-Specific Standards
 
-API work loads `API_SPEC.md` and its validators. List/search work loads `PAGINATION_SPEC.md` and `check-pagination.mjs`. Source configuration work loads `SOURCE_CONFIG_SPEC.md` and `check-source-config-standard.mjs`. Web server configuration work loads `SDKWORK_WEBSERVER_SPEC.md` and `check-webserver-toml-standard.mjs`. Rollback, restore, and defect-repair work loads `ROLLBACK_RESTRICTION_SPEC.md` and `sync-agent-rollback-restriction-standard.mjs`. Link these authorities instead of copying their normative bodies into `AGENTS.md`.
+API work loads `API_SPEC.md` and its validators. List/search work loads `PAGINATION_SPEC.md` and `check-pagination.mjs`. Source configuration work loads `SOURCE_CONFIG_SPEC.md` and `check-source-config-standard.mjs`. Web server configuration work loads `SDKWORK_WEBSERVER_SPEC.md` and `check-webserver-toml-standard.mjs`. Rollback, restore, and defect-repair work loads `ROLLBACK_RESTRICTION_SPEC.md` and `sync-agent-rollback-restriction-standard.mjs`. Client application root work loads `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` plus the matching root architecture standard, and loads `DESKTOP_APP_ARCHITECTURE_SPEC.md` for any Tauri, Electron, or Capacitor desktop host or `APP_H5_ARCHITECTURE_SPEC.md` §8 for the one H5 Capacitor mobile host. Desktop host package naming is owned by `NAMING_SPEC.md` §3 and the `desktop:*` command family by `PNPM_SCRIPT_SPEC.md` §4.1.1. Link these authorities instead of copying their normative bodies into `AGENTS.md`.
 
 ## Rollback Restriction And Fix-Forward
 

@@ -574,6 +574,7 @@ Rules:
 - Capacitor builds `MUST` use the H5 mobile renderer build output. `webDir` `MUST` point at that output, and the host package `MUST NOT` build a second web bundle.
 - Platform code belongs in the per-platform subtrees (`ios/`, `android/`) and the per-platform adapter or plugin files. Shared code lives in `src/` and `MUST NOT` import platform-only globals.
 - The Capacitor dev commands `dev:capacitor-ios:standalone`, `dev:capacitor-ios:cloud`, `dev:capacitor-android:standalone`, and `dev:capacitor-android:cloud` select the Capacitor targets when packaging is enabled.
+- An H5 root `MUST NOT` introduce a generic `sdkwork-<application-code>-h5-host` package. The only host package name for an H5 root is `sdkwork-<application-code>-h5-capacitor` (`NAMING_SPEC.md` section 3.1): a root that currently carries `-h5-host` `MUST` be renamed, and a root that ships no Capacitor platform `MUST NOT` carry an H5 host package at all. A generic `-pc-host` is equally non-canonical and `MUST NOT` stand beside a `-pc-<architecture>` desktop host.
 - A root owning a single mobile host `MAY` also expose the `mobile:*` host family from `PNPM_SCRIPT_SPEC.md` section 4.1.2 (`mobile:dev`, `mobile:dev:ios`, `mobile:build:android`) as a top-level alias of the action-first `dev:capacitor-ios` / `build:capacitor-android` commands, with the same default profile (`standalone`, `development`). The action-first names remain canonical, and a root owning more than one mobile host `MUST NOT` expose the family.
 - Capacitor ownership is split by client root and `MUST NOT` overlap. This standard owns the Capacitor **iOS/Android** host of an H5 root (`h5-capacitor`, `runtime_target = "capacitor-ios" | "capacitor-android"`). The Capacitor **desktop** host of a PC root (`pc-capacitor`, `clientArchitecture = "capacitor"`, `runtimeTarget = "desktop"`) is owned by `APP_PC_ARCHITECTURE_SPEC.md` and `DESKTOP_APP_ARCHITECTURE_SPEC.md`. An H5 root `MUST NOT` own the desktop Capacitor host, and a PC root `MUST NOT` own mobile Capacitor targets.
 
@@ -719,6 +720,7 @@ Rules:
 - `runtime.family` in `sdkwork.app.config.json` should be `mobile` for H5/Capacitor applications.
 - `runtime.framework` should be `react-capacitor` when Capacitor targets exist and `react-h5` or a more specific value when H5-only.
 - `runtime.runtimes` should declare actual runtime families such as `WEB`, `CAPACITOR_IOS`, and `CAPACITOR_ANDROID` when represented by the manifest schema.
+- Each shipped Capacitor platform `MUST` declare `clientArchitecture = "capacitor"` on its `artifacts.installConfig.packages[]` entry together with the matching `runtimeTarget` (`capacitor-ios` or `capacitor-android`), resolving to the single `sdkwork-<application-code>-h5-capacitor` host package under the client-root-scoped rule of `APP_MANIFEST_SPEC.md`. An H5 root `MUST NOT` declare a `runtimeTarget = "desktop"` entry; desktop Capacitor belongs to the PC root.
 - `publish.platforms` should include actual supported platforms such as `H5`, `H5_WEIXIN`, `APP_IOS`, and `APP_ANDROID`.
 - `artifacts.installConfig.packages[]` must describe H5 URL packages, App Store/TestFlight or IPA entries, Google Play/private store or APK/AAB entries, and release package ids.
 - `app.identifiers.bundleId` owns iOS bundle identity. `app.identifiers.packageName` owns Android application id.
@@ -818,6 +820,7 @@ Required verification for H5 application architecture changes:
 | --- | --- |
 | Root layout | Static check proves the root path uses `apps/sdkwork-<application-code>-h5/` and `.sdkwork/`, `config/browser`, `config/host`, `src/bootstrap`, `packages/`, `sdks/`, `scripts/`, and tests exist for application roots. |
 | Package naming | Static check proves new packages use `sdkwork-<application-code>-h5-*`, including reserved console/admin/host forms. |
+| Host package naming | `node <sdkwork-specs>/tools/check-client-host-packages.mjs --root .` proves the H5 root carries at most the single `sdkwork-<application-code>-h5-capacitor` host package, that no generic `-h5-host` exists, and that the host package carries a `package.json`. |
 | Renderer sharing | Tests or static checks prove H5, WebView, iOS, and Android targets reuse the same renderer, route contributions, SDK clients, IAM runtime, and TokenManager. |
 | Surface split | Static scan proves app, console, and admin packages do not deep import each other or share hidden route/service internals. |
 | SDK boundary | Static scan proves app/console packages use app SDKs, approved `backend-admin` packages use backend SDKs, protected open-api uses declared open-api credential provider, and no raw HTTP/manual auth headers/generated SDK edits were introduced. |

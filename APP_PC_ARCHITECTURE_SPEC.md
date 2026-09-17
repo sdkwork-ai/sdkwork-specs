@@ -205,6 +205,10 @@ Standard config ownership:
 | --- | --- | --- | --- |
 | Vite/browser build env | `.env.<deployment-profile>.<environment>` | public `VITE_*` profile identity, SDK base URLs, public flags | secrets, tokens, database/Redis config, host packaging metadata |
 | Browser deploy-time runtime | `config/browser/runtime-env.<deployment-profile>.<environment>.example.json`, `/runtime-env.js` | promotable public SDK base URLs, public feature flags, public app metadata | secrets, database URLs, Redis URLs, tokens, private service endpoints |
+| Desktop user runtime | `config/desktop/<application-code>.<deployment-profile>.<environment>.toml.example`, user `~/.sdkwork/<application-code>/config/<application-code>.toml` | installed desktop mode, local service toggle, declared client-local user-private SQLite path, secure storage provider | server PostgreSQL defaults for dev services, API route constants, signing secrets |
+| Server runtime | `config/server/<application-code>.<deployment-profile>.<environment>.toml.example`, `/etc/sdkwork/<application-code>/<process>.toml` | bind address, PostgreSQL, Redis, reverse proxy trust, service paths | browser-only `VITE_*`, Tauri packaging metadata |
+| Container runtime | `config/container/<application-code>.<deployment-profile>.<environment>.toml.example`, mounted `/etc/sdkwork/...` | container service config, mounted secrets, external services, volumes | image-baked secrets or mutable database state |
+| Tauri platform | `src-tauri/tauri.*.conf.json`, optional `config/tauri/` templates | bundle id, package id, icons, permissions, capabilities, window metadata, signing references | business API contracts, SDK ownership, auth tokens, private keys |
 
 The browser runtime source matrix is one file per supported
 `<deployment-profile>.<environment>` combination (all ten when both
@@ -214,10 +218,6 @@ environment-only or profile-only names. Value rules per profile follow
 `ENVIRONMENT_SPEC.md` §5.1.0.1: `standalone` sources use the same-origin root
 `/` for every SDK base URL; `cloud` sources use the unified `cloudApiBaseUrl`
 origin for the environment (`api-dev.<domain>` … `api-demo.<domain>` … `api.<domain>`).
-| Desktop user runtime | `config/desktop/<application-code>.<deployment-profile>.<environment>.toml.example`, user `~/.sdkwork/<application-code>/config/<application-code>.toml` | installed desktop mode, local service toggle, declared client-local user-private SQLite path, secure storage provider | server PostgreSQL defaults for dev services, API route constants, signing secrets |
-| Server runtime | `config/server/<application-code>.<deployment-profile>.<environment>.toml.example`, `/etc/sdkwork/<application-code>/<process>.toml` | bind address, PostgreSQL, Redis, reverse proxy trust, service paths | browser-only `VITE_*`, Tauri packaging metadata |
-| Container runtime | `config/container/<application-code>.<deployment-profile>.<environment>.toml.example`, mounted `/etc/sdkwork/...` | container service config, mounted secrets, external services, volumes | image-baked secrets or mutable database state |
-| Tauri platform | `src-tauri/tauri.*.conf.json`, optional `config/tauri/` templates | bundle id, package id, icons, permissions, capabilities, window metadata, signing references | business API contracts, SDK ownership, auth tokens, private keys |
 
 Rules:
 
@@ -711,6 +711,7 @@ These are valid historical references for package decomposition, but they are no
 Rules:
 
 - New PC application packages `MUST` include the `pc` segment.
+- Desktop host packages `MUST` be named `sdkwork-<application-code>-pc-<architecture>` with `<architecture>` in `tauri`, `electron`, `capacitor` (`NAMING_SPEC.md` section 3.1), one host package per architecture. A repository still carrying `sdkwork-<application-code>-pc-desktop` is running on the retired migration alias for the Tauri host: the rename to `-pc-tauri` `MUST` be completed, and the alias `MUST NOT` be reused for a second architecture or for a new host package. Until the rename lands, exactly one package in that client root `MUST` own `src-tauri/`, and no package `MUST` be named `-pc-host` alongside a `-pc-<architecture>` desktop host.
 - Existing packages may be migrated incrementally by adding normalized package names and compatibility exports.
 - During migration, do not move app, console, and admin behavior into one catch-all package to reduce rename work.
 - Migration tests `SHOULD` prove public exports, route ids, SDK dependencies, and permission prefixes remain compatible.
@@ -723,6 +724,7 @@ Required verification for PC application architecture changes:
 | --- | --- |
 | Root layout | Static check proves the root path uses `apps/sdkwork-<application-code>-pc/` and `.sdkwork/`, `src/`, `packages/`, `sdks/`, `scripts/`, and required metadata exist for application roots. |
 | Package naming | Static check proves new packages use `sdkwork-<application-code>-pc-*`, `sdkwork-<application-code>-pc-console-*`, or `sdkwork-<application-code>-pc-admin-*`. |
+| Host package naming | `node <sdkwork-specs>/tools/check-client-host-packages.mjs --root .` proves every native host package is architecture-explicit, is owned by the matching client root, keeps exactly one package per architecture, and carries a `package.json`. The retired `-pc-desktop` alias is reported as migration debt and fails the gate under `--strict`. |
 | Surface split | Static scan proves app, console, and admin packages do not deep import each other or share hidden route/service internals. |
 | SDK boundary | Static scan proves app/console use app SDKs, `backend-admin` packages use backend SDKs, protected open-api uses declared open-api credential provider, and no raw HTTP/manual auth headers were introduced. |
 | SDK export boundary | Static scan proves `pc-core` exports app SDK/appbase app SDK wrappers and no backend SDK wrappers, while backend SDK/appbase backend SDK wrappers are exported only from `pc-admin-core` or another `backend-admin` boundary. |

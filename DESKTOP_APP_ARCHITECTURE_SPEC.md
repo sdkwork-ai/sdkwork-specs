@@ -24,7 +24,7 @@ Desktop SDK composition, appbase IAM runtime wiring, dependency SDK usage, and g
 
 For SDKWork PC applications, `APP_PC_ARCHITECTURE_SPEC.md` is the parent application-root standard. This file is the desktop/tablet native host detail standard for the `sdkwork-<application-code>-pc-tauri` (Tauri host), `sdkwork-<application-code>-pc-electron` (Electron host), and `sdkwork-<application-code>-pc-capacitor` (Capacitor host) packages and related native packaging behavior, including Windows, macOS, Linux, iPadOS, and Android tablet targets.
 
-Capacitor ownership is split by client root, never shared: this standard and `APP_PC_ARCHITECTURE_SPEC.md` own the Capacitor **desktop** host of a PC root (`clientArchitecture = "capacitor"`, `runtimeTarget = "desktop"`), while `APP_H5_ARCHITECTURE_SPEC.md` owns the Capacitor **iOS/Android** host of an H5 root (`runtime_target = "capacitor-ios" | "capacitor-android"`). A PC root `MUST NOT` own mobile Capacitor targets, and an H5 root `MUST NOT` own the desktop Capacitor host.
+Capacitor ownership is split by client root, never shared: this standard and `APP_PC_ARCHITECTURE_SPEC.md` own the Capacitor **desktop** host of a PC root (`clientArchitecture = "capacitor"`, `runtimeTarget = "desktop"`), while `APP_H5_ARCHITECTURE_SPEC.md` owns the Capacitor **iOS/Android** host of an H5 root (`clientArchitecture = "capacitor"`, `runtimeTarget = "capacitor-ios" | "capacitor-android"`). A PC root `MUST NOT` own mobile Capacitor targets, and an H5 root `MUST NOT` own the desktop Capacitor host.
 
 ## 1. Reference Architecture
 
@@ -652,6 +652,7 @@ Required verification for desktop architecture changes:
 | Verification | Evidence |
 | --- | --- |
 | Package boundary | Static scan proves Tauri code lives in `-pc-tauri`, Electron code lives in `-pc-electron`, Capacitor code lives in `-pc-capacitor`, no host package contains a second architecture's scaffold or dependencies, and feature UI lives in app/domain packages. |
+| Host package naming | `node <sdkwork-specs>/tools/check-client-host-packages.mjs --root .` proves every native host package is architecture-explicit, is owned by the matching client root, keeps exactly one package per architecture, and carries a `package.json`. The retired `-pc-desktop` alias is reported as migration debt and fails the gate under `--strict`. |
 | Adapter ownership | Static scan proves each host adapter lives in its own host package, and `pc-core/src/host/` contains only the contract re-export, host registry, and browser fallback with no native host dependency. |
 | SDK boundary | Static scan proves no raw HTTP, manual token headers, or generated SDK edits were introduced for business flows. |
 | Host boundary | Static scan proves feature packages use the host adapter contract (section 5.5), not scattered raw host globals (`window.__TAURI__`, `window.electron`, `Capacitor.*`, `ipcRenderer`, `@tauri-apps/api`, `electron`, `@capacitor/core` imports). |

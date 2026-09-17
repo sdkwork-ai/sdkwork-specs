@@ -283,7 +283,7 @@ Rules:
   `MUST` include `CACHE_SPEC.md`.
 - A `web-backend-service` component `MUST` document its API authority, owned surface, and generated
   SDK family or explicitly state that it is an implementation-only module with no HTTP authority.
-- A `web-backend-service`, `rust-crate`, `tauri-host`, or app shell that mounts dependency APIs
+- A `web-backend-service`, `rust-crate`, `tauri-host`, `electron-host`, `capacitor-host`, `h5-capacitor-host`, or app shell that mounts dependency APIs
   `MUST` declare `contracts.dependencyApiSurfaces` with dependency workspace, SDK family, API
   authority, surface, `apiPrefix`, runtime mode, executable public export, and coverage evidence.
   A dependency route manifest alone does not satisfy this runtime contract.
