@@ -1,5 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// The specs repository root owns the renderer scope file, so this module resolves it
+// from its own location rather than from the repository under validation.
+const SPECS_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const IGNORED_DIRECTORIES = new Set([
   '.git',
@@ -98,13 +103,61 @@ function isExecutableRenderer(moduleRoot) {
   ));
 }
 
-function isCredentialEntryViteConsumer(viteConfigPath) {
+// A Vite config is in scope whenever it belongs to an executable renderer.
+//
+// `IAM_CREDENTIAL_ENTRY_SPEC.md` section 6 requires every host app Vite config to
+// consume `@sdkwork/iam-credential-entry/vite`. Predicating the check on an
+// existing IAM marker (`moduleConsumesIam`) inverted the requirement: the one
+// class of host that has never wired credential entry -- exactly the class the
+// rule exists to catch -- was the only class excluded from the check. A renderer
+// that consumes no IAM marker yet still dispatches protected operations therefore
+// reported a green gate while failing at runtime with
+// `non-open-api request requires Access-Token before request dispatch`.
+//
+// Scope widening is staged through `credential-entry-renderer-scope.json`: repos
+// enumerated there are fully enforced, so widening the predicate does not turn the
+// workspace red for debt owned by repos that have not migrated. Repos outside the
+// list keep the historical marker-gated behaviour.
+function readRendererScope() {
+  const scopePath = path.join(SPECS_ROOT, 'credential-entry-renderer-scope.json');
+  if (!fs.existsSync(scopePath)) return undefined;
+  try {
+    const scope = JSON.parse(readText(scopePath));
+    return Array.isArray(scope.repositories) ? scope.repositories : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// Scope entries are workspace-relative paths, so the repository name is the first
+// path segment. A bare repository name covers every renderer beneath it; a deeper
+// entry covers only that subtree. Both forms are compared against the module path
+// relative to the workspace root, which keeps a single comparison rule.
+function isEnforcedRenderer(repositoryRoot, moduleRoot) {
+  if (/[/\\]external[/\\]/u.test(moduleRoot)) return false;
+  const scope = readRendererScope();
+  if (scope === undefined) return false;
+  const resolvedRoot = path.resolve(repositoryRoot);
+  const workspaceRoot = path.dirname(resolvedRoot);
+  const relativeModule = path.relative(workspaceRoot, moduleRoot).replaceAll(path.sep, '/');
+  return scope.some((entry) => {
+    const normalized = String(entry).replaceAll('\\', '/').replace(/^\.\//u, '').replace(/\/+$/u, '');
+    if (normalized.length === 0) return false;
+    return relativeModule === normalized || relativeModule.startsWith(`${normalized}/`);
+  });
+}
+
+function isCredentialEntryViteConsumer(viteConfigPath, repositoryRoot) {
   const moduleRoot = path.dirname(viteConfigPath);
   const source = readText(viteConfigPath);
-  return source.includes('iam-credential-entry')
+  if (source.includes('iam-credential-entry')
     || source.includes('createSdkworkCredentialEntryBootstrapVitePlugin')
-    || moduleDeclaresCredentialEntryDependency(moduleRoot)
-    || (isExecutableRenderer(moduleRoot) && moduleConsumesIam(moduleRoot));
+    || moduleDeclaresCredentialEntryDependency(moduleRoot)) {
+    return true;
+  }
+  if (!isExecutableRenderer(moduleRoot)) return false;
+  return moduleConsumesIam(moduleRoot)
+    || isEnforcedRenderer(repositoryRoot, moduleRoot);
 }
 
 function resolveLocalImportPath(importerPath, specifier) {
@@ -146,7 +199,7 @@ function readLocalViteComposition(entryPath, visited = new Set()) {
 
 function validateViteConsumer(repositoryRoot, viteConfigPath) {
   const source = readText(viteConfigPath);
-  if (!isCredentialEntryViteConsumer(viteConfigPath)) return [];
+  if (!isCredentialEntryViteConsumer(viteConfigPath, repositoryRoot)) return [];
   const compositionSource = readLocalViteComposition(viteConfigPath);
 
   const displayPath = relative(repositoryRoot, viteConfigPath);
@@ -232,7 +285,7 @@ export function validateCredentialEntryRepository(repositoryRoot) {
   const viteConfigs = walkFiles(root, (filePath) => /^vite\.config\.(?:js|mjs|mts|ts)$/u.test(path.basename(filePath)));
   const iamApplicationRoots = new Set();
   for (const viteConfigPath of viteConfigs) {
-    if (isCredentialEntryViteConsumer(viteConfigPath)) {
+    if (isCredentialEntryViteConsumer(viteConfigPath, root)) {
       iamApplicationRoots.add(findApplicationRoot(viteConfigPath, root));
     }
     issues.push(...validateViteConsumer(root, viteConfigPath));

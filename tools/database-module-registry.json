@@ -313,5 +313,15 @@
     "legacySqlGlobs": [
       "crates/sdkwork-aiot-storage-sqlx/src/lib.rs"
     ]
+  },
+  {
+    "repo": "sdkwork-webserver",
+    "moduleId": "webserver",
+    "serviceCode": "WEB",
+    "tablePrefix": "webserver_",
+    "ownerTeam": "web-platform",
+    "legacySqlGlobs": [
+      "database/ddl/baseline/postgres/0001_webserver_baseline.sql"
+    ]
   }
 ]

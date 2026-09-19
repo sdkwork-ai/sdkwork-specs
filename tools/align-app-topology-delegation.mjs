@@ -8,6 +8,15 @@ import { parseArgs } from 'node:util';
 const SPECS_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_WORKSPACE = path.resolve(SPECS_ROOT, '..');
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'target', 'dist', 'build', 'vendor', '.runtime']);
+const COMPONENT_DEPLOYMENT_KEYS = new Set([
+  'schemaVersion',
+  'kind',
+  'application',
+  'parentDeploymentConfig',
+  'parentTopologySpec',
+]);
+// `authority` belongs to the retired `sdkwork.deployment-reference` envelope.
+const RETIRED_REFERENCE_KEYS = new Set(['authority']);
 
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/u, ''));
@@ -62,11 +71,26 @@ export function planTopologyDelegation(repoRoot, { migrateRetiredReferences = fa
   if (!fs.existsSync(topologyPath)) return [];
   const plans = [];
   for (const appRoot of nestedApplicationRoots(repoRoot)) {
-    if (fs.existsSync(path.join(appRoot, 'specs', 'topology.spec.json'))) continue;
-    const appManifest = readJson(path.join(appRoot, 'sdkwork.app.config.json'));
     const etcRoot = path.join(appRoot, 'etc');
     const configPath = path.join(etcRoot, 'sdkwork.deployment.config.json');
     const current = fs.existsSync(configPath) ? readJson(configPath) : null;
+    if (fs.existsSync(path.join(appRoot, 'specs', 'topology.spec.json'))) {
+      // A root that owns its own topology is self-authoritative, so delegating it would create
+      // the contradictory state `check-source-config-standard.mjs` rejects. Reporting the
+      // combination is the only safe action: a stale duplicate and a real authority are
+      // indistinguishable from the enclosing repository's point of view.
+      if (typeof current?.parentTopologySpec === 'string') {
+        plans.push({
+          actions: [],
+          appRoot,
+          configPath,
+          conflict: 'specs/topology.spec.json competes with the declared parentTopologySpec;'
+            + ' remove the competing topology or the delegation',
+        });
+      }
+      continue;
+    }
+    const appManifest = readJson(path.join(appRoot, 'sdkwork.app.config.json'));
     const isRetiredReference = current?.kind === 'sdkwork.deployment-reference';
     if (
       current
@@ -99,6 +123,16 @@ export function planTopologyDelegation(repoRoot, { migrateRetiredReferences = fa
       ...(runtimeConfigName(etcRoot, current)
         ? { runtimeConfig: runtimeConfigName(etcRoot, current) }
         : {}),
+      // Keys this aligner does not own are preserved: `SOURCE_CONFIG_SPEC.md` fixes the required
+      // envelope, not an exhaustive schema, so a surface may carry extra materialization or
+      // profile-source declarations that a replace-style rewrite would silently drop.
+      ...Object.fromEntries(
+        Object.entries(current ?? {}).filter(([key]) => (
+          !COMPONENT_DEPLOYMENT_KEYS.has(key)
+          && key !== 'runtimeConfig'
+          && !(isRetiredReference && RETIRED_REFERENCE_KEYS.has(key))
+        )),
+      ),
     };
     const configNeedsWrite = JSON.stringify(current) !== JSON.stringify(next);
     const readmePath = path.join(etcRoot, 'README.md');

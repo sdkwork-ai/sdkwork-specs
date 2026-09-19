@@ -87,3 +87,51 @@ test('refuses delegation when the enclosing deployment authority is missing', ()
   assert.match(plans[0].conflict, /missing etc\/sdkwork\.deployment\.config\.json/u);
   assert.deepEqual(plans[0].actions, []);
 });
+
+test('reports a competing child topology that also declares a parent spec', () => {
+  const { app, repo } = fixture();
+  fs.mkdirSync(path.join(app, 'specs'), { recursive: true });
+  fs.writeFileSync(path.join(app, 'specs', 'topology.spec.json'), '{"schemaVersion":5}\n');
+  fs.writeFileSync(path.join(app, 'etc', 'sdkwork.deployment.config.json'), JSON.stringify({
+    schemaVersion: 1,
+    kind: 'sdkwork.component-deployment',
+    parentTopologySpec: '../../../specs/topology.spec.json',
+  }));
+
+  const [plan] = planTopologyDelegation(repo);
+
+  assert.match(plan.conflict, /competes with the declared parentTopologySpec/u);
+  assert.deepEqual(plan.actions, []);
+});
+
+test('leaves a self-authoritative child root that owns its topology alone', () => {
+  const { app, repo } = fixture();
+  fs.mkdirSync(path.join(app, 'specs'), { recursive: true });
+  fs.writeFileSync(path.join(app, 'specs', 'topology.spec.json'), '{"schemaVersion":5}\n');
+
+  assert.deepEqual(planTopologyDelegation(repo), []);
+});
+
+test('preserves surface-owned keys the aligner does not own', () => {
+  const { app, repo } = fixture();
+  const materialization = {
+    authority: '../../../etc/sdkwork.deployment.config.json',
+    command: 'pnpm workflow:materialize-client-env',
+    format: 'json',
+    profiles: ['standalone.development'],
+  };
+  fs.writeFileSync(path.join(app, 'etc', 'sdkwork.deployment.config.json'), JSON.stringify({
+    schemaVersion: 1,
+    kind: 'sdkwork.component-deployment',
+    application: 'sdkwork-demo-pc',
+    parentDeploymentConfig: '../../../etc/sdkwork.deployment.config.json',
+    parentTopologySpec: '../../../specs/topology.spec.json',
+    runtimeConfig: 'browser.runtime.json',
+    materialization,
+  }));
+
+  const [plan] = planTopologyDelegation(repo);
+
+  assert.equal(plan.configNeedsWrite, false);
+  assert.deepEqual(plan.config.materialization, materialization);
+});

@@ -1,8 +1,8 @@
 # SDKWork Drive Standard
 
-- Version: 1.0
-- Scope: SDKWork Drive, Drive Uploader, file storage, object storage providers, spaces, nodes, upload sessions, download grants, storage metadata, file/media lifecycle, Drive-backed `MediaResource` mapping, client upload services, server-side Rust upload components, generated Drive SDKs, uploader attribution/statistics, database references, RPC storage-control contracts
-- Related: `DOMAIN_SPEC.md`, `API_SPEC.md`, `RPC_SPEC.md`, `RUST_RPC_SPEC.md`, `DATABASE_SPEC.md`, `MEDIA_RESOURCE_SPEC.md`, `REGION_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `FRONTEND_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `CONFIG_SPEC.md`, `DEPLOYMENT_SPEC.md`, `OBSERVABILITY_SPEC.md`, `EVENT_SPEC.md`, `TEST_SPEC.md`
+- Version: 1.1
+- Scope: SDKWork Drive, Drive Uploader, file storage, object storage providers, spaces, nodes, upload sessions, download grants, storage metadata, file/media lifecycle, Drive-backed `MediaResource` mapping, client upload services, server-side Rust upload components, generated Drive SDKs, uploader attribution/statistics, application upload declaration contract, database references, RPC storage-control contracts
+- Related: `DOMAIN_SPEC.md`, `API_SPEC.md`, `RPC_SPEC.md`, `RUST_RPC_SPEC.md`, `DATABASE_SPEC.md`, `MEDIA_RESOURCE_SPEC.md`, `REGION_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `FRONTEND_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `CONFIG_SPEC.md`, `DEPLOYMENT_SPEC.md`, `OBSERVABILITY_SPEC.md`, `EVENT_SPEC.md`, `APP_MANIFEST_SPEC.md`, `COMPONENT_SPEC.md`, `TEST_SPEC.md`
 - Canonical location: `specs/DRIVE_SPEC.md`
 - Implementation family: `sdkwork-drive`
 
@@ -240,6 +240,21 @@ The app API exposes user/application file workflows:
 | `/drive/upload_sessions/{sessionId}/complete` | Complete an upload and return the Drive resource plus `MediaResource` mapping when applicable. |
 | `/drive/upload_sessions/{sessionId}/abort` | Abort an upload session. |
 | `/drive/nodes/{nodeId}/download_grants` | Create a short-lived download grant or delivery URL. |
+| `/drive/nodes/{nodeId}/content` | Read the bytes of one active file node on the same origin, without following a presigned provider URL. |
+
+#### 6.1.1 Same-Origin Node Content Read
+
+`nodes.content.retrieve` (`GET /app/v3/api/drive/nodes/{nodeId}/content`) `MUST` exist so an authenticated client that is confined to a single origin can read a Drive file's bytes without following a presigned storage-provider URL.
+
+Rules:
+
+- The operation `MUST` require the same reader role as `nodes.downloadUrls.retrieve` and `MUST` resolve the active node before reading.
+- The success body `MUST` be the standard `SdkWorkApiResponse` envelope carrying a bounded content payload, following `API_SPEC.md` section 15.1.1. It `MUST NOT` return a raw `application/octet-stream` success body, because the `app-api` SDK family does not permit a non-JSON success schema. Model the payload on `sandboxFileContents.retrieve`.
+- The payload `MUST` carry an explicit `encoding` (`utf8` or `base64`) so a binary artifact survives the JSON boundary, plus the artifact `sizeBytes`, the returned range, and a `hasMore` flag. A client `MUST` treat a short read against `sizeBytes` as a failure rather than publishing a truncated artifact.
+- The response `MUST` be bounded. The contract `MUST` declare the bound, and the handler `MUST` reject an over-bound request with the payload-too-large result code instead of silently truncating.
+- A caller that needs more than the bound `MUST` read successive ranges within the bound. This operation `MUST NOT` be treated as a bulk-download mechanism: large artifacts continue to use download grants, download packages, or range streaming per the transfer rules in this spec.
+- The operation `MUST NOT` expose the storage provider, bucket, object key, credentials, or a signed provider URL across this boundary. It returns content bytes only.
+- OperationIds must use SDKWork resource style, for example `spaces.create`, `nodes.children.list`, `uploader.uploads.create`, `uploader.uploads.parts.markUploaded`, `uploadSessions.parts.presign`, `uploadSessions.complete`, `nodes.content.retrieve`, and `downloadGrants.create`.
 
 ### 6.2 Backend API
 
@@ -292,6 +307,7 @@ Rules:
 - Drive storage-control RPC may expose Drive-specific messages such as `DriveReference`, `DriveSpace`, `DriveNode`, `DriveUploadSession`, and `DriveDownloadGrant`.
 - Business RPC services must use Drive references or `sdkwork.common.v1.MediaResource` for file/media payloads; they must not expose provider bucket/object identity unless they are Drive backend/internal services.
 - Large file transfer should use Drive upload sessions, download grants, or range streaming. Business RPC services must not add ad hoc client streaming uploads unless Drive explicitly owns the stream.
+- A bounded same-origin content read (`nodes.content.retrieve`) is for inspection and for clients that cannot leave their origin. It is not a substitute for the transfer mechanisms above; a caller that needs a large artifact uses download grants, download packages, or range streaming.
 - Drive RPC methods must map to equivalent HTTP operationIds where both surfaces exist.
 
 Recommended common reference:
@@ -321,6 +337,7 @@ Standard packages:
 Rules:
 
 - Frontend upload services must use the generated Drive app SDK for upload sessions, completion, node metadata, and download grants.
+- A frontend that is confined to a single origin must read Drive bytes through the generated `drive.nodes.content.retrieve` method rather than resolving a download URL and issuing a raw HTTP request to the provider origin. The read is bounded, so multiple ranges may be required for a large artifact.
 - `backend-admin` consoles must use the generated Drive backend SDK for provider, policy, quota, and diagnostic workflows.
 - Business SDKs such as IM, commerce, user profile, or app manifest SDKs should receive Drive references or `MediaResource` payloads. They must not duplicate Drive upload operations.
 - Consumers must not patch missing Drive SDK methods with raw HTTP, manual auth headers, direct provider SDK calls, or local generated-client forks. Fix Drive OpenAPI/proto and regenerate.
@@ -758,3 +775,141 @@ adapter.
 - [ ] Both budgets (bytes and entries) are enforced and survive restarts.
 - [ ] Multi-instance races degrade to misses, never to errors or torn reads.
 - [ ] Cache failures downgrade to upstream streaming; logs do not spam.
+
+## 18. Application Upload Declaration Contract
+
+Upload is a **cross-cutting platform capability**, not an application feature. Section 9 states that every upload-capable application must declare canonical `appResourceType`, `appResourceId`, `scene`, `source`, and allowed `uploadProfileCode` values, but the obligation has been prose only: with no declared home and no declared shape, each application invented its own values, and the same repository shipped two conflicting `source` styles for the same capability.
+
+This section makes the obligation executable. It defines where an application declares its upload identity, what the declaration must contain, how the values are named, and what verifies them.
+
+### 18.1 Declaration Home And Format
+
+Every application that performs an upload `MUST` declare its upload identity in one file:
+
+```text
+<application-root>/specs/upload.declaration.json
+```
+
+- The file is repository-owned authored content. It is not generated and `MUST NOT` be emitted by a materializer that would overwrite authored values.
+- The file is the single authority for that application's upload identity. An application `MUST NOT` restate these values in a second local file as a competing authority.
+- When a repository hosts several application roots, each root declares its own file. A repository-level declaration is not a substitute.
+- `uploadProfileCode` and `appResourceType` values in `upload.declaration.json` and in the calling code `MUST` be identical. The declaration is not documentation of an intent; it is the value that code uses.
+
+Required shape:
+
+```json
+{
+  "schemaVersion": 1,
+  "appId": "sdkwork-deployments-pc",
+  "declarations": [
+    {
+      "appResourceType": "deploy.artifact",
+      "appResourceIdKind": "application",
+      "scene": "deployment-package",
+      "source": "sdkwork-deployments-pc",
+      "uploadProfileCode": "archive",
+      "retention": "long_term",
+      "purpose": "Application deployment package uploaded for release and deployment."
+    }
+  ]
+}
+```
+
+The `appId` above is read from the application's own `sdkwork.app.config.json`; it is illustrative of that file, not a fixed literal. An implementation `MUST NOT` copy a value from this example: copy the application's own `backend.appId`.
+
+Field rules:
+
+| Field | Requirement |
+| --- | --- |
+| `schemaVersion` | `MUST` be `1`. A new schema revision is a Drive-governed change. |
+| `appId` | `MUST` equal the application's canonical `appId` from `sdkwork.app.config.json`, which is the `backend.appId` field of that file. It is declared here for cross-checking only; Drive still derives the authoritative `appId` from the authenticated runtime. An application root with no `sdkwork.app.config.json` of its own declares the `backend.appId` of the runnable application root that hosts it. |
+| `declarations[]` | `MUST` contain one entry per distinct upload purpose. Two purposes that differ in `appResourceType`, `scene`, or `uploadProfileCode` `MUST` be two entries. Two surfaces of one application that differ **only** in `source` `MUST` also be two entries (see the `source` rule below), but they are one purpose: they share one identity triple. |
+| `appResourceType` | `MUST` be a stable dotted business resource type. |
+| `appResourceIdKind` | `MUST` be one of `application`, `entity`, or `draft`. It states what the `appResourceId` passed at call time identifies. |
+| `scene` | `MUST` be a stable lowercase kebab-case workflow label. |
+| `source` | `MUST` be a stable lowercase source label. It is the value sent as the Drive upload `source`; see the naming rules below. |
+| `uploadProfileCode` | `MUST` be one of the standard profiles in section 8.1. |
+| `retention` | `MUST` be `long_term` or `temporary`. A `temporary` entry `MUST` also declare `retentionTtlSeconds`. |
+| `purpose` | `MUST` be a non-empty sentence. It is what a reviewer reads to judge whether the values are right. |
+
+Unknown fields `MUST` be rejected rather than ignored, so a typo in a field name cannot silently drop a declaration dimension.
+
+### 18.2 Naming Rules
+
+These rules exist because unconstrained naming has already produced conflicting values inside one repository.
+
+`appResourceType`:
+
+- Format: `<domain>.<resource>` in lowercase, dot-separated, at least two segments.
+- The first segment is the owning business domain, not the client surface and not the package name.
+- The resource segment describes the business aggregate or artifact, not the transport: `deploy.artifact`, `catalog.product_image`, `profile.avatar`.
+
+`source`:
+
+- Format: lowercase kebab-case, ASCII letters, digits, and `-` only.
+- `source` labels the **call origin** of the upload. It is a stable label, not a transport detail and not a free-form description.
+- Choose one of these two forms, and use the same form consistently within one application:
+  - the application code, for example `sdkwork-deploy` or `sdkwork-deployments-pc`; or
+  - a business source label naming the upload surface, for example `listing-media`, `catalog-import`, `admin-import`.
+- A package name, npm specifier, module path, import path, or scoped-identifier string is `FORBIDDEN` as `source`. These are already present in the fleet as debt: the same application shipped both `sdkwork-deployments-pc` and `@sdkwork/deployments-pc-console-publishing` for one capability, which splits one upload origin into two statistic rows.
+- `source` `MUST NOT` be composed from a runtime value, the uploaded file's name or type, a user-provided string, or an unbounded enum. It is a declared constant.
+- All upload call sites of one application `MUST` agree with the declaration. Where an application declares a business source label, that label is the single value for that surface, and a second surface with a different origin is a new declaration entry rather than a second label for the same entry.
+
+`scene`:
+
+- Format: lowercase kebab-case, ASCII letters, digits, and `-` only.
+- `scene` names the workflow, not the file type and not the profile: `deployment-package`, `chat-message`, `catalog-image`, `admin-import`.
+- `scene` `MUST NOT` be dynamically composed from a user-supplied value or from an unbounded enum. A per-kind suffix is allowed only when the kind set is closed and enumerated elsewhere in the application contract, and even then a fixed scene plus a separate dimension is preferred.
+- Reserved scenes owned by Drive: `im` (section 9.4). An application `MUST NOT` declare or send `scene = im`.
+
+`uploadProfileCode`:
+
+- The profile is chosen by content shape, not by business purpose. A deployment package is `archive`; a product photo is `image`.
+- An application `MUST NOT` declare a custom profile code, and `MUST NOT` fork an implementation because no profile fits. A genuinely new content shape is a Drive governance, API, and SDK change per section 8.1.
+- When a caller omits `uploadProfileCode`, the Drive SDK applies the method-implied default (`uploadArchive` implies `archive`). Declaring the implied profile explicitly is preferred, because the declaration then states what the statistic will record.
+
+### 18.3 Call-Time Rules
+
+- The application service layer, not the UI component, `MUST` supply the declared values. An upload `MUST NOT` be initiated from a presentation component that composes `appResourceType`, `scene`, or `source` inline.
+- The values passed at call time `MUST` come from the declaration. Hard-coding a string literal that duplicates a declared value is `FORBIDDEN`; import the declaration, or carry the derived constant, so the two cannot drift.
+- The rules of section 9 remain in force: the caller supplies only app-resource, scene, source, profile, content, target, and retention intent. `appId`, `tenantId`, `organizationId`, `userId`, and operator identity `MUST NOT` be passed as inputs, and `appId` in the declaration is not a call argument.
+- `appResourceId` `MUST` be the identifier of an existing entity. Where Drive upload requires an anchor, the creating flow `MUST` persist the application first and upload second, as section 9 already implies for draft-then-attach flows.
+
+### 18.4 Verification
+
+An application's declaration is verified structurally and against its call sites:
+
+- The file exists at the declared path and parses as JSON.
+- `schemaVersion` is `1`, `appId` matches `sdkwork.app.config.json`, and every required field is present with the right type.
+- Every `uploadProfileCode` is one of the section 8.1 profiles.
+- Every `source` matches the lowercase kebab-case label rule, is not a package name or module path, and is identical across that application's call sites for the entry.
+- Every `scene` matches the lowercase kebab-case rule and is not a reserved Drive scene.
+- Every `appResourceType` matches the two-segment-or-more dotted lowercase rule.
+- Every entry declares a distinct `(appResourceType, scene, uploadProfileCode)` triple, **except** for entries that are the same purpose seen from two different `source` surfaces: those `MUST` share the triple and `MUST` differ in `source`. An application `MUST NOT` use this exemption to give one purpose two names on one surface — the triple-and-`source` pair identifies one entry uniquely.
+
+Call-site conformance is verified by the rule in section 18.3 that the declaration is imported rather than duplicated: a review or a repository gate confirms that no upload call site passes a `source`, `scene`, or `appResourceType` value absent from the declaration.
+
+An upload feature is not complete when the declaration is missing. A missing or non-conforming declaration blocks completion under section 16 and the repository checklist in `README.md`.
+
+### 18.5 Migration Of Existing Upload Call Sites
+
+An application that already uploads without a declaration adopts this contract by declaring its current behavior truthfully, then converging the code:
+
+1. Author `specs/upload.declaration.json` listing every existing upload purpose with the values the code actually sends.
+2. Where two call sites disagree on `source`, `scene`, or `appResourceType` for one purpose, choose the rule-conforming value and converge both call sites to it.
+3. Replace inline literals with the declaration-derived constant.
+4. Delete any superseded local constant or comment that stated a different value.
+
+Step 2 is the step that pays off: it is the only moment the conflicting values are visible side by side.
+
+### 18.6 Review Checklist
+
+- [ ] `specs/upload.declaration.json` exists for every application that uploads.
+- [ ] Each `appResourceType` is a dotted lowercase business type owned by a business domain.
+- [ ] Each `source` is a stable lowercase kebab-case label, identical across all of the application's call sites for that entry, and is not a package name or import path.
+- [ ] Each `scene` is a stable lowercase kebab-case workflow label and no application declares or sends the reserved `im` scene.
+- [ ] Each `uploadProfileCode` is a section 8.1 standard profile, and every declared profile matches what the call site sends.
+- [ ] `retention` is declared, and a `temporary` entry declares its TTL.
+- [ ] Upload call sites import the declaration instead of repeating its values.
+- [ ] No upload is initiated from a presentation component that composes these values inline.
+- [ ] Existing call sites were converged to one value per purpose, not left with two.

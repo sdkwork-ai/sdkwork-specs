@@ -175,7 +175,7 @@ IAM uses two tokens for protected operations:
 | Token | Transport | Owns |
 | --- | --- | --- |
 | `auth_token` | `Authorization: Bearer <JWT>` | Principal identity, session identity, auth strength, token expiry |
-| `access_token` | `Access-Token: <JWT>` | Tenant, organization, app, environment, deployment profile, runtime target, data scope, permission scope, sharding context |
+| `access_token` | `Access-Token: <JWT>` | Tenant, organization, app, environment, deployment profile, runtime target. Authorization scopes are never embedded; they are DB-authoritative and loaded at request time. |
 
 Rules:
 
@@ -186,11 +186,18 @@ Rules:
 - `auth_token` parsers `MUST` validate principal identity, session identity, tenant identity, organization identity, login scope, auth strength, expiry, issuer, and revocation.
 - `access_token` parsers `MUST` validate principal identity, session identity,
   tenant identity, organization identity, login scope, app, environment,
-  deployment profile, runtime target, data scope, permission scope, expiry,
-  issuer, audience, and revocation.
+  deployment profile, runtime target, expiry, issuer, audience, and revocation.
+- Authorization scopes (`data_scope`, `permission_scope`) `MUST NOT` be embedded
+  in either token. Parsers `MUST NOT` require them in a token payload; the
+  framework `MUST` load the authoritative scope set from the IAM session store
+  (`iam_session.data_scope_json` / `permission_scope_json`) at request time.
 - If both tokens include the same principal or tenancy claim, the framework `MUST` resolve that claim from `auth_token` when both tokens are present.
 - If `access_token` includes an overlapping principal or tenancy claim that contradicts `auth_token` after normalization, validation `MUST` reject the request.
-- Access-isolation-only claims that exist only on `access_token`, such as `data_scope`, `permission_scope`, deployment profile, runtime target, and sharding hints, remain authoritative from `access_token`.
+- Authorization-isolation state (`data_scope`, `permission_scope`) is never
+  authoritative from a token claim; it is stored in the IAM session row and
+  loaded at request time. Token claims carry only stable identity and runtime
+  fields; a claim `MUST NOT` be used to bootstrap scope for a session that has no
+  matching active `iam_session` row.
 - App API session creation returns `authToken`, `accessToken`, optional `refreshToken`, session metadata, user summary, and AppContext.
 - Refresh token handling `MUST` be server-controlled, revocable, rotated where possible, and unavailable to normal business operation handlers.
 - Passwords, verification codes, recovery secrets, private tokens, API key raw values, and MFA secrets `MUST` be write-only and never appear in response schemas.
@@ -315,7 +322,10 @@ Rules:
 - `tenant_id`, `user_id`/`sub`, and non-zero `organization_id` claims `MUST` be positive numeric snowflake strings that map to SQL `BIGINT` subject scope per `SUBJECT_ID_SPEC.md`. New IAM entity creation `MUST NOT` use retired opaque prefixes such as `iamu_`, `iamt_`, `org_`, or `tenant_`, and `MUST NOT` use bare UUID strings as `iam_user.id` or `iam_tenant.id` primary keys.
 - Documented bootstrap exceptions `MAY` use reserved stable numeric ids such as default bootstrap admin `user_id = "1"` when declared in the owning IAM bootstrap contract.
 - `login_scope = "ORGANIZATION"` requires a non-zero `organization_id`. `login_scope = "TENANT"` requires `organization_id` to be absent or `0`. Contradictory claims `MUST` be rejected.
-- `access_token` additionally owns access-specific claims such as `data_scope`, `permission_scope`, and sharding hints.
+- A persistent deployment profile and runtime target `MAY` be signed when needed for fail-closed verification, but `data_scope` and `permission_scope` are never registered claims: they `MUST` be read from the matching `iam_session` row and re-computed on login, context switch, refresh, and RBAC change.
+- Token payloads `MUST` be minimal, bounded, and terminated by the entrypoint header budget. Identity, session, tenancy, runtime, auth-strength, and expiry claims that verification needs are allowed; no variable-length authorization or data-access lists (`data_scope`, `permission_scope`, role-code arrays) `MUST` be signed into a token. Embedding them inflated the payload and caused `HTTP 431 Request Header Fields Too Large` at the reverse-proxy edge.
+- Issuer builds `MUST` assert the rendered JWT length stays below the Nginx `large_client_header_buffers` single-buffer budget at the forwarding edge (default single `8k`, total `4 * 8k`); a single payload at or above that budget risks `431`. Issuer-side tests `MUST` assert the rendered token length under the budget.
+- Request-time scope loading `MUST` be consistent with session revocation and context switch: when `iam_session.revoked_at` is stamped or `data_scope_json`/`permission_scope_json` is recomputed on switch, any cached scope entry `MUST` be treated as stale and reloaded from the session row before authorization is granted.
 - Token signatures `MUST` use a tenant-bound signing key. A global shared signing secret for all tenants is forbidden for production and production-like profiles.
 - Token headers `SHOULD` include a `kid` that maps to one tenant signing key. Validation `MUST` prove that the key used to verify the token belongs to the same `tenant_id` carried by the verified claims.
 - Tenant signing keys `MUST` support rotation with overlapping validation windows. Revoked or expired keys `MUST NOT` sign new tokens.
