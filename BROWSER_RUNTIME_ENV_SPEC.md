@@ -1,16 +1,34 @@
 # Browser Runtime Env Specification
 
-Status: normative. Authority over how every SDKWork browser surface (PC web, H5
-web, admin web, future SPA surfaces) publishes and consumes its runtime
-environment in development, and how generated SDK clients resolve their API
-base URLs from it. Companion authorities: `ENVIRONMENT_SPEC.md` (per-environment
-domain binding), `APP_RUNTIME_TOPOLOGY_SPEC.md` §8.2 (adaptive browser
+Status: normative. Browser-surface annex of `APP_RUNTIME_ENV_SPEC.md` (the
+umbrella runtime-env standard for every application surface — PC web, H5 web,
+admin web, desktop renderers, Flutter, mini-program). This annex owns how
+every SDKWork browser surface (PC web, H5 web, admin web, future SPA surfaces)
+publishes and consumes its runtime environment in development, and how
+generated SDK clients resolve their API base URLs from it. Companion
+authorities: `APP_RUNTIME_ENV_SPEC.md` (four-quadrant lifecycle matrix,
+`browser-document` vs `transport` styles, shared Vite integration),
+`ENVIRONMENT_SPEC.md` (per-environment domain binding, §6.3 runtime
+`resolveBaseUrl`), `APP_RUNTIME_TOPOLOGY_SPEC.md` §8.2 (adaptive browser
 delivery), `PNPM_SCRIPT_SPEC.md` §3 (dev commands), `SDK_SPEC.md` (generated
 SDK transport).
 
-Canonical implementation (do not fork):
-`tools/browser-runtime-env.mjs` in this repository. Regression checker:
-`tools/check-browser-runtime-env-standard.mjs --root <repo>`.
+Canonical implementations (do not fork):
+
+- `tools/browser-runtime-env.mjs` — dev/build runtime document builders and
+  the `SDKWORK_RUNTIME_ENV` bridge.
+- `tools/app-base-url.mjs` — the node-side lifecycle-matrix resolver
+  (`resolveBaseUrl({ deploymentProfile, environment, phase, surface })`) with
+  multi-domain splitting; consumed by env materializers, build runners, and
+  application contract libraries.
+- `tools/browser-runtime-env-vite.mjs` — the shared Vite integration factory
+  (serve-only middleware, build asset emit, script injection).
+- `tools/browser-cloud-api-base.mjs` — cloud `api-<suffix>.<base-domain>`
+  family derivation and page-host auto-selection.
+
+Regression checkers:
+`tools/check-browser-runtime-env-standard.mjs --root <repo>`,
+`tools/check-base-url-resolution.mjs --workspace <workspace-root>`.
 
 ---
 
@@ -132,6 +150,11 @@ Both are covered by `sdkwork-sdk-commons` `tests/base-url-resolution.test.mjs`.
 
 ## 6. Vite integration standard
 
+- Browser surfaces consume the shared factory
+  `tools/browser-runtime-env-vite.mjs` `createBrowserRuntimeEnvVitePlugin`
+  (serve-only middleware, build asset emit, script injection) instead of
+  re-declaring the wiring per app; the document VALUES stay
+  application-owned (authored through the app's contract library).
 - Serve-only middleware in `configureServer`; build paths
   (`generateBundle` / static hosting) keep the deploy-time document.
 - Dev resolution order: `{ ...dotenvFile, ...process.env }` (process wins),
@@ -140,6 +163,10 @@ Both are covered by `sdkwork-sdk-commons` `tests/base-url-resolution.test.mjs`.
   materialized `public/runtime-env.json` overrides.
 - The runtime document middleware must not require the dev proxy environment
   at build time (server config is computed only for `serve`).
+- The matrix decision behind every authored value (which base is
+  same-origin relative, which is the local gateway, which is the build
+  domain family) comes from `tools/app-base-url.mjs` `resolveBaseUrl`
+  (`APP_RUNTIME_ENV_SPEC.md` §2/§4) — never re-derived in vite configs.
 
 ## 7. Compliance
 

@@ -73,6 +73,59 @@ Rules:
 
 Application repositories `MUST` resolve bootstrap access tokens through the shared IAM workflow. They `MUST NOT` fork signing, fixture JWT, manifest identity, private env-file parsing, or HTML injection logic per application.
 
+### 5.1 Vite Serve Call Contract (normative)
+
+Stating "use the shared workflow" is not sufficient on its own: the plugin has options, and an
+option that is silently optional in TypeScript can still be *semantically required*. The
+following contract is therefore normative. History: before 2026-09-20 this section described
+only the principle, and the resulting option drift let a real bootstrap artifact match no
+candidate path, so the plugin resolved no token, returned `undefined` **without any
+diagnostic**, and the failure surfaced only at the first authenticated request as
+`access-token-only request requires Access-Token before request dispatch`.
+
+The **only** sanctioned dev-time browser handoff is:
+
+```ts
+import { resolveViteEnvironment } from '<specs>/tools/vite-runtime-profile.mjs';
+import { createSdkworkCredentialEntryBootstrapVitePlugin } from '@sdkwork/iam-credential-entry/vite';
+
+const lifecycleEnvironment = resolveViteEnvironment(mode, process.env);
+// ...
+createSdkworkCredentialEntryBootstrapVitePlugin({
+  accessToken: process.env.SDKWORK_ACCESS_TOKEN, // optional; plugin also reads process.env itself
+  environment: lifecycleEnvironment,            // MUST be a lifecycle name
+});
+```
+
+Rules:
+
+- `environment` `MUST` receive a **lifecycle** name — `development`, `test`, `staging`, `demo`,
+  `production`. It `MUST NOT` receive Vite's raw `mode`. Vite `mode` is a *deployment profile
+  id* (`standalone.development`, `cloud.development`) on every canonical build path, and the
+  plugin's gate is a strict comparison, so passing `mode` silently disables injection. Always
+  normalize through `resolveViteEnvironment(mode, process.env)`; do not hand-roll the mapping.
+- `repoRoot` `MAY` be omitted. When omitted, the plugin searches the process working directory
+  and walks ancestors. Callers `MUST NOT` hand-write an artifact path: a wrong root fails
+  silently. Only pass `repoRoot` when the artifact genuinely lives outside the app's ancestor
+  chain.
+- The artifact file names the reader accepts are exactly:
+  `.sdkwork.local.env`, `.env.standalone.<lifecycle>.bootstrap.local`,
+  `.env.<lifecycle>.bootstrap.local`. A writer that emits any other name or location is
+  non-conforming.
+- Staging and production `MUST NOT` inject; the plugin's own gate refuses, and callers `MUST NOT`
+  widen it (`allowTestInjection` is the only widening, and only for `test`).
+
+### 5.2 Credential Material Invariants (normative)
+
+- A credential field `MUST NOT` be given a fabricated literal default
+  (`accessToken: "dev-access-token"`). A literal is not a validated session; seeding a default
+  session object with one makes an unauthenticated browser report itself as authenticated
+  (`SECURITY_SPEC.md` login-synthesis prohibition). Default such fields to `""` and fail closed.
+- A stub IAM runtime `MUST` fail closed rather than manufacture login success.
+- These invariants are machine-checked; see §6.
+
+### 5.3 Environment Behavior
+
 | Environment | Missing `SDKWORK_ACCESS_TOKEN` | Browser/Vite behavior |
 | --- | --- | --- |
 | `development` | Shared helper may generate a disposable local bootstrap JWT from application manifest identity. | Serve-only shared plugin may inject the canonical global handoff. |
@@ -123,3 +176,9 @@ Rules:
 - [ ] Browser `device_authorizations.create`, retrieve, and session exchange dispatch without `Access-Token` or `Authorization`; QR scan and password-completion credential-entry calls still require only bootstrap `Access-Token`.
 - [ ] Development/test lifecycle gates and production browser bootstrap exchange/host channels fail closed under the exact environment policy.
 - [ ] Renderer port/bind, injected bootstrap, browser access endpoint, and CORS authority come from the same resolved runtime plan.
+- [ ] Machine-checked: `node ../sdkwork-specs/tools/check-token-manager-bootstrap-fallback.mjs --workspace <workspace>` reports zero violations. The gate enforces four independent rules, each with a labeled triage class:
+  - `rule1-token-manager`: a session `TokenManager` (or equivalent credential store) that does not fall back to the shared credential-entry bootstrap reader.
+  - `rule2-env-fork`: a locally applied `process.env.SDKWORK_ACCESS_TOKEN` Vite `define` entry, or another hand-rolled credential injection channel that bypasses `@sdkwork/iam-credential-entry/vite`.
+  - `rule3-raw-mode-as-environment`: a `createSdkworkCredentialEntryBootstrapVitePlugin` call passing Vite `mode` straight through as `environment`, without normalizing it through `resolveViteEnvironment(...)` (see §5.1).
+  - `rule4-fabricated-credential`: a credential-ish property (`accessToken` / `authToken` / `access_token` / `auth_token`) bound to a fabricated literal (`dev-access-token`, `mock-token`, `YOUR_TOKEN`-style scaffolding), instead of reading real material or failing closed (see §5.2).
+- [ ] Machine-checked: an artifact written for one surface `MUST` be discoverable by the sanctioned reader. The writer and reader contract in §5.1 is the only accepted artifact location; a dev server whose HTML lacks the injected `__SDKWORK_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN__` bootstrap is non-conformant regardless of which file exists on disk.

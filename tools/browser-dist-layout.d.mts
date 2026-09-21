@@ -2,6 +2,7 @@ export declare const LIFECYCLE_ENVIRONMENTS: readonly [
   'development',
   'test',
   'staging',
+  'demo',
   'production',
 ];
 
@@ -9,6 +10,7 @@ export declare const BROWSER_DIST_ENV_ALIASES: Readonly<{
   development: 'dev';
   test: 'test';
   staging: 'staging';
+  demo: 'demo';
   production: 'prod';
 }>;
 

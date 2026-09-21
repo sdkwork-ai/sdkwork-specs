@@ -149,6 +149,20 @@ Rules:
   origin. That env family applies only when the selected deployment profile
   places the dependency in a separate process: standalone external mode, or a
   cloud `platform.api-gateway` upstream.
+- **Runtime-derived base URLs are in scope.** The prohibition covers a base URL
+  computed in code, not only one declared in a deployment profile. Reading the
+  process's own ingress/bind variable — the
+  `SDKWORK_<APPLICATION_CODE>_..._APPLICATION_PUBLIC_INGRESS_BIND` /
+  `..._APPLICATION_(PUBLIC|OPEN|BACKEND)_HTTP_URL` family — and mapping it to a
+  loopback origin (`http://127.0.0.1:<port>`) or any alias of this process's own
+  listener is the same self-loop as declaring that loopback value in an env
+  file. It is a violation whether the derivation is a default, an intermediate
+  resolution step, or a last-resort fallback. A backend module that needs an
+  absolute base URL takes it from an authored topology value or an explicit
+  per-dependency override (`APP_SDK_INTEGRATION_SPEC.md` §5.2).
+- A gateway process `MUST NOT` start a second HTTP listener, or publish an
+  alternate loopback port or a platform-gateway URL, to serve a dependency it
+  already mounts in-process (`API_ASSEMBLY_SPEC.md` §6.1).
 - Same-process consumption `MUST NOT` require IAM service credentials whose
   only purpose is to authenticate a loopback request to the gateway's own
   protected surface. Authorization for in-process consumption is enforced by
@@ -176,8 +190,8 @@ base URL is the gateway's own bind/origin, and runtime smoke checks `MUST`
 start the gateway without any retry-on-own-listener log pattern.
 
 `tools/check-embedded-self-loop.mjs --workspace <root>` is the workspace gate
-for this section. It reads every repository's deployment profiles and Cargo
-manifests and fails on three conditions:
+for this section. It reads every repository's deployment profiles, Cargo
+manifests, and Rust backend sources and fails on four conditions:
 
 - `SELF-LOOP` — a deployment profile declares a dependency base URL whose
   authority resolves to this application's own ingress.
@@ -188,6 +202,14 @@ manifests and fails on three conditions:
   still declares a loopback base URL naming `M`. A routable external origin is
   allowed: that is the documented escape hatch for a dependency deployed as a
   separate process.
+- `EMBEDDED-DERIVED-LOOPBACK` — Rust backend source in the repository derives
+  an outbound base URL from the process's own ingress/bind variable into a
+  loopback origin, which is the same violation in code form and is invisible to
+  a profile-only scan (`APP_SDK_INTEGRATION_SPEC.md` §5.2).
+
+A workspace scan that finds no repository or no deployment profile is a
+configuration error and `MUST` fail: an empty scan must never report success,
+because a mis-pointed `--workspace` would otherwise mask every violation above.
 
 Browser-facing variables (`VITE_*`, `*_BROWSER_*`, `*_DEV_PROXY_*`, desktop app
 origins) are out of scope: a browser talking to a server is a real network hop.

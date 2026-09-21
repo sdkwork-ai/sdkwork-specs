@@ -56,23 +56,78 @@ function issueAt(origin, message) {
   return origin ? `${origin}: ${message}` : message;
 }
 
+const PARAM_SEGMENT = /^\{[a-z][A-Za-z0-9_]*\}$/u;
+// API_SPEC.md section 5.1: an SDKWork custom method suffix (`:<action>`, `:search`,
+// `:bulk<Action>`) is permitted only on the final path segment, expressed in
+// lowerCamelCase. API_SPEC.md section 4.5.2 additionally requires vendor compatibility
+// routes to preserve the upstream platform path verbatim, and section 5.1 makes the
+// published authority URI the transport contract, so the suffix stays part of the
+// comparison key rather than being stripped.
+//
+// Grammar accepted on the final segment only:
+//   `{param}:<action>`  e.g. `{entryId}:publish`, `{model}:generateContent`
+//   `<segment>:<action>` e.g. `users:search`, `users:bulkCreate`, `entries:resolve`
+const METHOD_SUFFIX = /^[a-z][A-Za-z0-9]*$/u;
+const PARAM_NAME = /^[a-z][A-Za-z0-9_]*$/u;
+const PARAM_HEAD = PARAM_NAME;
+const PARAM_WITH_METHOD_SUFFIX = /^\{([a-z][A-Za-z0-9_]*)\}:([A-Za-z][A-Za-z0-9]*)$/u;
+const COLLECTION_WITH_METHOD_SUFFIX = /^([A-Za-z0-9_\-]+):([A-Za-z][A-Za-z0-9]*)$/u;
+
 export function normalizeApiRoutePath(input) {
   if (typeof input !== 'string') return undefined;
   const trimmed = input.trim();
   if (!trimmed || trimmed.includes('?') || trimmed.includes('#') || trimmed.includes('\\')) {
     return undefined;
   }
-  const withRoot = `/${trimmed.replace(/^\/+|\/+$/gu, '')}`;
+  const normalized = trimmed.replace(/^\/+|\/+$/gu, '');
+  if (!normalized) return '/';
+  const withRoot = `/${normalized}`;
   if (withRoot.includes('//')) return undefined;
-  const segments = withRoot.split('/').map((segment) => {
-    if (segment.startsWith(':')) return `{${segment.slice(1)}}`;
-    return segment;
-  });
+  const rawSegments = withRoot.split('/');
+  const lastIndex = rawSegments.length - 1;
+  const hasParameter = rawSegments.some((segment) => (
+    segment.includes(':') || segment.includes('{') || segment.includes('}')
+  ));
+  const segments = [];
+  for (let index = 0; index < rawSegments.length; index += 1) {
+    const segment = rawSegments[index];
+    if (!segment.includes(':')) {
+      // A `{...}` group outside the strict OpenAPI parameter form is invalid whenever
+      // the path uses route templates at all; a plain literal is kept verbatim.
+      if ((segment.includes('{') || segment.includes('}')) && !PARAM_SEGMENT.test(segment)) {
+        return undefined;
+      }
+      segments.push(segment);
+      continue;
+    }
+    const isFinal = index === lastIndex;
+    // OpenAPI parameter marker: `:param` as a whole segment.
+    if (segment.startsWith(':')) {
+      const marked = segment.slice(1);
+      if (!PARAM_NAME.test(marked)) return undefined;
+      segments.push(`{${marked}}`);
+      continue;
+    }
+    if (!isFinal) return undefined;
+    const paramMatch = PARAM_WITH_METHOD_SUFFIX.exec(segment);
+    if (paramMatch) {
+      if (!METHOD_SUFFIX.test(paramMatch[2])) return undefined;
+      segments.push(`{${paramMatch[1]}}:${paramMatch[2]}`);
+      continue;
+    }
+    const collectionMatch = COLLECTION_WITH_METHOD_SUFFIX.exec(segment);
+    if (collectionMatch) {
+      if (!METHOD_SUFFIX.test(collectionMatch[2])) return undefined;
+      segments.push(segment);
+      continue;
+    }
+    return undefined;
+  }
   if (segments.some((segment) => segment === '.' || segment === '..')) return undefined;
-  if (segments.some((segment) => (
-    (segment.startsWith('{') || segment.endsWith('}'))
-    && !/^\{[A-Za-z][A-Za-z0-9_]*\}$/u.test(segment)
-  ))) return undefined;
+  if (segments.some((segment) => {
+    const withoutParams = segment.replace(/\{[a-z][A-Za-z0-9_]*\}/gu, '');
+    return withoutParams.includes('{') || withoutParams.includes('}');
+  })) return undefined;
   return segments.join('/') || '/';
 }
 

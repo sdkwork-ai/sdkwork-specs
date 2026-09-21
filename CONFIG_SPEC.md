@@ -455,13 +455,18 @@ Rules:
 
 | Profile | Browser default | Server/runtime default | Primary authority |
 | --- | --- | --- | --- |
-| `standalone` | Same-origin relative canonical API paths from authored `VITE_*` or runtime config | Application standalone gateway listener from topology `application.public-ingress` | `ENVIRONMENT_SPEC.md` §6.2, `API_ASSEMBLY_SPEC.md` §6.1.1 |
+| `standalone` | Same-origin relative canonical API paths from authored `VITE_*` or runtime config | In-process port for every surface mounted in the application standalone gateway; no outbound base URL is derived from the application's own ingress. An externally deployed service resolves from a declared external upstream | `ENVIRONMENT_SPEC.md` §6.2, `APP_SDK_INTEGRATION_SPEC.md` §5.2, `API_ASSEMBLY_SPEC.md` §6.1.1 |
 | `cloud` | Absolute URLs from `application.public-ingress` and `platform.api-gateway` | Deployed upstream URLs from topology; no local standalone gateway process | `DEPLOYMENT_SPEC.md` §1.2, `ENVIRONMENT_SPEC.md` §6.2 |
 
 Rules:
 
 - Topology `MUST` declare enough surface metadata for the selected profile to materialize every required SDK base URL without guessing sibling repository ports.
 - `standalone` topology `MUST` declare the standalone gateway bind address, public browser origin, and every same-origin-mounted dependency surface that the api-assembly composes.
+- A `standalone` runtime `MUST NOT` treat the application's own ingress bind as the base URL of a
+  surface it mounts in-process, and `MUST NOT` publish an alternate loopback port, a second HTTP
+  listener, or a platform-gateway URL for such a surface (`APP_SDK_INTEGRATION_SPEC.md` §5.2,
+  `API_ASSEMBLY_SPEC.md` §6.1). The standalone gateway bind is an ingress declaration for real HTTP
+  clients, not a client-side base URL for its own modules.
 - `cloud` topology `MUST` declare public ingress for application-owned APIs and platform gateway URLs for dependency APIs unless an explicit per-dependency override documents a different host.
 - Profile-specific URL materialization `MUST` follow `ENVIRONMENT_SPEC.md` §5.1.4.1 resolution order. Authored same-origin `VITE_*` values `MUST NOT` be overwritten by launcher-derived absolute URLs in `standalone` development.
 

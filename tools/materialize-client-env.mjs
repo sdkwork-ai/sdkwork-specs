@@ -11,9 +11,9 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import {
-  cloudSdkBaseUrlMaterializationValue,
-  resolveCloudApiOriginListForRepository,
-} from './browser-cloud-api-base.mjs';
+  baseUrlsMaterializationValue,
+  resolveBaseUrl as resolveAppBaseUrl,
+} from './app-base-url.mjs';
 
 export const CLIENT_ENV_DEPLOYMENT_PROFILES = ['standalone', 'cloud'];
 export const CLIENT_ENVIRONMENTS = ['development', 'test', 'staging', 'demo', 'production'];
@@ -189,13 +189,16 @@ export function applyViteSurfaceCloudValues(values, sourceValues, profile, { rep
   if (profile.deploymentProfile !== 'cloud') {
     return values;
   }
-  const resolvedOrigins = origins ?? resolveCloudApiOriginListForRepository({
-    repositoryRoot,
-    environment: profile.environment,
-    deployment,
-    preferTopology: true,
-  });
-  const primaryEdge = String(resolvedOrigins[0] ?? '').trim();
+  const primaryEdge = origins
+    ? String(origins[0] ?? '').trim()
+    : resolveAppBaseUrl({
+        deploymentProfile: 'cloud',
+        environment: profile.environment,
+        phase: 'build',
+        surface: 'transport',
+        repositoryRoot,
+        deployment,
+      }).primaryBaseUrl;
   if (!primaryEdge) {
     throw new Error(`${profile.profileId} has no registered cloud API origin for dotenv normalization.`);
   }
@@ -243,6 +246,23 @@ export function applyViteSurfaceCloudValues(values, sourceValues, profile, { rep
   return projected;
 }
 
+/**
+ * The registered cloud build family materialization for one profile, derived
+ * through the canonical lifecycle-matrix resolver (APP_RUNTIME_ENV_SPEC.md
+ * §4, tools/app-base-url.mjs `resolveBaseUrl`) — the single decision entry
+ * point; do not re-derive the family inline.
+ */
+function cloudBuildMaterializationValue(profile, deploymentIndex, repositoryRoot) {
+  return baseUrlsMaterializationValue(resolveAppBaseUrl({
+    deploymentProfile: 'cloud',
+    environment: profile.environment,
+    phase: 'build',
+    surface: 'transport',
+    repositoryRoot,
+    deployment: deploymentIndex,
+  }));
+}
+
 function applyCloudGatewayProjection(values, deploymentIndex, profile, repositoryRoot, sourceValues = {}) {
   if (profile.deploymentProfile !== 'cloud') {
     return values;
@@ -275,14 +295,7 @@ function applyCloudGatewayProjection(values, deploymentIndex, profile, repositor
     }
     return projected;
   }
-  const materialized = cloudSdkBaseUrlMaterializationValue(
-    resolveCloudApiOriginListForRepository({
-      repositoryRoot,
-      environment: profile.environment,
-      deployment: deploymentIndex,
-      preferTopology: true,
-    }),
-  );
+  const materialized = cloudBuildMaterializationValue(profile, deploymentIndex, repositoryRoot);
   const projected = { ...values };
   for (const key of Object.keys(projected)) {
     if (!shouldExpandCloudGatewayKey(key)) {
@@ -311,13 +324,7 @@ function expandCloudGatewayUrls(sourceValues, deploymentIndex, profile, reposito
   if (profile.deploymentProfile !== 'cloud') {
     return sourceValues;
   }
-  const origins = resolveCloudApiOriginListForRepository({
-    repositoryRoot,
-    environment: profile.environment,
-    deployment: deploymentIndex,
-    preferTopology: true,
-  });
-  const materialized = cloudSdkBaseUrlMaterializationValue(origins);
+  const materialized = cloudBuildMaterializationValue(profile, deploymentIndex, repositoryRoot);
   const expanded = { ...sourceValues };
   for (const [key, value] of Object.entries(expanded)) {
     if (!shouldExpandCloudGatewayKey(key)) {

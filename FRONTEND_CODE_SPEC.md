@@ -149,6 +149,20 @@ Rules:
 - Respect user preference: honor `prefers-reduced-motion` for animations, and `prefers-contrast`
   where the design system supports it.
 
+### 7.1 Monetary And Unit Display
+
+`API_SPEC.md` section 13.2 is the authority for money units on the wire and in the client. This subsection states the frontend obligations.
+
+- A monetary value `MUST` reach the UI unchanged from the SDK. Services, hooks, adapters, and stores `MUST NOT` multiply, divide, or otherwise rescale it. The view is the only layer that converts to major units.
+- Conversion `MUST` go through the shared formatting helper. Manual division, string concatenation, decimal-point insertion, or character-slicing to build a displayed amount is forbidden — each of these silently breaks for a different currency exponent.
+- The formatting helper's expected input unit `MUST` be evident at the call site, from the function name or a required marker argument. If two helpers exist, one for minor units and one for major units, calling the wrong one is a defect the reviewer `MUST` be able to catch by reading the call.
+- A monetary field name `MUST NOT` assert a currency it does not hold or a unit it does not hold. A field named with a currency suffix (`totalAmountCny`) that actually carries a non-monetary unit, or a different currency, is a naming defect and `MUST` be renamed rather than papered over with a comment.
+- Absent, unknown, and not-yet-settled amounts `MUST` render an explicit placeholder. Rendering `¥0.00` for "no payment recorded" misinforms the user and is forbidden.
+- Monetary amounts and non-monetary asset balances (points, quota, credits, usage) `MUST` be presented in separate labelled columns or fields, and the asset value `MUST NOT` carry a currency symbol. They answer different questions — what was paid versus what was received — and combining them makes a unit error indistinguishable from a pricing change.
+- Locale grouping and fraction digits `MUST` come from the locale-aware formatter. Concatenating a symbol with a pre-formatted string is forbidden.
+- Tabular monetary columns `SHOULD` use tabular figures and consistent alignment so digits line up, and the numeric columns `SHOULD` be right-aligned.
+- A component that renders either a monetary amount or an asset balance `MUST` have a test covering the rendered string for a real sample value, so a unit regression fails a test instead of reaching a user.
+
 ## 8. State And Data
 
 Rules:
@@ -225,6 +239,13 @@ Forbidden:
 - Uncaught render errors without an error boundary.
 - Duplicating server state into client stores.
 - Hardcoded strings for user-facing copy outside i18n catalogs in reusable/user-facing packages.
+- Rescaling a monetary value in a service, hook, adapter, or store instead of leaving it to the
+  view layer.
+- Calling a major-unit formatting helper with a minor-unit value, or the reverse, where the two
+  cannot be told apart at the call site.
+- Formatting a non-monetary balance (points, quota, credits) with a currency symbol, or sharing a
+  column with a monetary amount.
+- Rendering `0`/`¥0.00` for an absent or not-yet-settled monetary value.
 
 ## 13. Verification
 

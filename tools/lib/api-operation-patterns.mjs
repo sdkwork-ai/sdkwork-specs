@@ -19,6 +19,75 @@ export function classifyOpenApiOperationPatterns(text) {
     issues.push(...classifyOperation(entry));
   }
   issues.push(...classifyInt64StringContract(document));
+  issues.push(...classifyMoneyUnitContract(document));
+  return issues;
+}
+
+/**
+ * API_SPEC §13.2.2 monetary-unit closure: every monetary amount field MUST
+ * declare which unit it carries.
+ *
+ * The failure this guards against is silent and large. When a producer writes
+ * minor units (fen) and a consumer renders them as major units (yuan), the
+ * displayed amount is overstated by exactly 100x, and for a finer-unit asset
+ * such as micro-points by exactly 1,000,000x. Nothing throws; the number is
+ * simply wrong.
+ *
+ * Detection is intentionally marker-based rather than name-based. A field is a
+ * candidate when its name uses monetary vocabulary and its schema is an
+ * int64-string, and it MUST then carry `x-sdkwork-money-unit: minor`. Name
+ * heuristics cannot decide the contract on their own, so the marker is the
+ * requirement and the name only decides where to look.
+ */
+const MONEY_FIELD_NAME_PATTERN = /(?:^|[a-z])(?:amount|price|fee|cost|subtotal|discount|refund|balance|payment|payable|paid|revenue|tax|charge|credit(?:Amount)?|wallet)/iu;
+
+/**
+ * Names that contain monetary vocabulary but are counts, not money. Requests,
+ * users, orders, and similar tallies legitimately use words such as `total`
+ * and must not be forced to declare a currency unit.
+ */
+const NON_MONETARY_FIELD_NAME_PATTERN = /(?:count|number|num|qty|quantity|requests?|users?|orders?|items?|rows?|hits?|calls?|times?|rate|ratio|percent|bps|rpm|tpm|score|rank|invited|size|length|bytes?|points?|tokens?|minutes?|seconds?|days?)/iu;
+
+function classifyMoneyUnitContract(document) {
+  if (document && document['x-sdkwork-int64-openai-compat'] === true) {
+    return [];
+  }
+  const issues = [];
+  const schemas = (document && document.components && document.components.schemas) || {};
+  for (const [schemaName, schema] of Object.entries(schemas)) {
+    if (!schema || typeof schema !== 'object') {
+      continue;
+    }
+    const properties = (schema.properties && typeof schema.properties === 'object')
+      ? schema.properties
+      : {};
+    for (const [propertyName, property] of Object.entries(properties)) {
+      if (!property || typeof property !== 'object' || property.format !== 'int64') {
+        continue;
+      }
+      if (!MONEY_FIELD_NAME_PATTERN.test(propertyName)) {
+        continue;
+      }
+      if (NON_MONETARY_FIELD_NAME_PATTERN.test(propertyName)) {
+        continue;
+      }
+      const label = `${schemaName}.${propertyName}`;
+      const unit = property['x-sdkwork-money-unit'];
+      if (unit === undefined) {
+        issues.push({
+          kind: 'money-unit-marker-missing',
+          detail: `${label} looks like a monetary amount but declares no x-sdkwork-money-unit per API_SPEC §13.2.2; without it a minor-unit value can be rendered as major units and overstated 100x. If this field is a count rather than money, rename it so the distinction is explicit`,
+        });
+        continue;
+      }
+      if (unit !== 'minor') {
+        issues.push({
+          kind: 'money-unit-not-minor',
+          detail: `${label} declares x-sdkwork-money-unit: ${unit} but API_SPEC §13.2.1 requires integer minor units on the wire`,
+        });
+      }
+    }
+  }
   return issues;
 }
 

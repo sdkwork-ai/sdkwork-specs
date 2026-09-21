@@ -437,8 +437,13 @@ Rules:
 Rules:
 
 - Money fields `MUST` store amount and currency. Currency `SHOULD` follow ISO 4217 unless a domain-specific unit is documented.
+- Money fields `MUST` store integer minor units (the currency's smallest indivisible unit, for example `fen` for `CNY` and `cent` for `USD`). They `MUST NOT` store major units, and `MUST NOT` store a floating-point amount in any unit.
+- The minor-unit exponent is derived from a single registered currency table (`minorUnitExponent(currency)`), never from a per-table literal. A zero-decimal currency such as `JPY` or `KRW` makes any hardcoded `/ 100` conversion wrong.
 - Decimal precision, scale, rounding mode, tax basis, discount basis, and exchange-rate source `MUST` be documented for financial tables.
 - Usage, quota, token, point, and unit balances `MUST` document unit, precision, reset or settlement semantics, and overflow behavior.
+- A balance or quota stored in a finer internal unit than its displayed unit `MUST` declare the scale relationship (for example `1 point = 1e6 micro`) in the schema, migration, or owning spec — not only in application code.
+- How the stored unit reaches the API and the UI is governed by `API_SPEC.md` section 13.2. Storage and transport `MUST NOT` disagree on the unit: a column in minor units surfaced as major units, or a micro-unit balance surfaced as whole units, is a defect in one of the two layers and `MUST` be resolved rather than compensated for downstream.
+- Rounding `MUST NOT` occur on write. Stored minor-unit values are exact; rounding belongs to the display boundary only.
 
 ## 15. Time Standard
 
@@ -715,6 +720,12 @@ CI, schema linters, migration tools, or repository audits `SHOULD` implement the
 | DB091 | MUST | Runtime queries resolve a missing IAM organization context to the sentinel or match it explicitly; predicates matching only `organization_id IS NULL` are contract violations. |
 | DB092 | MUST | Legacy nullable `organization_id` migrations backfill the sentinel before `SET NOT NULL` and are idempotent. |
 | DB093 | MUST | New DDL references `organization_id` directly in unique indexes/constraints; `COALESCE(organization_id, '0')` is a legacy migration fact only. |
+| DB094 | MUST | Money columns store the currency's integer minor unit; major units and floating-point amounts are contract violations. |
+| DB095 | MUST | Money and unit columns declare their exponent or scale relationship rather than relying on a hardcoded divisor such as `/ 100`. |
+| DB096 | MUST | Money columns declare a currency identity; a bare amount whose currency is implicit is incomplete. |
+| DB097 | MUST | Balance and quota columns using a finer internal unit than the displayed unit declare the scale relationship (for example `1 point = 1e6 micro`). |
+| DB098 | MUST | A money or unit column's stored unit agrees with the unit surfaced by `API_SPEC.md` section 13.2; the two layers never disagree. |
+| DB099 | MUST | Stored money and unit values are exact; rounding happens only at the display boundary, never on write. |
 
 ## 27. Design Review Checklist
 

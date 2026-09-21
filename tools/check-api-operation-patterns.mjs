@@ -50,6 +50,9 @@ function scanSpecsNormative(root) {
   const text = fs.readFileSync(apiSpec, 'utf8');
   for (const required of [
     '### 15.4 Operation Input And Output Contract Matrix',
+    '### 13.2 Monetary Amount And Unit Contract',
+    '### 13.6 Int64 Wire String Standard',
+    'x-sdkwork-money-unit',
     'Create',
     'Replace',
     'Patch',

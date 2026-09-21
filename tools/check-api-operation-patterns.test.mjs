@@ -565,3 +565,117 @@ test('checker scans every same-surface OpenAPI authority instead of one preferre
   assert.match(result.stderr, /zzz-bad/);
   assert.match(result.stderr, /create-status/);
 });
+
+function moneyDocument(properties) {
+  return JSON.stringify({
+    openapi: '3.1.2',
+    info: { title: 'money units', version: '1.0.0' },
+    paths: {},
+    components: {
+      schemas: {
+        Amounts: { type: 'object', properties },
+      },
+    },
+  });
+}
+
+test('classifyOpenApiOperationPatterns requires a money-unit marker on monetary int64 fields', () => {
+  const issues = classifyOpenApiOperationPatterns(moneyDocument({
+    totalAmount: {
+      type: 'string',
+      format: 'int64',
+      pattern: '^[0-9]+$',
+      'x-sdkwork-int64-string': true,
+    },
+  }));
+  assert.ok(
+    issues.some((issue) => issue.kind === 'money-unit-marker-missing'),
+    'a monetary amount without x-sdkwork-money-unit must be reported',
+  );
+});
+
+test('classifyOpenApiOperationPatterns rejects a non-minor money unit', () => {
+  const issues = classifyOpenApiOperationPatterns(moneyDocument({
+    paidAmount: {
+      type: 'string',
+      format: 'int64',
+      pattern: '^[0-9]+$',
+      'x-sdkwork-int64-string': true,
+      'x-sdkwork-money-unit': 'major',
+    },
+  }));
+  assert.ok(
+    issues.some((issue) => issue.kind === 'money-unit-not-minor'),
+    'x-sdkwork-money-unit: major must be rejected per API_SPEC 13.2.1',
+  );
+});
+
+test('classifyOpenApiOperationPatterns accepts a declared minor-unit money field', () => {
+  const issues = classifyOpenApiOperationPatterns(moneyDocument({
+    totalAmount: {
+      type: 'string',
+      format: 'int64',
+      pattern: '^[0-9]+$',
+      'x-sdkwork-int64-string': true,
+      'x-sdkwork-money-unit': 'minor',
+      'x-sdkwork-money-currency': 'CNY',
+    },
+  }));
+  assert.equal(
+    issues.filter((issue) => issue.kind.startsWith('money-unit')).length,
+    0,
+    'a fully declared minor-unit amount must pass',
+  );
+});
+
+test('classifyOpenApiOperationPatterns does not flag non-monetary counters', () => {
+  const issues = classifyOpenApiOperationPatterns(moneyDocument({
+    totalRequestCount: {
+      type: 'string',
+      format: 'int64',
+      pattern: '^[0-9]+$',
+      'x-sdkwork-int64-string': true,
+    },
+    totalUsers: {
+      type: 'string',
+      format: 'int64',
+      pattern: '^[0-9]+$',
+      'x-sdkwork-int64-string': true,
+    },
+    totalInvited: {
+      type: 'string',
+      format: 'int64',
+      pattern: '^[0-9]+$',
+      'x-sdkwork-int64-string': true,
+    },
+    points: {
+      type: 'string',
+      format: 'int64',
+      pattern: '^[0-9]+$',
+      'x-sdkwork-int64-string': true,
+    },
+  }));
+  assert.equal(
+    issues.filter((issue) => issue.kind.startsWith('money-unit')).length,
+    0,
+    'counters, tallies, and unit balances are not money and must not require a currency marker',
+  );
+});
+
+test('classifyOpenApiOperationPatterns exempts documents marked openai-compatible', () => {
+  const document = JSON.parse(moneyDocument({
+    totalAmount: {
+      type: 'string',
+      format: 'int64',
+      pattern: '^[0-9]+$',
+      'x-sdkwork-int64-string': true,
+    },
+  }));
+  document['x-sdkwork-int64-openai-compat'] = true;
+  const issues = classifyOpenApiOperationPatterns(JSON.stringify(document));
+  assert.equal(
+    issues.filter((issue) => issue.kind.startsWith('money-unit')).length,
+    0,
+    'the vendor wire-protocol exemption also covers the money-unit closure',
+  );
+});

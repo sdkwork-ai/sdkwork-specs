@@ -122,6 +122,315 @@ export function moduleOfRepo(repoName) {
   return repoName.startsWith('sdkwork-') ? repoName.slice('sdkwork-'.length) : null;
 }
 
+// Rust backend sources of a repository. `listFiles` already skips `target`,
+// `node_modules`, and VCS output, so this is authored source only.
+//
+// Test scaffolding is excluded: an integration test that spawns a server and
+// then dials it over loopback is a legitimate client/server test, and reporting
+// it would teach the gate's readers to ignore the rule that matters.
+function isRustTestPath(file) {
+  const parts = file.split(/[\\/]/);
+  if (parts.includes('tests')) return true;
+  // Match a `test`/`tests` segment anywhere in the stem, not only the whole
+  // stem: fixtures live in `src/test_helper.rs` and `src/bind_test.rs` just as
+  // often as in `src/tests.rs`, and a file-wide miss reports scaffolding.
+  const stem = path.basename(file).replace(/\.rs$/, '');
+  return /(?:^|[._-])tests?(?:[._-]|$)/.test(stem);
+}
+
+export function rustSources(repoRoot) {
+  return [
+    ...listFiles(path.join(repoRoot, 'crates'), (name) => name.endsWith('.rs')),
+    ...listFiles(path.join(repoRoot, 'services'), (name) => name.endsWith('.rs')),
+    ...listFiles(path.join(repoRoot, 'apps'), (name) => name.endsWith('.rs')),
+    ...listFiles(path.join(repoRoot, 'src'), (name) => name.endsWith('.rs')),
+  ].filter((file) => !isRustTestPath(file));
+}
+
+// A Rust source derives a loopback origin from this process's own listener when
+// it builds a loopback origin **for use as an outbound client base URL**.
+//
+// Judging this per file does not work: a single file commonly contains both an
+// inbound bind resolver and an outbound client, and a file-wide marker would
+// report the whole file. The decision is therefore made per line, using the
+// line that composes the origin plus a small window around it. Three legitimate
+// shapes compose a loopback origin and must never be reported:
+//   - a listener bind: the value flows into `bind_address` / `SocketAddr` /
+//     `.bind()` / `addr()`;
+//   - a CORS allow-list entry: it flows into an `origins` / `allowed_origins`
+//     collection;
+//   - test scaffolding that records a spawned server's bind.
+// The violation is a `base_url` / `endpoint` / client value, or an injected
+// environment variable, that names this process's own listener.
+const RUST_OWN_LISTENER_KEY =
+  /SDKWORK_[A-Z0-9_]*_APPLICATION_(?:PUBLIC_INGRESS_BIND|PUBLIC_HTTP_URL|OPEN_HTTP_URL|BACKEND_HTTP_URL)/;
+
+// A composed loopback origin: the scheme or a `{port}` placeholder must be
+// present, so a bare language attribute like `#[serde(rename)]` cannot match.
+// The scheme is captured when present so a finding quotes the origin in full —
+// a bare `127.0.0.1:{port}` reads like a bind and hides that it is a URL.
+const RUST_COMPOSED_LOOPBACK_ORIGIN = /((?:https?:\/\/)?127\.0\.0\.1:\{[a-z_][a-z0-9_]*\})/i;
+
+// A loopback origin with no scheme is a listener bind, never an outbound base
+// URL: `env::set_var("..._INGRESS_BIND", format!("127.0.0.1:{port}"))` seeds the
+// process's own listener, and `format!("{host}:{port}")` style bind resolvers
+// produce the same shape. Only a scheme-bearing origin can be dialled.
+const RUST_SCHEMED_LOOPBACK_ORIGIN = /https?:\/\/127\.0\.0\.1:\{[a-z_][a-z0-9_]*\}/i;
+
+// Markers, checked over the composing line and its neighbourhood.
+const RUST_OUTBOUND_MARKER =
+  /\bbase_url\b|\bbase_uri\b|\bendpoint\b|\bapi_url\b|\bgateway_url\b|\bclient\b|sdk\b|_url\b|set_var/i;
+const RUST_INBOUND_OR_ALLOWLIST_MARKER =
+  /\bbind\b|\bbind_address\b|\bbind_addr\b|\baddr\b|\blisten\b|\borigins\b|allowed_origins|allow_origin|cors|Access-Control-Allow-Origin|SocketAddr|\bport\s*:/i;
+
+// How far around a composing line to look for the marker that classifies it.
+const RUST_CONTEXT_LINES = 6;
+
+// A line that is entirely a comment. Documentation that *names* the prohibited
+// pattern while explaining why it is forbidden is not a violation — a rule that
+// reports its own rationale teaches readers to delete the rationale. Rust has
+// three comment forms (`//`, `///`, `//!`), all starting with `//`.
+function isRustCommentLine(line) {
+  const trimmed = line.trimStart();
+  return trimmed.startsWith('//');
+}
+
+// Line ranges covered by an inline `#[cfg(test)]` module. Brace counting is
+// enough for Rust's grammar here: a `mod tests { ... }` block is delimited by
+// balanced braces, and string/comment handling does not change that balance
+// materially for this purpose. Test-only scaffolding is excluded from the rule
+// so the gate keeps reporting only production call paths.
+function inlineTestRanges(lines) {
+  const ranges = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!/#\[cfg\(test\)\]/.test(lines[index])) continue;
+    // Walk forward to the opening brace, then count to its match.
+    let cursor = index;
+    let depth = 0;
+    let opened = false;
+    for (; cursor < lines.length; cursor += 1) {
+      const line = lines[cursor];
+      for (const ch of line) {
+        if (ch === '{') {
+          depth += 1;
+          opened = true;
+        } else if (ch === '}') {
+          depth -= 1;
+        }
+      }
+      if (opened && depth <= 0) break;
+    }
+    ranges.push([index, Math.min(cursor, lines.length - 1)]);
+    index = cursor;
+  }
+  return ranges;
+}
+
+// The key a composing line is assigning into, when the line itself names a bind
+// variable. A test fixture that supplies `..._INGRESS_BIND` its value is
+// building a listener configuration, never an outbound base URL.
+const RUST_ASSIGNS_BIND_KEY = /_INGRESS_BIND/;
+
+// Returns the loopback origin a Rust file derives from its own listener as an
+// outbound base URL, or null. Reports at most the first offending origin.
+//
+// The reported fragment is widened to the enclosing string literal when the
+// origin is composed inside one. `format!("http://127.0.0.1:{port}/backend")`
+// otherwise reports only `127.0.0.1:{port}`, which reads like a bind and hides
+// that the value is a URL.
+function quotedLiteralContaining(line, index, length) {
+  let quoteStart = -1;
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const ch = line[cursor];
+    if (ch === '"') {
+      quoteStart = cursor;
+      break;
+    }
+    if (ch !== '{' && ch !== ' ') break;
+  }
+  if (quoteStart < 0) return null;
+  const quoteEnd = line.indexOf('"', index + length);
+  if (quoteEnd < 0) return null;
+  return line.slice(quoteStart + 1, quoteEnd);
+}
+
+export function derivedLoopbackInRust(source) {
+  const lines = source.split(/\r?\n/);
+  const fileTouchesOwnListener = RUST_OWN_LISTENER_KEY.test(source);
+  const testRanges = inlineTestRanges(lines);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const composed = RUST_COMPOSED_LOOPBACK_ORIGIN.exec(line);
+    if (!composed) continue;
+    // A comment naming the pattern is documentation, not a call path: this
+    // includes the doc comments that explain why the pattern is prohibited.
+    if (isRustCommentLine(line)) continue;
+    // Scaffolding inside an inline `#[cfg(test)] mod tests { ... }` block.
+    if (testRanges.some(([start, end]) => index >= start && index <= end)) continue;
+    // The composing line itself assigns a `*_INGRESS_BIND` value: this is a
+    // listener configuration (typically a test fixture or a bind resolver), not
+    // an outbound client target.
+    if (RUST_ASSIGNS_BIND_KEY.test(line)) continue;
+    // A bind-shaped literal is not dialable, so it is out of scope. This has to
+    // be checked on the *literal*, not the line: a multi-line `set_var` puts the
+    // bind key on one line and its value on the next, so the line-level
+    // `RUST_ASSIGNS_BIND_KEY` above cannot see it.
+    if (!RUST_SCHEMED_LOOPBACK_ORIGIN.test(line)) continue;
+    // A composing line inside a `#[cfg(test)]` module or a test file is
+    // scaffolding: it spawns a server on an ephemeral port and records the bind.
+    const window = lines
+      .slice(Math.max(0, index - RUST_CONTEXT_LINES), index + RUST_CONTEXT_LINES + 1)
+      .join('\n');
+    if (RUST_INBOUND_OR_ALLOWLIST_MARKER.test(window) && !RUST_OUTBOUND_MARKER.test(window)) {
+      continue;
+    }
+    // An outbound base URL is only a violation when the code also consults this
+    // process's own listener variable, or injects it for another module. A
+    // hard-coded loopback client target with no relation to the ingress bind is
+    // a different (and separately owned) concern, not this rule's subject.
+    const consultsOwnListener =
+      fileTouchesOwnListener
+      || RUST_OWN_LISTENER_KEY.test(window)
+      || /env::var(?:_os)?\s*\(\s*"[A-Z_]*INGRESS_BIND"/.test(window);
+    if (!consultsOwnListener) continue;
+    return quotedLiteralContaining(line, composed.index, composed[0].length)
+      ?? composed[0]
+      ?? '127.0.0.1';
+  }
+  return null;
+}
+
+// --- Rule E: base-URL / bind resolution must not be re-implemented -----------
+//
+// `APP_SDK_INTEGRATION_SPEC.md` §5.2 requires the profile->mode classification,
+// the override/authored/default precedence, and the listener-bind port parse to
+// live once in `sdkwork-utils-rust::service_base_url`. A per-call-site copy is
+// what let `standalone` and `cloud` drift apart in the first place, so the gate
+// has to see the copy, not just its consequences.
+//
+// The component itself is exempt: it is the one legitimate implementation.
+export const SHARED_BASE_URL_COMPONENT = 'sdkwork-utils-rust/src/service_base_url.rs';
+
+// A re-implemented resolution *decision*.
+//
+// These regexes are deliberately narrow. A wide net here is worse than no rule:
+// the workspace contains many legitimate `.or_else(...)` chains (URL path
+// extraction, JSON record field merges, localhost desktop endpoints, SDK
+// generator clients, HH:MM:SS timestamp parsing), and reporting them would
+// teach readers to ignore the rule that matters. Each pattern therefore
+// requires the distinguishing token of the *deployment* resolver, not merely
+// an `or_else` or a `split(':')`.
+const RUST_PROFILE_MODE_CLASSIFICATION =
+  /(?:deployment_)?profile[^\n]{0,60}(?:==|eq\(|contains\(|starts_with|matches!)[^\n]{0,60}"standalone"/i;
+
+// The precedence chain must move between an authored *public* URL and a split
+// default while a profile decides the mode — the shape `service_base_url`
+// owns. Requiring the public-URL token is what separates it from the unrelated
+// `.or_else` chains found across the workspace.
+const RUST_RESOLUTION_PRECEDENCE =
+  /(?:APPLICATION_PUBLIC_HTTP_URL|APPLICATION_OPEN_HTTP_URL|APPLICATION_BACKEND_HTTP_URL|PUBLIC_HTTP_URL)[^\n]{0,80}(?:or_else|or\(|unwrap_or|\.or\b)|(?:or_else|or\(|unwrap_or)[^\n]{0,80}(?:APPLICATION_PUBLIC_HTTP_URL|APPLICATION_OPEN_HTTP_URL|PUBLIC_HTTP_URL)/i;
+
+// Parsing a listener bind into a port. Requires a bind-typed variable name
+// within a short distance of a `split(':')` and a port parse: a generic
+// `split(':')` matches HH:MM:SS timestamp parsing and must not fire.
+//
+// The distance matters. A full 13-line window lets unrelated lines in one
+// function contribute one token each — a `bind` parameter in the signature, a
+// `split(':')` three lines down, a `u16` six lines further — and reports a
+// parse that does not exist. Requiring all three tokens inside a tight block
+// keeps the rule to code that really parses a bind.
+const RUST_BIND_PARSE_BLOCK_LINES = 5;
+const RUST_BIND_NAME = /\b(?:[a-z_]*bind[a-z_]*|[a-z_]*ingress[a-z_]*)\b/i;
+
+// A `:` inside a string literal is data, never a bind split. Rust SQL and
+// format strings routinely contain `:` (`AND c.id = $3`), so the colon must be
+// the split call's *own argument* to count.
+//
+// The normalization pins that argument to a marker before the general literal
+// stripping runs. Order matters: the colon literal is itself a string literal,
+// so an unpinned `(':')` would be erased by the very next rule and the real
+// parse would stop matching.
+const RUST_SPLIT_MARKER = 'SDKWORK_COLON_SEP';
+const RUST_SPLIT_CALL =
+  new RegExp(
+    `\\b[a-z_][a-z0-9_]*\\s*\\.\\s*(?:split_once|rsplit_once|split|rsplit|rfind)\\s*\\(\\s*${RUST_SPLIT_MARKER}\\s*\\)`,
+    'i',
+  );
+const RUST_PORT_PARSE = /(?:\.parse(?:::<u16>)?\(\)|\bu16\b)/;
+
+function normalizeForBindParse(line) {
+  return line
+    // Raw strings are data.
+    .replace(/r#*"[\s\S]*?"#*/g, '""')
+    // Pin the split call's colon argument, in both quote styles.
+    .replace(
+      new RegExp(
+        `\\b([a-z_][a-z0-9_]*)\\s*\\.\\s*(split_once|rsplit_once|split|rsplit|rfind)\\s*\\(\\s*['"]:['"]\\s*\\)`,
+        'gi',
+      ),
+      `$1.$2(${RUST_SPLIT_MARKER})`,
+    )
+    // Everything else literal is data.
+    .replace(/"(?:\\.|[^"\\])*"/g, '""')
+    .replace(/'(?:\\.|[^'\\])*'/g, "''");
+}
+
+// A tight block around a line, used for the bind-parse rule.
+function blockAround(lines, index, radius) {
+  return lines
+    .slice(Math.max(0, index - radius), index + radius + 1)
+    .join('\n');
+}
+
+// Whether the *current* line sits inside a bind parse. The colon-split and the
+// port parse must appear together in one tight block around this line; the
+// bind-typed name may sit in the enclosing signature, so it is checked over the
+// wider window the caller already computed.
+//
+// Scanning the whole file here instead would fire on any file that contains a
+// `:` inside a string literal (SQL placeholders, format strings) anywhere near
+// a type mention of `u16`, which is most of the workspace.
+function lineParsesBind(lines, index) {
+  const block = normalizeForBindParse(blockAround(lines, index, RUST_BIND_PARSE_BLOCK_LINES));
+  return RUST_SPLIT_CALL.test(block) && RUST_PORT_PARSE.test(block);
+}
+
+export function reimplementedBaseUrlResolution(source, file) {
+  const normalized = file.split(/[\\/]/).join('/');
+  if (normalized.endsWith(SHARED_BASE_URL_COMPONENT)) return null;
+  const lines = source.split(/\r?\n/);
+  const testRanges = inlineTestRanges(lines);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (isRustCommentLine(line)) continue;
+    if (testRanges.some(([start, end]) => index >= start && index <= end)) continue;
+    // A file whose window merely *uses* the shared component is a consumer, not
+    // a second implementation.
+    const window = lines
+      .slice(Math.max(0, index - RUST_CONTEXT_LINES), index + RUST_CONTEXT_LINES + 1)
+      .join('\n');
+    if (/service_base_url/.test(window)) continue;
+
+    if (RUST_PROFILE_MODE_CLASSIFICATION.test(line)) {
+      return `profile-to-mode classification (${line.trim().slice(0, 90)})`;
+    }
+    if (RUST_RESOLUTION_PRECEDENCE.test(line)) {
+      return `base-URL resolution precedence (${line.trim().slice(0, 90)})`;
+    }
+    // The bind-parse check needs care: the split and the port parse are often
+    // on separate lines, so a single-line test misses the real shape, while a
+    // wide window invents parses that do not exist. The rule therefore requires
+    // the colon-split and the port parse to sit inside one tight statement
+    // block, with a bind-typed name in the enclosing window.
+    if (RUST_BIND_NAME.test(window) && lineParsesBind(lines, index)) {
+      return `inline listener-bind port parse (${line.trim().slice(0, 90)})`;
+    }
+  }
+  return null;
+}
+
 // Resolves the dependency a variable names, scanning right-to-left so the
 // surface suffix and the consumer application never shadow the real dependency.
 // `SDKWORK_FEEDS_COMMUNITY_OPEN_API_BASE_URL` names `community`, not the
@@ -319,6 +628,46 @@ export function validateEmbeddedSelfLoop(workspace, { onlyRepo = null } = {}) {
         }
       }
     }
+
+    // Rule D: the same violation in code form. A profile-only scan cannot see a
+    // base URL that Rust builds at runtime from the process's own ingress bind,
+    // so the declaration rules above pass while the process still talks to
+    // itself over loopback. `APP_SDK_INTEGRATION_SPEC.md` §5.2 makes this
+    // explicit; without this rule the gate has a structural blind spot.
+    for (const file of rustSources(path.join(workspace, repoName))) {
+      const derived = derivedLoopbackInRust(readText(file));
+      if (!derived) continue;
+      const relative = path.relative(workspace, file).replaceAll('\\', '/');
+      findings.push(
+        `EMBEDDED-DERIVED-LOOPBACK ${relative}: backend source derives a loopback origin (${derived}) from this process's own ingress/bind; consume the in-process port or take an authored topology value (APPLICATION_GATEWAY_SPEC §2.3, APP_SDK_INTEGRATION_SPEC §5.2)`,
+      );
+    }
+
+    // Rule E: `APP_SDK_INTEGRATION_SPEC.md` §5.2 requires base-URL and bind
+    // resolution to exist once, in `sdkwork-utils-rust::service_base_url`. A
+    // second copy is the defect that makes standalone and cloud deployments
+    // drift, so the gate must see the copy rather than only its symptoms.
+    for (const file of rustSources(path.join(workspace, repoName))) {
+      const duplicate = reimplementedBaseUrlResolution(readText(file), file);
+      if (!duplicate) continue;
+      const relative = path.relative(workspace, file).replaceAll('\\', '/');
+      findings.push(
+        `BASE-URL-RESOLUTION-DUPLICATED ${relative}: repository re-implements ${duplicate}; delegate to sdkwork-utils-rust::service_base_url so standalone and cloud cannot drift (APP_SDK_INTEGRATION_SPEC §5.2)`,
+      );
+    }
+  }
+
+  // An empty scan is a configuration error, never a pass. A mis-pointed
+  // `--workspace` (for example the repository itself instead of the workspace
+  // root) finds nothing and would otherwise silently mask every rule above.
+  if (repoNames.length === 0) {
+    findings.push(
+      `SCAN-ROOT-EMPTY ${path.resolve(workspace)}: no repository with a Cargo.toml was found; point --workspace at the workspace root, not a single repository`,
+    );
+  } else if (profiles === 0) {
+    findings.push(
+      `SCAN-PROFILES-EMPTY ${path.resolve(workspace)}: no deployment profile was found under ${repoNames.length} repositories; the scan cannot prove anything and must not pass`,
+    );
   }
 
   return { findings: [...new Set(findings)], repositories: repoNames.length, profiles };

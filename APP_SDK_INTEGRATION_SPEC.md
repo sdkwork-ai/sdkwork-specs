@@ -312,6 +312,12 @@ Rules:
 - TypeScript application/backend SDK transports, open-api SDKs using an explicitly declared dual-token branch, and approved runtime bridges `MUST` delegate dual-token header construction to `@sdkwork/sdk-common` `buildAuthHeaders('dual-token', ..., tokenManager)` instead of reading tokens and formatting `Authorization` or `Access-Token` locally. `api-key-or-dual-token` transports `MUST` keep API-key and TokenManager state mutually exclusive and fail before dispatch on an incomplete dual-token pair. IAM credential entry uses the first-class `credential-entry-bootstrap` transport profile: it injects bootstrap `Access-Token` only, never adds session/context credentials, and fails before dispatch when bootstrap is absent, as governed by `IAM_CREDENTIAL_ENTRY_SPEC.md`.
 - Application bootstrap `MUST` pass the approved locale provider or i18n provider into generated SDK clients that support locale propagation. Feature packages must receive the provider or translated text through injected runtime ports, not through direct environment reads or manual `Accept-Language` mutation.
 - Application roots `MUST` document private bootstrap `SDKWORK_ACCESS_TOKEN` in env templates when credential-entry or protected app/backend surfaces are consumed. Service/native runtimes may seed TokenManager from that value before interactive login. Development browser renderers use only the private lifecycle handoff; production browser renderers use an approved short-lived bootstrap exchange or trusted host channel. Public env, static assets, `AUTH_TOKEN`, `REFRESH_TOKEN`, `API_KEY`, `VITE_*_TOKEN`, and `PORTAL_PUBLIC_*_TOKEN` are forbidden outside explicit isolated test fixtures.
+- **Bootstrap Access-Token fallback is mandatory in every TokenManager that generated SDK transports read.** A generated SDK transport that requires an `Access-Token` resolves it exclusively from `tokenManager.getAccessToken()` and fails before dispatch when the value is empty. Therefore every TokenManager bound to an authenticated app-api, `backend-admin` backend-api, or declared dual-token branch `MUST` resolve its Access-Token in this order: (1) the current session token, (2) any in-memory transient token set through the TokenManager API, (3) the private bootstrap artifact resolved through the shared IAM credential-entry workflow (`readBootstrapAccessTokenFromProcessEnv` from `@sdkwork/iam-credential-entry`, per `IAM_CREDENTIAL_ENTRY_SPEC.md`). An application `MUST NOT` re-implement bootstrap env parsing, `globalThis` handoff reads, or manifest identity mapping locally.
+- A session-scoped TokenManager adapter (for example a chat/session manager that layers session persistence over the login TokenManager) `MUST` preserve the bootstrap fallback in (3). It is a projection of session state, never an independent credential store, and it `MUST NOT` be the single point that makes a credential-entry or protected dispatch impossible. Its `hasAccessToken()` `MUST` agree with `getAccessToken()` so readiness, credential-entry gating, and dispatch decisions cannot disagree.
+- Failure semantics: when no session token, no transient token, and no bootstrap token are available, the transport `MUST` fail before dispatch with a diagnostic that names the SDK client and states whether a bootstrap artifact was present. A bare `access-token-only request requires Access-Token before request dispatch` without client identity or bootstrap presence is not an acceptable diagnosis surface.
+- A TokenManager factory that only builds a **generic container** from a caller-supplied getter — the signature shape `createTokenManager(getAccessToken: () => string | undefined)` whose returned manager owns no credential state of its own — is not itself the credential authority and `MUST NOT` be required to import the bootstrap reader. The bootstrap obligation lands on whichever module supplies that getter. The canonical `@sdkwork/sdk-common` `createTokenManager(tokens?, events?)` / `DefaultAuthTokenManager` is the container case: it exposes `hasAccessToken()` (mirroring the injected state) but no `getAuthToken()`. A binding that reads its Access-Token from a `hasAccessToken()`-only container `MUST` populate that container from the bootstrap artifact at bind time; it `MUST NOT` leave it empty and rely on a later login to fill it.
+- A locally applied Vite `define` entry for `process.env.SDKWORK_ACCESS_TOKEN` is a **forbidden handoff** (`IAM_CREDENTIAL_ENTRY_SPEC.md` §5). The bootstrap credential reaches a development renderer only through `createSdkworkCredentialEntryBootstrapVitePlugin`; application/backend SDK transports are bound through a TokenManager, never through a `define`-baked `process.env` read.
+- Regression guard: `sdkwork-specs/tools/check-token-manager-bootstrap-fallback.mjs` `MUST` pass. It asserts that every `create*TokenManager` implementation reachable by generated SDK transports resolves the bootstrap fallback and that no local `SDKWORK_ACCESS_TOKEN` reader is forked outside `@sdkwork/iam-credential-entry`.
 - Logout and refresh failure `MUST` clear local token store, global token manager, context store, sensitive caches, realtime/session bridges, and native secure storage when present, even when remote session deletion fails.
 - Runtime/bootstrap `MUST` compose the single authenticated session recovery coordinator from `IAM_LOGIN_INTEGRATION_SPEC.md` section 5.2 and bind application SDKs, dependency SDKs, approved composed wrappers, uploads, and realtime transports to it. Sharing only the TokenManager without shared refresh and terminal-clearing behavior is insufficient.
 
@@ -392,7 +398,107 @@ Rules:
   It must not fall back to an application backend route prefix unless appbase backend IAM executable
   routes are mounted and verified in the application runtime.
 
-### 5.2 Appbase Backend IAM Runtime Rule
+### 5.2 Rust Backend Base-URL And Caller-Identity Resolution
+
+Rust backend modules that invoke another SDKWork surface from inside a running process resolve
+their base URL by the same `standalone` versus `cloud` axis that governs browser SDK clients
+(`ENVIRONMENT_SPEC.md` §6.2 / §6.2.1 / §6.3, `CONFIG_SPEC.md` §3.1). The profile axis is read from
+`SDKWORK_DEPLOYMENT_PROFILE`; there is no Rust-only third mode.
+
+Rules:
+
+- A Rust module that runs **inside** the process that serves the target surface `MUST` consume it
+  through a declared in-process port wired by the composition root, per
+  `APPLICATION_GATEWAY_SPEC.md` §2.3 and `API_ASSEMBLY_SPEC.md` §6.1. It `MUST NOT` construct an
+  HTTP client whose base URL resolves to that same process's listener.
+- **Forbidden loopback derivation.** A Rust module `MUST NOT` derive an outbound base URL by reading
+  the current application's own ingress/bind variable — the
+  `SDKWORK_<APP_CODE>_..._APPLICATION_(PUBLIC|OPEN|BACKEND)_HTTP_URL` /
+  `..._APPLICATION_PUBLIC_INGRESS_BIND` family — and mapping it to a loopback origin
+  (`http://127.0.0.1:<port>`) or to any alias of this application's own listener. This holds for a
+  default value, an intermediate resolution step, and a final fallback. An assembled `standalone`
+  profile `MUST NOT` publish an alternate loopback port, a second HTTP listener, or a
+  platform-gateway URL for a surface it mounts in-process (`API_ASSEMBLY_SPEC.md` §6.1).
+- **Explicit external override is the only loopback-free escape hatch.** When the selected profile
+  places the dependency in a separate process (standalone external mode, or a cloud
+  `platform.api-gateway` upstream), the module resolves the base URL from a declared topology value
+  or an explicit override key for that dependency, and the value `MUST` be an authored
+  configuration input — not a value re-derived from this application's own bind.
+- **Resolution order for a Rust client that legitimately needs an absolute base URL.** (1) an
+  explicit dependency-specific override key declared for that surface; (2) the topology-derived
+  value for that surface under the selected profile; (3) a documented compile-time default for
+  split deployments. Host, port, and scheme come from the deployment contract, and the client
+  `MUST` fail bootstrap with a redacted diagnostic when none of the three yields a value, instead of
+  silently falling back to loopback.
+- **Standalone versus cloud, stated for backend clients.**
+  - `standalone`: a same-origin-mounted dependency is consumed in-process and needs no base URL at
+    all. When such a module nonetheless requires an HTTP client for a *different*, externally
+    deployed service, that service is declared as an external upstream and its URL comes from
+    topology — never from this application's own ingress.
+  - `cloud`: a dependency that the cloud `platform.api-gateway` terminates is resolved from
+    `platform.api-gateway` or an explicit per-dependency override; a dependency co-hosted on
+    `application.public-ingress` is resolved from that surface. Deployed values are absolute
+    domain origins, not loopback ip+port pairs.
+- **No Rust-only profile inference.** A module `MUST NOT` infer standalone/cloud from a bind address
+  shape, from port numbers, from a loopback probe, or from whether its own listener is reachable.
+  The profile is a declared value (`SDKWORK_DEPLOYMENT_PROFILE`), and the topology is the authority
+  for which surfaces exist in that profile.
+
+- **Resolution is a shared component, never per-call-site logic.** Base-URL resolution `MUST` be
+  implemented once in the workspace utility library
+  (`sdkwork-utils-rust`, module `service_base_url`) and consumed by every backend SDK client.
+
+  - The component `MUST` own: the profile-to-mode classification (`ServiceMode::Split` /
+    `ServiceMode::Embedded`), the resolution precedence, the value normalization
+    (trim, blank-is-absent), the `BaseUrlSource` provenance label, and the actionable
+    "no HTTP transport in-process" diagnostic.
+  - A consuming module `MUST NOT` re-implement the precedence, re-derive a loopback origin, or
+    inline its own bind/environment parsing. Per-call-site resolution is precisely how the
+    `standalone` self-loop and the opaque `Bad gateway` reached production: each site re-derived an
+    origin, and no single place could be corrected or tested.
+  - Listener-bind parsing (`bind_port`) and the bind precedence cascade (`resolve_listener_bind`)
+    are part of the same component, so every gateway parses `address:port` identically.
+  - The component's resolution is a **pure function of supplied inputs**. The consuming module reads
+    its environment and passes the values in; the component `MUST NOT` read the process environment
+    itself. This keeps the decision unit-testable without process-global mutation, and keeps each
+    application's variable names at that application's boundary.
+  - Consumers `MUST` propagate the `BaseUrlSource` (or the equivalent provenance) into logs and
+    problem details, so an operator can distinguish an authored value from a fallback.
+
+#### 5.2.1 Caller-Identity Propagation Through Backend SDK Calls
+
+A backend module that calls another SDKWork surface on behalf of an end user carries that user's
+identity; it `MUST NOT` substitute process credentials for it.
+
+Rules:
+
+- A user-scoped backend call `MUST` propagate the caller's authenticated identity — the dual tokens
+  or the resolved `WebRequestContext` / `AppContext` — through the same mechanism the destination
+  surface authenticates, per `WEB_FRAMEWORK_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, and
+  `SECURITY_SPEC.md`. An in-process port carries the typed context; an outbound HTTP client carries
+  the documented headers.
+- A module `MUST NOT` mint, cache, or widen credentials to make an internal call succeed. No
+  service-account escalation, no anonymous internal bypass, and no reuse of one request's token for
+  another caller.
+- **In-process consumption does not require IAM service credentials.** Per
+  `APPLICATION_GATEWAY_SPEC.md` §2.3, authorization for in-process consumption is enforced by the
+  port contract and the composition root, not by re-entering the HTTP authentication stack. A
+  design that needs a token solely to call back into its own listener is a self-loop defect, not an
+  identity requirement.
+- When a backend call fails on identity, the diagnostic `MUST` name the destination surface and
+  distinguish "no caller identity was present" from "the destination rejected the identity". A
+  generic upstream-failure message that hides a missing or rejected caller identity is not an
+  acceptable diagnosis surface.
+- A module that both serves end users and owns a background/worker path `MUST` keep the two
+  identity sources separate: request-scoped identity for user turns, and an explicitly declared
+  service identity — never a borrowed end-user token — for background work.
+
+Verification: `node <sdkwork-specs>/tools/check-embedded-self-loop.mjs --workspace <workspace-root>`
+`MUST` pass, including its backend-source inspection for loopback base-URL derivation. Repository
+verification `MUST` also fail when a Rust module derives an outbound base URL from its own
+ingress/bind variable.
+
+### 5.3 Appbase Backend IAM Runtime Rule
 
 Appbase app SDK integration and appbase backend IAM integration are separate runtime obligations.
 
@@ -448,6 +554,9 @@ Required checks for app SDK composition:
 | Component port closure | `check-component-port-bindings.mjs` proves new composable modules expose layer roles, valid provided/required ports, and executable runtime entrypoints for same-origin dependency surfaces. |
 | Frontend composition closure | `check-frontend-composition.mjs` proves feature packages consume SDK access through core/ports and host packages do not depend on business SDKs. |
 | Rust backend composition closure | `check-rust-backend-composition.mjs` proves route/service/repository/runtime Cargo dependency boundaries. |
+| Backend base-URL closure | `check-embedded-self-loop.mjs` proves no Rust backend module derives an outbound base URL from its own ingress/bind, and that a same-origin-mounted dependency is consumed in-process rather than over a loopback HTTP client. |
+| Backend base-URL resolution is centralized | `check-embedded-self-loop.mjs` rule E (`BASE-URL-RESOLUTION-DUPLICATED`) proves no repository re-implements the profile→mode classification, the override/authored/default precedence, or an inline listener-bind port parse outside `sdkwork-utils-rust::service_base_url`; the shared component's own file is exempt. `cargo test -p sdkwork-utils-rust --lib service_base_url` proves the classification, the precedence, blank-is-absent normalization, the provenance label, the `is_standalone_profile` default, and the in-process diagnostic. A repository `MUST NOT` carry a second implementation of any of them. |
+| Backend caller-identity closure | Tests prove a user-scoped backend SDK call propagates the caller's dual tokens or typed `WebRequestContext`/`AppContext`, that no internal call mints or caches credentials, and that an identity failure names the destination surface instead of reporting a generic upstream failure. |
 | Global TokenManager | Tests prove one `TokenManager` is bound to appbase app SDKs, application/dependency app SDKs, explicit `backend-admin` appbase backend/application backend/dependency backend SDKs, and approved composed wrappers through `setTokenManager`, constructor injection, or the language equivalent. |
 | I18n provider closure | Tests prove runtime/bootstrap derives one locale strategy for UI providers, host adapters, and generated SDK locale providers; feature services do not assemble locale request headers manually, and SDK transports negotiate locale through the standard `Accept-Language` header only. |
 | Session commit order | Tests prove persistence failure does not update token manager, context propagation failure rolls back token/context state, stale context is cleared, and continuation flows preserve refresh token only when allowed. |
@@ -559,8 +668,7 @@ Authority: `SDK_SPEC.md` package naming table, `SDK_WORKSPACE_GENERATION_SPEC.md
 - [ ] Application/frontend core exports the application-owned app SDK and only the required dependency app SDK
   wrappers for app integration, including appbase app SDK when appbase IAM, current-user, workspace,
   contacts, or address-book resources are used.
-- [ ] Backend SDK wrappers are exported only from `backend-admin` boundaries and are absent from app auth runtime, app packages, and user-facing console packages.
-- [ ] Upload-capable apps declare Drive app SDK as a dependency, client upload services call `client.uploader.*`, Rust server upload services call the Drive server-side uploader service, and application-owned SDKs accept only Drive references or `MediaResource`.
+- [ ] Backend SDK wrappers are exported only from `backend-admin` boundaries and are absent from app auth runtime, app packages, and user-facing console packages.- [ ] Upload-capable apps declare Drive app SDK as a dependency, client upload services call `client.uploader.*`, Rust server upload services call the Drive server-side uploader service, and application-owned SDKs accept only Drive references or `MediaResource`.
 - [ ] The selected UI architecture uses the matching generated SDK language and surface.
 - [ ] Runtime/bootstrap declares or derives an SDK inventory and classifies each SDK credential mode before services are constructed.
 - [ ] `resolve-composition.mjs` materializes `generated/composition.resolved.json#architecture` for component contracts, frontend packages, Rust crates, route manifests, and runtime dependency surfaces; generated output is not hand-edited.
@@ -581,6 +689,19 @@ Authority: `SDK_SPEC.md` package naming table, `SDK_WORKSPACE_GENERATION_SPEC.md
 - [ ] Embedded Rust runtimes mount dependency-owned executable router/controller/service exports for
   every same-origin dependency surface; split/server runtimes configure the platform API surface that
   serves the dependency surface or explicit dependency SDK base URLs.
+- [ ] No Rust backend module derives an outbound base URL from this application's own
+  ingress/bind variable (`..._APPLICATION_PUBLIC_INGRESS_BIND` or the
+  `..._APPLICATION_(PUBLIC|OPEN|BACKEND)_HTTP_URL` family) into a loopback origin; a
+  same-origin-mounted dependency is consumed through a declared in-process port, and an outbound
+  absolute base URL only ever comes from an authored topology value or an explicit per-dependency
+  override.
+- [ ] A user-scoped backend SDK call propagates the caller's authenticated identity and never
+  substitutes a service credential, a borrowed token, or an anonymous internal bypass; an identity
+  failure is distinguishable from a destination outage in the diagnostic.
+- [ ] Backend base-URL and bind resolution is implemented once in the shared
+  `sdkwork-utils-rust::service_base_url` component and consumed by every repository; no repository
+  re-implements the profile-to-mode classification, the override/authored/default precedence, the
+  loopback derivation, or an inline listener-bind port parse.
 - [ ] Frontend services use injected SDK clients and no raw HTTP/manual auth or locale header fallback.
 - [ ] Application consumers import scoped composed SDK packages (`@sdkwork/<application-code>-app-sdk`, `@sdkwork/<application-code>-backend-sdk`) and never generator transport names such as `sdkwork-*-generated-typescript`.
 - [ ] Logout, refresh failure, token persistence failure, context rollback, stale context clearing, and refresh-token continuation behavior are tested.

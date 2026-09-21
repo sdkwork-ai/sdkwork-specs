@@ -1205,6 +1205,92 @@ Rules:
 - AI provider adapter DTOs may preserve provider-native names such as `image_url`, `audio_url`, `video_url`, `uri`, or `url`. SDKWork business DTOs must normalize them to `MediaResource` before storing or publishing domain state.
 - Recursive `MediaResource` fields for `poster`, `thumbnails`, and `variants` may be replaced with non-recursive `MediaVariant`/`MediaRendition` helper schemas only when a generator cannot safely emit recursive SDK types.
 
+### 13.2 Monetary Amount And Unit Contract
+
+Money is a precision-critical value. A unit mismatch between producer and consumer is silent, deterministic, and large — a `fen`/`yuan` confusion overstates by exactly 100x and a `micro-point`/`point` confusion by exactly 1,000,000x, and neither throws an error. This section is the single authority for **which unit travels on the wire, where the conversion happens, and how the value is displayed**. `DATABASE_SPEC.md` section 14 governs storage; this section governs the transport, client, and display boundary.
+
+#### 13.2.1 Canonical wire unit
+
+- Monetary wire values `MUST` be integer **minor units** of the declared currency — the smallest indivisible unit (`fen` for `CNY`, `cent` for `USD` and `EUR`, and so on). They `MUST NOT` be major units, and `MUST NOT` be a floating-point number of any unit.
+- The minor-unit exponent `MUST` come from a single registered currency table (`minorUnitExponent(currency)`), not from a per-call literal. Two endpoints disagreeing on an exponent for the same currency is a contract violation.
+- The wire field `MUST` carry a currency identity. A bare amount whose currency is implied by a neighbouring column, a locale, or a deployment environment is not a complete contract. Naming a field with a currency suffix (`totalAmountCny`, `paidAmountUsd`) is the accepted way to bind currency when the currency is genuinely fixed per field.
+- A field name `MUST NOT` use a currency suffix while holding a different currency's unit, and `MUST NOT` use a currency suffix while holding a non-monetary unit such as points, quota, credits, or usage counts. If a value is not money, name it for its asset (`points`, `quota`, `credits`) and follow section 13.2.4.
+- Signed amounts `MUST` use the sign for direction (refunds, reversals, adjustments) rather than a separate boolean, and the contract `MUST` state whether negatives are permitted for that field.
+- An amount field `MUST NOT` use a single value to mean both "absent" and "zero". Absent, unknown, and not-yet-settled states `MUST` be expressed by omitting the field (`skip_serializing_if` on the Rust side) so clients can distinguish "no amount yet" from "an amount of zero".
+
+#### 13.2.2 Wire representation
+
+- Monetary minor-unit fields `MUST` follow the `int64` string rules of section 13.6: `type: string`, `format: int64`, a decimal pattern, and `x-sdkwork-int64-string: true`.
+- A monetary field `MUST` declare `x-sdkwork-money-unit: minor`. This marker is the machine-readable form of section 13.2.1 and exists so validators, reviewers, and SDK consumers can detect a unit regression without reading prose.
+- A monetary field `MUST` declare `x-sdkwork-money-currency` with an ISO 4217 code whenever the currency is fixed per field and is not already unambiguous from the field name. Both extensions `MUST` be repeated on the canonical authority and on every derived generator input mirror.
+- Rationale for strings, stated once: `Number.MAX_SAFE_INTEGER` is 2^53-1 = `9007199254740991`. A minor-unit amount stays exactly representable only below that bound, and a finer-unit asset (section 13.2.4) crosses it at an entirely plausible order of magnitude for a prepaid balance. Strings keep the value exact regardless of magnitude.
+
+#### 13.2.3 Conversion ownership
+
+The conversion between wire minor units and human major units belongs to **exactly one place**, and the duty is deliberately asymmetric by direction:
+
+| Boundary | Unit on that side | Conversion duty |
+| --- | --- | --- |
+| Database | minor units | none; stores what the domain passes |
+| Rust DTO / server adapter | minor units | none outbound; inbound parses the int64 string only |
+| Generated SDK | minor units | none; transports the string verbatim |
+| Client service / mapping layer | **minor units, unchanged** | none; `MUST NOT` rescale |
+| View / formatting helper | major units | **the only place that divides** |
+
+- Client service and mapping layers `MUST` pass monetary values through unchanged and `MUST NOT` rescale them. They are transport, not presentation.
+- Rendering helpers are the **only** components permitted to convert. A formatting helper that expects major units `MUST NOT` be called with a minor-unit value, and vice versa.
+- Formatting helpers `MUST` make their input unit explicit, either in the function name or in a required marker parameter. A helper whose unit expectation can only be learned from a doc comment is a defect: that ambiguity is the direct cause of the 100x overstatement class. Helpers `SHOULD` be split so the unit is visible at the call site — for example a major-unit helper and a distinct minor-unit helper.
+- A helper that consumes minor units `MUST` validate that its input is an integer before dividing, and `MUST` return a distinguishable failure (for example `null`) rather than a formatted `0` for absent input. Silently rendering `¥0.00` for "not yet paid" is a correctness bug, not a cosmetic one.
+- Division `MUST` use the registered exponent and `MUST NOT` be written as a literal `/ 100`. A hardcoded divisor silently becomes wrong for any zero-decimal currency such as `JPY` or `KRW`.
+
+#### 13.2.4 Non-monetary assets: points, quota, credits, usage
+
+- Points, quota, credits, and usage counters are **not** monetary amounts and `MUST NOT` be carried in monetary fields or formatted with a currency symbol.
+- Each such asset `MUST` declare its unit, its scale relative to the user-visible figure, and its relationship to currency if any. A scale expressed only in a code comment does not satisfy this rule.
+- Where an asset uses a finer internal unit than its display unit (for example `1 point = 1e6 micro`), the wire value `MUST` state which of the two it is, and the display helper `MUST` be named for the unit it accepts. The internal unit `SHOULD` stay exact end to end; a micro-unit asset `MUST NOT` be downscaled and re-expanded in transit.
+- Asset unit and monetary amount `MUST` be rendered in **separate columns or separate labelled fields**. They answer different questions ("what did I pay" versus "what did I receive") and `MUST NOT` share a cell, a column header, or a currency symbol.
+- A grant formula that converts money to an asset `MUST` be stated in the contract or its owning spec, including any promotional add-on term, so consumers can reconcile an observed rate. An observed rate differing from the base rate is otherwise indistinguishable from a defect.
+
+#### 13.2.5 Display and rounding
+
+- Displayed precision `MUST` match the currency's exponent. `CNY` and `USD` display two fraction digits; zero-decimal currencies display none.
+- Grouping separators `MUST` follow the active locale and `MUST` be produced by the locale-aware formatter rather than by manual string manipulation.
+- Rounding `MUST` occur at exactly one point, at the display boundary, and `MUST` be documented for the currency. Transported and stored minor-unit values `MUST NOT` be pre-rounded.
+- Display code `MUST NOT` re-derive a major-unit value by string concatenation, padding, or by inserting a decimal point manually. Every conversion goes through the shared helper.
+- A negative displayed amount `MUST` be distinguishable from a positive one by sign or by explicit label, and `MUST NOT` be rendered as an unsigned magnitude.
+- A monetary value `MUST` display a placeholder rather than `0` when the underlying value is absent or unknown.
+
+#### 13.2.6 Review checklist
+
+Before merging a change that touches a monetary or unit-bearing field:
+
+- [ ] The wire unit is stated, and it is the currency's minor unit.
+- [ ] The field declares `x-sdkwork-money-unit: minor` and, when fixed per field, `x-sdkwork-money-currency`.
+- [ ] No client service, mapping layer, or store converts the value.
+- [ ] Exactly one display helper converts, its input unit is visible at the call site, and its divisor comes from the currency table.
+- [ ] Absent values render a placeholder, not `0`.
+- [ ] Points, quota, and credits are in their own field or column, formatted without a currency symbol.
+- [ ] A sample produced from real data is attached: minor-unit input and rendered output, side by side.
+
+### 13.6 Int64 Wire String Standard
+
+This subsection is the anchor cited by `AGENTS.md` and by section 15.4. It states the `int64` string closure as a named rule.
+
+Raw `int64` values include entity ids, snowflake ids, versions, sequence numbers, byte counters, and monetary minor units (section 13.2). All of them are vulnerable to the same JavaScript precision failure.
+
+Rules:
+
+- Any OpenAPI schema property or operation parameter declared `format: int64` `MUST` be `type: string` with `x-sdkwork-int64-string: true` and a decimal `pattern` such as `^-?[0-9]+$`.
+- `type: integer, format: int64` `MUST NOT` appear in a browser-facing document. It makes generated TypeScript SDKs emit `number`, and browsers then round values past `Number.MAX_SAFE_INTEGER` (2^53-1 = `9007199254740991`), replaying wrong ids into lookups and overstating monetary amounts.
+- Native integer types stay native everywhere except the JSON boundary. Rust `i64`, Java `long`, Go `int64`, C# `long`, and SQL `BIGINT` remain numeric; only the HTTP JSON and generated-SDK boundary is string-based.
+- Server HTTP adapters `MUST` parse inbound `int64` strings at the request boundary, validate sign and range, and pass native numerics into domain and database code.
+- Frontend code and generated TypeScript SDKs `MUST` receive, store, compare, and submit `int64` values as strings. They `MUST NOT` parse them into JavaScript `number` for storage, comparison, or submission — including monetary minor units and micro-unit asset balances, which are the values most likely to exceed the safe range.
+- Where a value must be rendered, the string `MUST` reach the formatting helper as a string. Round-tripping a string through `Number` and back to string is a violation even when the current sample happens to survive it, because the bound is a property of the value, not of the test data.
+- Rust response DTOs `MUST` serialize `i64` wire fields with `#[serde(with = "sdkwork_utils_rust::serde_int64")]` or the `::option` variant, and `Option` fields `SHOULD` use `skip_serializing_if = "Option::is_none"` so absent and zero remain distinguishable.
+- **OpenAI/Anthropic compatible gateway exemption**: an OpenAPI document that mirrors a third-party wire protocol `MAY` declare `x-sdkwork-int64-openai-compat: true` on the document root. Those protocols require JSON numbers, and their timestamps, byte sizes, and seeds stay below `Number.MAX_SAFE_INTEGER`. The marker `MUST` be present on the authority and every derived mirror, and the operation-patterns validator skips the closure for marked documents only.
+
+Verification: `node <sdkwork-specs>/tools/check-api-operation-patterns.mjs --workspace <root>`. The validator reports `int64-integer-type` and `int64-string-marker-missing`.
+
 ## 14. Request Body Standard
 
 SDKWork-owned business operations on `app-api`, `backend-api`, and `open-api` `MUST` follow this section. Vendor compatibility open-api operations declared with `x-sdkwork-wire-protocol: external` per section 4.5.2 `MAY` preserve upstream request shapes instead.
@@ -2145,6 +2231,8 @@ SDKWork governance tools may read these extensions.
 | `x-sdkwork-data-scope` | Data visibility scope |
 | `x-sdkwork-audit-event` | Audit event type |
 | `x-sdkwork-idempotent` | Whether idempotency is required |
+| `x-sdkwork-money-unit` | Monetary unit carried by the field. `minor` means the currency's smallest indivisible unit; required on every monetary amount field per section 13.2.2 |
+| `x-sdkwork-money-currency` | ISO 4217 currency code for a fixed-currency monetary field per section 13.2.2 |
 | `x-sdkwork-auth-mode` | Canonical operation credential profile: `anonymous`, `credential-entry-bootstrap`, `refresh-token`, `dual-token`, `api-key`, `oauth`, `open-api-flexible`, `api-key-or-dual-token`, `ingress-token`, `agent-token`, or `compatibility` |
 | `x-sdkwork-forbid-credential-headers` | Strict contamination guard: reject every credential/context header outside the allowlist defined by `x-sdkwork-auth-mode` |
 | `x-sdkwork-sdk-resource` | SDK nested resource override if path inference is insufficient |
