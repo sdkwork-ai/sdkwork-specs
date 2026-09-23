@@ -42,6 +42,8 @@
     "check:deploy-standard": "node tools/check-deploy-standard.mjs --workspace ..",
     "check:upload-declaration-standard": "node tools/check-upload-declaration-standard.mjs --workspace ..",
     "check:doc-tool-invocation-contract": "node tools/check-doc-tool-invocation-contract.mjs --workspace ..",
+    "check:repository-baseline-content": "node tools/check-repository-baseline-content.mjs --workspace ..",
+    "test:repository-baseline-content": "node --test tools/check-repository-baseline-content.test.mjs",
     "test:shell-portability": "node --test tools/check-shell-portability.test.mjs",
     "test:workspace-path-portability": "node --test tools/check-workspace-path-portability.test.mjs",
     "test:deploy-layout": "node --test tools/upsert-layout-section.test.mjs tools/render-deploy-yaml.test.mjs",
