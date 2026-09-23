@@ -171,6 +171,77 @@ startup-sequence steps 3-6 through framework-driven discovery:
   structured `ERROR` event naming the workspace, module id, and failure
   stage (`init` / `migrate` / `seed`). Silent continuation is forbidden.
 
+### 4.4.1 Composed Dependency Lifecycle Closure
+
+Composition and initialization `MUST` be closed over the same module set: a host `MUST NOT`
+serve a dependency's routes without having converged that dependency's schema. The failure this
+clause forbids is a **live route surface over an unverified schema**, which reaches the operator
+as a raw SQL error on the first authenticated request instead of a boot failure.
+
+- A standalone gateway's pooled process contract (`specs/process-database-pool.spec.json`) `MUST`
+  declare one consumer for every `sdkwork-api-<application-code>-assembly` the gateway composes
+  directly, excluding its own owner assembly. A composed dependency without a declared consumer
+  `MUST` fail the check.
+- The contract `MUST` declare one nested lifecycle relation per dependency, naming its
+  `dependencyAssembly`, the invoke path (`invokedVia`), and the stages covered. A relation that
+  covers fewer than `init`, `migrate`, and `drift` `MUST` fail the check.
+- The lifecycle invocation `MUST` be reachable from the **serve** path. Declaring it only on an
+  explicit migrate command (`--migrate-databases`, `db-migrate`, installer migration) does not
+  satisfy this clause: those commands are the authorization for explicit migration, not a
+  substitute for serve-time convergence. The relation `MUST` name the serve-path evidence that
+  invokes the owner or dependency lifecycle entry, and the entry `MUST` reach the dependency's own
+  lifecycle function.
+- Implicit serve-time migration remains governed by `SDKWORK_DATABASE_AUTO_MIGRATE` per §4.4. A
+  host whose dependencies are composed at all `MUST` still run the drift check at serve startup and
+  fail closed per §4.4, whether or not implicit migration is enabled.
+- A repository that composes same-origin dependencies `MUST` wire both
+  `tools/check-api-assembly-integration-closure.mjs --strict-standalone-hosting` and
+  `tools/check-process-shared-database-pool.mjs` into its `_sdkwork:check` pipeline. A generic
+  `verify-repo.mjs` invocation that omits `strictStandaloneHosting` does **not** substitute for
+  them: the standalone closure rules are inert without that flag.
+- A declared stage `MUST` be **implemented by the owning module host**, not merely asserted by the
+  contract. The relation `MUST` name `hostEvidence` — the dependency's own `*-database-host`
+  lifecycle source — and that source `MUST` perform every stage the relation declares. This is the
+  clause that catches a contract promising `drift` while the host constructs no `DriftEngine`
+  (observed on 2026-09-23 in four of six composed modules, one of which had even declared the
+  `sdkwork-database-drift` dependency without calling it).
+- Stage evidence `MUST` be anchored at the **construction or call site**, never at a bare type
+  name. `LifecycleOrchestrator::new`, `DriftEngine::new`, `.init()`, `.migrate()`, `.analyze()`,
+  and the fail-closed comparison on the drift summary `MUST` be present; an import statement, a
+  forward declaration, or a renamed call `MUST NOT` satisfy the clause. Mutation testing on
+  2026-09-23 showed a bare type name is satisfiable by a leftover `use` import, which is exactly
+  the declaration-without-action defect this section forbids.
+- Drift `MUST` be fail-closed in the host that owns the module: analysing the schema without acting
+  on the result repairs nothing, so the host `MUST` abort startup (or the readiness check `MUST`
+  fail) when the drift summary reports errors.
+- **Repair closure.** The module set the **explicit migration command** converges `MUST` equal the
+  module set the **serve** path converges. The contract `MUST` declare `migrationClosure` (the
+  operator-facing command plus its evidence), and **every** nested relation `MUST` declare
+  `migrationPath.entrypoint`, which the closure evidence `MUST` invoke. A module converged only by
+  `serve` turns its own fail-closed drift gate into a permanent outage whose repair instruction
+  cannot work — strictly worse than the silent failure the gate replaced. Observed on 2026-09-23:
+  `sdkwork-drive` was converged on the serve path and had just gained a fail-closed drift gate, while
+  the gateway's `db-migrate` covered only Web/IAM/Skills/MCP/Deployments.
+- `migrationClosure.command` `MUST` be a literal the process entrypoint actually dispatches. A
+  command that appears only in an error message is not a command.
+- The repair-reachability search `MUST` be scoped to the migration command's own function
+  (`migrationClosure.scope`), not performed file-wide: a gateway's serve path and its migration
+  command invoke the same dependency entrypoints from **different functions of the same file**, so a
+  file-wide search reports success after the migration-side call is deleted. Mutation testing on
+  2026-09-23 confirmed this false green for IAM and is why the clause names a scope.
+- **Forced migration belongs to the explicit command only.** The serve path `MUST NOT` force
+  migrations by writing `SDKWORK_DATABASE_AUTO_MIGRATE` (e.g. `std::env::set_var`) before resolving
+  §4.4 options; it `MUST` resolve them from configuration/environment alone. Forcing at serve time
+  makes the authored policy undecidable — `auto_migrate = false` stays declared while nothing can
+  turn migrations off. An explicit migration command (installer migration, container entrypoint,
+  `db-migrate`) `MAY` force it on for its own process, because running that command **is** the
+  operator's authorization to apply DDL.
+
+Verification: `tools/lib/api-assembly-integration-closure.mjs`
+(`validateStandaloneNestedLifecycle` with `STAGE_IMPLEMENTATION_EVIDENCE` checking declared stages
+against the host source, and `validateMigrationClosure` checking the repair path) plus
+`tools/check-process-shared-database-pool.mjs`.
+
 ### 4.5 Embedded Dependency Server-Error Surfacing
 
 Hosts that proxy or compose embedded dependency routers `MUST` surface

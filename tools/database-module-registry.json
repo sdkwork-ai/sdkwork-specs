@@ -323,5 +323,16 @@
     "legacySqlGlobs": [
       "database/ddl/baseline/postgres/0001_webserver_baseline.sql"
     ]
+  },
+  {
+    "repo": "sdkwork-mcp",
+    "moduleId": "mcp",
+    "serviceCode": "MCP",
+    "tablePrefix": "ai_mcp_",
+    "ownerTeam": "mcp-platform",
+    "engines": ["postgres"],
+    "legacySqlGlobs": [
+      "database/ddl/baseline/postgres/0001_mcp_baseline.sql"
+    ]
   }
 ]

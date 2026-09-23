@@ -339,6 +339,348 @@ function validateCloudGatewayContract(root, manifest, component) {
   return issues.map((issue) => `${path.relative(root, manifest.path).replaceAll('\\', '/')}: ${issue}`);
 }
 
+const LIFECYCLE_STAGES = ['init', 'migrate', 'drift'];
+
+/**
+ * Symbols that prove a lifecycle stage is **implemented by the module host**,
+ * not merely declared in the contract. `stages` is a promise; the host source is
+ * the evidence.
+ *
+ * The 2026-09-23 defect class this closes: five relations declared
+ * `init + migrate + drift` while four of the six module hosts (iam, drive,
+ * skills, mcp) constructed no `DriftEngine` at all. The contract asserted a gate
+ * that no code performed, and `sdkwork-iam` had even declared the
+ * `sdkwork-database-drift` dependency without calling it — so the declaration
+ * looked satisfied while the schema was never verified, and a composed route
+ * surface could be served over an unverified schema.
+ *
+ * `drift` additionally requires the fail-closed comparison (`summary.error`),
+ * because an analysis whose result is discarded repairs nothing
+ * (DATABASE_SPEC §35).
+ *
+ * Every symbol is anchored at its **construction site** (`Type::new`, not the
+ * bare type name). Mutation-testing this rule on 2026-09-23 proved the bare
+ * type name was satisfiable by a leftover `use ...::DriftEngine;` import: a
+ * mutation that renamed the only call to `DriftEngineShim::new` kept the rule
+ * green. Requiring the constructor makes the evidence the act of building the
+ * engine, not the act of importing it.
+ */
+const STAGE_IMPLEMENTATION_EVIDENCE = {
+  init: ['LifecycleOrchestrator::new', '.init()'],
+  migrate: ['.migrate()'],
+  drift: ['DriftEngine::new', '.analyze()', 'summary.error'],
+};
+
+/**
+ * Symbol-boundary match. A bare `includes()` is a false oracle here: renaming the
+ * call to `<symbol>_DISABLED()` or `<symbol>_REMOVED()` keeps the expected text as a
+ * prefix, so the rule stays green while the invocation is gone (observed while
+ * mutation-testing this rule on 2026-09-23 — the first mutation pass was a false
+ * green). Require the match not to continue as a longer identifier.
+ */
+function invokesSymbol(text, symbol) {
+  const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  return new RegExp(`${escaped}(?![A-Za-z0-9_])`, 'u').test(text);
+}
+
+/**
+ * Extracts a Rust function body by brace balance, starting at the first `{`
+ * after `fn <name>(`.
+ *
+ * R5 needs this because a gateway's serve path and its migrate path invoke the
+ * same dependency entrypoints in *different* functions of the same file: IAM is
+ * converged by `bootstrap_database_with_pool` on both paths, so searching the
+ * whole file for that symbol stayed green after the migrate-only call was
+ * deleted (found while mutation-testing this rule, 2026-09-23). Scoping the
+ * search to the migration command's own function is what makes the rule
+ * per-call-site rather than per-file.
+ *
+ * Rust `format!`/`write!` placeholders are brace-balanced, so brace counting
+ * stays correct here; the alternative (a real parser) is not worth its weight
+ * for one shape of function.
+ */
+function rustFunctionBody(text, name) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  const anchor = new RegExp(`fn\\s+${escaped}\\s*[(<]`, 'u').exec(text);
+  if (!anchor) return null;
+  const start = text.indexOf('{', anchor.index);
+  if (start === -1) return null;
+  let depth = 0;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, index + 1);
+    }
+  }
+  return null;
+}
+
+/**
+ * DATABASE_FRAMEWORK_SPEC §4.4 + API_ASSEMBLY_SPEC §4.1 — every same-origin
+ * dependency a standalone gateway composes must have its database lifecycle
+ * reachable from the **serve** path, not only from an explicit migrate command.
+ *
+ * The 2026-09-23 incident this rule exists for: `sdkwork-webserver` composed
+ * `sdkwork-api-deployments-assembly` (routes mounted, `/app/v3/api/apps` served) while
+ * the pooled process contract declared no consumer for it and nothing invoked its
+ * lifecycle outside the separate `db-migrate` subcommand. The shared dev database had
+ * been rebuilt at 20:41 and `deploy_*` (58 tables, anchor `deploy_app`) was never
+ * recreated, so the edge served a live route over a missing table and the first
+ * authenticated request answered `relation "deploy_app" does not exist`. Startup never
+ * noticed, because composition and initialization were checked independently and
+ * neither check tied a composed route surface to a verified schema.
+ *
+ * Rules:
+ *   R1 completeness — {direct assembly deps} \ {self assembly} == {declared consumers}
+ *   R2 relation     — every dependency owns a nested lifecycle relation
+ *   R3 stages       — the relation covers init + migrate + drift
+ *   R4 closure      — the serve path invokes the owner/dependency lifecycle entry,
+ *                     and that entry reaches the dependency's own lifecycle entry
+ *   R5 repair       — the explicit migration command converges every relation too
+ *                     (see `validateMigrationClosure`; enforced after R4)
+ *
+ * R4 is symbol-level on declared serve-path files; it proves the invocation exists on
+ * the serve path but not that the callee initializes the whole composed set. The
+ * runtime counterpart (boot must abort when a composed module's schema is absent) is
+ * DATABASE_FRAMEWORK_SPEC §4.4 fail-closed, which `serve` now performs.
+ */
+function validateStandaloneNestedLifecycle(root, manifest, assemblyDependencies) {
+  const issues = [];
+  const selfAssembly = manifest.name.replace(/-standalone-gateway$/u, '-assembly');
+  const required = assemblyDependencies.filter((dependency) => dependency !== selfAssembly);
+
+  const contractPath = path.join(root, 'specs', 'process-database-pool.spec.json');
+  if (!fs.existsSync(contractPath)) {
+    issues.push('standalone gateway requires specs/process-database-pool.spec.json declaring its same-origin dependency lifecycle');
+    return issues;
+  }
+  let contract;
+  try {
+    contract = readJson(contractPath);
+  } catch (error) {
+    issues.push(`specs/process-database-pool.spec.json is invalid JSON (${error.message})`);
+    return issues;
+  }
+  const processContract = (contract.processes ?? [])
+    .find((process) => process?.id === manifest.name);
+  if (!processContract) {
+    issues.push(`process database pool contract must declare process ${manifest.name}`);
+    return issues;
+  }
+
+  const declaredAssemblies = new Set(
+    (processContract.consumers ?? [])
+      .map((consumer) => consumer?.ownerAssembly)
+      .filter((value) => typeof value === 'string' && ASSEMBLY_DEPENDENCY.test(value)),
+  );
+  for (const dependency of required) {
+    if (!declaredAssemblies.has(dependency)) {
+      issues.push(`process database pool contract must declare a consumer for same-origin dependency ${dependency}`);
+    }
+  }
+  for (const declared of declaredAssemblies) {
+    if (!required.includes(declared)) {
+      issues.push(`process database pool declares consumer ${declared} which the gateway does not compose directly`);
+    }
+  }
+
+  const relations = new Map(
+    (processContract.nestedLifecycleDependencies ?? [])
+      .map((relation) => [relation?.dependencyAssembly, relation]),
+  );
+  for (const dependency of required) {
+    const relation = relations.get(dependency);
+    if (!relation) {
+      issues.push(`nested lifecycle relation missing for ${dependency}: composing its routes without running its lifecycle serves a route surface over an unverified schema`);
+      continue;
+    }
+    const stages = new Set(relation.stages ?? []);
+    for (const stage of LIFECYCLE_STAGES) {
+      if (!stages.has(stage)) {
+        issues.push(`nested lifecycle relation ${dependency} must declare stage ${stage}`);
+      }
+    }
+
+    // R3b — every declared stage must be performed by the owning module host.
+    // A contract that promises `drift` while the host never constructs a
+    // `DriftEngine` is a declaration, not a gate: the composed route surface
+    // stays mounted over a schema nobody verified.
+    const hostEvidence = relation.hostEvidence ?? [];
+    if (hostEvidence.length === 0) {
+      issues.push(`nested lifecycle relation ${dependency} must declare hostEvidence proving stages ${[...stages].join('+')} against the owning module host`);
+    } else {
+      const missingFiles = hostEvidence.filter((file) => !fs.existsSync(path.resolve(root, file)));
+      const hostText = hostEvidence
+        .map((file) => readText(path.resolve(root, file)))
+        .join('\n');
+      if (missingFiles.length > 0) {
+        issues.push(`nested lifecycle relation ${dependency} hostEvidence is missing: ${missingFiles.join(', ')}`);
+      } else if (hostText.trim() === '') {
+        issues.push(`nested lifecycle relation ${dependency} hostEvidence is not readable`);
+      } else {
+        for (const stage of LIFECYCLE_STAGES) {
+          if (!stages.has(stage)) continue;
+          const missing = (STAGE_IMPLEMENTATION_EVIDENCE[stage] ?? [])
+            .filter((symbol) => !invokesSymbol(hostText, symbol));
+          if (missing.length > 0) {
+            issues.push(`nested lifecycle relation ${dependency} declares stage ${stage} but its hostEvidence never performs it (missing ${missing.join(', ')})`);
+          }
+        }
+      }
+    }
+
+    const dependencyCrate = dependency.replaceAll('-', '_');
+    const entrypoint = relation.lifecycleEntrypoint;
+    if (typeof entrypoint !== 'string' || entrypoint.trim() === '') {
+      issues.push(`nested lifecycle relation ${dependency} must declare lifecycleEntrypoint`);
+      continue;
+    }
+
+    // Hop 2 — the entry that actually runs the dependency lifecycle must reach it.
+    const evidenceText = (relation.evidence ?? [])
+      .map((file) => readText(path.resolve(root, file)))
+      .join('\n');
+    if (evidenceText.trim() === '') {
+      issues.push(`nested lifecycle relation ${dependency} must declare readable evidence`);
+    } else if (!invokesSymbol(evidenceText, `${dependencyCrate}::${entrypoint}`)
+      && !invokesSymbol(evidenceText, `fn ${entrypoint}`)) {
+      issues.push(`nested lifecycle evidence for ${dependency} must reach ${dependencyCrate}::${entrypoint}`);
+    }
+
+    // Hop 1 — and that entry must be on the serve path.
+    let expected;
+    if (relation.invokedVia === 'owner-assembly') {
+      const ownerAssembly = relation.ownerAssembly;
+      const ownerEntrypoint = relation.ownerLifecycleEntrypoint;
+      if (typeof ownerAssembly !== 'string' || !ASSEMBLY_DEPENDENCY.test(ownerAssembly)
+        || typeof ownerEntrypoint !== 'string' || ownerEntrypoint.trim() === '') {
+        issues.push(`nested lifecycle relation ${dependency} invokedVia owner-assembly must declare ownerAssembly and ownerLifecycleEntrypoint`);
+        continue;
+      }
+      expected = `${ownerAssembly.replaceAll('-', '_')}::${ownerEntrypoint}`;
+    } else {
+      expected = `${dependencyCrate}::${entrypoint}`;
+    }
+    const servePath = relation.servePathEvidence ?? [];
+    if (servePath.length === 0) {
+      issues.push(`nested lifecycle relation ${dependency} must declare servePathEvidence`);
+      continue;
+    }
+    const serveText = servePath
+      .map((file) => readText(path.resolve(root, file)))
+      .join('\n');
+    if (!invokesSymbol(serveText, expected)) {
+      issues.push(`serve path must invoke ${expected} for ${dependency}; declaring its lifecycle only on the migrate-only command leaves the listener bound over an unverified schema`);
+    }
+  }
+  for (const dependency of relations.keys()) {
+    if (typeof dependency === 'string' && !required.includes(dependency)) {
+      issues.push(`nested lifecycle relation declares ${dependency} which the gateway does not compose directly`);
+    }
+  }
+  issues.push(...validateMigrationClosure(root, processContract, required, relations));
+  return issues;
+}
+
+/**
+ * R5 — repair closure. The **serve** path and the **explicit migration command**
+ * must converge the same module set.
+ *
+ * Why this is separate from R4: R4 proves a composed dependency is initialized
+ * before the listener binds. It says nothing about whether the operator has a
+ * way to *repair* that dependency once its own drift gate refuses to boot. The
+ * 2026-09-23 defect: `sdkwork-drive` was converged on the serve path (through
+ * `assemble_same_origin_contribution_with_pool`) and its host had just gained a
+ * fail-closed drift gate, but the gateway's `db-migrate` subcommand converged
+ * only Web/IAM/Skills/MCP/Deployments. A drifted Drive schema therefore aborted
+ * startup while the error message told the operator to run `db:migrate` — a
+ * command that could not fix Drive. The gate turns that into a permanent outage
+ * with an unfollowable instruction: strictly worse than the silent failure it
+ * replaced.
+ *
+ * Rules:
+ *   R5a command   — `migrationClosure.command` must be a literal the process
+ *                   entrypoint actually dispatches (a command named only in an
+ *                   error message is not a command).
+ *   R5b evidence  — `migrationClosure.evidence` must exist and be readable.
+ *   R5c per-relation reach — every nested relation must declare
+ *                   `migrationPath.entrypoint`, and the closure evidence must
+ *                   invoke it.
+ *
+ * R5c is deliberately anchored on the symbol the closure evidence *calls*
+ * (`crate::symbol`, matched with `invokesSymbol`), not on a module name: the
+ * whole defect class is "the name appears somewhere in the file" (contract,
+ * comment, unused import) while no invocation exists.
+ */
+function validateMigrationClosure(root, processContract, required, relations) {
+  const issues = [];
+  // A gateway that composes no nested lifecycle dependency has nothing to
+  // converge beyond its own module, so the closure question is vacuous.
+  if (required.length === 0) return issues;
+
+  const closure = processContract.migrationClosure;
+  if (!closure || typeof closure !== 'object') {
+    issues.push('process database pool contract must declare migrationClosure: the explicit migration command must converge every nested lifecycle relation, because it is the only path that repairs a drifted schema');
+    return issues;
+  }
+
+  const command = closure.command;
+  if (typeof command !== 'string' || command.trim() === '') {
+    issues.push('migrationClosure must declare the operator-facing migration command');
+  } else {
+    const entrypointFile = processContract.entrypoint;
+    if (typeof entrypointFile !== 'string' || !fs.existsSync(path.resolve(root, entrypointFile))) {
+      issues.push(`migrationClosure command "${command}" cannot be verified: process entrypoint ${entrypointFile ?? '<undeclared>'} is missing`);
+    } else if (!readText(path.resolve(root, entrypointFile)).includes(`"${command}"`)) {
+      issues.push(`migrationClosure command "${command}" is not dispatched by ${entrypointFile}; an operator-facing repair instruction must name a command the binary accepts`);
+    }
+  }
+
+  const closureEvidence = closure.evidence ?? [];
+  const missingEvidence = closureEvidence.filter((file) => !fs.existsSync(path.resolve(root, file)));
+  if (closureEvidence.length === 0) {
+    issues.push('migrationClosure must declare readable evidence');
+  } else if (missingEvidence.length > 0) {
+    issues.push(`migrationClosure evidence is missing: ${missingEvidence.join(', ')}`);
+  }
+  let closureText = closureEvidence
+    .filter((file) => fs.existsSync(path.resolve(root, file)))
+    .map((file) => readText(path.resolve(root, file)))
+    .join('\n');
+
+  // Scope the search to the migration command's own function when declared:
+  // serve and migrate paths call the same dependency entrypoints in different
+  // functions of one file, so a file-wide search cannot see the deletion of the
+  // migrate-path call (see `rustFunctionBody`).
+  const scope = closure.scope;
+  if (typeof scope === 'string' && scope.trim() !== '') {
+    const body = rustFunctionBody(closureText, scope);
+    if (body === null) {
+      issues.push(`migrationClosure.scope "${scope}" is not defined in ${closureEvidence.join(', ')}; the command's convergence set cannot be verified`);
+    } else {
+      closureText = body;
+    }
+  }
+
+  for (const dependency of required) {
+    const relation = relations.get(dependency);
+    if (!relation) continue; // R2 already reported the missing relation.
+    const migrationEntrypoint = relation.migrationPath?.entrypoint;
+    if (typeof migrationEntrypoint !== 'string' || migrationEntrypoint.trim() === '') {
+      issues.push(`nested lifecycle relation ${dependency} must declare migrationPath.entrypoint: it is converged on the serve path, so a drifted schema must be repairable by the migration command too`);
+      continue;
+    }
+    if (closureText.trim() === '') continue;
+    if (!invokesSymbol(closureText, migrationEntrypoint)) {
+      issues.push(`migrationClosure never invokes ${migrationEntrypoint} for ${dependency}; its fail-closed drift gate would name a command that cannot repair it`);
+    }
+  }
+  return issues;
+}
+
 function validateStandaloneGatewayContract(root, manifest, assemblyDependencies) {
   const issues = [];
   const source = gatewaySources(manifest.path);
@@ -403,6 +745,7 @@ function validateStandaloneGatewayContract(root, manifest, assemblyDependencies)
   if (!source.includes('.into_hosted(')) {
     issues.push('standalone gateway must retain manifest, OpenAPI, permissions, injectors, and readiness through into_hosted');
   }
+  issues.push(...validateStandaloneNestedLifecycle(root, manifest, assemblyDependencies));
   return issues.map((issue) => `${path.relative(root, manifest.path).replaceAll('\\', '/')}: ${issue}`);
 }
 

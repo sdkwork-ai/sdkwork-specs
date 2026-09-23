@@ -221,6 +221,131 @@ test('standalone gateway rejects router-only assembly projection', () => {
   assert.ok(issues.some((issue) => issue.includes('through into_hosted')));
 });
 
+/**
+ * Minimal process contract for a standalone gateway whose only assembly
+ * dependency is its own owner assembly.
+ *
+ * `validateStandaloneNestedLifecycle` requires the contract file to exist and to
+ * declare the process before it validates anything else, so a fixture that
+ * means to exercise the *hosting* rules still has to carry one. (Two such
+ * fixtures were missing it and had been failing since the contract requirement
+ * landed; the rules they assert were never exercised.)
+ */
+function writeSoloProcessContract(root, processId) {
+  write(
+    path.join(root, 'specs/process-database-pool.spec.json'),
+    JSON.stringify({ processes: [{ id: processId, consumers: [] }] }),
+  );
+}
+
+/**
+ * Standalone-gateway fixture with one **nested** lifecycle dependency, used by
+ * the R5 repair-closure test.
+ *
+ * Layout: the gateway composes `sdkwork-api-child-assembly` (routes + lifecycle
+ * on the serve path) and owns an explicit migration command whose body lives in
+ * `src/lifecycle.rs`. `runMigrations` decides whether that command still
+ * converges the child; `withClosure` decides whether the contract declares the
+ * closure at all.
+ */
+function standaloneNestedFixture({ withClosure = true, migrationsConvergeChild = true } = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-standalone-nested-'));
+  write(
+    path.join(root, 'crates/sdkwork-api-demo-standalone-gateway/Cargo.toml'),
+    '[package]\nname = "sdkwork-api-demo-standalone-gateway"\nversion = "0.0.0"\n\n[dependencies]\nsdkwork-api-demo-assembly = "0"\nsdkwork-api-child-assembly = "0"\n',
+  );
+  // The serve path converges the child; the entrypoint also dispatches the
+  // literal the closure names, so R5a has something real to verify.
+  write(
+    path.join(root, 'crates/sdkwork-api-demo-standalone-gateway/src/main.rs'),
+    'fn main() { match arg { Some("migrate-now") => run_migrations(), _ => serve() } }\n'
+      + 'fn serve() { sdkwork_api_demo_assembly::assemble_api_router(); sdkwork_api_child_assembly::bootstrap_database_with_pool(); ApiModuleRegistry::new().add_module(m).try_compose().into_hosted(); }\n',
+  );
+  write(
+    path.join(root, 'crates/sdkwork-api-demo-standalone-gateway/specs/component.spec.json'),
+    JSON.stringify({
+      component: {
+        name: 'sdkwork-api-demo-standalone-gateway',
+        type: 'rust-api-standalone-gateway',
+      },
+      contracts: {
+        requiredPorts: [
+          {
+            name: 'applicationApiAssembly',
+            export: 'sdkwork_api_demo_assembly::assemble_api_router',
+          },
+          {
+            name: 'childApiAssembly',
+            export: 'sdkwork_api_child_assembly::bootstrap_database_with_pool',
+          },
+        ],
+        runtimeEntrypoints: ['src/main.rs', 'src/lifecycle.rs'],
+      },
+    }),
+  );
+  write(
+    path.join(root, 'crates/sdkwork-api-demo-standalone-gateway/src/lifecycle.rs'),
+    migrationsConvergeChild
+      ? 'pub async fn run_migrations() {\n    sdkwork_api_child_assembly::bootstrap_database_with_pool();\n}\n'
+      : 'pub async fn run_migrations() {\n    // regression: the child was dropped from the repair path\n}\n',
+  );
+  write(
+    path.join(root, 'crates/sdkwork-api-child-assembly/src/bootstrap.rs'),
+    'pub async fn bootstrap_database_with_pool(pool: DatabasePool) -> Result<(), String> {\n'
+      + '    sdkwork_child_database_host::bootstrap_child_database(pool).await\n}\n',
+  );
+  // The owning module host is what actually performs the three stages (R3b).
+  write(
+    path.join(root, 'crates/sdkwork-api-child-database-host/src/lib.rs'),
+    'pub async fn bootstrap_child_database(pool: DatabasePool) -> Result<(), String> {\n'
+      + '    let orchestrator = LifecycleOrchestrator::new(pool.clone(), module.clone());\n'
+      + '    orchestrator.init().await?;\n'
+      + '    if options.auto_migrate { orchestrator.migrate().await?; }\n'
+      + '    let drift = DriftEngine::new(pool.clone(), module.clone()).analyze().await?;\n'
+      + '    if drift.summary.error > 0 { return Err("drift".to_string()); }\n'
+      + '    Ok(())\n}\n',
+  );
+  write(
+    path.join(root, 'specs/process-database-pool.spec.json'),
+    JSON.stringify({
+      processes: [{
+        id: 'sdkwork-api-demo-standalone-gateway',
+        entrypoint: 'crates/sdkwork-api-demo-standalone-gateway/src/main.rs',
+        consumers: [{
+          module: 'sdkwork-child',
+          ownerAssembly: 'sdkwork-api-child-assembly',
+          evidence: ['crates/sdkwork-api-demo-standalone-gateway/src/main.rs'],
+        }],
+        nestedLifecycleDependencies: [{
+          dependencyAssembly: 'sdkwork-api-child-assembly',
+          module: 'sdkwork-child',
+          order: 'child-before-serve',
+          invokedVia: 'gateway',
+          stages: ['init', 'migrate', 'drift'],
+          lifecycleEntrypoint: 'bootstrap_database_with_pool',
+          servePathEvidence: ['crates/sdkwork-api-demo-standalone-gateway/src/main.rs'],
+          evidence: ['crates/sdkwork-api-child-assembly/src/bootstrap.rs'],
+          hostEvidence: ['crates/sdkwork-api-child-database-host/src/lib.rs'],
+          migrationPath: {
+            entrypoint: 'sdkwork_api_child_assembly::bootstrap_database_with_pool',
+            evidence: ['crates/sdkwork-api-demo-standalone-gateway/src/lifecycle.rs'],
+          },
+        }],
+        ...(withClosure
+          ? {
+            migrationClosure: {
+              command: 'migrate-now',
+              scope: 'run_migrations',
+              evidence: ['crates/sdkwork-api-demo-standalone-gateway/src/lifecycle.rs'],
+            },
+          }
+          : {}),
+      }],
+    }),
+  );
+  return root;
+}
+
 test('standalone gateway accepts the complete hosted assembly contract', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-standalone-closure-'));
   write(
@@ -247,6 +372,7 @@ test('standalone gateway accepts the complete hosted assembly contract', () => {
       },
     }),
   );
+  writeSoloProcessContract(root, 'sdkwork-api-demo-standalone-gateway');
   assert.deepEqual(
     validateApiAssemblyIntegrationClosure(root, { strictStandaloneHosting: true }),
     [],
@@ -279,10 +405,37 @@ test('standalone gateway accepts the ApiModuleRegistry add_module front door', (
       },
     }),
   );
+  writeSoloProcessContract(root, 'sdkwork-api-demo-standalone-gateway');
   assert.deepEqual(
     validateApiAssemblyIntegrationClosure(root, { strictStandaloneHosting: true }),
     [],
   );
+});
+
+test('standalone gateway accepts a nested lifecycle relation converged on both paths', () => {
+  const root = standaloneNestedFixture();
+  assert.deepEqual(
+    validateApiAssemblyIntegrationClosure(root, { strictStandaloneHosting: true }),
+    [],
+  );
+});
+
+test('standalone gateway requires the explicit migration command to converge every nested relation', () => {
+  // The 2026-09-23 defect: the relation is converged by `serve`, but the repair
+  // command silently omits it, so the fail-closed drift gate names a command
+  // that cannot fix it.
+  const root = standaloneNestedFixture({ migrationsConvergeChild: false });
+  const issues = validateApiAssemblyIntegrationClosure(root, { strictStandaloneHosting: true });
+  assert.ok(
+    issues.some((issue) => issue.includes('migrationClosure never invokes sdkwork_api_child_assembly::bootstrap_database_with_pool')),
+    `expected a repair-closure issue, got: ${JSON.stringify(issues)}`,
+  );
+});
+
+test('standalone gateway requires a declared migration closure', () => {
+  const root = standaloneNestedFixture({ withClosure: false });
+  const issues = validateApiAssemblyIntegrationClosure(root, { strictStandaloneHosting: true });
+  assert.ok(issues.some((issue) => issue.includes('must declare migrationClosure')));
 });
 
 test('strict standalone hosting rejects Web Framework installation inside owner assembly', () => {
