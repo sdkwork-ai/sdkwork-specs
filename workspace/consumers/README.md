@@ -9,7 +9,6 @@ Multi-repository checkout roots such as `sdkwork-space/` must not declare child 
 ```bash
 cd sdkwork-im
 node ../sdkwork-specs/tools/sync-workspace.mjs --repo sdkwork-im --root .
-node ../tools/sync-workspace-catalog.mjs --target sdkwork-im
 pnpm install
 pnpm dev
 ```

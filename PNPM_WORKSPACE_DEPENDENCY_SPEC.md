@@ -78,7 +78,7 @@ Rules:
 - The checkout path `MUST` resolve to the relative path expected by the consuming workspace root (`../sdkwork-<id>`). When the framework uses a different checkout directory, it `MUST` redirect the workspace-root declared path to the checkout (symlink, junction, or workspace-root path rewrite) without editing member `package.json` files.
 - Dependency refs `MUST` be pinned commit SHAs or validated safe Git refs before checkout; unsafe refs fail the job.
 - Tokens `MUST NOT` appear in clone URLs; use credential headers or first-party checkout actions.
-- Completeness `MUST` be verified with `node ../sdkwork-specs/tools/check-dependency-list-completeness.mjs --target <repo-name>`; a missing sibling entry is a release-blocking defect.
+- Completeness `MUST` be verified with `node ../sdkwork-specs/tools/check-dependency-list-completeness.mjs --root .` from the repository root, or `--workspace <sdkwork-space-root>` to check every repository in one pass; a missing sibling entry is a release-blocking defect.
 
 ## 4. Package Import Rules
 
@@ -128,7 +128,7 @@ node sdkwork-specs/tools/check-workspace-member-protocol.mjs --root <repository-
 node sdkwork-specs/tools/sync-workspace.mjs --repo <repo-name> --root <repository-root> --check
 
 # CI release dependency completeness: every ../sdkwork-* sibling must have a dependencies[] entry
-node sdkwork-specs/tools/check-dependency-list-completeness.mjs --target <repo-name>
+node sdkwork-specs/tools/check-dependency-list-completeness.mjs --root <repository-root>
 ```
 
 Failures are defects, not warnings: an undeclared sibling, a `file:`/`link:`/git-URL specifier for an SDKWork sibling, a cross-package relative import, or an undocumented Vite alias must be fixed before merge.

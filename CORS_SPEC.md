@@ -301,7 +301,7 @@ hand-edit a label list in a carrier; the label list is derived.
 | --- | --- | --- |
 | Workspace origin set | `node tools/check-cors-standard.mjs --workspace <workspace-root>` | §3, §4, §5, §6, §8.1: every required profile is present, exact, environment-correct, complete, deduplicated, and canonically ordered; console key sets are complete per environment; retired keys are gone; every repository that can host the gate hosts it. |
 | Repository origin set | `node tools/check-cors-standard.mjs --root .` | The same carrier invariants for one application root, without scanning sibling checkouts. Fails closed when the directory carries no allowlist at all. |
-| Source config | `node tools/check-source-config-standard.mjs --workspace <root>` | `[cors]` TOML invariants. |
+| Source config | `node tools/check-source-config-standard.mjs --root <root>` | `[cors]` TOML invariants. |
 | Alignment | `node tools/align-cors-standard.mjs --workspace <root> --check` or `--root . --check` | Dry run; exits non-zero when a carrier is not canonical. |
 | Unit | `node --test tools/cors/registry.test.mjs` | §4 derivation, §4.2/§4.3.1 seeds, and §4.4 invalidation rules. |
 

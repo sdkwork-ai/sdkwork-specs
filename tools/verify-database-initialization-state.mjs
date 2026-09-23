@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Per-repo verification that application databases are in initialization state
- * per DATABASE_FRAMEWORK_SPEC.md section 7.5 (and section 5.1 for the README).
+ * Verification that every repository in a workspace keeps its application databases in
+ * initialization state, reported one row per repository, per DATABASE_FRAMEWORK_SPEC.md
+ * section 7.5 (and section 5.1 for the README).
  *
  * Initialization state is a property of the committed asset SET, not a demand that
  * the migration tree be empty. Section 7.5 keeps ordered post-baseline migrations as
@@ -11,7 +12,11 @@
  * undocumented `database/README.md` state section.
  *
  * Usage:
- *   node verify-database-initialization-state.mjs --workspace <dir> [--json]
+ *   node verify-database-initialization-state.mjs [--workspace <workspace-root>] [--json]
+ *
+ * `--workspace` names the directory that holds the `sdkwork-*` repositories, not a single repository.
+ * It defaults to the workspace this tool ships in, so the command reads the same from any repository.
+ * A root that lists no repository is an error rather than an empty pass.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -75,6 +80,11 @@ function parseArgs(argv) {
       index += 1;
     } else if (token === '--json') {
       args.json = true;
+    } else {
+      // An unread flag used to be skipped in silence, so `--root .` fell back to the workspace
+      // default and the command verified a different tree than the document prescribed. A caller
+      // that spells an argument this tool does not have is a caller with a wrong expectation.
+      throw new Error(`unsupported argument: ${token}`);
     }
   }
   return args;
@@ -370,7 +380,18 @@ function verifyRepo(workspaceRoot, repoName) {
 
 function main() {
   const { workspace, json } = parseArgs(process.argv.slice(2));
-  const rows = listRepos(workspace).map((repo) => verifyRepo(workspace, repo));
+  const repos = listRepos(workspace);
+  // A `--workspace` naming a repository rather than the workspace holding it lists no repository, and
+  // a directory that cannot be read lists none either. Reporting `Fail: 0` for zero modules is the
+  // fail-open shape `QUALITY_GATE_SPEC.md` section 9 rejects: it is indistinguishable from a pass.
+  if (repos.length === 0) {
+    process.stderr.write(
+      `No repository under ${workspace} has database/database.manifest.json.\n` +
+        'Pass the workspace root that holds the sdkwork-* repositories, not a repository path.\n',
+    );
+    process.exit(1);
+  }
+  const rows = repos.map((repo) => verifyRepo(workspace, repo));
 
   if (json) {
     process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`);
@@ -399,4 +420,9 @@ function main() {
   process.exit(failing.length === 0 ? 0 : 1);
 }
 
-main();
+try {
+  main();
+} catch (error) {
+  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  process.exit(2);
+}

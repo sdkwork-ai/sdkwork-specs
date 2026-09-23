@@ -49,16 +49,29 @@ function escapesRepositoryRoot(command) {
     || /(?:^|[;&|]\s*)cd\s+\.\.[\\/]/u.test(command);
 }
 
+function readValue(argv, index, flag) {
+  const value = argv[index + 1];
+  if (value === undefined || value.startsWith('--')) {
+    throw new Error(`${flag} requires a value`);
+  }
+  return value;
+}
+
 function parseArgs(argv) {
   const args = { root: process.cwd(), layout: 'application' };
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (token === '--root') {
-      args.root = path.resolve(argv[index + 1] ?? '');
+      args.root = path.resolve(readValue(argv, index, token));
       index += 1;
     } else if (token === '--layout') {
-      args.layout = argv[index + 1] ?? 'application';
+      args.layout = readValue(argv, index, token);
       index += 1;
+    } else {
+      // Silently skipping an unread flag let a typo such as `--module-root` fall back to the default
+      // root, so the command validated a different target than its document prescribed and reported
+      // failures belonging to another tree.
+      throw new Error(`unsupported argument: ${token}`);
     }
   }
   return args;
@@ -978,5 +991,10 @@ function main() {
 
 const entryUrl = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : null;
 if (import.meta.url === entryUrl) {
-  main();
+  try {
+    main();
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(2);
+  }
 }

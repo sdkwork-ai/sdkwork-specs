@@ -97,7 +97,7 @@ Verification:
 
 ```bash
 node sdkwork-specs/tools/verify-repo.mjs --root <repository-root>
-node sdkwork-specs/tools/check-workspace-dependencies.mjs --target <repo-name>
+node sdkwork-specs/tools/audit-undeclared-workspace-imports.mjs <repository-root>
 ```
 
 ## 1.4 Governance Catalog Sync
@@ -107,7 +107,7 @@ Third-party dependency versions are governed centrally and inherited per reposit
 Rules:
 
 - `configs/dependency-catalog.yaml` at the multi-repository checkout root is the version authority for shared third-party packages.
-- Each repository-root `pnpm-workspace.yaml catalog:` section `MUST` be synced from the governance catalog through `tools/sync-workspace-catalog.mjs` or an equivalent repository-local command documented in the repository README. Sync merges governance versions into the repository catalog; repository-local entries are preserved unless the same key exists in the governance catalog.
+- Each repository-root `pnpm-workspace.yaml` `catalog:` section `MUST` be synced from the governance catalog through `sdkwork-specs/tools/sync-workspace.mjs --repo <repo-name> --root <path-to-repo>` or an equivalent repository-local command documented in the repository README. Sync merges governance versions into the repository catalog; repository-local entries are preserved unless the same key exists in the governance catalog.
 - Repository maintainers `MUST NOT` hand-edit divergent catalog versions for packages already governed by the central catalog unless the repository documents an approved exception.
 - Governance tooling at the multi-repository checkout root may sweep and validate child repositories, but must not become the install/build entrypoint for application packages.
 

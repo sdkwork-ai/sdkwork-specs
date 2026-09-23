@@ -73,7 +73,7 @@ Verification:
 \`\`\`bash
 node ../sdkwork-specs/tools/verify-repo.mjs --root .
 node ../sdkwork-specs/tools/check-workspace-member-protocol.mjs --root .
-node ../sdkwork-specs/tools/check-dependency-list-completeness.mjs --target <repo-name>
+node ../sdkwork-specs/tools/check-dependency-list-completeness.mjs --root .
 \`\`\`
 ${MARKER_END}`;
 
@@ -103,20 +103,34 @@ function isAligned(text) {
   return !!region && region === BLOCK;
 }
 
+/// The line ending the target file already uses.
+///
+/// This workspace checks AGENTS.md out with `core.autocrlf=true`: the committed blob is LF while the
+/// working copy is CRLF. Writing the template's `\n` straight into a CRLF working copy leaves the
+/// file carrying both, which `git diff` cannot show — it normalizes before comparing — so the
+/// inconsistency survives until something reads the bytes.
+function eolOf(text) {
+  return /^[^\n]*\r\n/.test(text) ? '\r\n' : '\n';
+}
+
 function applyBlock(text) {
+  const eol = eolOf(text);
+  const block = eol === '\n' ? BLOCK : BLOCK.replace(/\n/g, eol);
   const start = text.indexOf(MARKER_START);
   if (start < 0) {
-    const trimmed = text.replace(/\s+$/, '');
-    return `${trimmed}\n\n${BLOCK}\n`;
+    const trimmed = text.replace(/[\s\r\n]+$/, '');
+    return `${trimmed}${eol}${eol}${block}${eol}`;
   }
   const end = text.indexOf(MARKER_END, start);
   if (end < 0) {
     // Corrupted marker pair: replace from the start marker to the end of file.
-    return `${text.slice(0, start).replace(/\s+$/, '')}\n\n${BLOCK}\n`;
+    return `${text.slice(0, start).replace(/[\s\r\n]+$/, '')}${eol}${eol}${block}${eol}`;
   }
-  const before = text.slice(0, start).replace(/\s+$/, '');
-  const after = text.slice(end + MARKER_END.length).replace(/^\s+/, '');
-  return after ? `${before}\n\n${BLOCK}\n\n${after}` : `${before}\n\n${BLOCK}\n`;
+  const before = text.slice(0, start).replace(/[\s\r\n]+$/, '');
+  const after = text.slice(end + MARKER_END.length).replace(/^[\s\r\n]+/, '');
+  return after
+    ? `${before}${eol}${eol}${block}${eol}${eol}${after}`
+    : `${before}${eol}${eol}${block}${eol}`;
 }
 
 const repos = targetRepos();

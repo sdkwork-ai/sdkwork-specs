@@ -240,4 +240,12 @@ Rules:
   `xargs rm`, recursive `git rm`, `git clean -f*`, cmd/PowerShell recursive
   delete, `rimraf`, and dynamic `shutil.rmtree`. Literal exact-path artifact
   removal is not reported. Use `--json` for machine-readable output.
+- `check-doc-tool-invocation-contract.mjs` validates that every `tools/*.mjs`
+  invocation written into a normative document names a tool that exists and
+  passes only flags that tool accepts. It reads the flag surface from each
+  tool's source, stays silent when a tool assembles its options elsewhere or
+  forwards its own arguments to another command, and reports records of work
+  already done (`DOCUMENTATION_SPEC.md` section 2.1) as out of scope. Use
+  `--workspace ..` for the fleet audit or `--root .` inside one repository,
+  whose gate then answers only for that repository's own documents.
 - Tools must not embed application-specific secrets, local paths, or application-line behavior.

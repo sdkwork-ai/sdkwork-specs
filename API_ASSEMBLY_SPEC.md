@@ -896,7 +896,7 @@ node ../sdkwork-specs/tools/check-api-assembly-integration-closure.mjs --workspa
 node ../sdkwork-specs/tools/check-cross-module-api-collisions.mjs --workspace ..
 node ../sdkwork-specs/tools/check-web-module-adoption.mjs --workspace .. --strict
 node ../sdkwork-specs/tools/check-web-module-exports.mjs ..
-node ../sdkwork-specs/tools/check-web-module-contribution-projection.mjs --workspace ..
+node ../sdkwork-specs/tools/check-web-module-contribution-projection.mjs ..
 node ../sdkwork-specs/tools/check-embedded-self-loop.mjs --workspace ..
 ```
 
