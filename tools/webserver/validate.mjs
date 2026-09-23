@@ -1018,7 +1018,12 @@ function validateWebserverSurface(moduleRoot, options) {
   }
 
   // W29: Adaptive Web edge modules (expose.mode web / web+api) wire production hosts correctly.
-  const adaptiveEdge = moduleUsesAdaptiveWebEdge(moduleRoot, moduleName);
+  let adaptiveEdge = false;
+  try {
+    adaptiveEdge = moduleUsesAdaptiveWebEdge(moduleRoot, moduleName);
+  } catch (error) {
+    errors.push(`expose-mode: ${error?.message ?? error}`);
+  }
   if (adaptiveEdge && common.enabled !== false) {
     if (!(common.http?.include ?? []).some((entry) => String(entry).includes('adaptive-web.maps.conf'))) {
       errors.push('server.common.toml: MUST declare http.include snippets/adaptive-web.maps.conf for Adaptive Web edge (W29)');

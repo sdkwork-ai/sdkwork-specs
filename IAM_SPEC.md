@@ -293,7 +293,7 @@ Request examples:
 
 Rules:
 
-- Context switch `MUST` rotate both `auth_token` and `access_token` and recompute `data_scope` and `permission_scope`.
+- Context switch `MUST` rotate both `auth_token` and `access_token` and recompute the session's `data_scope` and `permission_scope` **in the `iam_session` row** (§5.6). The rotated tokens `MUST NOT` carry either value.
 - Switching to `TENANT` `MUST` clear the active organization context (`organization_id = 0` or absent, `login_scope = "TENANT"`).
 - Switching to `ORGANIZATION` `MUST` verify active membership for the target organization before issuing new tokens.
 
@@ -323,8 +323,13 @@ Rules:
 - Documented bootstrap exceptions `MAY` use reserved stable numeric ids such as default bootstrap admin `user_id = "1"` when declared in the owning IAM bootstrap contract.
 - `login_scope = "ORGANIZATION"` requires a non-zero `organization_id`. `login_scope = "TENANT"` requires `organization_id` to be absent or `0`. Contradictory claims `MUST` be rejected.
 - A persistent deployment profile and runtime target `MAY` be signed when needed for fail-closed verification, but `data_scope` and `permission_scope` are never registered claims: they `MUST` be read from the matching `iam_session` row and re-computed on login, context switch, refresh, and RBAC change.
-- Token payloads `MUST` be minimal, bounded, and terminated by the entrypoint header budget. Identity, session, tenancy, runtime, auth-strength, and expiry claims that verification needs are allowed; no variable-length authorization or data-access lists (`data_scope`, `permission_scope`, role-code arrays) `MUST` be signed into a token. Embedding them inflated the payload and caused `HTTP 431 Request Header Fields Too Large` at the reverse-proxy edge.
-- Issuer builds `MUST` assert the rendered JWT length stays below the Nginx `large_client_header_buffers` single-buffer budget at the forwarding edge (default single `8k`, total `4 * 8k`); a single payload at or above that budget risks `431`. Issuer-side tests `MUST` assert the rendered token length under the budget.
+- **Claim admission is closed by default.** A token payload `MUST` be a fixed-size identity envelope. A claim is admissible only when it is (a) listed in the required-claims table above, `token_type`, `token_version`, or the `sid`/`sub` aliases, and (b) fixed-size for the lifetime of the session. Anything not on that list is **forbidden**, not merely discouraged.
+- Forbidden claims (`MUST NOT` be signed) include, without limitation: `data_scope`, `permission_scope`, role-code arrays, group or department membership lists, menu/route/permission trees, feature-flag maps, tenant or organization listings, user profiles, display names, locale/timezone preferences, avatars, entitlements, quota counters, and any other list, map, or object whose length grows with tenant configuration, user grants, or business data. Carrying authorization facts in the credential is forbidden even when a claim is small: size is not the admissibility test, mutability is.
+- Variable-length or mutable content `MUST` be resolved server-side at request time through the framework port defined in §5.6, never transported in a token. A validator `MUST NOT` require such a claim to be present, and `MUST NOT` derive an authorization decision from one when it is present.
+- Token payloads `MUST` be minimal, bounded, and terminator-bounded by the entrypoint header budget. Identity-only claims render roughly 400–700 bytes; the ceiling below leaves an order of magnitude of headroom, so exceeding it means forbidden content was signed back in.
+- **Entrypoint header budgets.** A single credential header line is bounded by the Nginx-compatible tuning surface (`client_header_buffer_size 1k` + `large_client_header_buffers 4 8k` ⇒ 8 KiB per header line at the forwarding edge). The dual-token contract renders **two** credentials into the same request, and the developer-facing ingress (Node HTTP parser default) bounds the **whole** header block to 16 KiB. Issuers `MUST` therefore hold one rendered token to at most `(16384 - 4096 reserve - 64 header names) / 2 = 6112` bytes, and issue-time tests `MUST` assert both the single-token ceiling and the combined dual-token block footprint.
+- Issuer builds `MUST` fail closed when a rendered credential exceeds that ceiling, and the failure `MUST` surface as an issuance error rather than a silently oversized token that the edge later rejects with `HTTP 431 Request Header Fields Too Large`. The framework provides the shared assertion (`validate_rendered_token_bytes` / `validate_dual_token_header_budget`); every issuer `MUST` call it on each rendered credential.
+- The size budget is a **regression guard, not a design target**. A change that makes a credential approach the ceiling is a signal that dynamic content belongs on the server, not that the ceiling should be raised. Raising the edge header budget `MUST NOT` be the first response to a size failure.
 - Request-time scope loading `MUST` be consistent with session revocation and context switch: when `iam_session.revoked_at` is stamped or `data_scope_json`/`permission_scope_json` is recomputed on switch, any cached scope entry `MUST` be treated as stale and reloaded from the session row before authorization is granted.
 - Token signatures `MUST` use a tenant-bound signing key. A global shared signing secret for all tenants is forbidden for production and production-like profiles.
 - Token headers `SHOULD` include a `kid` that maps to one tenant signing key. Validation `MUST` prove that the key used to verify the token belongs to the same `tenant_id` carried by the verified claims.
@@ -382,6 +387,86 @@ Rules:
 - `sdkwork-iam-web-adapter` `MUST` provide `IamWebRequestContextResolver` (canonical application integration alias; concrete type `IamDatabaseWebRequestContextResolver`) and `IamOpenApiWebRequestContextResolver` for standard IAM open-api wiring.
 - Open-api bootstrap `MUST` pass the route manifest to `build_iam_open_api_web_framework_layer(resolver, route_manifest)` so `RouteAuth::ApiKey`, `RouteAuth::OAuth`, and `RouteAuth::OpenApiFlexible` are enforced consistently.
 - Session/token SQL against IAM foundation tables `MUST` follow `DATABASE_SPEC.md` section 8.1.1 for TEXT-stored `instant` comparisons.
+
+### 5.6 Server-Side Authorization Scope Resolution
+
+Authorization scope (`data_scope`, `permission_scope`) is a **server-side fact about a subject at a moment**, not a property of a credential. §5.2 forbids carrying it in a token; this section defines where it comes from instead, who owns each layer, and how the layers may be replaced. Because the capability is reusable by every application that integrates `sdkwork-web-framework`, the interface is framework-owned and the database authority is IAM-owned.
+
+#### 5.6.1 Layer Ownership
+
+| Layer | Owner | Contract |
+| --- | --- | --- |
+| Port (query interface) | `sdkwork-web-framework` (`sdkwork-web-core::authz_scope`) | `DynamicAuthorizationScopeSource::resolve(subject) -> Option<WebAuthorizationScope>`. Defines the request shape, the resolved value object, and the revision marker. It `MUST NOT` name a table, a SQL dialect, a store, or a transport. |
+| Policy (cache, TTL, fallback, invalidation) | `sdkwork-web-framework` (`AuthorizationScopeProvider`) | Owns positive and negative caching, TTL, the fail-closed decision, and the invalidation surface. |
+| Pipeline (application of the resolved scope) | `sdkwork-web-framework` (`ServerResolvedScopeResolver`) | Wraps any `WebRequestContextResolver`, so an application inherits server-side scope resolution without writing its own resolver. |
+| Authority (where the scope actually lives) | `sdkwork-iam` | `iam_session.data_scope_json` / `permission_scope_json`, written at login, context switch, refresh, and RBAC change. IAM provides the reference port implementation (`IamSessionAuthorizationScopeSource`). |
+
+Rules:
+
+- The port `MUST` be defined in the framework, not in IAM. An application `MUST NOT` be required to depend on IAM to resolve scope.
+- An application that integrates the framework and already receives a fully resolved principal from its resolver `MUST NOT` re-resolve scope for that request; the resolution already happened server-side.
+- Two independent sources of truth for the same scope `MUST NOT` exist in one request path. In particular, a request-path check `MUST NOT` compare a freshly resolved scope against a credential copy of the same scope; the comparison `MUST` be against the authoritative row only.
+- The resolved scope `MUST` be applied to the principal **before** any authorization policy, route guard, or business handler observes it.
+- **Every** bearer path that produces a principal (session token, OAuth bearer token, API key, legacy token forms) `MUST` resolve scope from the same authoritative source under the same liveness predicate. The path `MUST` take the scope from the same row and the same query that established liveness; verifying liveness in one place and resolving scope in another `MUST NOT` be introduced, because the two predicates then drift independently and one path silently degrades.
+- A helper that constructs a principal from a credential `MUST` initialise scope **empty** and `MUST NOT` read scope from the credential, even when the credential happens to carry it. When such a credential still contains the legacy claim (§5.2 migration), reading it would silently re-establish the claim as a second source of truth. The scope is filled in only by the server-resolved step above, and an unresolved scope `MUST` deny.
+
+#### 5.6.2 Cache Contract
+
+The scope cache is declared as a namespace policy per `CACHE_SPEC.md` §6:
+
+| Field | Value | Rationale |
+| --- | --- | --- |
+| `namespace` | `iam.authorization_scope` | Dotted, stable, runtime-unique. |
+| `scope` | `session` | The cached fact is bound to one session context. |
+| `sensitivity` | `credential` | The value describes effective authority; it `MUST NOT` appear in admin output, logs, or telemetry. |
+| `consistency` | `coordination_critical` | A stale entry grants or denies authority that the subject no longer holds. |
+| `failureMode` | `fail_closed` | A cache or source failure `MUST` deny, not fall back to a credential copy. |
+| `ttlSeconds` | `15`, bounded and shorter than the routing-policy TTL | The TTL is a safety net, never the consistency mechanism. |
+
+Rules:
+
+- The cache key `MUST` include every dimension that can change the resolved scope: tenant, organization, user, app, session, environment, deployment profile, and API surface. A context switch changes at least one of them and therefore `MUST NOT` be able to read another context's entry.
+- Negative results (no authoritative row) `MUST` be cached for the same TTL, so an absent session cannot turn every request into a database round trip.
+- Cached scope `MUST` never outlive the session it describes. An entry whose session has been revoked, has expired, or has switched context `MUST` be treated as stale and reloaded before any authorization decision.
+- The cache `MUST NOT` be the only guard against a revoked session. Session validity is verified on every request through the tenant-bound signature check plus the session-revocation check (§5.2); the scope cache `MUST NOT` be used to skip that verification.
+
+#### 5.6.3 Invalidation And Consistency
+
+Explicit invalidation is the consistency mechanism; TTL is the backstop.
+
+| Trigger | Required invalidation |
+| --- | --- |
+| Role binding granted, revoked, or re-scoped for a user | That user's entries |
+| Role, permission catalog, or role-exclusion (SoD) rule changed for a tenant | The whole tenant's entries |
+| Session context switch (organization selection, login scope change) | The previous and the new context's entries |
+| Session revoked, logged out, or expired | That session's entry |
+| Permission-catalog deployment or `token_version` rollout | The whole namespace |
+
+Rules:
+
+- Every command that mutates RBAC state, session context, or session validity `MUST` invalidate the affected cache scope inside the same operation that returns success to the caller. A design that relies on TTL expiry to reflect a permission change `MUST NOT` be accepted for `coordination_critical` namespaces.
+- Invalidation `MUST` be reachable from the writer. The writer and the reader `MUST NOT` be wired through different cache instances without a shared invalidation channel; an in-process cache in a multi-replica deployment `MUST` be paired with a shared TTL bound or a broadcast invalidation.
+- A security-relevant scope change (revocation, role removal, SoD rule addition) `MUST` take effect on the next request after invalidation completes; a bounded-stale window is acceptable only for additive grant changes.
+- Scope recomputation on context switch `MUST` be atomic with the session-row update. A request `MUST NOT` be able to observe a new context with the previous context's scope.
+- Consistency failures `MUST` be observable: hit, miss, negative-hit, invalidation, and load-failure counters `MUST` be exported, and a load failure `MUST` be distinguishable from an authoritative "no scope" answer.
+
+#### 5.6.4 Extension And Override
+
+The capability is expected to be specialized, so each layer is independently replaceable and no layer may require forking the framework.
+
+| What an application needs | How it extends |
+| --- | --- |
+| A different authority (another store, another identity system) | Implement `DynamicAuthorizationScopeSource` and register it. Do not touch the policy or pipeline layers. |
+| Different cache policy (TTL, negative caching, cache backend) | Keep the source and construct the provider explicitly (`AuthorizationScopeProvider::new`). Do not re-implement caching in the source. |
+| A different application point (partial surfaces, extra enrichment) | Compose another `WebRequestContextResolver` wrapper. Do not patch the provider. |
+| Compatibility during migration off claim-embedded scope | Select the credential-claim fallback **explicitly and per profile**. |
+
+Rules:
+
+- The credential-claim fallback is a **migration** affordance. It `MUST` be selected explicitly, `MUST` be named as non-authoritative in the deployment profile declaration, and `MUST NOT` be the default in production or production-like profiles; those `MUST` resolve to the fail-closed `Deny` behavior.
+- An override `MUST` be additive and `MUST NOT` weaken fail-closed behavior for production profiles. A custom source that returns an empty scope is indistinguishable from "no authority" and therefore denies under the production fallback.
+- A domain that owns a distinct scope vocabulary `MUST` publish its own source rather than extend the IAM source with domain branches; the port takes a subject, not a domain switch.
+- New scope dimensions `MUST` be added by extending `WebAuthorizationScope` and the subject, not by widening the token claim set. §5.2 is not reopened by an extension.
 
 ## 6. API Surface
 
@@ -456,6 +541,7 @@ Rules:
 - Sensitive authorization changes `MUST` emit audit events and, when security-relevant, security events.
 - Role assignment, revocation, custom role updates, bootstrap default bindings, and super-admin activation `MUST` follow `PERMISSION_STANDARD_SPEC.md`, `IAM_RBAC_FEDERATION_SPEC.md`, and `IAM_MODULE_MANIFEST_SPEC.md` assignability rules.
 - Application bootstrap access token scopes `MUST NOT` be treated as user-session RBAC. Runtime authorization uses token `login_scope`, subject bindings, role bindings, permission catalog materialization, and per-route policy.
+- The effective `data_scope` / `permission_scope` a policy evaluates `MUST` be the server-resolved scope of §5.6, not a credential-carried copy. A policy `MUST NOT` read scope from a token claim, and a policy that receives an unresolved or empty scope `MUST` deny rather than treat emptiness as "no restriction".
 
 ## 8. Standalone And Cloud Parity
 
@@ -479,6 +565,11 @@ Rules:
 - [ ] Login/session creation does not trust inbound auth/context headers and derives tenant from real IAM user/tenant data.
 - [ ] Login with one or more active organization memberships returns `LOGIN_CONTEXT_SELECTION` instead of choosing a default organization.
 - [ ] Both `authToken` and `accessToken` include matching `tenant_id`, `organization_id`, `login_scope`, `user_id`, and `session_id` claims.
+- [ ] Neither `authToken` nor `accessToken` carries `data_scope`, `permission_scope`, role-code arrays, or any other variable-length or mutable content. An issue-time test asserts the forbidden-claim set is absent from the rendered payload.
+- [ ] Every rendered credential passes the entrypoint header budget assertion (§5.2); a rendered token stays within `6112` bytes and a dual-token pair stays within the `16 KiB` whole-header-block budget minus the reserve.
+- [ ] Authorization scope is resolved server-side through the framework port (§5.6) and no request path compares a freshly resolved scope against a credential copy of that scope.
+- [ ] The `iam.authorization_scope` cache namespace declares `sensitivity = credential`, `consistency = coordination_critical`, `failureMode = fail_closed`, and a bounded TTL; negative results are cached and counted separately from load failures.
+- [ ] RBAC, role-exclusion, session context-switch, and session-revocation commands invalidate the affected scope cache within the same successful operation, and invalidation is reachable from the writer.
 - [ ] New IAM `tenant_id` and `user_id` values are positive numeric snowflake strings that map to SQL `BIGINT` subject scope per `SUBJECT_ID_SPEC.md`; legacy opaque `iamu_` / `iamt_` ids are repaired or migrated.
 - [ ] Token signing and validation use tenant-bound signing keys with key id and tenant binding checks.
 - [ ] API key operations resolve a server-side API key record and never trust raw key claims alone in production.

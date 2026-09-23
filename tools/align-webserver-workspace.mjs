@@ -115,7 +115,10 @@ function alignModule(moduleRoot, { dryRun = false } = {}) {
   }
 
   if (!dryRun) {
-    writeWebserverLayout(moduleRoot, docs);
+    // Forward appId + topology: buildWebserverReadme derives the `Surfaces:` line
+    // from topology.cloudPublicHosts, so omitting them rewrites the README with
+    // "none (placeholder)" and silently degrades a correct document.
+    writeWebserverLayout(moduleRoot, docs, { appId: name, topology });
   }
 
   const validation = validateWebserverDir(moduleRoot);

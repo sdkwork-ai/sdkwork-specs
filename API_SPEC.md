@@ -1019,7 +1019,7 @@ Rules:
 - Dual-token resolution `MUST` treat overlapping principal and tenancy claims from `auth_token` as authoritative when both tokens are present. Overlapping fields are `sub`/`user_id`, `sid`/`session_id`, `tenant_id`, `organization_id`, `login_scope`, and `auth_level`.
 - Dual-token resolution `MUST` reject requests where `access_token` carries an overlapping claim that contradicts the authoritative `auth_token` value after normalization.
 - Dual-token resolution `MUST` reject missing or conflicting `login_scope` claims and any `TENANT`/`ORGANIZATION` claim mismatch with `organization_id`.
-- Access-isolation claims that exist only on `access_token`, such as `data_scope`, `permission_scope`, deployment profile, runtime target, and sharding hints, `MUST` be resolved from `access_token` even when `auth_token` is present.
+- Access-isolation claims that exist only on `access_token`, such as deployment profile, runtime target, and sharding hints, `MUST` be resolved from `access_token` even when `auth_token` is present. Authorization scope (`data_scope`, `permission_scope`) is **never** an access-isolation claim: it is resolved server-side per `IAM_SPEC.md` §5.6 and `MUST NOT` be signed into either token.
 - Context values from request body, query, path, or frontend state `MUST NOT` override the resolved context.
 
 Forbidden client identity headers:

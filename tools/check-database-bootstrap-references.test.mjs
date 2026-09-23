@@ -26,14 +26,14 @@ const DDL = 'CREATE TABLE demo (id BIGINT PRIMARY KEY);';
 // --- a stale sibling reference is reported -------------------------------------------------
 fs.writeFileSync(
   baselinePath,
-  `-- baseline source: ddl/baseline/postgres/0001_demo_legacy_baseline.sql\n${DDL}\n`,
+  `-- baseline source: ddl/baseline/postgres/0001_demo_baseline.sql\n${DDL}\n`,
   'utf8',
 );
 const stale = [];
 checkBaselineDir(repoRoot, 'postgres', stale);
 assert.deepEqual(
   stale,
-  ['postgres/0001_demo_baseline.sql: provenance reference does not exist: ddl/baseline/postgres/0001_demo_legacy_baseline.sql'],
+  ['postgres/0001_demo_baseline.sql: provenance reference does not exist: ddl/baseline/postgres/0001_demo_baseline.sql'],
   'a provenance reference to a renamed sibling must be reported',
 );
 

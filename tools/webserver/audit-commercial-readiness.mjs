@@ -58,7 +58,12 @@ export function auditCommercialReadiness(workspaceRoot) {
       }
     }
 
-    const adaptiveEdge = moduleUsesAdaptiveWebEdge(moduleRoot, name);
+    let adaptiveEdge = false;
+    try {
+      adaptiveEdge = moduleUsesAdaptiveWebEdge(moduleRoot, name);
+    } catch (error) {
+      localAdd('critical', name, `expose-mode unresolved (adaptive verdict unknown): ${error?.message ?? error}`);
+    }
     const proxyOnly = isEdgeProxyOnlyModule(name);
 
     if (proxyOnly) {

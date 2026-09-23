@@ -38,15 +38,87 @@ export function classifyOpenApiOperationPatterns(text) {
  * int64-string, and it MUST then carry `x-sdkwork-money-unit: minor`. Name
  * heuristics cannot decide the contract on their own, so the marker is the
  * requirement and the name only decides where to look.
+ *
+ * Vocabulary matching is segment-based rather than substring-based. Substring
+ * matching made `fee` fire inside `feedbackId`, so every feedback identifier in
+ * a workspace was reported as an undeclared monetary amount — a false positive
+ * that pushes authors toward renaming correct fields, or worse, toward tagging
+ * an identifier with a currency unit. Splitting on camelCase and non-alphanumeric
+ * boundaries keeps `totalAmount` / `creditAmount` / `subTotal` matching while
+ * making `feedbackId` resolve to the segments `feedback`, `id`.
  */
-const MONEY_FIELD_NAME_PATTERN = /(?:^|[a-z])(?:amount|price|fee|cost|subtotal|discount|refund|balance|payment|payable|paid|revenue|tax|charge|credit(?:Amount)?|wallet)/iu;
+
+/** Monetary vocabulary as whole word segments, including the plurals the previous substring patterns accepted. */
+const MONEY_FIELD_SEGMENTS = new Set([
+  'amount', 'amounts',
+  'price', 'prices',
+  'fee', 'fees',
+  'cost', 'costs',
+  'subtotal',
+  'discount', 'discounts',
+  'refund', 'refunds',
+  'balance', 'balances',
+  'payment', 'payments',
+  'payable',
+  'paid',
+  'revenue', 'revenues',
+  'tax', 'taxes',
+  'charge', 'charges',
+  'credit', 'creditamount',
+  'wallet', 'wallets',
+]);
 
 /**
  * Names that contain monetary vocabulary but are counts, not money. Requests,
  * users, orders, and similar tallies legitimately use words such as `total`
  * and must not be forced to declare a currency unit.
  */
-const NON_MONETARY_FIELD_NAME_PATTERN = /(?:count|number|num|qty|quantity|requests?|users?|orders?|items?|rows?|hits?|calls?|times?|rate|ratio|percent|bps|rpm|tpm|score|rank|invited|size|length|bytes?|points?|tokens?|minutes?|seconds?|days?)/iu;
+const NON_MONETARY_FIELD_SEGMENTS = new Set([
+  'count', 'counts',
+  'number', 'numbers', 'num',
+  'qty', 'quantity',
+  'request', 'requests',
+  'user', 'users',
+  'order', 'orders',
+  'item', 'items',
+  'row', 'rows',
+  'hit', 'hits',
+  'call', 'calls',
+  'time', 'times',
+  'rate', 'ratio', 'percent', 'bps', 'rpm', 'tpm',
+  'score', 'rank',
+  'invited',
+  'size', 'length',
+  'byte', 'bytes',
+  'point', 'points',
+  'token', 'tokens',
+  'minute', 'minutes',
+  'second', 'seconds',
+  'day', 'days',
+]);
+
+/** Splits a field name into lowercase word segments on camelCase and non-alphanumeric boundaries. */
+function fieldNameSegments(fieldName) {
+  return String(fieldName)
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[^A-Za-z0-9]+/)
+    .map((segment) => segment.toLowerCase())
+    .filter(Boolean);
+}
+
+function isMonetaryFieldName(fieldName) {
+  const segments = fieldNameSegments(fieldName);
+  if (segments.some((segment) => MONEY_FIELD_SEGMENTS.has(segment))) {
+    return true;
+  }
+  // Compound forms such as `subTotal` split into `sub` + `total`, which carry no
+  // monetary segment on their own.
+  return MONEY_FIELD_SEGMENTS.has(segments.join(''));
+}
+
+function isNonMonetaryFieldName(fieldName) {
+  return fieldNameSegments(fieldName).some((segment) => NON_MONETARY_FIELD_SEGMENTS.has(segment));
+}
 
 function classifyMoneyUnitContract(document) {
   if (document && document['x-sdkwork-int64-openai-compat'] === true) {
@@ -65,10 +137,10 @@ function classifyMoneyUnitContract(document) {
       if (!property || typeof property !== 'object' || property.format !== 'int64') {
         continue;
       }
-      if (!MONEY_FIELD_NAME_PATTERN.test(propertyName)) {
+      if (!isMonetaryFieldName(propertyName)) {
         continue;
       }
-      if (NON_MONETARY_FIELD_NAME_PATTERN.test(propertyName)) {
+      if (isNonMonetaryFieldName(propertyName)) {
         continue;
       }
       const label = `${schemaName}.${propertyName}`;

@@ -662,6 +662,59 @@ test('classifyOpenApiOperationPatterns does not flag non-monetary counters', () 
   );
 });
 
+test('classifyOpenApiOperationPatterns matches monetary vocabulary on word segments, not substrings', () => {
+  const issues = classifyOpenApiOperationPatterns(moneyDocument({
+    // `feedbackId` contains the substring `fee` but is an identifier. Substring
+    // matching reported every feedback id as an undeclared monetary amount.
+    feedbackId: {
+      type: 'string',
+      format: 'int64',
+      pattern: '^[0-9]+$',
+      'x-sdkwork-int64-string': true,
+    },
+    feedbackCount: {
+      type: 'string',
+      format: 'int64',
+      pattern: '^[0-9]+$',
+      'x-sdkwork-int64-string': true,
+    },
+  }));
+  assert.equal(
+    issues.filter((issue) => issue.kind.startsWith('money-unit')).length,
+    0,
+    'identifiers that merely embed monetary substrings must not require a currency marker',
+  );
+});
+
+test('classifyOpenApiOperationPatterns still flags genuine monetary fields after segment matching', () => {
+  const issues = classifyOpenApiOperationPatterns(moneyDocument({
+    feeMinor: {
+      type: 'string',
+      format: 'int64',
+      pattern: '^[0-9]+$',
+      'x-sdkwork-int64-string': true,
+    },
+    creditAmount: {
+      type: 'string',
+      format: 'int64',
+      pattern: '^[0-9]+$',
+      'x-sdkwork-int64-string': true,
+    },
+    subTotal: {
+      type: 'string',
+      format: 'int64',
+      pattern: '^[0-9]+$',
+      'x-sdkwork-int64-string': true,
+    },
+  }));
+  const flagged = issues.filter((issue) => issue.kind === 'money-unit-marker-missing');
+  assert.equal(
+    flagged.length,
+    3,
+    'feeMinor, creditAmount, and subTotal are monetary and must each be reported',
+  );
+});
+
 test('classifyOpenApiOperationPatterns exempts documents marked openai-compatible', () => {
   const document = JSON.parse(moneyDocument({
     totalAmount: {

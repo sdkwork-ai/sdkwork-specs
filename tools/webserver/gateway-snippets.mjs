@@ -41,9 +41,38 @@ function locationBlock(match, lines) {
   return [`    location ${match} {`, ...lines.map((line) => `        ${line}`), '    }', ''];
 }
 
+/**
+ * PRD-FR-021: administrative, health, readiness, metrics, profiling, and debug
+ * surfaces are separately governed and must never be implicitly exposed through
+ * an application virtual host. The loopback data-plane operations listener
+ * serves diagnostics; the public edge denies them with an exact match so that
+ * no `location /` or `/api/` prefix rule can ever capture them.
+ */
+const EXPOSURE_GOVERNANCE_NOTES = [
+  '#',
+  '# Exposure governance (PRD-FR-021): the edge proxies only operator probes',
+  '# (/healthz, /readyz) and application traffic. Unauthenticated diagnostics',
+  '# surfaces (/metrics, /livez) are denied here; scrape them on the host over',
+  '# the loopback data-plane operations listener (SDKWORK_WEBSERVER_DATA_PLANE_OPERATIONS_BIND).',
+  '',
+];
+
+function exposureDenyBlocks() {
+  return [
+    '    # Diagnostics are loopback-governed; the public edge never forwards them.',
+    ...locationBlock('= /metrics', ['return 404;']),
+    ...locationBlock('= /livez', ['return 404;']),
+  ];
+}
+
 export function gatewayLocationSnippetContent(tier) {
   const production = tier === 'production';
-  const lines = headerLines(tier);
+  const lines = [
+    `# Gateway location snippet (${tier}) — SDKWORK_WEBSERVER_SPEC.md §2.4`,
+    '# Referenced from server.include; do not edit locations inline in environment files.',
+    ...EXPOSURE_GOVERNANCE_NOTES,
+    ...exposureDenyBlocks(),
+  ];
 
   if (production) {
     for (const probe of ['/healthz', '/readyz']) {

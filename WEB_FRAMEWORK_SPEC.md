@@ -169,6 +169,29 @@ Rules:
 - Business handlers and controllers `MUST NOT` parse `Accept-Language`, cookies, query parameters, or user-agent headers to choose locale.
 - Production locale resolution `MUST NOT` trust query parameters unless the route is a documented preview/test route and route metadata declares the exception.
 
+### 5.3 Authorization Scope Projection
+
+`data_scope` / `permission_scope` are framework-resolved request facts, not credential contents. The framework owns the query interface and the cache policy; a domain owns the authority. See `IAM_SPEC.md` §5.6 for the authorization model and §5.2 for the claim budget that makes this the only viable carrier.
+
+Framework-owned vocabulary:
+
+| Item | Role |
+| --- | --- |
+| `AuthorizationScopeSubject` | The cache-key identity of a scope lookup: tenant, organization, user, app, session, environment, deployment profile, API surface. |
+| `WebAuthorizationScope` | The resolved value: `data_scope`, `permission_scope`, and a `scope_revision` marker from the authoritative row. |
+| `DynamicAuthorizationScopeSource` | The port a domain implements against its own store. It `MUST NOT` name a table, dialect, or transport. |
+| `AuthorizationScopeProvider` | Owns positive/negative caching, bounded TTL, fail-closed fallback, and the invalidation surface. |
+| `ServerResolvedScopeResolver` | Wraps any `WebRequestContextResolver` so an application inherits server-side scope resolution. |
+
+Rules:
+
+- A resolver that returns an authenticated principal `MUST` either already carry the authoritative scope (read server-side by the resolver) or be wrapped by `ServerResolvedScopeResolver`. A principal that carries neither `MUST` be treated as unscoped and denied, never as unrestricted.
+- Enrichment `MUST` occur before authorization policies, route guards, and handlers observe the principal.
+- An API-key or OAuth principal whose scope came from its own server-side credential record `MUST NOT` be re-enriched from a user-scope provider; that would replace a narrower credential scope with a broader user scope.
+- The port, the provider, and the wrapper are the extension points. An application that needs different authority, different caching, or a different application point replaces the corresponding layer and `MUST NOT` fork the framework or patch the shared provider.
+- A production or production-like profile `MUST` use the fail-closed fallback (`Deny`) for authorization scope, so an unresolvable scope denies instead of falling back to credential contents. The credential-claim fallback exists only for development, test, and an explicitly declared migration profile.
+- Any request path that transmits authorization scope through a credential `MUST` be treated as a defect against `IAM_SPEC.md` §5.2 regardless of how small the payload is.
+
 ## 6. API Surfaces And Auth Modes
 
 | Surface | Prefix | Auth mode | Framework requirement |

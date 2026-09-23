@@ -71,7 +71,16 @@ export const sdkWorkEnvelopeComponentSchemas = {
       mode: { type: 'string', enum: ['offset', 'cursor'] },
       page: { type: 'integer', minimum: 1 },
       pageSize: { type: 'integer', minimum: 1, maximum: 200 },
-      totalItems: { type: 'string', pattern: '^[0-9]+$' },
+      // API_SPEC 13.6: totalItems is an int64 wire field, so it must be a string
+      // carrying format int64 plus the marker. Without the marker the generated
+      // TypeScript SDK emits `number`, and a Memory space with more than 2^53
+      // rows would silently round its total on the wire.
+      totalItems: {
+        type: 'string',
+        format: 'int64',
+        pattern: '^[0-9]+$',
+        'x-sdkwork-int64-string': true,
+      },
       totalPages: { type: 'integer', minimum: 0 },
       nextCursor: { type: ['string', 'null'] },
       hasMore: { type: 'boolean' },

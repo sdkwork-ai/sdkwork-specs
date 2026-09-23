@@ -124,6 +124,34 @@ Rules:
 - `coordination_critical` namespaces should default to `fail_closed`.
 - `relaxed` namespaces may use `origin_fallback` or `serve_stale` when the source of truth is safe to read.
 
+### 6.1 Authorization Scope Resolution Namespace
+
+Authorization scope (`data_scope`, `permission_scope`) is a server-resolved fact (`IAM_SPEC.md` §5.6). It is cached under a declared namespace because it is derived state, but it is **not** a routing preference: a stale entry grants or denies authority the subject no longer holds. It therefore sits at the strict end of every policy dimension.
+
+| Field | Value |
+| --- | --- |
+| `namespace` | `iam.authorization_scope` |
+| `instanceName` | The runtime `local_cache` / `redis_cache` binding for the profile |
+| `ttlSeconds` | `15` (bounded, and shorter than `iam.dynamic_policy` routing TTLs) |
+| `scope` | `session` |
+| `sensitivity` | `credential` |
+| `failureMode` | `fail_closed` |
+| `consistency` | `coordination_critical` |
+| `jitterPercent` | `0` — synchronization of expiry buys nothing here and delays a reload |
+| `staleWhileRevalidateSeconds` | `0` — stale authorization scope `MUST NOT` be served |
+| `tags` | `iam`, `authorization`, `security` |
+
+Rules:
+
+- Caller keys `MUST` include tenant, organization, user, app, session, environment, deployment profile, and API surface, so a context switch cannot read another context's entry.
+- Negative results `MUST` be cached for the namespace TTL so an absent session row cannot force a database round trip per request. Negative hits `MUST` be counted separately from loads and load failures.
+- Invalidation `MUST` be explicit and driven by the writer. Role binding changes, role/permission-catalog changes, role-exclusion rule changes, session context switches, session revocations, and permission-catalog deployments each invalidate the affected scope (one subject, one user, one tenant, one session, or the whole namespace).
+- TTL expiry is the backstop for a missed invalidation, never the consistency mechanism. A design that reflects a permission change only by waiting for the TTL `MUST NOT` be accepted.
+- Cached scope `MUST NOT` be treated as session validity. Revocation and expiry are verified per request through the tenant-bound signature and session-revocation checks; the scope cache `MUST NOT` be allowed to bypass them.
+- In a multi-replica deployment an in-process scope cache `MUST` be paired with a shared TTL bound or a broadcast invalidation channel; an unshared in-process cache without either `MUST NOT` be used for `coordination_critical` namespaces.
+- Because `sensitivity = credential`, cached scope values `MUST NOT` appear in admin cache output, logs, traces, metrics labels, or frontend state. Only counts, keys, and TTL metadata may be surfaced.
+- A scope load failure `MUST` surface as `fail_closed` denial with a distinguishable error/telemetry outcome, and `MUST NOT` be silently converted into an empty scope (which is indistinguishable from "no authority" and would deny with the wrong signal).
+
 ## 7. Key Construction
 
 Physical keys must be constructed by the cache manager:

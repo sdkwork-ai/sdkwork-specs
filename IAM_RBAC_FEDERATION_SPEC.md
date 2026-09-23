@@ -14,7 +14,7 @@ SDKWork adopts **IAM Module Federation (IMF)**. Platform kernel capabilities sta
 | L2 | Capability catalog | Each module | `iam_permission`, `iam_module_registry_*` |
 | L3 | Assignment | Kernel roles + module extensions | `iam_role`, `iam_role_permission`, `iam_role_binding`, `iam_role_exclusion` |
 | L4 | Policy | Kernel + module condition vocabulary | `iam_policy`, binding `condition_json` |
-| L5 | Surface | Kernel only | Derived `userSurface`, token `permission_scope`, backend surface gate |
+| L5 | Surface | Kernel only | Derived `userSurface`, server-resolved `permission_scope` (`IAM_SPEC.md` §5.6 — never a token claim), backend surface gate |
 
 Authorization chain:
 
