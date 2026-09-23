@@ -223,6 +223,15 @@ Rules:
   blocks, and `--apply` to refresh. `--recursive` additionally covers nested
   component `AGENTS.md` while skipping tests, fixtures, snapshots, and generated
   output.
+- `sync-agent-main-branch-standard.mjs` propagates the normative main-branch
+  development discipline of `REPOSITORY_BASELINE_SPEC.md` section 1 into every
+  repository `AGENTS.md` as the `SDKWORK-MAIN-BRANCH-STANDARD` managed block. It
+  generates the in-block verification commands with the correct relative path to
+  `sdkwork-specs` for each file, so nested component entrypoints stay runnable.
+  Use `--root` for one repository, `--workspace` for all child `sdkwork-*`
+  repositories, `--check` to fail on stale or missing blocks, and `--apply` to
+  refresh. `--recursive` additionally covers nested component `AGENTS.md` while
+  skipping tests, fixtures, snapshots, and generated output.
 - `check-destructive-operation-patterns.mjs` is the read-only audit for
   pattern-driven deletion. It scans shell/PowerShell/cmd scripts under `bin/`,
   `scripts/`, `tools/`, `deployments/`, and `docker/`, plus `run:` steps in

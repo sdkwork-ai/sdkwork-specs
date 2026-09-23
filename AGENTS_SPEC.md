@@ -1,6 +1,6 @@
 # AGENTS.md Standard
 
-- Version: 1.3
+- Version: 1.4
 - Scope: repository, application, and component-level `AGENTS.md` files used by SDKWork agents and AI-assisted development tools, plus tool compatibility shims such as `CLAUDE.md`, `GEMINI.md`, and `CODEX.md`
 - Related: `SOUL.md`, `SDKWORK_WORKSPACE_SPEC.md`, `APP_MANIFEST_SPEC.md`, `COMPONENT_SPEC.md`, `DOCUMENTATION_SPEC.md`, `GOVERNANCE_SPEC.md`, `CODE_STYLE_SPEC.md`, `DESTRUCTIVE_OPERATION_SPEC.md`, `ROLLBACK_RESTRICTION_SPEC.md`, `NAMING_SPEC.md`, `TEST_SPEC.md`
 
@@ -53,6 +53,8 @@ Sections may be brief, but they must be actionable and must use repository-relat
 Every repository and application root `AGENTS.md` `MUST` carry the `SDKWORK-DESTRUCTIVE-OPERATION-STANDARD` managed sync block defined by `DESTRUCTIVE_OPERATION_SPEC.md`. The block is tool-owned; do not hand-edit it and do not restate its rules in an authored section. It is exempt from the "do not copy root spec content into `AGENTS.md`" rule because it is a managed block under section 4.1 of this standard, not an authored copy.
 
 Every repository and application root `AGENTS.md` `MUST` carry the `SDKWORK-ROLLBACK-RESTRICTION-STANDARD` managed sync block defined by `ROLLBACK_RESTRICTION_SPEC.md`. It states the fix-forward rule, the prohibition on git-level rollback as a defect remedy, the additive-only recovery direction, the evidence and protection requirements that precede a restore, and the explicit human authorization a rollback requires. It is tool-owned on the same terms as the destructive-operation block: do not hand-edit it, do not restate its rules in an authored section, and re-run its sync tool to refresh it.
+
+Every repository and application root `AGENTS.md` `MUST` carry the `SDKWORK-MAIN-BRANCH-STANDARD` managed sync block defined by `REPOSITORY_BASELINE_SPEC.md` section 1. It states that development happens on `main`, that a detached HEAD and a side branch are not development venues, and that a checkout off `main` stays read-only. It is tool-owned on the same terms as the destructive-operation block: do not hand-edit it, do not restate its rules in an authored section, and re-run its sync tool to refresh it.
 
 ## 3. Relative Path Rules
 

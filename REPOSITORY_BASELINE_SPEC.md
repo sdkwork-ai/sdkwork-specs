@@ -1,8 +1,8 @@
 # SDKWork Repository Baseline Standard
 
-- Version: 1.0
-- Scope: default git branch, repository L1 baseline metadata, and workspace compliance auditing for every SDKWork git repository root
-- Related: `SOUL.md`, `AGENTS_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `ENGINEERING_WORKFLOW_SPEC.md`, `QUALITY_GATE_SPEC.md`, `GOVERNANCE_SPEC.md`
+- Version: 1.1
+- Scope: default git branch, the development branch every working tree must be on, repository L1 baseline metadata, and workspace compliance auditing for every SDKWork git repository root
+- Related: `SOUL.md`, `AGENTS_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `ENGINEERING_WORKFLOW_SPEC.md`, `ROLLBACK_RESTRICTION_SPEC.md`, `QUALITY_GATE_SPEC.md`, `GOVERNANCE_SPEC.md`
 
 This standard defines the minimum source-controlled baseline every SDKWork git repository root must satisfy before it is considered standardized.
 
@@ -15,6 +15,31 @@ Rules:
 - Historical `master` branches `MUST` be renamed to `main` and removed from the remote after the GitHub default branch is updated.
 - Repository automation, dependency checkout refs, reusable workflow inputs, and documentation examples `MUST` use `main` unless pinning an explicit tag or commit SHA.
 - `master` `MUST NOT` be used as a new default branch name.
+- **Development happens on `main`.** A working tree that receives authored content `MUST` have `main`
+  checked out as its current branch for the whole time that work is in progress. Authored changes are
+  committed onto `main` directly, not onto a branch a later merge is expected to bring in.
+- A detached HEAD `MUST NOT` be used as a development venue. A commit created while HEAD is detached
+  from every branch is reachable only through the reflog: it is absent from every branch history, from
+  a fresh `git clone` of the repository, and from every other working tree, so the work it carries is
+  one `git gc` away from being unrecoverable. Checking out a bare commit, a tag, or an older ref in
+  order to "get a clean starting point" and committing there is forbidden; `ROLLBACK_RESTRICTION_SPEC.md`
+  states the same prohibition for the restore case.
+- A side branch `MUST NOT` be used as a development venue either. There is no long-lived feature,
+  release, maintenance, or personal branch: a repository `MUST NOT` accumulate local commits that
+  `main` cannot reach, because making those commits findable would then depend on a merge that may
+  never happen.
+- A checkout that is not on `main` is legitimate only while it stays read-only — a dependency or SDK
+  pinned to an explicit commit, a release artifact checkout, or a bisect. No authored change is
+  committed in that state.
+
+The current branch is the machine-checkable form of this rule:
+
+```bash
+node <sdkwork-specs>/tools/audit-repository-baseline.mjs --root . --only branch-main
+```
+
+That check fails when the current branch is anything other than `main`, and reports a detached HEAD
+as `detached`.
 
 ## 2. L1 Baseline (All Git Repository Roots)
 
@@ -102,7 +127,7 @@ Rules:
 Rules:
 
 - Run `node tools/audit-repository-baseline.mjs --root <repo>` from `sdkwork-specs/` before claiming repository baseline completion.
-- Baseline audits `MUST` report branch name, L1 file presence, and forbidden tracked paths such as `node_modules/`, `target/`, `dist/`, and `.env`.
+- Baseline audits `MUST` report branch name, L1 file presence, and forbidden tracked paths such as `node_modules/`, `target/`, `dist/`, and `.env`. The branch report is the `branch-main` check of section 1: it fails for any current branch other than `main` and reports a detached HEAD as `detached`, so a working tree that is not on `main` cannot pass a baseline audit.
 - Baseline audits `MUST` report tracked compiler emit beside source (section 2). A repository that
   has not adopted the whole L1 baseline `MAY` enforce that rule alone with
   `--only tracked-compiler-emit`, which accepts a repeatable or comma-separated list of check names;
@@ -112,6 +137,8 @@ Rules:
 ## 6. Acceptance Checklist
 
 - [ ] Default branch is `main` locally and on GitHub.
+- [ ] The working tree is on `main` — never detached, never on a side branch — and every local
+      commit is reachable from `main` (`audit-repository-baseline.mjs --only branch-main` passes).
 - [ ] L1 baseline files exist and shims point to `AGENTS.md`.
 - [ ] Root `.gitignore` and `.sdkwork/.gitignore` ignore local-only state.
 - [ ] Root `.gitignore` does not ignore the root `bin/` directory or `sdks/**/generated/`
