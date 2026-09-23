@@ -20,6 +20,7 @@ export function classifyOpenApiOperationPatterns(text) {
   }
   issues.push(...classifyInt64StringContract(document));
   issues.push(...classifyMoneyUnitContract(document));
+  issues.push(...classifyQueryParameterVocabulary(document, entries));
   return issues;
 }
 
@@ -621,4 +622,63 @@ function hasJsonSuccessBody(responses, statuses) {
     const response = responses[status];
     return Boolean(response && typeof response === 'object' && response.content);
   });
+}
+
+const LOWER_SNAKE_CASE_QUERY_PARAMETER = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/u;
+
+function resolveInlineParameter(document, parameter) {
+  if (!parameter || typeof parameter !== 'object') {
+    return undefined;
+  }
+  if (typeof parameter.$ref !== 'string') {
+    return parameter;
+  }
+  const prefix = '#/components/parameters/';
+  if (!parameter.$ref.startsWith(prefix)) {
+    return undefined;
+  }
+  const resolved = document?.components?.parameters?.[parameter.$ref.slice(prefix.length)];
+  return resolved && typeof resolved === 'object' ? resolved : undefined;
+}
+
+/**
+ * API_SPEC section 13 query-parameter vocabulary: multi-word query parameter
+ * names MUST use `lower_snake_case` (`page_size`, `created_after`,
+ * `organization_id`). `pageSize` is reserved for JSON request bodies, response
+ * payloads, and language-level SDK models (PAGINATION_SPEC.md line 9) and is not
+ * an HTTP query alias.
+ *
+ * This check exists because the failure it guards is invisible to every other
+ * gate. A contract declaring `?spaceId=` while the handler deserializes
+ * `space_id` under `serde(deny_unknown_fields)` describes a filter nobody can
+ * use: the generated SDK faithfully sends the documented name, the server
+ * rejects it with 400, and both halves look correct in isolation. Every
+ * spec validator sees a well-formed document, so the breakage ships green.
+ */
+export function classifyQueryParameterVocabulary(document, entries) {
+  const issues = [];
+  for (const { routePath, method, operation } of entries) {
+    const parameters = operation?.parameters;
+    if (!Array.isArray(parameters)) {
+      continue;
+    }
+    for (const rawParameter of parameters) {
+      const parameter = resolveInlineParameter(document, rawParameter);
+      if (!parameter || parameter.in !== 'query') {
+        continue;
+      }
+      const name = parameter.name;
+      if (typeof name !== 'string' || name.length === 0) {
+        continue;
+      }
+      if (LOWER_SNAKE_CASE_QUERY_PARAMETER.test(name)) {
+        continue;
+      }
+      issues.push({
+        kind: 'non-canonical-query-parameter-name',
+        detail: `${method.toUpperCase()} ${routePath} query parameter ${JSON.stringify(name)} must use lower_snake_case (API_SPEC section 13)`,
+      });
+    }
+  }
+  return issues;
 }
