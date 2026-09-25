@@ -6,6 +6,12 @@
  * Only the exact offending rule line is removed: no other entry, comment, blank line, or line
  * ending changes. Files are matched CRLF-aware and written back with their original EOL.
  *
+ * Whether a negation may be removed is decided by the rule, not by the aligner: `!` lines are
+ * checked against the same pattern list, and only a rule that explicitly targets a negation
+ * (`^!...`) matches one. That keeps a legitimate negation such as `!.env.example` or a `!/bin/`
+ * that restores tracking, while still retiring the `!` lines that existed solely to punch a hole
+ * in a broad glob.
+ *
  *   node tools/align-gitignore-standard.mjs --workspace <workspace-root>            # plan
  *   node tools/align-gitignore-standard.mjs --workspace <workspace-root> --fix      # apply
  */
@@ -28,9 +34,10 @@ export function planRepository(repoRoot) {
   const kept = [];
   for (const rawLine of original.split(/\r?\n/u)) {
     const entry = rawLine.trim();
+    // No blanket `!` exclusion: a rule that targets negations carries a leading `!` in its own
+    // pattern, so the rule list - not this loop - decides whether a negation is an offender.
     const isOffender = entry.length > 0
       && !entry.startsWith('#')
-      && !entry.startsWith('!')
       && CANONICAL_CONTENT_IGNORE_RULES.some((rule) => rule.match.test(entry));
     if (isOffender) {
       removed.push(entry);

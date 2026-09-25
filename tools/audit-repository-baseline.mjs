@@ -60,6 +60,26 @@ function checkForbiddenTracked(root) {
  * Authored ambient declarations (`vite-env.d.ts`) are not flagged: they have no same-named .ts
  * sibling, which is exactly what makes them authored rather than emitted.
  */
+/**
+ * Compiler emit must never be tracked beside its source (REPOSITORY_BASELINE_SPEC section 2):
+ * tsc run without --noEmit or an outDir drops .js/.d.ts next to every .ts input, and those stale
+ * copies shadow the source for bundlers and for tsc itself.
+ *
+ * The family is closed on purpose. `.mjs` and `.cjs` are NOT part of it: a `.mjs` next to a `.ts`
+ * is an in-tree transpile artifact, and in this fleet it is frequently the file a tracked
+ * `package.json`, `vite.config.mjs` or test imports at runtime, with no `.ts`->`.mjs` step in the
+ * repository to regenerate it. Flagging those would demand a code migration, not an untrack.
+ * `.js.map` and `.d.ts.map` are emit by definition.
+ *
+ * Suffix stripping is iterative so that a declaration emitted FOR an emitted file still resolves
+ * to its source: `foo.js.d.ts` strips to `foo.js`, and that strips again to `foo`, which finds
+ * `foo.ts`. A single strip would look for `foo.js.ts` and report nothing.
+ *
+ * Authored ambient declarations (`vite-env.d.ts`) are not flagged: they have no same-named .ts
+ * sibling, which is exactly what makes them authored rather than emitted.
+ */
+const EMIT_SUFFIXES = ['.d.ts.map', '.js.map', '.d.ts', '.js'];
+
 function checkTrackedCompilerEmit(root) {
   try {
     const files = execSync('git ls-files', { cwd: root, encoding: 'utf8' })
@@ -72,8 +92,12 @@ function checkTrackedCompilerEmit(root) {
         continue;
       }
       const directory = join(root, dirname(file));
-      const stem = basename(file).replace(/\.d\.ts\.map$/, '').replace(/\.js\.map$/, '')
-        .replace(/\.d\.ts$/, '').replace(/\.js$/, '');
+      let stem = basename(file);
+      for (;;) {
+        const suffix = EMIT_SUFFIXES.find((candidate) => stem.endsWith(candidate));
+        if (suffix === undefined) break;
+        stem = stem.slice(0, -suffix.length);
+      }
       const hasSibling = ['ts', 'tsx'].some((ext) => existsSync(join(directory, `${stem}.${ext}`)));
       if (hasSibling) {
         offenders.push(file);

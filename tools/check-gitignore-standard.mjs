@@ -39,6 +39,23 @@ export const CANONICAL_CONTENT_IGNORE_RULES = [
     match: /^sdks\/\*\*\/generated\/\*{0,2}$/u,
     authority: 'SDK_WORKSPACE_GENERATION_SPEC.md',
   },
+  {
+    // Section 2 keeps only the emit suffixes that are emit BY DEFINITION (`*.js.map`,
+    // `*.d.ts.map`). A directory glob over an emit extension cannot express the sibling
+    // criterion, so it also hides authored declarations and real mini-program source under
+    // `src/`. Measured 2026-09-23: 136 authored files across 14 repositories.
+    id: 'broad-emit-glob',
+    match: /^!?(?:\*\*\/)?(?:src|composed)\/\*\*\/\*\.(?:js|jsx|mjs|cjs|d\.ts|d\.mts|d\.cts)$/u,
+    authority: 'REPOSITORY_BASELINE_SPEC.md section 2',
+  },
+  {
+    // A negation exists only to punch a hole in a broad glob. With the globs retired the
+    // negation is a no-op, and keeping it invites the next author to re-add the glob it was
+    // written against. The enumeration could never be complete anyway.
+    id: 'negation-in-broad-emit-glob',
+    match: /^!(?:\*\*\/)?(?:src|composed)\/\*\*\/.*\.(?:js|jsx|mjs|cjs|d\.ts|d\.mts|d\.cts)$/u,
+    authority: 'REPOSITORY_BASELINE_SPEC.md section 2',
+  },
 ];
 
 export function parseArgs(argv) {
@@ -68,7 +85,10 @@ export function findIgnoredCanonicalContent(repoRoot) {
   const lines = fs.readFileSync(gitignorePath, 'utf8').split(/\r?\n/u);
   lines.forEach((rawLine, index) => {
     const line = rawLine.trim();
-    if (line.length === 0 || line.startsWith('#') || line.startsWith('!')) {
+    // Negations are checked too, and the rule list decides: a rule that targets a negation
+    // carries a leading `!` in its own pattern. A blanket `!` skip here would make the
+    // `negation-in-broad-emit-glob` rule unreachable while reporting it as enforced.
+    if (line.length === 0 || line.startsWith('#')) {
       return;
     }
     for (const rule of CANONICAL_CONTENT_IGNORE_RULES) {

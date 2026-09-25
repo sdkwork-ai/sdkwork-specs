@@ -86,12 +86,40 @@ Rules:
   before `.ts` (Vite's default `resolve.extensions`), so the application silently runs pre-rename
   code; and `tsc` treats a `.d.ts` inside an `include`d directory as a program input, so a
   declaration left behind after a rename reports symbols that no longer exist anywhere in the
-  source tree. Root `.gitignore` `MUST` therefore ignore `*.js.map` and `*.d.ts.map`, plus
-  `*.js` and `*.d.ts` under source directories, with negations for authored ambient declarations
-  (`vite-env.d.ts`, `global.d.ts`, and similar). Because emit and source share a filename, cleanup
-  `MUST` delete only files that are untracked, carry an emit extension, and have a sibling source
-  of the same name: `git clean` without `-X` also removes untracked source files, including
-  in-progress work that was never committed.
+  source tree.
+
+  **The criterion is the sibling, not the path.** A tracked file is emit when it carries one of the
+  four emit suffixes — `*.js`, `*.js.map`, `*.d.ts`, `*.d.ts.map` — and a source file with the same
+  stem exists beside it in the same directory. Suffix stripping is iterative: `foo.js.d.ts` is the
+  declaration emitted *for* the emitted `foo.js`, so it strips twice to `foo` and is emit if
+  `foo.ts` exists. A file with no same-stem source sibling is authored, which is exactly what makes
+  `vite-env.d.ts` and module-shim declarations (`declare module '...'`) authored rather than
+  emitted. No whitelist exists and none is needed.
+
+  **The extension family is closed at those four.** `.mjs` and `.cjs` are deliberately out of
+  scope: a `.mjs` beside its `.ts` source is an in-tree transpile artifact, and in this fleet
+  `package.json`, `vite.config.mjs` and tracked tests import it at runtime while the repository
+  carries no `.ts`→`.mjs` step that would regenerate it. Treating it as emit would demand a code
+  migration, not a cleanup.
+
+  **Root `.gitignore` `MUST` therefore ignore `*.js.map` and `*.d.ts.map`, and `MUST NOT` ignore
+  `*.js` or `*.d.ts` under source directories.** The broad directory globs are prohibited, not
+  merely discouraged: `.gitignore` cannot express "ignore this only when a same-stem `.ts` sibling
+  exists", so a `**/src/**/*.d.ts` rule also hides authored declarations and real mini-program
+  source, and the `!` negations written to punch holes in it can never be complete. Measured
+  2026-09-23: the globs were hiding 136 authored files across 14 repositories — `styles.d.ts`,
+  `sdkworkAuthPcReactShim.d.ts`, `html2canvas-pro.d.ts`, `dependencyAppSdk.d.ts`, and the
+  authentic `src/app.js` / `src/pages/*/index.js` of every mini-program root — while
+  `git status` stayed clean and no gate reported anything. Emit that survives in a working tree is
+  meant to be visible: visibility plus a red gate is the signal, and a hidden file is neither.
+  `check:gitignore-standard` enforces this half.
+
+  The tracked half is enforced by `check:repository-baseline-content`, which runs the audit's
+  `tracked-compiler-emit` and `forbidden-tracked` checks across every governed repository with
+  `baseline: 0` in `gates.manifest.json`. Because emit and source share a filename, cleanup `MUST`
+  delete only files that are untracked, carry an emit extension, and have a sibling source of the
+  same name: `git clean` without `-X` also removes untracked source files, including in-progress
+  work that was never committed.
 - `.sdkwork/` follows `SDKWORK_WORKSPACE_SPEC.md`.
 - `.sdkwork/.gitignore` `MUST` ignore `local/`, `tmp/`, `cache/`, `secrets/`, and `manual-backups/`.
 

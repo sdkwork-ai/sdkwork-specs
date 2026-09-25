@@ -40,6 +40,42 @@ for (const entry of ['/bin/', 'bin/', '/bin/**', '/bin/*']) {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// --- section 2: the broad emit globs and the negations written against them -------------
+// `.gitignore` cannot express the sibling criterion, so a directory glob over an emit extension
+// hides authored source too. Measured 2026-09-23: 136 authored files across 14 repositories.
+for (const entry of ['**/src/**/*.js', '**/src/**/*.d.ts', '**/composed/**/*.js', '**/composed/**/*.d.ts', 'src/**/*.js']) {
+  const root = fixture(`node_modules/\n${entry}\ndist/\n`);
+  const findings = findIgnoredCanonicalContent(root);
+  assert.equal(findings.length, 1, `${entry} must be reported as hiding authored source`);
+  assert.equal(findings[0].rule, 'broad-emit-glob');
+  assert.equal(findings[0].line, 2);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+for (const entry of ['!**/src/**/vite-env.d.ts', '!**/src/**/global.d.ts', '!**/src/**/shims.d.ts', '!**/src/**/styles.d.ts']) {
+  const root = fixture(`node_modules/\n${entry}\n`);
+  const findings = findIgnoredCanonicalContent(root);
+  assert.equal(findings.length, 1, `${entry} must be reported as an orphan negation`);
+  assert.equal(findings[0].rule, 'negation-in-broad-emit-glob');
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// The rules that ARE the section-2 ignore set, and the negations that are legitimate.
+for (const [label, text] of [
+  ['emit by definition: js map', 'node_modules/\n*.js.map\n'],
+  ['emit by definition: declaration map', '*.d.ts.map\n'],
+  ['emit by definition: order-independent', '*.d.ts.map\n*.js.map\n'],
+  ['a general negation is not a hole in a glob', 'node_modules/\n!.env.example\n'],
+  ['a src rule outside the emit family is allowed', 'node_modules/\n**/src/**/*.snap\n'],
+  ['a nested bin negation still restores tracking', '/bin/\n!/bin/\n'],
+]) {
+  const root = fixture(text);
+  const findings = findIgnoredCanonicalContent(root);
+  const expected = label.startsWith('a nested bin negation') ? 1 : 0;
+  assert.equal(findings.length, expected, `${label}: got ${JSON.stringify(findings)}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 // --- entries that must stay untouched ---------------------------------------------------
 for (const [label, text] of [
   ['a narrower bin path is legitimate', 'node_modules/\n/bin/lib/\ndist/\n'],
