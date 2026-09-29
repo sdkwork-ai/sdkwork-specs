@@ -648,6 +648,14 @@ function resolveInlineParameter(document, parameter) {
  * payloads, and language-level SDK models (PAGINATION_SPEC.md line 9) and is not
  * an HTTP query alias.
  *
+ * Exemption: an OpenAPI document may declare `x-sdkwork-query-parameter-vendor-compat: true`
+ * when it is a verbatim mirror of a vendor wire protocol (for example the
+ * OpenAI `/v1` and Google `/google/v1beta` faces of an OpenAI-compatible
+ * gateway). Those protocols mandate camelCase (`pageSize`, `pageToken`) and
+ * bracketed (`include[]`) query names; renaming them would break upstream
+ * client SDKs. SDKWork-owned documents must never set this flag.
+ * API_SPEC section 13 documents the exemption.
+ *
  * This check exists because the failure it guards is invisible to every other
  * gate. A contract declaring `?spaceId=` while the handler deserializes
  * `space_id` under `serde(deny_unknown_fields)` describes a filter nobody can
@@ -656,6 +664,9 @@ function resolveInlineParameter(document, parameter) {
  * spec validator sees a well-formed document, so the breakage ships green.
  */
 export function classifyQueryParameterVocabulary(document, entries) {
+  if (document && document['x-sdkwork-query-parameter-vendor-compat'] === true) {
+    return [];
+  }
   const issues = [];
   for (const { routePath, method, operation } of entries) {
     const parameters = operation?.parameters;

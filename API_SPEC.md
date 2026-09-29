@@ -1357,6 +1357,7 @@ Rules:
 - Query parameter names `MUST` use lowercase URL wire names (`page_size`, `created_after`).
 - JSON request body field names `MUST` use camelCase (`pageSize`, `createdAfter`) per §13.
 - `pageSize` is the JSON/body or response field equivalent of `page_size`; it `MUST NOT` be accepted or documented as a GET query parameter.
+- **Vendor-protocol mirror exemption**: an OpenAPI document that is a verbatim mirror of a third-party wire protocol (for example the OpenAI `/v1` and Google `/google/v1beta` faces of an OpenAI-compatible gateway) `MAY` declare `x-sdkwork-query-parameter-vendor-compat: true` on the document root. Those protocols mandate their own query vocabulary (`pageSize`, `pageToken`, `include[]`); renaming it would break upstream client SDKs, so the operation-patterns validator skips the lower_snake_case query-parameter closure for marked documents only. SDKWork-owned documents `MUST NOT` set this flag.
 - List/search GET operations `MUST NOT` accept `limit`, `page_no`, `pageNo`, `per_page`, `size`, or other aliases for the standard pagination parameters. Pre-launch applications `MUST` reject those aliases with `40003 INVALID_PARAMETER` instead of silently mapping them.
 - `GET` list operations `MUST NOT` accept a request body.
 - Domain filters beyond the standard set `MUST` use explicit query parameters such as `status`, `organization_id`, or `role_id`. Each filter parameter `MUST` be typed and documented.
