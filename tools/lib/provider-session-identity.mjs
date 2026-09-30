@@ -59,6 +59,12 @@ const EXEMPT_PATH_PATTERNS = [
   /\/sdkwork-specs\/tools\/(?:check|migrate)-provider-session-identity\.mjs$/u,
   /\/sdkwork-specs\/tools\/lib\/provider-session-identity\.mjs$/u,
   /\/sdkwork-specs\/tools\/provider-session-identity\.test\.mjs$/u,
+  // The Agents Session id scheme module is the single legacy-prefix
+  // migration detector: its job is to recognize (and retire) the retired
+  // `session.native.` / `session.provider.` identifiers, so it must name
+  // them.
+  /\/sdkwork-agents\/crates\/sdkwork-intelligence-agents-service\/src\/session_id_scheme\.rs$/u,
+  /\/sdkwork-agents\/crates\/sdkwork-intelligence-agents-service\/src\/provider_session_sync\.rs$/u,
 ];
 
 export const PROVIDER_SESSION_IDENTITY_REPLACEMENTS = [
