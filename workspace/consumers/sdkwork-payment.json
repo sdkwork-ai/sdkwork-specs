@@ -1,13 +1,14 @@
 {
   "pnpm": {
     "packages": [
+      "../sdkwork-app-topology",
       "../sdkwork-appbase/packages/common/foundation/sdkwork-runtime-bootstrap",
       "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-appbase-pc-react",
       "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-i18n-pc-react",
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-user-center-core-pc-react",
+      "../sdkwork-sdk-commons/sdkwork-sdk-common-typescript",
       "../sdkwork-ui/sdkwork-ui-pc-react",
-      "../sdkwork-utils/packages/sdkwork-utils-typescript",
-      "../sdkwork-sdk-commons/sdkwork-sdk-common-typescript"
+      "../sdkwork-utils/packages/sdkwork-utils-typescript"
     ]
   },
   "catalog": {
