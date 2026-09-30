@@ -25,7 +25,11 @@
       "../sdkwork-core/sdkwork-core-pc-react",
       "../sdkwork-ui/sdkwork-ui-pc-react",
       "../sdkwork-sdk-commons/sdkwork-sdk-common-typescript",
-      "../sdkwork-utils/packages/sdkwork-utils-typescript"
+      "../sdkwork-utils/packages/sdkwork-utils-typescript",
+      "../sdkwork-app-topology",
+      "../sdkwork-ui/sdkwork-ui-mobile-react",
+      "../sdkwork-cloudrouter/sdks/cloudrouter-app-sdk/cloudrouter-app-sdk-typescript",
+      "../sdkwork-cloudrouter/sdks/cloudrouter-backend-sdk/cloudrouter-backend-sdk-typescript"
     ]
   },
   "catalog": {
