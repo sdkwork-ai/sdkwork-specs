@@ -16,6 +16,7 @@ export const IAM_PACKAGE_PATHS = {
   '@sdkwork/iam-sdk-adapter': `${IAM_COMMON_PACKAGES}/sdkwork-iam-sdk-adapter`,
   '@sdkwork/iam-application-bootstrap': `${IAM_COMMON_PACKAGES}/sdkwork-iam-application-bootstrap`,
   '@sdkwork/iam-rpc-contracts': `${IAM_COMMON_PACKAGES}/sdkwork-iam-rpc-contracts`,
+  '@sdkwork/iam-desktop-auth': `${IAM_COMMON_PACKAGES}/sdkwork-iam-desktop-auth`,
   '@sdkwork/auth-pc-react': `${IAM_PC_PACKAGES}/sdkwork-auth-pc-react`,
   '@sdkwork/auth-runtime-pc-react': `${IAM_PC_PACKAGES}/sdkwork-auth-runtime-pc-react`,
   '@sdkwork/iam-react': `${IAM_PC_PACKAGES}/sdkwork-iam-react`,
@@ -39,6 +40,10 @@ export const IAM_PNPM_WORKSPACE_PACKAGES = [
   `../${SDKWORK_IAM_REPO}/${IAM_COMMON_PACKAGES}/sdkwork-iam-sdk-adapter`,
   `../${SDKWORK_IAM_REPO}/${IAM_COMMON_PACKAGES}/sdkwork-iam-service`,
   `../${SDKWORK_IAM_REPO}/${IAM_COMMON_PACKAGES}/sdkwork-iam-application-bootstrap`,
+  // `sdkwork-auth-pc-react` depends on the desktop auth adapter via
+  // `workspace:*`; without this entry the closure is uninstallable
+  // (ERR_PNPM_WORKSPACE_PKG_NOT_FOUND).
+  `../${SDKWORK_IAM_REPO}/${IAM_COMMON_PACKAGES}/sdkwork-iam-desktop-auth`,
   `../${SDKWORK_IAM_REPO}/${IAM_PC_PACKAGES}/sdkwork-auth-pc-react`,
   `../${SDKWORK_IAM_REPO}/${IAM_PC_PACKAGES}/sdkwork-auth-runtime-pc-react`,
   `../${SDKWORK_IAM_REPO}/${IAM_PC_PACKAGES}/sdkwork-iam-react`,
