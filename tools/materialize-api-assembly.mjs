@@ -110,7 +110,7 @@ function readWorkspacePackageFields(repoRoot) {
     return fields;
   }
   for (const line of section[1].split('\n')) {
-    const match = line.match(/^(\w+)\s*=/u);
+    const match = line.match(/^([\w-]+)\s*=/u);
     if (match) {
       fields[match[1]] = true;
     }
@@ -167,6 +167,7 @@ function renderCargoToml(
   const licenseLine = workspaceFields.license ? 'license.workspace = true\n' : '';
   const editionLine = workspaceFields.edition ? 'edition.workspace = true' : 'edition = "2021"';
   const versionLine = workspaceFields.version ? 'version.workspace = true' : 'version = "0.1.0"';
+  const rustVersionLine = workspaceFields['rust-version'] ? 'rust-version.workspace = true\n' : '';
   const depLines = routeCrates
     .map((crate) => {
       const relPath = path.posix.relative(assemblyCrateDir(applicationCode), crate.memberDir);
@@ -203,9 +204,12 @@ function renderCargoToml(
 
   return `[package]
 name = "${packageName}"
-${editionLine}
+${rustVersionLine}${editionLine}
 ${licenseLine}${versionLine}
 description = "Generated API assembly for sdkwork-${applicationCode} application HTTP plane."
+
+[lints]
+workspace = true
 
 [lib]
 name = "${packageName.replace(/-/gu, '_')}"
