@@ -28,6 +28,7 @@
       "../sdkwork-iam/sdks/sdkwork-iam-backend-sdk/sdkwork-iam-backend-sdk-typescript",
       "../sdkwork-iam/sdks/sdkwork-iam-open-sdk/sdkwork-iam-open-sdk-typescript",
       "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-credential-entry",
+      "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-user-center-core",
       "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-command-pc-react"
     ]
   },
