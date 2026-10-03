@@ -109,7 +109,8 @@ apps/sdkwork-<application-code>-h5/packages/<package>/
 Rules:
 
 - `screens/` owns mobile route-level UI.
-- `navigation/` owns route metadata, tab registration, stack registration, and deep-link mapping.
+- `navigation/` owns route metadata, tab registration, stack registration, and deep-link mapping.- Shared mobile shell chrome — the page navbar (title bar with back control) and the bottom tab bar — `MUST` be defined once in the appbase shell foundation package (`@sdkwork/shell-mobile-react`) and reused by every app. App capability packages `MUST NOT` hand-roll per-screen headers or tab bars; they compose the shared components with app data (titles, back handlers, badges, action slots). Shared chrome components `MUST` stay app-agnostic (data in, events out; no app store, router-implementation, or capability imports), which keeps reuse high-cohesion and low-coupling.
+
 - `host/` owns injected host adapter contracts only, not native implementation details unless the package is a host package.
 - `services/` owns app SDK orchestration through injected clients or shared service interfaces.
 - `state/` owns mobile view/cache state and must clear sensitive state on logout and account/tenant switch.

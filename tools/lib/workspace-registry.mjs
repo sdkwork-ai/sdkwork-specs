@@ -19,6 +19,8 @@ export const FOUNDATION_PNPM_PACKAGES = [
   '../sdkwork-appbase/packages/common/foundation/sdkwork-runtime-bootstrap',
   '../sdkwork-appbase/packages/pc-react/foundation/sdkwork-appbase-pc-react',
   '../sdkwork-appbase/packages/pc-react/foundation/sdkwork-i18n-pc-react',
+  '../sdkwork-appbase/packages/mobile-react/foundation/sdkwork-appbase-mobile-react',
+  '../sdkwork-appbase/packages/mobile-react/foundation/sdkwork-shell-mobile-react',
   // `sdkwork-appbase-pc-react` depends on the base-data backend SDK via
   // `workspace:*`; without this entry the closure is uninstallable
   // (ERR_PNPM_WORKSPACE_PKG_NOT_FOUND).
