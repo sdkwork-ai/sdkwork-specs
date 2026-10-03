@@ -1,6 +1,6 @@
 # H5 Application Architecture Standard
 
-- Version: 1.1
+- Version: 1.2
 - Scope: SDKWork phone-first H5 application roots, mobile browser applications, WeChat-H5 style browser runtimes, embedded WebView mobile runtimes, and multi-platform mobile app packaging (iOS and Android) through one Capacitor host that reuses the same H5 renderer
 - Related: `SDKWORK_WORKSPACE_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `GOVERNANCE_SPEC.md`, `TEST_SPEC.md`
 
@@ -712,6 +712,7 @@ Rules:
 - App, console, and admin route prefixes `SHOULD` be distinct when they coexist in one root, for example `/app`, `/console`, and `/admin`.
 - Physical mobile paths may be shorter than PC paths, but route ids `MUST` align through `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`.
 - Deep links resolve to route ids first, then navigation adapters map the route id to stack/tab/modal/sheet presentation.
+- Bottom-tab visibility is a composition-level decision: the app root mounts route identities that own a bottom tab inside the tab-shell layout, and mounts every other identity inside a secondary stack layout that renders no tab bar. The composed route table's tab ownership `MUST` drive this split; screens `MUST NOT` toggle tab-bar visibility themselves, and secondary routes `MUST NOT` mount inside the tab-shell layout (APP_MOBILE_REACT_UI_SPEC.md §5).
 
 ## 12. Config And Manifest
 

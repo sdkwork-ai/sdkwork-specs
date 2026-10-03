@@ -1,6 +1,6 @@
 ﻿# App Mobile React UI Standard
 
-- Version: 1.1
+- Version: 1.2
 - Scope: app/user-facing and H5 user-console React mobile packages, H5 mobile web screens, Capacitor mobile renderer packages, app SDK integration
 - Related: `API_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `COMPONENT_SPEC.md`, `CONFIG_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `NAMING_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
@@ -142,6 +142,7 @@ Rules:
 - Text must fit within compact mobile containers without overlap or viewport-scaled font hacks.
 - Page surfaces `MUST` be full-bleed: the page-level container and its primary scroll body `MUST NOT` apply horizontal padding or horizontal margins, so section surfaces, media, banners, and list rows span the full viewport width edge-to-edge. Layout rhythm comes from vertical spacing and surface background contrast, not page gutters. Text-dense blocks `MAY` keep a small documented content inset inside their own surface for readability, but re-adding a page-level gutter through a shared inner wrapper on every block is forbidden. Horizontal page padding is a review failure.
 - A bottom tab bar `MUST` distinguish the selected tab with a filled icon and unselected tabs with an outline (unfilled) icon of the same glyph, and `MUST NOT` convey selection by color alone. When the icon set has no dedicated filled/outline pair, the selected state `MUST` fill the same glyph (for example `fill="currentColor"` on a stroke-based icon set). When the platform exposes a native selected-icon slot, it `MUST` be used (such as mini program `iconPath`/`selectedIconPath` or Flutter `NavigationDestination(icon:/selectedIcon:)`). Icon pairs `SHOULD` ship in both light and dark tab-bar themes or use a theme-aware tint.
+- A bottom tab bar `MUST` render only on tab-root routes. Secondary screens — stack pushes, detail, creation, and settings surfaces — `MUST NOT` render the bottom tab bar or reserve its space. Tab-bar visibility `MUST` be decided once per route at composition or shell-layout time from the surface's declared tab roots (route table or native tabBar manifest), never inside individual screens with per-screen conditionals; on platforms with a native tab bar the platform mechanism is the equivalent guarantee, and the declared tab roots remain the cross-surface source of which routes show the tab bar.
 
 ## 6. Security
 
