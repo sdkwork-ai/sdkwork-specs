@@ -1,8 +1,8 @@
 # Mini Program App Architecture Standard
 
-- Version: 1.0
+- Version: 1.1
 - Scope: SDKWork mini program application roots, SDKWork package taxonomy for mini programs, platform pages/subpackages projection, generated TypeScript app SDK integration, host adapters for mini program APIs, and cross-client route alignment
-- Related: `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APPLICATION_SPEC.md`, `NAMING_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `APP_MANIFEST_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `TEST_SPEC.md`
+- Related: `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APPLICATION_SPEC.md`, `NAMING_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `APP_MANIFEST_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines the application-root architecture for SDKWork mini program clients, including WeChat Mini Program and future Alipay, DingTalk, Lark, Baidu, QQ, Kuaishou, JD, and other mini program profiles.
 
@@ -40,6 +40,7 @@ Rules:
 - Business pages, components, services, state, i18n, and route contributions `MUST` live in packages.
 - Platform APIs such as `wx.*`, `my.*`, `dd.*`, or equivalent must be wrapped by typed host adapters.
 - Mini program packages `MUST` use generated TypeScript app SDK clients or approved appbase/mini-program wrappers. They must not call backend SDKs for user-facing workflows.
+- Mini program authored sources — the app entry, bootstrap, pages, components, services, state, i18n fragments, route metadata, and host adapters — `MUST` be written in TypeScript under the `TYPESCRIPT_CODE_SPEC.md` strict baseline (`strict: true` plus the extended strict family). Platform markup (`.wxml`/`.axml`) and styles (`.wxss`/`.acss`) stay platform-native. Platform JavaScript files under the mini program root are generated build artifacts only; hand-authored JavaScript page, bootstrap, or package sources are a review failure. Toolchains that need plain JavaScript at runtime (WeChat DevTools, `require`-based module graphs) consume compiled output, never the TypeScript sources.
 
 ## 2. Standard Root Layout
 
@@ -366,6 +367,7 @@ Required verification for mini program architecture changes:
 | Host boundary | Static scan proves feature packages do not call platform globals directly. |
 | Config boundary | Tests prove runtime and host config templates are non-secret and reject platform private keys, tokens, API keys, database URLs, and private endpoints. |
 | Package-size boundary | Checks prove root package and subpackages stay within documented platform limits when tooling supports it. |
+| Language boundary | Static checks prove authored page/bootstrap/package sources are TypeScript, strict `tsc --noEmit` passes over the whole authored graph, and platform JavaScript under `src/` is generated output only. |
 
 Acceptance checklist:
 
@@ -375,6 +377,7 @@ Acceptance checklist:
 - [ ] Package names use the `mp` segment unless a platform-specific exception is approved.
 - [ ] Generated TypeScript app SDKs or approved wrappers are injected from bootstrap/core.
 - [ ] Platform APIs are behind typed host adapters.
+- [ ] Authored mini program sources are TypeScript under the strict baseline; committed platform JavaScript is generated output only.
 - [ ] Route ids align with other client architectures where workflows match.
 - [ ] Config, manifest, platform package metadata, and release files are secret-free.
 - [ ] Verification evidence is recorded before completion.

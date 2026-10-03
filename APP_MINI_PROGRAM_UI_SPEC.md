@@ -1,8 +1,8 @@
 ﻿# App Mini Program UI Standard
 
-- Version: 1.0
+- Version: 1.1
 - Scope: app/user-facing and mini program user-console UI packages, source pages/components, route projection inputs, generated app SDK integration, mini program host adapters, and package-size-aware interaction rules
-- Related: `API_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `COMPONENT_SPEC.md`, `CONFIG_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `NAMING_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
+- Related: `API_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `COMPONENT_SPEC.md`, `CONFIG_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `NAMING_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`
 
 This standard defines how SDKWork app-side and mini program user-console UI is packaged and integrated. In application roots it is applied after `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`; in shared package families it remains the detailed mini program package standard. Mini program UI packages are user-facing or user-console packages and consume app-api through generated TypeScript app SDK clients or approved appbase mini program wrappers. They must not consume `backend-admin` UI packages or backend SDKs for user-facing workflows.
 
@@ -111,6 +111,7 @@ packages/mini-program/<domain>/<package>/
 
 Rules:
 
+- Authored page, component, service, state, route, and host-adapter sources `MUST` be TypeScript (`.ts`) under the `TYPESCRIPT_CODE_SPEC.md` strict baseline; i18n fragments follow `I18N_SPEC.md` section 6.1 (`.ts` or `.json`). Platform JavaScript beside the sources is a generated projection artifact, not an authoring venue; hand-authored JavaScript page or component sources are a review failure.
 - `src/index.ts` is the public export boundary.
 - `pages/` owns SDKWork source pages before projection into platform runtime pages.
 - `components/` owns package-local mini program components and reusable domain components.
@@ -233,6 +234,7 @@ Required coverage for new mini program UI capabilities:
 | Host boundary | Static scan proves feature pages/components do not call platform globals directly. |
 | UI states | Tests or documented fixtures cover loading, empty, validation-error, permission-denied, unavailable, and unknown-error states. |
 | I18n layout | Static scan proves authored fragments stay under `src/i18n/<locale>/<domain>/<capability>/` and generated platform resources are not hand-authored feature copy. |
+| Language boundary | Static scan proves authored page/component/service sources are TypeScript, strict typecheck passes, and platform JavaScript beside them is generated output. |
 | Package size | Build or static check proves root package/subpackage size budgets are respected when tooling supports it. |
 
 Acceptance checklist:
