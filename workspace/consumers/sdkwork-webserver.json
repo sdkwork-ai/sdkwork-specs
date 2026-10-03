@@ -60,6 +60,8 @@
       "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-core",
       "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-admin-core",
       "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-admin-storage-providers",
+      "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-admin-storage-buckets",
+      "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-file-preview",
       "../sdkwork-drive/sdks/sdkwork-drive-admin-storage-sdk/sdkwork-drive-admin-storage-sdk-typescript",
       "../sdkwork-drive/sdks/sdkwork-drive-backend-sdk/sdkwork-drive-backend-sdk-typescript"
     ]
