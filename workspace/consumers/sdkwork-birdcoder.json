@@ -67,7 +67,8 @@
       "../sdkwork-models/apps/sdkwork-models-pc/packages/sdkwork-models-pc-model-management",
       "../sdkwork-models/sdks/sdkwork-models-app-sdk/sdkwork-models-app-sdk-typescript",
       "../sdkwork-mcp/sdks/sdkwork-mcp-app-sdk/sdkwork-mcp-app-sdk-typescript",
-      "../sdkwork-deployments/sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript"
+      "../sdkwork-deployments/sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript",
+      "../sdkwork-drive/apps/sdkwork-drive-common/packages/sdkwork-drive-upload-image-core"
     ]
   },
   "catalog": {
