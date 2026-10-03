@@ -1,6 +1,6 @@
 ﻿# App Flutter UI Standard
 
-- Version: 1.0
+- Version: 1.1
 - Scope: app/user-facing and Flutter user-console packages, Flutter mobile app packages, generated app SDK integration, platform adapters
 - Related: `API_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `COMPONENT_SPEC.md`, `CONFIG_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `NAMING_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
@@ -146,6 +146,8 @@ Rules:
 - Forms must support keyboard avoidance, autofill hints where appropriate, and accessible labels.
 - QR scan, OAuth redirect, verification-code, and password reset flows must handle app lifecycle transitions.
 - Theme usage must come from the app design system or package-injected theme extensions. Domain packages must not redefine global themes.
+- Screen bodies `MUST` be full-bleed: the page-level scroll body `MUST NOT` apply horizontal `EdgeInsets` padding, and card/section surfaces `MUST` span the full window width with zero horizontal margin, so media, banners, and list tiles run edge-to-edge. Layout rhythm comes from vertical spacing and surface contrast, not page gutters. Text-dense blocks `MAY` keep a small documented content inset inside their own surface (for example `ListTile.contentPadding`), but a shared horizontal page-gutter wrapper on every screen is forbidden. Horizontal page padding is a review failure.
+- A bottom tab bar `MUST` distinguish the selected tab with a filled icon and unselected tabs with an outline (unfilled) icon of the same glyph, and `MUST NOT` convey selection by color alone. When the icon set has no dedicated filled/outline pair, the selected state `MUST` fill the same glyph (for example `fill="currentColor"` on a stroke-based icon set). When the platform exposes a native selected-icon slot, it `MUST` be used (such as mini program `iconPath`/`selectedIconPath` or Flutter `NavigationDestination(icon:/selectedIcon:)`). Icon pairs `SHOULD` ship in both light and dark tab-bar themes or use a theme-aware tint.
 
 ## 6. Security
 

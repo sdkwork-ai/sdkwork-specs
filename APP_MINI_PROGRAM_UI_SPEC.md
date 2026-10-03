@@ -210,6 +210,8 @@ Rules:
 - Login, phone authorization, QR, subscription, payment, share, and scene-entry flows must handle foreground/background transitions where the platform supports them.
 - Text must fit compact containers without overlap or viewport-scaled font hacks.
 - Package-size budgets must be considered before adding large dependencies, media, or cross-platform compatibility layers.
+- Page surfaces `MUST` be full-bleed: page containers and the `page-*` wrappers `MUST NOT` apply horizontal padding, and card/section surfaces `MUST` use zero horizontal margin so blocks, media, banners, and list rows span the full screen width edge-to-edge. Layout rhythm comes from vertical spacing and surface background contrast, not page gutters. Text-dense blocks `MAY` keep a small documented content inset inside their own surface for readability, but re-adding a page-level gutter through a shared inner `view` wrapper on every block is forbidden. Horizontal page padding is a review failure.
+- A bottom tab bar `MUST` distinguish the selected tab with a filled icon and unselected tabs with an outline (unfilled) icon of the same glyph, and `MUST NOT` convey selection by color alone. When the icon set has no dedicated filled/outline pair, the selected state `MUST` fill the same glyph (for example `fill="currentColor"` on a stroke-based icon set). When the platform exposes a native selected-icon slot, it `MUST` be used (such as mini program `iconPath`/`selectedIconPath` or Flutter `NavigationDestination(icon:/selectedIcon:)`). Icon pairs `SHOULD` ship in both light and dark tab-bar themes or use a theme-aware tint.
 
 ## 8. Security
 
