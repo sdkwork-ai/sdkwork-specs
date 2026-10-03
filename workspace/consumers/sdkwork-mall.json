@@ -15,6 +15,7 @@
       "../sdkwork-promotion/sdks/sdkwork-promotion-backend-sdk/sdkwork-promotion-backend-sdk-typescript",
       "../sdkwork-payment/apps/sdkwork-payment-common/packages/*",
       "../sdkwork-payment/sdks/sdkwork-payment-app-sdk/sdkwork-payment-app-sdk-typescript",
+      "../sdkwork-im/sdks/sdkwork-im-app-sdk/sdkwork-im-app-sdk-typescript",
       "../sdkwork-appbase/packages/common/foundation/sdkwork-runtime-bootstrap",
       "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-appbase-pc-react",
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-auth-pc-react",
