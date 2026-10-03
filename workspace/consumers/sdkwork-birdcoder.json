@@ -60,7 +60,8 @@
       "../sdkwork-core/sdkwork-core-pc-react",
       "../sdkwork-ui/sdkwork-ui-pc-react",
       "../sdkwork-sdk-commons/sdkwork-sdk-common-typescript",
-      "../sdkwork-utils/packages/sdkwork-utils-typescript"
+      "../sdkwork-utils/packages/sdkwork-utils-typescript",
+      "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-desktop-auth"
     ]
   },
   "catalog": {
