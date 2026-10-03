@@ -22,11 +22,16 @@
       "../sdkwork-iam/sdks/sdkwork-iam-backend-sdk/sdkwork-iam-backend-sdk-typescript/src/index.ts",
       "../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript",
       "../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript/src/index.ts",
+      "../sdkwork-drive/apps/sdkwork-drive-common/packages/sdkwork-drive-upload-image-core",
+      "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-upload-image",
       "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-application-bootstrap",
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-react",
       "../sdkwork-iam/sdks/sdkwork-iam-app-sdk/sdkwork-iam-app-sdk-typescript",
       "../sdkwork-iam/sdks/sdkwork-iam-backend-sdk/sdkwork-iam-backend-sdk-typescript",
-      "../sdkwork-iam/sdks/sdkwork-iam-open-sdk/sdkwork-iam-open-sdk-typescript"
+      "../sdkwork-iam/sdks/sdkwork-iam-open-sdk/sdkwork-iam-open-sdk-typescript",
+      "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-command-pc-react",
+      "../sdkwork-search/apps/sdkwork-search-pc/packages/sdkwork-search-pc-react",
+      "../sdkwork-search/apps/sdkwork-search-common/packages/sdkwork-search-contracts"
     ]
   },
   "catalog": {

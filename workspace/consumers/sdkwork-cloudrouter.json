@@ -203,6 +203,8 @@
       "../sdkwork-order/apps/sdkwork-order-pc/packages/sdkwork-order-pc-core",
       "../sdkwork-payment/apps/sdkwork-payment-pc/packages/sdkwork-payment-pc-core",
       "../sdkwork-drive/sdks/sdkwork-drive-sdk/sdkwork-drive-sdk-typescript",
+      "../sdkwork-drive/apps/sdkwork-drive-common/packages/sdkwork-drive-upload-image-core",
+      "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-upload-image",
       "../sdkwork-community/sdks/sdkwork-community-backend-sdk/sdkwork-community-backend-sdk-typescript",
       "../sdkwork-order/apps/sdkwork-order-pc/packages/sdkwork-order-pc-admin-orders",
       "../sdkwork-order/apps/sdkwork-order-pc/packages/sdkwork-order-pc-admin-trade",
