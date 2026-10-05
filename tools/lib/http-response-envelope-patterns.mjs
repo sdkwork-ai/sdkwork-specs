@@ -129,10 +129,16 @@ export function walkOpenApiFiles(root, acc = []) {
     const full = path.join(root, ent.name);
     let stat;
     try {
-      stat = fs.statSync(full);
+      // lstat, not stat: dependency managers leave junction/symlink cycles in
+      // place (pnpm `node_modules.__stale__donor*` debris), and following them
+      // makes this walk revisit the same physical tree under ever-growing
+      // logical paths. OpenAPI authorities are never reached through a
+      // symlink, so symlinked entries are skipped outright.
+      stat = fs.lstatSync(full);
     } catch {
       continue;
     }
+    if (stat.isSymbolicLink()) continue;
     if (stat.isDirectory()) walkOpenApiFiles(full, acc);
     else if (isAppOrBackendApiOpenApi(full)) acc.push(full);
   }
