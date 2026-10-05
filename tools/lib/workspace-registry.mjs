@@ -166,7 +166,7 @@ export function parsePnpmWorkspaceSettings(text) {
         : value;
       continue;
     }
-    const entry = line.match(/^\s+([A-Za-z0-9_-]+):\s*(.+?)\s*$/u);
+    const entry = line.match(/^\s+["']?([A-Za-z0-9_@/.-]+)["']?\s*:\s*(.+?)\s*$/u);
     if (entry && current) {
       const value = entry[2];
       settings[current][entry[1]] = value.startsWith('"') && value.endsWith('"')
@@ -220,7 +220,8 @@ export function renderPnpmWorkspace({ packages, catalog, settings }) {
     if (value !== null && typeof value === 'object') {
       lines.push(`${key}:`);
       for (const [innerKey, innerValue] of Object.entries(value)) {
-        lines.push(`  ${innerKey}: ${String(innerValue)}`);
+        const renderedKey = /[^A-Za-z0-9_-]/u.test(innerKey) ? `"${innerKey}"` : innerKey;
+        lines.push(`  ${renderedKey}: ${String(innerValue)}`);
       }
     } else {
       lines.push(`${key}: ${value}`);
