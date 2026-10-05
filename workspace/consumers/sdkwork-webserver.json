@@ -67,7 +67,9 @@
       "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-marketplace",
       "../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-admin-core",
       "../sdkwork-deployments/sdks/sdkwork-deployments-backend-sdk/sdkwork-deployments-backend-sdk-typescript",
-      "../sdkwork-order/sdks/sdkwork-order-app-sdk/sdkwork-order-app-sdk-typescript"
+      "../sdkwork-order/sdks/sdkwork-order-app-sdk/sdkwork-order-app-sdk-typescript",
+      "../sdkwork-appbase/packages/mobile-react/foundation/sdkwork-appbase-mobile-react",
+      "../sdkwork-appbase/packages/mobile-react/foundation/sdkwork-shell-mobile-react"
     ]
   },
   "catalog": {
