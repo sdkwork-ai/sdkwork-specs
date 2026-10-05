@@ -5,7 +5,8 @@ import path from 'node:path';
 import {
   buildWorkspaceCatalog,
   buildWorkspacePackages,
-  parsePnpmWorkspaceCatalog,
+  parsePnpmWorkspaceCatalog,
+  parsePnpmWorkspaceSettings,
   parsePnpmWorkspacePackages,
   renderPnpmWorkspace,
   isSiblingPackageEntry,
@@ -51,10 +52,13 @@ function main() {
   const existingPackages = parsePnpmWorkspacePackages(existing);
   const localPackages = existingPackages.filter((entry) => !isSiblingPackageEntry(entry));
   const existingCatalog = parsePnpmWorkspaceCatalog(existing);
+  // Everything besides packages/catalog is repo-owned policy; hand it back
+  // to the renderer verbatim so sync never deletes it.
+  const settings = parsePnpmWorkspaceSettings(existing);
 
   const packages = buildWorkspacePackages(localPackages, args.repo);
   const catalog = buildWorkspaceCatalog(existingCatalog, args.repo);
-  const rendered = renderPnpmWorkspace({ packages, catalog });
+  const rendered = renderPnpmWorkspace({ packages, catalog, settings });
 
   if (args.check) {
     const currentPackages = [...existingPackages].sort();

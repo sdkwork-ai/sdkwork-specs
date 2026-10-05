@@ -136,6 +136,47 @@ export function isSiblingPackageEntry(entry) {
   return entry.startsWith('../');
 }
 
+/**
+ * Repo-owned top-level settings in pnpm-workspace.yaml — anything besides the
+ * `packages` and `catalog` mappings this tool manages (for example
+ * `linkWorkspacePackages`, `preferWorkspacePackages`, `overrides`). Scalars
+ * pass through as strings; mappings become nested objects so the renderer can
+ * emit them back verbatim.
+ */
+export function parsePnpmWorkspaceSettings(text) {
+  const settings = {};
+  let current = null;
+  for (const line of text.split(/\r?\n/u)) {
+    if (/^packages:\s*$/u.test(line) || /^catalog:\s*$/u.test(line)) {
+      current = null;
+      continue;
+    }
+    const mapping = line.match(/^([A-Za-z0-9_-]+):\s*$/u);
+    if (mapping && !line.startsWith(' ')) {
+      current = mapping[1];
+      settings[current] = {};
+      continue;
+    }
+    const scalar = line.match(/^([A-Za-z0-9_-]+):\s*(.+?)\s*$/u);
+    if (scalar && !line.startsWith(' ')) {
+      current = null;
+      const value = scalar[2];
+      settings[scalar[1]] = value.startsWith('"') && value.endsWith('"')
+        ? JSON.parse(value)
+        : value;
+      continue;
+    }
+    const entry = line.match(/^\s+([A-Za-z0-9_-]+):\s*(.+?)\s*$/u);
+    if (entry && current) {
+      const value = entry[2];
+      settings[current][entry[1]] = value.startsWith('"') && value.endsWith('"')
+        ? JSON.parse(value)
+        : value;
+    }
+  }
+  return settings;
+}
+
 export function uniquePackages(entries) {
   return [...new Set(entries)];
 }
@@ -157,7 +198,7 @@ export function buildWorkspaceCatalog(existingCatalog, repoName) {
   return { ...DEFAULT_CATALOG, ...existingCatalog, ...overlay.catalog };
 }
 
-export function renderPnpmWorkspace({ packages, catalog }) {
+export function renderPnpmWorkspace({ packages, catalog, settings }) {
   const lines = ['packages:'];
   for (const entry of packages) {
     lines.push(`  - "${entry}"`);
@@ -168,6 +209,21 @@ export function renderPnpmWorkspace({ packages, catalog }) {
       const renderedKey = /[^A-Za-z0-9_-]/u.test(key) ? `"${key}"` : key;
       const renderedValue = /\s/u.test(value) ? JSON.stringify(value) : value;
       lines.push(`  ${renderedKey}: ${renderedValue}`);
+    }
+  }
+  // Repo-owned settings (linkWorkspacePackages, preferWorkspacePackages,
+  // overrides, ...) live beside packages/catalog in pnpm-workspace.yaml and
+  // are outside this tool's authority: carry them through verbatim so a sync
+  // never silently deletes an operator's resolution policy.
+  for (const [key, value] of Object.entries(settings ?? {})) {
+    lines.push('');
+    if (value !== null && typeof value === 'object') {
+      lines.push(`${key}:`);
+      for (const [innerKey, innerValue] of Object.entries(value)) {
+        lines.push(`  ${innerKey}: ${String(innerValue)}`);
+      }
+    } else {
+      lines.push(`${key}: ${value}`);
     }
   }
   lines.push('');
