@@ -3,6 +3,7 @@
     "packages": [
       "../sdkwork-app-topology",
       "../sdkwork-ui/sdkwork-ui-pc-react",
+      "../sdkwork-ui/sdkwork-ui-mobile-react",
       "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-appbase-pc-react",
       "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-i18n-pc-react",
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-auth-pc-react",
@@ -32,8 +33,8 @@
     ]
   },
   "catalog": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "typescript": "^6.0.2",
     "vite": "^8.0.3",
     "@types/react": "^19.2.14",
