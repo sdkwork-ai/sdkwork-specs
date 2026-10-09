@@ -206,6 +206,7 @@
       "../sdkwork-drive/apps/sdkwork-drive-common/packages/sdkwork-drive-upload-image-core",
       "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-upload-image",
       "../sdkwork-community/sdks/sdkwork-community-backend-sdk/sdkwork-community-backend-sdk-typescript",
+      "../sdkwork-course/sdks/sdkwork-course-backend-sdk/sdkwork-course-backend-sdk-typescript",
       "../sdkwork-order/apps/sdkwork-order-pc/packages/sdkwork-order-pc-admin-orders",
       "../sdkwork-order/apps/sdkwork-order-pc/packages/sdkwork-order-pc-admin-trade",
       "../sdkwork-rtc/apps/sdkwork-rtc-pc/packages/sdkwork-rtc-pc-admin-core",
