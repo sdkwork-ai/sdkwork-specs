@@ -255,7 +255,14 @@ function validateAgents(root) {
       'HTTP API Response Envelope',
       'List And Search Pagination',
     ]) {
-      if (hasHeading(text, duplicatedHeading)) {
+      // AGENTS_SPEC.md mandates these canonical sections; only a DUPLICATED
+      // section (a stale re-insert next to the managed block) is a violation.
+      const headingPattern = new RegExp(
+        `^##\\s+${duplicatedHeading.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}\\s*$`,
+        'gimu',
+      );
+      const headingOccurrences = Array.from(text.matchAll(headingPattern)).length;
+      if (headingOccurrences > 1) {
         issues.push(`${label} must route ${duplicatedHeading} work to global specs instead of copying the normative body`);
       }
     }
