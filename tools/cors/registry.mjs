@@ -48,12 +48,18 @@ export const CORS_ORIGIN_KEY = /^[A-Z0-9_]*(?:CORS|ALLOWED_ORIGINS)[A-Z0-9_]*$/u
  * Non-browser origins every lifecycle environment must carry, production
  * included: desktop WebView shells, the Mini Program runtime, and the
  * first-party `dsh` shell (WEB_FRAMEWORK_SPEC.md section 12).
+ *
+ * `app://dsh` and `dsh-app://app` are DISTINCT origins, not duplicate spellings
+ * of one shell: the first is scheme `app` with host `dsh`; the second is scheme
+ * `dsh-app` with host `app`, as registered by the Electron desktop shell for its
+ * application document. Both are first-party and every environment carries both.
  */
 export const CORS_CLIENT_ORIGINS = Object.freeze([
   'app://dsh',
   'app://birdcoder',
   'app://sdkwork',
   'app://dtupay',
+  'dsh-app://app',
   'tauri://localhost',
   'https://servicewechat.com',
 ]);

@@ -44,7 +44,7 @@ the spec to match the carrier.
 | **Role host** | The single-label registry role of a surface, e.g. `im`, `code`, `server-app`, `api`. |
 | **Console host** | `<role>[-<environment-suffix>].<base-domain>`, the public host where a browser surface is served. |
 | **Browser-facing surface** | A `cloudPublicHosts` entry that terminates HTTP for browsers: `application.public-ingress`, `application.app-http`, `application.backend-http`, `application.admin-http`, `application.open-http`, `edge.device-ingress`. `platform.api-gateway` is a **target**, not an origin carrier: a module's own allowlist does not list it. |
-| **Client origin** | A fixed, non-HTTP first-party shell origin (`app://…`, `tauri://localhost`, the Mini Program runtime). |
+| **Client origin** | A fixed, non-HTTP first-party shell origin (`app://…`, `dsh-app://app`, `tauri://localhost`, the Mini Program runtime). |
 | **Loopback seed** | A development-only `http://127.0.0.1:<port>` / `http://localhost:<port>` origin derived from a browser-reachable development bind. |
 
 ## 2. Layered Authority
@@ -138,7 +138,7 @@ loopback origin.
 
 ### 4.3 Client Origins
 
-Every lifecycle environment, production included, carries exactly these six
+Every lifecycle environment, production included, carries exactly these seven
 origins. Runtime assembly merges them (`WEB_FRAMEWORK_SPEC.md` §12); carrier
 repetition is permitted and is the canonical materialisation.
 
@@ -147,9 +147,17 @@ app://dsh
 app://birdcoder
 app://sdkwork
 app://dtupay
+dsh-app://app
 tauri://localhost
 https://servicewechat.com
 ```
+
+`app://dsh` and `dsh-app://app` are **distinct origins, not two spellings of the
+same shell**: `app://dsh` is scheme `app` with host `dsh`, while `dsh-app://app`
+is scheme `dsh-app` with host `app` — the scheme the Electron desktop shell
+registers for its application document. A shell that renames its custom scheme
+emits a different `Origin`, so removing either entry is a regression for the
+shell that emits it. Both are carried; neither substitutes for the other.
 
 ### 4.4 Preserved Extras
 
@@ -348,7 +356,7 @@ hand-edit a label list in a carrier; the label list is derived.
       deduplicated, canonically ordered `SDKWORK_CORS_ALLOWED_ORIGINS`.
 - [ ] `standalone.*` and `cloud.*` profiles of the same module are both complete.
 - [ ] Production-like profiles carry no loopback origin and no plain-HTTP host.
-- [ ] All six client origins are present in every lifecycle environment.
+- [ ] All seven client origins are present in every lifecycle environment.
 - [ ] Every console host origin has a registered base domain and no port.
 - [ ] Retired application-scoped allowlist keys are absent.
 - [ ] Every repository with carriers declares `check:cors-standard` and

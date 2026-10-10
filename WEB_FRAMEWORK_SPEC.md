@@ -364,11 +364,11 @@ The framework enforces secure defaults without per-route business configuration:
   fail startup when `allowAnyOrigin` is enabled or `allowedOrigins` is empty. Empty means deny all
   browser origins; it `MUST NOT` be interpreted as same-origin discovery. Each entry `MUST` be an
   exact origin without a wildcard, path, query, or fragment: an HTTP(S) origin, or a registered
-  desktop custom-scheme origin such as `app://dsh` or `tauri://localhost`. Browser and desktop
-  WebView callers use the same allowlist, including OAuth authorization and callback completion
-  requests. Unregistered schemes (`javascript:`, `data:`, `file:`) remain forbidden.
+  desktop custom-scheme origin such as `app://dsh`, `dsh-app://app`, or `tauri://localhost`. Browser
+  and desktop WebView callers use the same allowlist, including OAuth authorization and callback
+  completion requests. Unregistered schemes (`javascript:`, `data:`, `file:`) remain forbidden.
 - Registered first-party client origins (desktop WebView custom schemes `app://dsh`, `app://birdcoder`,
-  `app://sdkwork`, `app://dtupay`, `tauri://localhost`, and the mini program runtime
+  `app://sdkwork`, `app://dtupay`, `dsh-app://app`, `tauri://localhost`, and the mini program runtime
   `https://servicewechat.com`) `MUST` be merged into the effective CORS policy in every lifecycle
   environment, production included. Deployments `MAY` repeat them in `SDKWORK_CORS_ALLOWED_ORIGINS`
   but `MUST NOT` need to; runtime assembly owns the merge.
