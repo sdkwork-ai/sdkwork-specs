@@ -190,7 +190,7 @@ export function validateAppManifestWorkflowAlignment(
   manifest,
   workflow,
   manifestLabel = 'agent.app.config.json',
-  workflowLabel = 'sdkwork.workflow.json',
+  workflowLabel = 'agent.workflow.json',
 ) {
   const issues = [];
   const packages = new Map(
@@ -248,7 +248,7 @@ function main() {
   const manifestLabel = path.relative(root, configPath);
   const issues = validateAppManifestDeployment(manifest, manifestLabel);
   if (parsed.values['strict-release-targets']) {
-    const workflowPath = path.resolve(root, parsed.values.workflow ?? 'sdkwork.workflow.json');
+    const workflowPath = path.resolve(root, parsed.values.workflow ?? 'agent.workflow.json');
     if (!fs.existsSync(workflowPath)) {
       issues.push(`${manifestLabel}: strict release target alignment requires ${path.relative(root, workflowPath)}`);
     } else {

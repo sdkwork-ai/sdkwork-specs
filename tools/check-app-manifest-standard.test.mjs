@@ -184,8 +184,8 @@ test('enforces store media dimensions and immutable container URLs', () => {
   manifest.artifacts.installConfig.packages[0].id = 'container-x64-cloud-container-oci';
   manifest.artifacts.installConfig.packages[0].url = 'https://registry.sdkwork.com/demo:latest';
   const issues = validateAppManifest(manifest);
-  assert.ok(issues.some((issue) => issue.includes('feature graphic')));
-  assert.ok(issues.some((issue) => issue.includes('at least two screenshots')));
+  assert.ok(issues.some((issue) => issue.includes('FEATURE_GRAPHIC')));
+  assert.ok(issues.some((issue) => issue.includes('at least 2 screenshots')));
   assert.ok(issues.some((issue) => issue.includes('immutable OCI')));
 });
 
@@ -211,4 +211,22 @@ test('requires static checksums for direct distribution but not build scripts', 
   assert.ok(
     validateAppManifest(directManifest).some((issue) => issue.includes('checksum is required')),
   );
+});
+
+test('accepts a committed path as a media source', () => {
+  const manifest = validManifest();
+  manifest.media.icons.primary = {
+    id: 'primary-icon',
+    type: 'ICON',
+    purpose: 'PRIMARY',
+    path: 'assets/media/icons/icon-1024.png',
+    width: 1024,
+    height: 1024,
+    format: 'PNG',
+    fileSizeBytes: 1024,
+    alphaChannel: false,
+    locale: 'en-US',
+  };
+  const issues = validateAppManifest(manifest);
+  assert.ok(!issues.some((issue) => issue.includes('media requires')));
 });

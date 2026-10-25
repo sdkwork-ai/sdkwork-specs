@@ -1,0 +1,245 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.app-assets.profiles",
+  "updatedAt": "2026-10-25",
+  "authority": "APP_ASSETS_SPEC.md section 8",
+  "profiles": {
+    "SDKWORK_APPSTORE": {
+      "displayName": "SDKWork App Store catalog",
+      "kind": "catalog",
+      "sourceUrl": "APP_ASSETS_SPEC.md#8-store-submission-profiles",
+      "verifiedAt": "2026-10-25",
+      "verificationNote": "Catalog rules are SDKWork-owned and versioned with this standard.",
+      "assets": {
+        "ICON": {
+          "required": true,
+          "exactSizes": [[1024, 1024]],
+          "formats": ["PNG"],
+          "alpha": false,
+          "maxBytes": 2097152
+        },
+        "COVER": {
+          "required": true,
+          "perLocale": 1,
+          "exactSizes": [[1920, 1080]],
+          "formats": ["PNG", "WEBP"],
+          "alpha": false,
+          "maxBytes": 5242880
+        },
+        "SCREENSHOT": {
+          "required": true,
+          "min": 1,
+          "max": 10,
+          "formats": ["PNG", "JPG", "JPEG", "WEBP"],
+          "alpha": false,
+          "minSide": 320,
+          "maxSide": 3840,
+          "maxAspect": 2.25
+        },
+        "PREVIEW_IMAGE": {
+          "required": false,
+          "formats": ["PNG", "JPG", "JPEG", "WEBP"],
+          "minSide": 320,
+          "maxSide": 3840,
+          "maxAspect": 3
+        },
+        "POSTER": {
+          "required": false,
+          "formats": ["PNG", "JPG", "JPEG", "WEBP"],
+          "minSide": 512,
+          "maxSide": 4096,
+          "maxAspect": 3
+        },
+        "PREVIEW_VIDEO": {
+          "required": false,
+          "maxPerGroup": 3,
+          "formats": ["MP4", "MOV", "M4V"],
+          "minDuration": 10,
+          "maxDuration": 60,
+          "maxBytes": 524288000
+        }
+      }
+    },
+    "APPLE_APP_STORE": {
+      "displayName": "Apple App Store",
+      "kind": "vendor-store",
+      "sourceUrl": "https://developer.apple.com/help/app-store-connect/reference/screenshot-specifications/",
+      "verifiedAt": "2026-10-25",
+      "verificationNote": "Carried forward from APP_MANIFEST_SPEC v3 section 8; re-verify against App Store Connect before each submission.",
+      "assets": {
+        "ICON": {
+          "required": true,
+          "exactSizes": [[1024, 1024]],
+          "formats": ["PNG"],
+          "alpha": false
+        },
+        "SCREENSHOT": {
+          "required": true,
+          "formats": ["PNG", "JPG", "JPEG"],
+          "alpha": false,
+          "groups": {
+            "IPHONE_6_9": {
+              "min": 1,
+              "max": 10,
+              "sizes": [
+                [1320, 2868],
+                [1290, 2796],
+                [1260, 2736],
+                [2868, 1320],
+                [2796, 1290],
+                [2736, 1260]
+              ]
+            },
+            "IPHONE_6_5": {
+              "min": 0,
+              "max": 10,
+              "sizes": [
+                [1242, 2688],
+                [1284, 2778],
+                [2688, 1242],
+                [2778, 1284]
+              ]
+            },
+            "IPAD_13": {
+              "min": 0,
+              "max": 10,
+              "requiresTargetPlatform": "ipados",
+              "sizes": [
+                [2064, 2752],
+                [2048, 2732],
+                [2752, 2064],
+                [2732, 2048]
+              ]
+            }
+          }
+        },
+        "PREVIEW_VIDEO": {
+          "required": false,
+          "maxPerGroup": 3,
+          "formats": ["MOV", "MP4", "M4V"],
+          "minDuration": 15,
+          "maxDuration": 30
+        }
+      }
+    },
+    "GOOGLE_PLAY": {
+      "displayName": "Google Play",
+      "kind": "vendor-store",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9866151",
+      "verifiedAt": "2026-10-25",
+      "verificationNote": "Carried forward from APP_MANIFEST_SPEC v3 section 8; re-verify against Play Console before each submission.",
+      "assets": {
+        "ICON": {
+          "required": true,
+          "exactSizes": [[512, 512]],
+          "formats": ["PNG"],
+          "alpha": true,
+          "maxBytes": 1048576
+        },
+        "FEATURE_GRAPHIC": {
+          "required": true,
+          "exactSizes": [[1024, 500]],
+          "formats": ["PNG", "JPG", "JPEG"],
+          "alpha": false
+        },
+        "SCREENSHOT": {
+          "required": true,
+          "min": 2,
+          "max": 8,
+          "formats": ["PNG", "JPG", "JPEG"],
+          "alpha": false,
+          "minSide": 320,
+          "maxSide": 3840,
+          "maxAspect": 2,
+          "groups": {
+            "ANDROID_PHONE": {
+              "min": 2,
+              "max": 8
+            },
+            "ANDROID_TABLET_7": {
+              "min": 0,
+              "max": 8,
+              "requiresTargetPlatform": "android-tablet"
+            },
+            "ANDROID_TABLET_10": {
+              "min": 0,
+              "max": 8,
+              "requiresTargetPlatform": "android-tablet"
+            }
+          }
+        },
+        "PREVIEW_VIDEO": {
+          "required": false,
+          "maxPerGroup": 3,
+          "external": true,
+          "urlHosts": ["youtube.com", "www.youtube.com", "youtu.be", "m.youtube.com"]
+        }
+      }
+    },
+    "HUAWEI_APPGALLERY": {
+      "displayName": "Huawei AppGallery",
+      "kind": "vendor-store",
+      "sourceUrl": "https://developer.huawei.com/consumer/en/doc/distribution/app/50104",
+      "verifiedAt": "2026-10-25",
+      "provisional": true,
+      "verificationNote": "Profile introduced by APP_ASSETS_SPEC v1.0. Numeric constraints are conservative and MUST be re-verified in AppGallery Connect before the first submission.",
+      "assets": {
+        "ICON": {
+          "required": true,
+          "exactSizes": [[216, 216]],
+          "formats": ["PNG"],
+          "alpha": false
+        },
+        "SCREENSHOT": {
+          "required": true,
+          "min": 3,
+          "max": 8,
+          "formats": ["PNG", "JPG", "JPEG"],
+          "minSide": 320,
+          "maxSide": 3840,
+          "maxAspect": 2
+        },
+        "PREVIEW_VIDEO": {
+          "required": false,
+          "maxPerGroup": 1,
+          "formats": ["MP4", "MOV"],
+          "minDuration": 10,
+          "maxDuration": 60
+        }
+      }
+    },
+    "MICROSOFT_STORE": {
+      "displayName": "Microsoft Store",
+      "kind": "vendor-store",
+      "sourceUrl": "https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/upload-app-screenshots",
+      "verifiedAt": "2026-10-25",
+      "provisional": true,
+      "verificationNote": "Profile introduced by APP_ASSETS_SPEC v1.0. Numeric constraints are conservative and MUST be re-verified in Partner Center before the first submission.",
+      "assets": {
+        "ICON": {
+          "required": true,
+          "exactSizes": [[300, 300]],
+          "formats": ["PNG"],
+          "alpha": false
+        },
+        "SCREENSHOT": {
+          "required": true,
+          "min": 1,
+          "max": 10,
+          "formats": ["PNG", "JPG", "JPEG"],
+          "alpha": false,
+          "minSide": 768,
+          "maxSide": 3840,
+          "maxAspect": 2
+        },
+        "PREVIEW_VIDEO": {
+          "required": false,
+          "maxPerGroup": 1,
+          "formats": ["MP4", "MOV"],
+          "minDuration": 15,
+          "maxDuration": 120
+        }
+      }
+    }
+  }
+}

@@ -139,7 +139,7 @@ export function planReleaseDeployFacadeAlignment(repoRoot, { scope = 'all' } = {
   const nextManifest = structuredClone(manifest);
   nextManifest.scripts ??= {};
   const actions = [];
-  const workflowPath = path.join(repoRoot, 'sdkwork.workflow.json');
+  const workflowPath = path.join(repoRoot, 'agent.workflow.json');
   if (scope !== 'deploy' && fs.existsSync(workflowPath)) {
     const workflow = readJson(workflowPath);
     const profiles = releaseProfiles(workflow);

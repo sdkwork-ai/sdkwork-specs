@@ -2,7 +2,7 @@
 
 - Version: 1.0
 - Scope: app registration, app manifest, release metadata, install packages, media assets, platform_app projection
-- Related: `SOURCE_CONFIG_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `NAMING_SPEC.md`, `APPLICATION_SPEC.md`, `IAM_APPLICATION_BOOTSTRAP_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `CONFIG_SPEC.md`, `DEPENDENCY_MANAGEMENT_SPEC.md`, `DEPLOYMENT_SPEC.md`, `DRIVE_SPEC.md`, `MEDIA_RESOURCE_SPEC.md`, `SECURITY_SPEC.md`, `DOCUMENTATION_SPEC.md`
+- Related: `SOURCE_CONFIG_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `NAMING_SPEC.md`, `APPLICATION_SPEC.md`, `IAM_APPLICATION_BOOTSTRAP_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `CONFIG_SPEC.md`, `DEPENDENCY_MANAGEMENT_SPEC.md`, `DEPLOYMENT_SPEC.md`, `DRIVE_SPEC.md`, `MEDIA_RESOURCE_SPEC.md`, `APP_ASSETS_SPEC.md`, `SECURITY_SPEC.md`, `DOCUMENTATION_SPEC.md`
 
 SDKWork App Manifest Standard v3 defines the canonical app configuration used by new applications under `apps/`. The standard is intentionally strict: new apps do not carry legacy compatibility branches, and every field is designed to map cleanly into `platform_app` while retaining enough metadata for professional multi-platform release operations.
 
@@ -32,6 +32,9 @@ second manifest authority. Each real app directory uses the unsuffixed canonical
 
 The same `<app-root>` `MUST` contain the source-controlled `.sdkwork/` workspace required by
 `SDKWORK_WORKSPACE_SPEC.md`, including `.sdkwork/skills/` and `.sdkwork/plugins/`.
+The same `<app-root>` `MUST` contain the governed `assets/` root required by
+`APP_ASSETS_SPEC.md`: catalog and store media source bytes, type resources, and the
+capture configuration when the application ships a UI or authored content.
 When the application is independently deployable, the same root `MUST` contain source-controlled
 `etc/` governed by `SOURCE_CONFIG_SPEC.md`.
 
@@ -47,12 +50,12 @@ When the application is independently deployable, the same root `MUST` contain s
   must name the canonical `etc/` replacement.
 - `.sdkwork/` is the source-controlled workspace metadata directory for the same application root. It stores local skills and plugins; it does not store manifest release payloads, runtime state, generated SDK transport output, or user-private data.
 - `platform_app` is the database projection, not a second independent source.
-- App icons, screenshots, and preview assets are governed data, not loose files. SDKWork-owned media bytes must be stored through Drive, represented as `MediaResource` where app APIs expose them, and projected into `platform_app.config.media`.
+- App icons, covers, screenshots, posters, and preview assets are governed data, not loose files. Source bytes live under the application `assets/` root per `APP_ASSETS_SPEC.md`; SDKWork-owned media bytes must be stored through Drive, represented as `MediaResource` where app APIs expose them, and projected into `platform_app.config.media`.
 - Backend enum names are used verbatim. Do not invent aliases such as `DESKTOP_UBUNTU`; use `DESKTOP_LINUX` plus package metadata for the Linux distribution.
 - Latest download resolution is a matrix query across version, channel, platform, architecture, and optional Linux distribution.
 - Production release artifacts require immutable URLs or digests, checksums, signing metadata, and SBOM/provenance references.
 - The manifest must never contain passwords, access tokens, API keys, private keys, or credentials.
-- Source/build dependency checkout roots are governed by `DEPENDENCY_MANAGEMENT_SPEC.md` and `sdkwork.workflow.json`; app manifests must not carry machine-specific dependency source paths.
+- Source/build dependency checkout roots are governed by `DEPENDENCY_MANAGEMENT_SPEC.md` and `agent.workflow.json`; app manifests must not carry machine-specific dependency source paths.
 - App manifests must not become gateway catalogs. When an application or gateway manifest records
   dependency SDK/runtime references, those entries must point to existing SDKWork dependency
   declarations, component specs, SDK family manifest metadata, and native build-tool evidence such as Cargo
@@ -288,11 +291,16 @@ Rules:
 
 ## 7. Media Assets
 
-Every app must define governed product media. These assets support the SDKWork app catalog, registration UI, App Store Connect, Google Play Console, desktop download pages, and future app-preview surfaces.
+Media semantics, the `assets/` directory contract, the per-`appType` media matrix, creation-time capture, cover/preview composition, and store submission profiles are owned by `APP_ASSETS_SPEC.md`. This section defines the manifest shape and the projection binding only.
 
 ```json
 {
   "media": {
+    "metadata": {
+      "standard": "sdkwork-app-assets.v1",
+      "defaultLocale": "en-US",
+      "assetVersion": "1.0.0"
+    },
     "icons": {
       "primary": {},
       "platform": []
@@ -303,59 +311,54 @@ Every app must define governed product media. These assets support the SDKWork a
 }
 ```
 
-`media.icons.primary` is the canonical SDKWork app icon. It should be a 1024 x 1024 PNG with no embedded secrets or environment-specific URLs. It projects to `platform_app.iconUrl`.
+Asset roles are `ICON`, `COVER`, `SCREENSHOT`, `PREVIEW_IMAGE`, `PREVIEW_VIDEO`, `FEATURE_GRAPHIC`, and `POSTER`. `ICON` lives in `media.icons`; the remaining roles live in `media.screenshots` or `media.previews`. A `COVER` is catalog art, not a screenshot; `POSTER` is content art for video and poster applications.
 
-`media.icons.platform[]` stores platform-specific icon variants. Use it for Google Play 512 x 512 icons, Apple App Store 1024 x 1024 icons, desktop taskbar or dock variants, and other catalog-specific variants. It may be empty for desktop-only, server-only, and web-only apps that do not need store-specific icon variants.
-
-`media.screenshots[]` stores actual product screenshots. A screenshot must show the app itself, not a marketing-only banner. Each screenshot records platform, locale, device class, display type, dimensions, format, caption, sort order, and optional accessibility text in metadata.
-
-`media.previews[]` stores feature graphics, preview images, and preview videos. This is where Google Play feature graphics and Apple app preview videos live.
-
-Common media asset fields:
+Common media asset fields (full semantics, purpose vocabulary, and per-type requirements: `APP_ASSETS_SPEC.md` sections 2, 4, and 5):
 
 | Field | Purpose |
 | --- | --- |
 | `id` | Immutable unique asset id within the manifest |
-| `type` | `ICON`, `SCREENSHOT`, `PREVIEW_IMAGE`, `PREVIEW_VIDEO`, `FEATURE_GRAPHIC` |
-| `purpose` | Release purpose such as `PRIMARY`, `STORE_LISTING`, `CATALOG_SCREENSHOT`, `STORE_APP_PREVIEW` |
-| `url` | HTTP/HTTPS delivery URL for published/store-facing projection; SDKWork-owned source files remain Drive-backed |
-| `driveUri` | Stable Drive reference for SDKWork-owned media source when the asset is uploaded or managed by SDKWork |
-| `resource` | Optional `MediaResource` snapshot for SDKWork-owned media source |
+| `type` | Asset role listed above |
+| `purpose` | Canonical purpose such as `PRIMARY`, `CATALOG_COVER`, `CATALOG_SCREENSHOT`, `STORE_SUBMISSION`, `SLIDE_PREVIEW` |
+| `path` | Repository-relative source path under `assets/`; preferred for committed bytes |
+| `url` | HTTP/HTTPS delivery URL for published/store-facing projection |
+| `driveUri` | Stable Drive reference for an uploaded SDKWork-owned source |
+| `resource` | `MediaResource` snapshot for SDKWork-owned media source |
+| `external` | `true` only for third-party hosted media; required when `url` is the sole source |
 | `platform` | Backend `PlusPlatform` value |
-| `storePlatform` | Optional store value, currently `GOOGLE_PLAY` or `APPLE_APP_STORE` |
+| `storePlatform` | `SDKWORK_APPSTORE`, `APPLE_APP_STORE`, `GOOGLE_PLAY`, `HUAWEI_APPGALLERY`, or `MICROSOFT_STORE` |
 | `locale` | BCP 47 locale such as `en-US` or `zh-CN` |
-| `deviceClass` | Device class such as `ANDROID_PHONE`, `IPHONE`, `IPAD`, `DESKTOP`, `BROWSER` |
-| `displayType` | Store or catalog display profile, such as `IPHONE_6_9` or `DESKTOP_16_10` |
-| `width`, `height` | Pixel dimensions |
-| `format` | `PNG`, `JPG`, `JPEG`, `WEBP`, `MP4`, or `MOV` |
-| `fileSizeBytes` | File size for governance and upload limits |
-| `durationSeconds` | Preview video duration |
-| `alphaChannel` | Whether the image/video contains transparency |
-| `caption` | Short human-readable caption |
-| `sortOrder` | Display order inside the same platform/locale group |
+| `deviceClass` | Device class such as `ANDROID_PHONE`, `IPHONE`, `IPAD`, `DESKTOP`, `BROWSER`, `CONTENT` |
+| `displayType` | Store or catalog display profile such as `IPHONE_6_9` or `DESKTOP_16_9` |
+| `width`, `height` | Pixel dimensions; must equal the decoded source |
+| `format` | `PNG`, `JPG`, `JPEG`, `WEBP`, `MP4`, `MOV`, or `M4V` |
+| `fileSizeBytes` | Actual file size for governance and upload limits |
+| `durationSeconds` | Preview video duration; must match the container |
+| `alphaChannel` | Whether the decoded source carries an alpha channel |
+| `caption` | Short localized caption |
+| `sortOrder` | Display order inside the same platform/display/locale group |
 | `enabled` | Whether the asset participates in projection |
-| `metadata` | Non-secret extra data such as `altText`, `orientation`, codec, safe area |
+| `metadata` | Non-secret data such as `altText`, `placeholder`, `capture`, `posterAssetId`, `focalPoint`, `cropAnchor`, `theme` |
 
 Rules:
 
-- New SDKWork-owned app media assets should carry `driveUri` or `resource` as the stable source identity.
-- `url` is allowed for public store-facing projection and external marketplace URLs, but it must not replace Drive identity for SDKWork-owned uploaded assets.
-- Manifest tooling that uploads or imports media must use Drive APIs/SDKs from `DRIVE_SPEC.md`.
+- New applications `MUST` set `media.metadata.standard = "sdkwork-app-assets.v1"` and own the `assets/` root. Existing applications adopt the marker after migration (`APP_ASSETS_SPEC.md` section 11).
+- Every enabled asset `MUST` carry a usable source. Committed source bytes use `path`; released bytes may add `driveUri` or `resource`; `url` alone requires `external: true`.
+- `url` is a projection, not a replacement for source identity. Manifest tooling that uploads or imports media `MUST` use Drive APIs/SDKs from `DRIVE_SPEC.md`.
+- A catalog-ready application `MUST` satisfy the per-type matrix in `APP_ASSETS_SPEC.md`; a store-submitting application `MUST` satisfy the declared store profile.
+- Placeholder media is allowed only for drafts and `MUST NOT` remain enabled on a catalog-ready or store-submitted application.
 
 ## 8. Store Media Rules
 
-The validator encodes the practical parts of current store submission rules:
+Store submission profiles and their numeric constraints are owned by `APP_ASSETS_SPEC.md` section 8 and the machine catalog [`schemas/sdkwork.app-assets.profiles.v1.json`](schemas/sdkwork.app-assets.profiles.v1.json). This manifest standard intentionally carries no second numeric table.
 
-| Store | Asset | Rule |
-| --- | --- | --- |
-| Google Play | icon | 512 x 512, 32-bit PNG with alpha channel, 1 MB or smaller |
-| Google Play | feature graphic | 1024 x 500 |
-| Google Play | screenshots | At least 2 screenshots; PNG/JPEG/WebP, no alpha channel, 320-3840 px per side, max aspect ratio 2:1 |
-| Apple App Store | icon | 1024 x 1024, no alpha channel |
-| Apple App Store | screenshots | At least 1 screenshot; must match accepted display profiles such as `IPHONE_6_9`, `IPHONE_6_7`, `IPHONE_6_5`, `IPAD_13`, `IPAD_12_9`; `IPHONE_6_9` accepts current 6.9-inch sizes such as 1260 x 2736, 1290 x 2796, and 1320 x 2868 plus landscape variants |
-| Apple App Store | preview video | At most 3 videos per platform/displayType/locale; must match accepted preview dimensions for the same display profile; duration is validated when provided |
+Rules:
 
-For Apple screenshots, keep the platform enum as `APP_IOS` and put the device screen class in `displayType`. Do not create platform aliases such as `APP_IOS_IPHONE_6_9`.
+- `publish.stores[]` declares vendor store lanes. Each lane `MUST` match a profile in the catalog; an unknown store id fails validation.
+- Store media `MUST` set `storePlatform` and is validated for count, dimensions, formats, alpha, duration, and external-URL policy by the store profile.
+- For Apple screenshots, keep the platform enum as `APP_IOS` and put the device screen class in `displayType`. Do not create platform aliases such as `APP_IOS_IPHONE_6_9`.
+- Google Play preview videos are YouTube URLs (`external = true`), not uploaded files.
+- The manifest validator composes the store profile checks, so `check-app-manifest-standard.mjs` alone cannot pass a store lane with missing or invalid media.
 
 ## 9. Publish And platform_app Projection
 
@@ -371,6 +374,9 @@ The standard projects to `platform_app` as follows:
 | `app.appType` | `appType` |
 | `media.icons.primary.url` | `iconUrl` |
 | `media` | `config.media` |
+| `media.previews[]` where `type = COVER` and `enabled` | `config.media.cover` |
+| `media.screenshots[]` enabled, ordered by `sortOrder` | `config.media.screenshots` |
+| `media.metadata` (`standard`, `defaultLocale`, `assetVersion`) | `config.media.metadata` |
 | `app.officialWebsiteUrl` | `config.standard.officialWebsiteUrl`, `config.publish.officialWebsiteUrl` |
 | `publish.platforms` | `platforms.platforms` |
 | `publish.installPlatforms` | `installPlatforms.platforms` |
@@ -523,7 +529,7 @@ Rules:
   appear in `packageFormat = "DOCKER_IMAGE"` and operator documentation only,
   not as a runtime target or deployment profile.
 - Every enabled package listed by the current release note `MUST` have one exact
-  single-format `sdkwork.workflow.json` target when the application owns a
+  single-format `agent.workflow.json` target when the application owns a
   release workflow. Package id, runtime target, deployment profile, and
   architecture `MUST` agree across the app manifest and workflow target; a
   registry URL or previously published digest does not replace a build target
@@ -661,26 +667,30 @@ Run the canonical repository-level checks:
 
 ```bash
 node ../sdkwork-specs/tools/check-app-manifest-standard.mjs --root .
+node ../sdkwork-specs/tools/check-app-assets-standard.mjs --root .
 node ../sdkwork-specs/tools/check-app-manifest-deployment-standard.mjs --root .
 ```
 
 The repository-independent deployment/profile gate is composed into
-`tools/check-app-manifest-standard.mjs`. Application framework repositories may
-add media dimensions, Drive resource ownership, and `platform_app` projection
-checks, but a completion claim for manifest alignment `MUST` run the two
-repository-level validators and their tests.
+`tools/check-app-manifest-standard.mjs`, and its media checks delegate to the
+store profile evaluator owned by `APP_ASSETS_SPEC.md`. The asset gate
+(`check-app-assets-standard.mjs`) enforces the `assets/` root, the per-type
+matrix, capture configuration, and decoded source facts. A completion claim for
+manifest alignment `MUST` run the manifest validator, the asset validator, and
+their tests.
 
 Machine-readable output:
 
 ```bash
 node ../sdkwork-specs/tools/check-app-manifest-standard.mjs --root . --json
+node ../sdkwork-specs/tools/check-app-assets-standard.mjs --root . --json
 ```
 
 For a workspace release gate, use `--workspace <workspace-root>`; the command
 discovers every unsuffixed app manifest, validates each one, and rejects
 duplicate global `app.key` values.
 
-The validator enforces:
+The manifest validator and the asset validator together enforce:
 
 - strict standard version and kind
 - backend enum names
@@ -692,8 +702,10 @@ The validator enforces:
 - client targetPlatform/clientArchitecture/runtimeTarget consistency
 - package runtime target/platform/package format consistency from the matrix in
   this standard
-- required media icons, screenshots, and preview assets
-- store-grade icon, screenshot, and preview dimensions
+- required media roles and the per-`appType` matrix through `APP_ASSETS_SPEC.md`
+- store media profile counts, dimensions, formats, alpha channels, durations, and external-URL policy
+- media source identity, path safety, decoded dimensions, file size, alpha channel, and duration
+- capture configuration coverage for every shipped UI surface
 - desktop architecture
 - client runtime family/framework alignment with the selected PC, H5, Flutter, mini program, Android native, iOS native, or Harmony native root architecture
 - mobile identifiers
@@ -726,12 +738,14 @@ The schema and validators must stay aligned with this standard:
 - [ ] Use backend enum names exactly.
 - [ ] Fill platform and package matrix before registration.
 - [ ] Choose supported deployment profiles and one default deployment profile.
-- [ ] Add primary icon, store icons, screenshots, and preview assets.
+- [ ] Create `assets/` with `bootstrap-app-assets.mjs` and add the `media.metadata.standard` marker.
+- [ ] Add primary icon, catalog cover, per-surface screenshots, store media, and preview assets per `APP_ASSETS_SPEC.md`.
+- [ ] Fill `assets/capture/capture.config.json` and capture at least one real screenshot per shipped UI surface.
 - [ ] Add checksums for every direct package.
 - [ ] Add package metadata for signing, OS requirements, and server health checks.
 - [ ] Add at least one current release note and one default channel.
 - [ ] Declare non-empty `backend.accessTokenPermissionScope` for IAM bootstrap.
-- [ ] Run the validator.
+- [ ] Run `check-app-manifest-standard.mjs` and `check-app-assets-standard.mjs`.
 - [ ] Register the application template and provision the tenant application through `@sdkwork/iam-application-bootstrap` per `IAM_APPLICATION_BOOTSTRAP_SPEC.md`.
 - [ ] Expose `admin:bootstrap:app` (or approved equivalent) and keep bootstrap scripts thin.
 - [ ] Run `check-iam-application-bootstrap-standard.mjs` before merge.

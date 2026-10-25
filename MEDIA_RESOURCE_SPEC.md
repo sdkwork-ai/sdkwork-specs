@@ -295,6 +295,17 @@ interface CommerceProductMedia {
 }
 ```
 
+### 6.1 Application Catalog Media Profile
+
+Application icon, cover, screenshot, poster, feature graphic, and preview-video media are owned by `APP_ASSETS_SPEC.md`; this section only maps them into the media contract when an API exposes them.
+
+Rules:
+
+- The application media source bytes live under `<app-root>/assets/` and the catalog metadata lives in `agent.app.config.json#media`. Do not create a parallel media DTO or a second catalog for the same app.
+- When an app API returns application catalog media, each representation is a `MediaResource` with `media_role` from this standard: `icon`, `cover`, `screenshot`, `preview_image`, `preview_video`, `feature_graphic`, or `poster`.
+- Store submission media (`storePlatform` set) is governance metadata for a store lane; it is not a separate business DTO and does not get its own URL field.
+- `altText`, locale, dimensions, and ordering follow `APP_ASSETS_SPEC.md` section 4; a media resource `url` is a projection, not the source identity.
+
 ## 7. Frontend Interaction Contract
 
 Frontend upload and media pickers work with `MediaResource` objects from the first stable boundary.

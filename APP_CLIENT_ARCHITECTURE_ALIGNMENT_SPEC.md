@@ -1,4 +1,4 @@
-﻿# App Client Architecture Alignment Standard
+# App Client Architecture Alignment Standard
 
 - Version: 1.0
 - Scope: cross-client application architecture alignment for SDKWork PC, H5/mobile React, Flutter, mini program, uni-app, Unity, static web (pure HTML), native Android, native iOS, native HarmonyOS, backend/admin UI, and future client roots
@@ -164,6 +164,11 @@ Every client root should align to this logical structure. Architecture standards
 apps/sdkwork-<application-code>-<client-arch>/
   AGENTS.md
   agent.app.config.json
+  assets/
+    README.md
+    resources/
+    media/
+    capture/
   .sdkwork/
     README.md
     skills/
@@ -214,6 +219,7 @@ apps/sdkwork-<application-code>-<client-arch>/
 Rules:
 
 - `config/browser/` owns browser-visible public runtime config. H5 application roots use this because H5 is a browser runtime.
+- `assets/` owns the application asset root defined by `APP_ASSETS_SPEC.md`: type resources, catalog and store media, and the creation-time capture configuration. Client roots `MUST NOT` bury catalog screenshots or covers inside a package's `src/`, `public/`, or build output.
 - `config/app/` is allowed for non-browser app runtime public templates where the architecture standard defines it, such as Flutter, native Android, native iOS, and native HarmonyOS.
 - `config/host/` owns native, platform, or container-host packaging metadata and permission references. It is not a business runtime config store.
 - `src/bootstrap/` or `lib/bootstrap/` is the application bootstrap entry. It assembles providers, routes, and shell wiring only.

@@ -60,7 +60,7 @@ No standard is complete until it is executable.
 | Runtime/test port isolation | Validate `APP_RUNTIME_TOPOLOGY_SPEC.md` §8.3: automated test runs that boot the application configure dedicated test ports through topology bind overrides (`--*-bind` / `SDKWORK_*_BIND`), never the manual dev default ports; tests release ports and terminate spawned runtime processes on completion; no automated run kills, restarts, or port-shares with a manually started dev instance |
 | Shell portability | Validate `PORTABILITY_SPEC.md` with `tools/check-shell-portability.mjs` (static lint + `bash -n` over every governed `.sh`, zero findings) and `tools/check-module-bin.mjs`: operator-side scripts stay bash 3.2/any-Linux portable, bash-4-only and GNU-only tokens are absent or exemption-marked (`PORTABILITY:target-linux`/`PORTABILITY:allow`), and checksum sidecars use the portable two-space format |
 | Workspace path portability | Validate `DEPENDENCY_MANAGEMENT_SPEC.md` §1/§7/§9 with `tools/check-workspace-path-portability.mjs --workspace <checkout-root>` (zero findings): version-controlled source, configuration, and documentation contain no absolute path naming the relocatable workspace root (`WORKSPACE-ABS`), no `sdkwork-<name>` checkout that resolves through the consuming workspace mechanism (`SIBLING-REPO-ABS`), and no machine-rooted path outside the workspace (`MACHINE-ABS` — the last is on by default, because a hardcoded home directory, toolchain root, or installer cache is what breaks when the tree is built on another machine or OS; `--workspace-only` narrows the run to the two workspace rules); scan scope is `PORTABILITY_SPEC.md` §5.1 and the four reported exemption scopes are line `WORKSPACE-PATH:allow`, test-file `WORKSPACE-PATH:allow-fixture`, test-scoped-directory `.workspace-path-fixture`, and in-file `#[cfg(test)]` block `WORKSPACE-PATH:allow-fixture-block` per §5.2, with the exemption count and the exempt-file list printed on every run so no exemption is silent; the gate's own behaviour is pinned by `tools/check-workspace-path-portability.test.mjs` |
-| GitHub workflow | `GITHUB_WORKFLOW_SPEC.md` checks for `sdkwork.workflow.json`, thin reusable workflow entrypoint, planner/schema alignment, dependency `refInput` dispatch inputs and `dependency_refs_json` passthrough, deploymentProfile/runtimeTarget target metadata, safe refs and paths, lifecycle env, release policy, publication policy gates, supply-chain policy, attestation policy, deployment environment binding, and repository validation |
+| GitHub workflow | `GITHUB_WORKFLOW_SPEC.md` checks for `agent.workflow.json`, thin reusable workflow entrypoint, planner/schema alignment, dependency `refInput` dispatch inputs and `dependency_refs_json` passthrough, deploymentProfile/runtimeTarget target metadata, safe refs and paths, lifecycle env, release policy, publication policy gates, supply-chain policy, attestation policy, deployment environment binding, and repository validation |
 | Events | Schema compatibility, idempotent consumer, replay behavior |
 | Performance | Pagination, latency budget, retry, rate-limit behavior |
 | Documentation | README/examples match public contracts |
@@ -406,7 +406,7 @@ Rules:
   `flutter:*`, `mini-program:*`, and `*:tauri`, while ignoring generated SDK
   package manifests under generated output.
 - Tests `MUST` scan active command-bearing JSON such as `agent.app.config.json`,
-  `sdkwork.workflow.json`, active `specs/*.json`, and Tauri config command hooks
+  `agent.workflow.json`, active `specs/*.json`, and Tauri config command hooks
   for the same application-code-prefix, action-first runtime target, and gateway command
   order rules, plus retired deployment flags and values.
 - Application repositories may call the canonical validator with:
@@ -584,7 +584,7 @@ GitHub workflow tests make `GITHUB_WORKFLOW_SPEC.md` executable.
 
 Rules:
 
-- Application workflow tests `MUST` verify `sdkwork.workflow.json` exists when the application is packaged, released, or deployed through GitHub Actions.
+- Application workflow tests `MUST` verify `agent.workflow.json` exists when the application is packaged, released, or deployed through GitHub Actions.
 - Application workflow tests `MUST` verify `.github/workflows/package.yml` is a thin reusable workflow call to `sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@<pinned-ref>`.
 - Application workflow tests `MUST` fail when large framework workflow bodies, dependency checkout scripts, matrix planning, release upload logic, or attestation logic are copied into application repositories.
 - Application repositories may call the canonical entrypoint validator with:
@@ -662,7 +662,7 @@ that declare no identity fields at all.
 - Changelog tests `MUST` prove `release.changelog` validation, manifest `release.notes[]` rendering, stale manifest note rejection for non-matching package versions or release tags, file-based changelog rendering, git fallback rendering, generated `init-app` default changelog config, and GitHub Release `notes-file` upload wiring.
 - Supply-chain tests `MUST` prove `security.signingRequired`, `security.sbomRequired`, `security.artifactAttestations`, target-level signing overrides, and artifact attestation gates are enforced.
 - Dependency checkout tests `MUST` prove refs are safe before `git fetch`, checkout paths are safe, tokens are not embedded in clone URLs, and dependency ref JSON inputs are passed through environment variables or files rather than direct shell expression interpolation.
-- Dependency checkout tests `MUST` prove workflow checkout paths are safe implementation details, native build-tool source paths do not depend on machine-specific absolute paths, packaged applications declare the SDKWork repository refs they need in `sdkwork.workflow.json`, and unused dependencies are not left in `sdkwork.workflow.json`.
+- Dependency checkout tests `MUST` prove workflow checkout paths are safe implementation details, native build-tool source paths do not depend on machine-specific absolute paths, packaged applications declare the SDKWork repository refs they need in `agent.workflow.json`, and unused dependencies are not left in `agent.workflow.json`.
 - Composite action tests `MUST` prove shell-based actions pass action inputs through environment variables or structured argument arrays instead of embedding `${{ inputs.* }}` directly in shell script bodies.
 - Repository validation tests `MUST` include both a negative case for `${{ inputs.* }}` inside literal `run` script bodies and a positive case proving later `env:`, `with:`, `if:`, or reusable workflow metadata expressions are not misclassified as shell script content.
 - Deployment tests `MUST` prove configured deployments bind to GitHub Environments and pass deployment environment, URL, and lifecycle values to the lifecycle runner.
@@ -1159,6 +1159,23 @@ Rules:
 - Progressive function tests `MUST` prove representative pages render primary content without JavaScript.
 - Output layout tests `MUST` prove `dist/<profile>/<envAlias>/` output and the documented mapping to `<share>/web/static/` install delivery.
 
+## 2.4.13 App Assets Tests
+
+App assets tests make `APP_ASSETS_SPEC.md` executable for every `appType`.
+
+Rules:
+
+- Asset root tests `MUST` verify that every application with `media.metadata.standard = "sdkwork-app-assets.v1"` owns `assets/README.md`, `assets/.gitignore`, `assets/resources/`, the type-specific resource directories, and `assets/capture/capture.config.json` when the type is capture-bearing.
+- Scaffold tests `MUST` run `tools/bootstrap-app-assets.mjs` for all twelve `appType` values, prove the generated tree is idempotent, and prove the manifest identity, delivery platforms, and default locale are honored.
+- Matrix tests `MUST` build one catalog-ready fixture per `appType` and fail when a required icon, cover, per-surface screenshot, slide preview, poster, or preview video is missing. `PPT` requires three slide previews; `VIDEO` requires a poster and a preview video; `POSTER` requires a poster; every shipped UI surface requires its own catalog screenshot.
+- Decoded-fact tests `MUST` fail when declared dimensions, format, file size, alpha channel, or preview-video duration disagree with the bytes under `assets/`, and when a `path` escapes `assets/`, contains `..`, is absolute, is a symlink, or does not exist.
+- Capture tests `MUST` fail when `capture.config.json` omits a shipped UI surface family, uses an unknown adapter, omits the default locale, or lacks a content surface for `PPT`/`VIDEO`/`POSTER`. A captured report `MUST` match `schemas/sdkwork.app-assets.capture-report.schema.v1.json` and name every failed or skipped surface.
+- Store profile tests `MUST` cover every profile in `schemas/sdkwork.app-assets.profiles.v1.json`: Apple icon and display-group sizes, Google icon/feature graphic/phone screenshot counts, AppGallery and Microsoft profile requirements, preview-video duration and count, and Google's YouTube-only external preview rule.
+- Placeholder tests `MUST` fail an enabled placeholder on a catalog-ready application and allow it on a `DRAFT`.
+- Migration tests `MUST` prove a marker-less manifest is non-blocking by default, fails under `--require-standard`, and fails after a declared `media.metadata.assetsMigration.due` date.
+- Appstore projection tests `MUST` prove the cover, screenshot gallery ordering, locale fallback, alt text, and empty state come from `media` only, with no fabricated gradient or stock artwork.
+- Verification commands: `node tools/check-app-assets-standard.mjs --root .`, `node --test tools/check-app-assets-standard.test.mjs`, `node --test tools/bootstrap-app-assets.test.mjs`, and `node --test tools/check-app-manifest-standard.test.mjs`.
+
 ## 2.5 Drive Uploader Tests
 
 Drive Uploader tests make `DRIVE_SPEC.md` executable for all client and server upload paths.
@@ -1337,7 +1354,7 @@ Rules:
   `GITHUB_WORKFLOW_SPEC.md`.
 - GitHub workflow entrypoint tests `MUST` prove every
   `dependencies[].refInput` and `verificationDependencies[].refInput` in
-  `sdkwork.workflow.json` is exposed by the thin package workflow through a
+  `agent.workflow.json` is exposed by the thin package workflow through a
   matching `workflow_dispatch` input and `dependency_refs_json` entry.
 - GitHub workflow planner tests `MUST` fail when `docker`, `mobile`, `native`,
   or `web` is used as a deployment profile or non-canonical runtime target.

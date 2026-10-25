@@ -76,7 +76,7 @@ Rules:
 - `check-agent-workflow-standard.mjs` validates repository/application
   `AGENTS.md` dynamic progressive loading, compatibility shims, relative
   `sdkwork-specs` links, and list/search pagination section presence. For
-  application/package repositories it also validates `sdkwork.workflow.json`
+  application/package repositories it also validates `agent.workflow.json`
   package target metadata and thin `.github/workflows/package.yml` reusable
   workflow integration; `repository-kind: standards` roots skip application
   packaging workflow requirements.

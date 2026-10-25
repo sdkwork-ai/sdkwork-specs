@@ -288,7 +288,7 @@ const RETIRED_LOCAL_FIRST_SEGMENTS = new Set([
 const DOC_FILE_EXTENSIONS = new Set(['.md', '.mdx']);
 const RUNNER_SCRIPT_EXTENSIONS = new Set(['.js', '.cjs', '.mjs', '.ts', '.cts', '.mts', '.sh', '.ps1', '.cmd', '.bat']);
 const RUNNER_SCRIPT_ROOTS = new Set(['scripts', 'tools']);
-const COMMAND_JSON_FILENAMES = new Set(['agent.app.config.json', 'sdkwork.workflow.json', 'tauri.conf.json']);
+const COMMAND_JSON_FILENAMES = new Set(['agent.app.config.json', 'agent.workflow.json', 'tauri.conf.json']);
 const PNPM_NATIVE_COMMANDS = new Set([
   'add',
   'approve-builds',
@@ -906,7 +906,7 @@ function pushProfileDevelopmentEntrypointIssues(scripts, issues) {
 }
 
 function workflowReleaseProfiles(root) {
-  const workflowPath = path.join(root, 'sdkwork.workflow.json');
+  const workflowPath = path.join(root, 'agent.workflow.json');
   if (!fs.existsSync(workflowPath)) return new Set(['standalone', 'cloud']);
   // Optional manifest: a malformed or empty file must degrade to lifecycle
   // debt, never crash the audit (a single bad manifest used to take down the

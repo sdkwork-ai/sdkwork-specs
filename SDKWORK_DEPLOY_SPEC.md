@@ -23,7 +23,7 @@ Each deployable application repository MUST contain:
 <repository-root>/
   agent.app.config.json
   specs/topology.spec.json
-  sdkwork.workflow.json
+  agent.workflow.json
   deployments/
     deploy.yaml
 ```
@@ -495,7 +495,7 @@ Allowed names:
 
 `pc` and `h5` MUST NOT appear in `packages`.
 
-Package IDs, signing, and workflow targets come from `agent.app.config.json` and `sdkwork.workflow.json`.
+Package IDs, signing, and workflow targets come from `agent.app.config.json` and `agent.workflow.json`.
 
 ## 11. overrides
 

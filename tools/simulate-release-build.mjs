@@ -4,7 +4,7 @@
  *
  * Rehearse the release/packaging flow locally in the exact layout CI uses:
  *   1. clone this repository into a throwaway parent directory
- *   2. clone every sibling referenced by sdkwork.workflow.json dependencies[]
+ *   2. clone every sibling referenced by agent.workflow.json dependencies[]
  *      from the local ../sdkwork-* checkout at the pinned ref (or local HEAD)
  *   3. install with the frozen lockfile
  *   4. run the requested package/build step
@@ -92,7 +92,7 @@ function main() {
 
   const repoRoot = path.resolve(values.root);
   const repoName = path.basename(repoRoot);
-  const workflowFile = path.join(repoRoot, 'sdkwork.workflow.json');
+  const workflowFile = path.join(repoRoot, 'agent.workflow.json');
   const packageFile = path.join(repoRoot, 'package.json');
   const packageJson = existsSync(packageFile) ? JSON.parse(readFileSync(packageFile, 'utf8')) : {};
   const steps = values.steps ?? defaultStep(packageJson);

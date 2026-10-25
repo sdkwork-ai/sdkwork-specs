@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Validates sdkwork.workflow.json dependency list completeness against the
+ * Validates agent.workflow.json dependency list completeness against the
  * repository's native build-tool workspace sibling references.
  *
  * DEPENDENCY_MANAGEMENT_SPEC.md §4: every sibling SDKWork repository
  * referenced by the consuming workspace root (Cargo `path = "../sdkwork-*"`,
  * `pnpm-workspace.yaml` `../sdkwork-*` members, pubspec `dependency_overrides`
- * paths) MUST have a matching `sdkwork.workflow.json` `dependencies[]` entry,
+ * paths) MUST have a matching `agent.workflow.json` `dependencies[]` entry,
  * so CI/release checkouts materialize the same `../<id>` layout as local
  * development.
  *
@@ -31,7 +31,7 @@ function usage() {
     '',
     'Checks that every sibling sdkwork-* repository referenced by the native',
     'build-tool workspace (Cargo path / pnpm-workspace member / pubspec path)',
-    'has a matching sdkwork.workflow.json dependencies[] entry.',
+    'has a matching agent.workflow.json dependencies[] entry.',
   ].join('\n');
 }
 
@@ -158,7 +158,7 @@ function collectPubspecSiblings(repoRoot) {
 }
 
 function workflowDependencyIds(repoRoot) {
-  const workflowFile = path.join(repoRoot, 'sdkwork.workflow.json');
+  const workflowFile = path.join(repoRoot, 'agent.workflow.json');
   if (!fs.existsSync(workflowFile)) {
     return new Set();
   }
@@ -174,7 +174,7 @@ function workflowDependencyIds(repoRoot) {
 
 function checkRepository(repoRoot) {
   const repoName = path.basename(repoRoot);
-  const hasWorkflow = fs.existsSync(path.join(repoRoot, 'sdkwork.workflow.json'));
+  const hasWorkflow = fs.existsSync(path.join(repoRoot, 'agent.workflow.json'));
   if (!hasWorkflow) {
     // Repositories without a release/package workflow do not declare release
     // dependencies; completeness applies only when packaging or release
@@ -227,7 +227,7 @@ function main() {
   }
 
   if (failures.length > 0) {
-    fail(`workspace sibling references without sdkwork.workflow.json dependencies[] entries`, failures);
+    fail(`workspace sibling references without agent.workflow.json dependencies[] entries`, failures);
   }
   console.log(`[dependency-list-completeness] ok: ${repoRoots.length} repositories checked`);
 }

@@ -11,7 +11,7 @@ function fixture() {
   fs.mkdirSync(path.join(root, 'specs'), { recursive: true });
   fs.mkdirSync(path.join(root, 'deployments'), { recursive: true });
   fs.writeFileSync(path.join(root, 'specs', 'topology.spec.json'), JSON.stringify({ schemaVersion: 5 }));
-  fs.writeFileSync(path.join(root, 'sdkwork.workflow.json'), '{}');
+  fs.writeFileSync(path.join(root, 'agent.workflow.json'), '{}');
   fs.writeFileSync(path.join(root, 'deployments', 'deploy.yaml'), 'version: 1\n');
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
     dependencies: { '@sdkwork/app-topology': 'workspace:*' },
@@ -51,7 +51,7 @@ test('is idempotent when profile entrypoints already use the facade', () => {
 
 test('only creates release variants supported by fixed workflow targets', () => {
   const root = fixture();
-  fs.writeFileSync(path.join(root, 'sdkwork.workflow.json'), JSON.stringify({
+  fs.writeFileSync(path.join(root, 'agent.workflow.json'), JSON.stringify({
     targets: [{ deploymentProfile: 'cloud' }],
   }));
 
@@ -63,7 +63,7 @@ test('only creates release variants supported by fixed workflow targets', () => 
 
 test('delegates a bare release phase when workflow ownership and one profile are unambiguous', () => {
   const root = fixture();
-  fs.writeFileSync(path.join(root, 'sdkwork.workflow.json'), JSON.stringify({
+  fs.writeFileSync(path.join(root, 'agent.workflow.json'), JSON.stringify({
     lifecycle: {
       package: [{ run: 'node scripts/workflow-package.mjs' }],
       validate: [{ run: 'node scripts/workflow-validate.mjs' }],
@@ -85,7 +85,7 @@ test('delegates a bare release phase when workflow ownership and one profile are
 
 test('delegates only runtime target release scripts with an explicit supported profile', () => {
   const root = fixture();
-  fs.writeFileSync(path.join(root, 'sdkwork.workflow.json'), JSON.stringify({
+  fs.writeFileSync(path.join(root, 'agent.workflow.json'), JSON.stringify({
     lifecycle: {
       package: [{ run: 'node scripts/workflow-package.mjs' }],
     },

@@ -84,6 +84,7 @@ The following are task gates, not a startup bundle. Read the relevant sections o
 | Contract or platform change | `README.md`, `REQUIREMENTS_SPEC.md`, `ARCHITECTURE_DECISION_SPEC.md`, `ENGINEERING_WORKFLOW_SPEC.md`, `CODE_REVIEW_SPEC.md`, `QUALITY_GATE_SPEC.md`, the affected domain spec, `GOVERNANCE_SPEC.md`, and `TEST_SPEC.md` | Read the applicable sections in lifecycle order rather than loading every full file at startup |
 | Release, migration, or supply-chain standard change | `RELEASE_SPEC.md`, `MIGRATION_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `QUALITY_GATE_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `GOVERNANCE_SPEC.md`, and `TEST_SPEC.md` | Read the applicable sections in release, migration, and supply-chain sequence rather than loading every full file at startup |
 | Upload, file storage, download, or app-upload capability | `DRIVE_SPEC.md` | `APP_SDK_INTEGRATION_SPEC.md`, `FRONTEND_SPEC.md`, `API_SPEC.md`, `MEDIA_RESOURCE_SPEC.md` when a media representation is touched, `APP_MANIFEST_SPEC.md` for application identity, `TEST_SPEC.md`; author the application upload declaration per `DRIVE_SPEC.md` §18 |
+| Application assets, icon, cover, screenshots, previews, or store submission media | `APP_ASSETS_SPEC.md` | `APP_MANIFEST_SPEC.md`, `MEDIA_RESOURCE_SPEC.md`, `DRIVE_SPEC.md`, the matching root architecture standard, `PRIVACY_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`; scaffold with `tools/bootstrap-app-assets.mjs`, verify with `tools/check-app-assets-standard.mjs` |
 
 ## Int64 Wire Contract (API_SPEC §13.6)
 
@@ -128,6 +129,7 @@ Choose only the narrowest commands selected by the changed standard; this is not
 | Documentation debt or Canon layout | `node tools/audit-repository-docs-debt.mjs --root .` and the affected documentation checker or its test |
 | Repository/generated-state layout | `node tools/check-workspace-layout.mjs --root .` and `node --test tools/check-workspace-layout.test.mjs` |
 | Validator or tool implementation | The matching `node --test tools/<tool>.test.mjs` and the tool's narrow `--root .` check |
+| Application assets standard or asset tool change | `node tools/check-app-assets-standard.mjs --root .`, `node --test tools/check-app-assets-standard.test.mjs`, `node --test tools/bootstrap-app-assets.test.mjs`, and `node --test tools/check-app-manifest-standard.test.mjs` |
 | API, SDK, composition, workspace, runtime, or other domain standard | The validator and test command required by the affected authority and `TEST_SPEC.md`; use `--workspace ..` only when the change actually crosses repository roots |
 | Broad cross-contract change | `node tools/verify-repo.mjs --root .` after the narrow checks pass |
 
@@ -256,7 +258,7 @@ Sibling SDKWork repositories are consumed through a dual-track model that MUST s
   `../sdkwork-*` relative path, and consumed with `workspace:*` in `package.json`. Never use
   `file:`/`link:`/git-URL specifiers for SDKWork sibling packages in any environment.
 - **CI / release packaging**: git-repository dependency checkout. Every sibling referenced by the
-  local workspace MUST have a matching `dependencies[]` entry in `sdkwork.workflow.json` so CI
+  local workspace MUST have a matching `dependencies[]` entry in `agent.workflow.json` so CI
   clones the sibling into the same `../sdkwork-*` relative layout (`GITHUB_WORKFLOW_SPEC.md`).
   `package.json` is never rewritten for CI.
 

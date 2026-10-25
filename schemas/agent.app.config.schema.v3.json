@@ -113,14 +113,30 @@
       "required": ["id"],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
-        "type": { "enum": ["ICON", "SCREENSHOT", "PREVIEW_IMAGE", "PREVIEW_VIDEO", "FEATURE_GRAPHIC"] },
+        "type": { "enum": ["ICON", "COVER", "SCREENSHOT", "PREVIEW_IMAGE", "PREVIEW_VIDEO", "FEATURE_GRAPHIC", "POSTER"] },
+        "purpose": { "enum": ["PRIMARY", "CATALOG_COVER", "CATALOG_SCREENSHOT", "CATALOG_PREVIEW", "STORE_LISTING", "STORE_SUBMISSION", "STORE_APP_PREVIEW", "SLIDE_PREVIEW", "CONTENT_POSTER", "CONTENT_TRAILER", "FEATURE_GRAPHIC", "DOCS_PREVIEW"] },
+        "path": { "type": "string", "pattern": "^assets/[A-Za-z0-9._/-]+$" },
         "url": { "type": "string", "format": "uri" },
         "driveUri": { "type": "string" },
+        "resource": { "type": "object" },
+        "external": { "type": "boolean" },
+        "platform": { "type": "string", "minLength": 1 },
+        "storePlatform": { "enum": ["SDKWORK_APPSTORE", "APPLE_APP_STORE", "GOOGLE_PLAY", "HUAWEI_APPGALLERY", "MICROSOFT_STORE"] },
+        "locale": { "type": "string", "minLength": 2 },
+        "deviceClass": { "enum": ["BROWSER", "DESKTOP", "ANDROID_PHONE", "ANDROID_TABLET", "IPHONE", "IPAD", "HARMONY_PHONE", "HARMONY_TABLET", "MINI_PROGRAM", "MOBILE", "CONTENT"] },
+        "displayType": { "type": "string", "minLength": 1 },
         "width": { "type": "integer", "minimum": 1 },
         "height": { "type": "integer", "minimum": 1 },
-        "format": { "enum": ["PNG", "JPG", "JPEG", "WEBP", "MP4", "MOV"] }
+        "format": { "enum": ["PNG", "JPG", "JPEG", "WEBP", "MP4", "MOV", "M4V"] },
+        "fileSizeBytes": { "type": "integer", "minimum": 0 },
+        "durationSeconds": { "type": "number", "minimum": 0 },
+        "alphaChannel": { "type": "boolean" },
+        "caption": { "type": "string", "maxLength": 160 },
+        "sortOrder": { "type": "integer", "minimum": 0 },
+        "enabled": { "type": "boolean" },
+        "metadata": { "type": "object" }
       },
-      "anyOf": [{ "required": ["url"] }, { "required": ["driveUri"] }, { "required": ["resource"] }]
+      "anyOf": [{ "required": ["url"] }, { "required": ["driveUri"] }, { "required": ["resource"] }, { "required": ["path"] }]
     }
   }
 }

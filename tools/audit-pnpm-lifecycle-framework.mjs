@@ -62,7 +62,7 @@ function delegatesReleasePhase(name, command) {
   const value = String(command ?? '').trim();
   if (!value) return false;
   if (value.includes('sdkwork-app') && value.includes(` release:${phase}`)) return true;
-  if (value.includes('sdkwork-workflow')) return true;
+  if (value.includes('agent-workflow')) return true;
   const alias = value.match(/^pnpm\s+(?:run\s+)?(release:[^\s]+)(?:\s+--.*)?$/u)?.[1];
   return Boolean(alias && alias !== name && alias.split(':')[1] === phase);
 }
@@ -132,7 +132,7 @@ export function inspectApplicationRoot(workspace, root) {
     parentTopologyValid && parentDeploymentValid,
   );
   const scripts = packageManifest?.scripts ?? {};
-  const workflowPath = path.join(root, 'sdkwork.workflow.json');
+  const workflowPath = path.join(root, 'agent.workflow.json');
   const workflowManifest = fs.existsSync(workflowPath) ? readJson(workflowPath) : null;
   const readmePath = path.join(root, 'README.md');
   const readme = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, 'utf8') : '';

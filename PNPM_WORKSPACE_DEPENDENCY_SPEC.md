@@ -13,7 +13,7 @@ SDKWork consumes sibling repositories through exactly **two** tracks that must s
 | Track | Environment | Mechanism | Authority |
 | --- | --- | --- | --- |
 | Local development | Developer machine, `pnpm dev`, `pnpm build`, local tests | pnpm workspace protocol: sibling packages declared once in the consuming repository root `pnpm-workspace.yaml` `packages:` as `../sdkwork-*` relative paths; consumer `package.json` references them with `workspace:*` | `pnpm-workspace.yaml`, root `package.json`, `pnpm-lock.yaml` |
-| CI / release packaging | GitHub Actions, release runners | Git repository dependency: every sibling repository referenced by the local workspace is checked out from its git repository (via `sdkwork.workflow.json` `dependencies[]` and the reusable SDKWork workflow framework) into the **same relative layout** the local workspace expects | `sdkwork.workflow.json`, reusable workflow, `GITHUB_WORKFLOW_SPEC.md` §dependency checkout |
+| CI / release packaging | GitHub Actions, release runners | Git repository dependency: every sibling repository referenced by the local workspace is checked out from its git repository (via `agent.workflow.json` `dependencies[]` and the reusable SDKWork workflow framework) into the **same relative layout** the local workspace expects | `agent.workflow.json`, reusable workflow, `GITHUB_WORKFLOW_SPEC.md` §dependency checkout |
 
 Rules:
 
@@ -73,7 +73,7 @@ catalog:
 
 Rules:
 
-- Every sibling repository referenced by the repository-root workspace (`pnpm-workspace.yaml` `../sdkwork-*` members) `MUST` have a matching `dependencies[]` entry in `sdkwork.workflow.json` so CI checkouts materialize the same `../<id>` layout that local development resolves (`DEPENDENCY_MANAGEMENT_SPEC.md` §4).
+- Every sibling repository referenced by the repository-root workspace (`pnpm-workspace.yaml` `../sdkwork-*` members) `MUST` have a matching `dependencies[]` entry in `agent.workflow.json` so CI checkouts materialize the same `../<id>` layout that local development resolves (`DEPENDENCY_MANAGEMENT_SPEC.md` §4).
 - `dependencies[]` entries `MUST` declare stable `id`, `repository` (owner/repo form), pinned `ref` or validated `refInput`, and `tokenSecret`.
 - The checkout path `MUST` resolve to the relative path expected by the consuming workspace root (`../sdkwork-<id>`). When the framework uses a different checkout directory, it `MUST` redirect the workspace-root declared path to the checkout (symlink, junction, or workspace-root path rewrite) without editing member `package.json` files.
 - Dependency refs `MUST` be pinned commit SHAs or validated safe Git refs before checkout; unsafe refs fail the job.
@@ -141,5 +141,5 @@ Failures are defects, not warnings: an undeclared sibling, a `file:`/`link:`/git
 - [ ] Source imports use `@sdkwork/*` package names; no cross-package relative `src/` imports.
 - [ ] Imports resolve only through declared `exports`; no deep `src/` internals of sibling packages.
 - [ ] Vite aliases do not rename or redirect SDKWork packages; any approved alias is documented.
-- [ ] `sdkwork.workflow.json` `dependencies[]` covers every sibling; refs pinned or validated.
+- [ ] `agent.workflow.json` `dependencies[]` covers every sibling; refs pinned or validated.
 - [ ] `pnpm-lock.yaml` committed with dependency changes.

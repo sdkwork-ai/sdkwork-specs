@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Align sdkwork.workflow.json dependencies[] with native build-tool sibling
+ * Align agent.workflow.json dependencies[] with native build-tool sibling
  * references (DEPENDENCY_MANAGEMENT_SPEC.md §4 completeness rule).
  *
- * For every repository under --workspace that has a sdkwork.workflow.json,
+ * For every repository under --workspace that has a agent.workflow.json,
  * adds a dependencies[] entry for each sibling sdkwork-* repository that the
  * Cargo workspace / pnpm workspace / pubspec dependency_overrides reference
  * but the workflow does not yet declare. Entries only reference repositories
@@ -140,7 +140,7 @@ function main() {
   const warnings = [];
   let changed = 0;
   for (const repoRoot of repos) {
-    const workflowFile = path.join(repoRoot, 'sdkwork.workflow.json');
+    const workflowFile = path.join(repoRoot, 'agent.workflow.json');
     if (!fs.existsSync(workflowFile)) continue;
     const repoName = path.basename(repoRoot);
     const referenced = collectSiblingIds(repoRoot);

@@ -54,7 +54,7 @@ function inferLayout(workflow, overrides, explicit) {
 }
 
 function loadWorkflow(repoRoot) {
-  const workflowPath = path.join(repoRoot, 'sdkwork.workflow.json');
+  const workflowPath = path.join(repoRoot, 'agent.workflow.json');
   if (!fs.existsSync(workflowPath)) return null;
   return JSON.parse(fs.readFileSync(workflowPath, 'utf8'));
 }

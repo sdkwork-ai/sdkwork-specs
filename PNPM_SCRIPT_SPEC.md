@@ -113,7 +113,7 @@ Rules:
   processes.
 - Release and deployment public scripts `MUST` delegate to the workflow or
   deploy framework and preserve phase-first profile order. Product packaging
-  hooks may be called by `sdkwork.workflow.json` lifecycle steps, but a public
+  hooks may be called by `agent.workflow.json` lifecycle steps, but a public
   release script `MUST NOT` invoke `_sdkwork:release:*` directly and bypass the
   workflow matrix, validation, or evidence gates.
 - `pnpm dev` remains exactly equivalent to `pnpm dev:standalone`; adding a
@@ -1256,7 +1256,7 @@ pnpm script validation `MUST` check:
   retired public namespaces such as `server:*`, `service:*`, `portal:*`, `product:*`,
   `alignment:*`, `apis:*`, `file-sdk:*`, or `prepare:*`.
 - Standards, `README.md`, `AGENTS.md`, active runbook examples, `agent.app.config.json`,
-  `sdkwork.workflow.json`, active `specs/*.json`, and Tauri config command hooks do not
+  `agent.workflow.json`, active `specs/*.json`, and Tauri config command hooks do not
   introduce application-code-prefixed public root commands, platform/tool-first runtime aliases,
   retired deployment flags such as `--hosting self-hosted`, or retired command
   order such as `gateway:cloud:bundle`.

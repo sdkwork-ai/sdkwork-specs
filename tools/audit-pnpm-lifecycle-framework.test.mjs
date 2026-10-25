@@ -16,7 +16,7 @@ test('classifies framework adoption and migration waves', () => {
   const app = path.join(workspace, 'sdkwork-demo');
   writeJson(path.join(app, 'agent.app.config.json'), { app: { key: 'sdkwork-demo' } });
   writeJson(path.join(app, 'specs', 'topology.spec.json'), { schemaVersion: 5 });
-  writeJson(path.join(app, 'sdkwork.workflow.json'), { schemaVersion: 1 });
+  writeJson(path.join(app, 'agent.workflow.json'), { schemaVersion: 1 });
   fs.mkdirSync(path.join(app, 'deployments'), { recursive: true });
   fs.writeFileSync(path.join(app, 'deployments', 'deploy.yaml'), 'version: 2\n');
   writeJson(path.join(app, 'package.json'), {
@@ -71,7 +71,7 @@ test('reports public release phases that bypass the shared workflow facade', () 
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-lifecycle-audit-'));
   const app = path.join(workspace, 'sdkwork-demo');
   writeJson(path.join(app, 'agent.app.config.json'), { app: { key: 'sdkwork-demo' } });
-  writeJson(path.join(app, 'sdkwork.workflow.json'), { schemaVersion: 1 });
+  writeJson(path.join(app, 'agent.workflow.json'), { schemaVersion: 1 });
   writeJson(path.join(app, 'package.json'), {
     scripts: {
       dev: 'pnpm dev:standalone',

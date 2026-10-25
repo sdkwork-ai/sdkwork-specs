@@ -331,13 +331,13 @@ function collectDependencyRefInputs(workflow) {
 
 function validatePackageWorkflow(root) {
   const issues = [];
-  const workflowConfigPath = path.join(root, 'sdkwork.workflow.json');
+  const workflowConfigPath = path.join(root, 'agent.workflow.json');
   const packageWorkflowPath = path.join(root, '.github', 'workflows', 'package.yml');
   const workflowFiles = getWorkflowFiles(root);
   const packageWorkflowText = fs.existsSync(packageWorkflowPath) ? readText(packageWorkflowPath) : '';
 
   if (!fs.existsSync(workflowConfigPath)) {
-    issues.push('sdkwork.workflow.json must exist for SDKWork packaging workflow integration');
+    issues.push('agent.workflow.json must exist for SDKWork packaging workflow integration');
   }
   if (!fs.existsSync(packageWorkflowPath)) {
     issues.push('.github/workflows/package.yml must exist as the thin packaging workflow entrypoint');
@@ -369,7 +369,7 @@ function validatePackageWorkflow(root) {
       issues.push(`${packageLabel} must use a pinned sdkwork-github-workflow ref, not "${reusableMatch[1]}"`);
     }
     if (!/config_path:\s*sdkwork\.workflow\.json/u.test(workflowText)) {
-      issues.push(`${packageLabel} must pass config_path: sdkwork.workflow.json`);
+      issues.push(`${packageLabel} must pass config_path: agent.workflow.json`);
     }
     if (/runs-on:\s|steps:\s|actions\/checkout|gh\s+release\s+|npm\s+test|pnpm\s+verify/iu.test(workflowText)) {
       issues.push(`${packageLabel} must stay thin and must not copy local job steps`);
@@ -384,16 +384,16 @@ function validatePackageWorkflow(root) {
   if (fs.existsSync(workflowConfigPath)) {
     const workflow = readJson(workflowConfigPath);
     if (!workflow.schemaVersion) {
-      issues.push('sdkwork.workflow.json must declare schemaVersion');
+      issues.push('agent.workflow.json must declare schemaVersion');
     }
     if (!workflow.app?.id) {
-      issues.push('sdkwork.workflow.json must declare app.id');
+      issues.push('agent.workflow.json must declare app.id');
     }
     if (!workflow.release?.artifactPrefix) {
-      issues.push('sdkwork.workflow.json must declare release.artifactPrefix');
+      issues.push('agent.workflow.json must declare release.artifactPrefix');
     }
     if (!Array.isArray(workflow.targets) || workflow.targets.length === 0) {
-      issues.push('sdkwork.workflow.json must declare at least one target');
+      issues.push('agent.workflow.json must declare at least one target');
     } else {
       const targetIds = new Set();
       for (const [index, target] of workflow.targets.entries()) {
@@ -509,7 +509,7 @@ const agentResult = validateAgents(root);
 const kind = repositoryKind(root);
 const workflowFiles = getWorkflowFiles(root);
 const hasPackageContract =
-  fs.existsSync(path.join(root, 'sdkwork.workflow.json')) ||
+  fs.existsSync(path.join(root, 'agent.workflow.json')) ||
   fs.existsSync(path.join(root, '.github', 'workflows', 'package.yml'));
 const requiresPackageContract = kind === 'application' || hasPackageContract;
 let workflowResult;

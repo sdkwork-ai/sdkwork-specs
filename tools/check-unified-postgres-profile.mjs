@@ -101,7 +101,7 @@ const RUNTIME_SCAN_EXTENSIONS = new Set([
 const RUNTIME_ROOT_FILES = new Set([
   'package.json',
   'agent.app.config.json',
-  'sdkwork.workflow.json',
+  'agent.workflow.json',
 ]);
 const RUNTIME_ROOT_SCRIPT_EXTENSIONS = new Set(['.bat', '.cmd', '.ps1', '.sh']);
 const TEST_FILE_PATTERN = /(?:^|[.\-_])(?:spec|test|tests)(?:[.\-_]|$)/iu;

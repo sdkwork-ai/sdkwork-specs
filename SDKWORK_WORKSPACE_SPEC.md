@@ -702,6 +702,7 @@ Every git repository root and every SDKWork application root `MUST` have:
 Rules:
 
 - The application-root `database/` dictionary shown above is the PostgreSQL `authoritative-server` layout from `DATABASE_FRAMEWORK_SPEC.md`. SQLite assets do not appear beside it; a client/native module with declared local persistence owns its separate role-specific `database/` dictionary.
+- An application root that owns `agent.app.config.json` `MUST` also contain the governed `assets/` root defined by `APP_ASSETS_SPEC.md`: `assets/README.md`, `assets/resources/`, catalog media under `assets/media/`, and `assets/capture/` for capture-bearing types. The asset root is source-controlled and is not a build output or a runtime cache.
 - `AGENTS.md` `MUST` follow `AGENTS_SPEC.md`, cite `SOUL.md`, and declare the relative path to root `sdkwork-specs/README.md`.
 - Tool compatibility shims such as `CLAUDE.md`, `GEMINI.md`, and `CODEX.md`, when present, `MUST` point to `AGENTS.md`; they must not copy or override root standards.
 - `.sdkwork/README.md` `MUST` explain the workspace purpose, owner, and which directories are authoritative.

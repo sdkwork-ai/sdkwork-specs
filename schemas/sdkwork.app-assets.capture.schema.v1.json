@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sdkwork.com/schemas/sdkwork.app-assets.capture.schema.v1.json",
+  "title": "SDKWork App Asset Capture Configuration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "appKey", "surfaces", "capture"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "sdkwork.app-assets.capture" },
+    "appKey": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "appVersion": { "type": "string", "minLength": 1 },
+    "surfaces": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "platform", "deviceClass", "displayType", "locales"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "kind": { "enum": ["ui", "device", "content"] },
+          "tool": {
+            "enum": [
+              "playwright",
+              "host-webview",
+              "flutter-integration-test",
+              "android-instrumentation",
+              "ios-xctest",
+              "harmony-test",
+              "mini-program-automator",
+              "unity-recorder",
+              "render-pipeline",
+              "manual"
+            ]
+          },
+          "platform": { "type": "string", "minLength": 1 },
+          "deviceClass": {
+            "enum": [
+              "BROWSER",
+              "DESKTOP",
+              "ANDROID_PHONE",
+              "ANDROID_TABLET",
+              "IPHONE",
+              "IPAD",
+              "HARMONY_PHONE",
+              "HARMONY_TABLET",
+              "MINI_PROGRAM",
+              "MOBILE",
+              "CONTENT"
+            ]
+          },
+          "displayType": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "viewport": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["width", "height", "deviceScaleFactor"],
+            "properties": {
+              "width": { "type": "integer", "minimum": 1 },
+              "height": { "type": "integer", "minimum": 1 },
+              "deviceScaleFactor": { "type": "number", "minimum": 0.5, "maximum": 4 }
+            }
+          },
+          "locales": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Z]{2}|-[A-Z][a-z]{3})?$" }
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "path"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "path": { "type": "string", "pattern": "^/" }
+              }
+            }
+          },
+          "theme": { "enum": ["light", "dark"] },
+          "readySelector": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "command", "outputRoot"],
+      "properties": {
+        "tool": {
+          "enum": [
+            "playwright",
+            "host-webview",
+            "flutter-integration-test",
+            "android-instrumentation",
+            "ios-xctest",
+            "harmony-test",
+            "mini-program-automator",
+            "unity-recorder",
+            "render-pipeline",
+            "manual"
+          ]
+        },
+        "command": { "type": "string", "minLength": 1 },
+        "outputRoot": { "type": "string", "pattern": "^(\\.sdkwork|[a-z0-9._-]+)(/[a-z0-9._-]+)*$" },
+        "locales": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Z]{2}|-[A-Z][a-z]{3})?$" }
+        },
+        "freezeAnimations": { "type": "boolean" },
+        "maskSelectors": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "seed": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

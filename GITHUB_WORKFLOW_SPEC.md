@@ -13,9 +13,9 @@ Release policy is governed by `RELEASE_SPEC.md`. Supply-chain security policy is
 Rules:
 
 - The canonical reusable workflow framework is the `sdkwork-github-workflow` repository.
-- Application repositories own `sdkwork.workflow.json`.
+- Application repositories own `agent.workflow.json`.
 - Application repositories own one thin `.github/workflows/package.yml` entrypoint that calls `sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@<ref>`.
-- Application-specific build, package, validation, signing, SBOM, deploy, and publish commands live in lifecycle steps inside `sdkwork.workflow.json`.
+- Application-specific build, package, validation, signing, SBOM, deploy, and publish commands live in lifecycle steps inside `agent.workflow.json`.
 - Framework-level behavior lives in reusable workflows, composite actions, and tested planner code in `sdkwork-github-workflow`.
 - Application repositories `MUST NOT` copy large framework workflow bodies, dependency checkout scripts, matrix planners, release upload logic, or attestation logic into local workflow YAML.
 
@@ -23,7 +23,7 @@ The standard integration shape is:
 
 ```text
 <application-root>/
-  sdkwork.workflow.json
+  agent.workflow.json
   .github/
     workflows/
       package.yml
@@ -35,7 +35,7 @@ Rules:
 
 - `.github/workflows/package.yml` `MUST` be a thin reusable workflow call.
 - The workflow `uses:` target `MUST` point to `sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@<pinned-ref>`.
-- The workflow `MUST` pass `config_path: sdkwork.workflow.json` unless the configuration file has an explicitly documented alternate location.
+- The workflow `MUST` pass `config_path: agent.workflow.json` unless the configuration file has an explicitly documented alternate location.
 - The workflow `SHOULD` support these standard triggers:
   - tag push for release packaging.
   - `release.published` for release packaging and configured deployments.
@@ -47,11 +47,11 @@ Rules:
   files such as `.github/workflows/release-package.yml` or
   `.github/workflows/package-release.yml`. Package, release upload,
   dependency checkout, changelog, attestation, and deployment packaging logic
-  belongs in the reusable framework plus `sdkwork.workflow.json`.
+  belongs in the reusable framework plus `agent.workflow.json`.
 
 ## 3. Configuration Contract
 
-`sdkwork.workflow.json` is the application packaging contract consumed by `sdkwork-github-workflow`.
+`agent.workflow.json` is the application packaging contract consumed by `sdkwork-github-workflow`.
 
 Required top-level fields:
 
@@ -305,7 +305,7 @@ Dependency relationship policy, native build-tool dependency management, cross-p
 
 Rules:
 
-- Dependencies `MUST` be declared in `sdkwork.workflow.json`, not hidden in application YAML.
+- Dependencies `MUST` be declared in `agent.workflow.json`, not hidden in application YAML.
 - Runtime, build, package, or release dependencies `MUST` use `dependencies[]`.
 - `dependencies[]` `MUST` be complete: every sibling repository referenced by
   the repository's native build-tool workspace (Cargo `path = "../sdkwork-*"`,
@@ -332,7 +332,7 @@ Rules:
   checks.
 - Dependency refs may come from a fixed `ref` or from a declared `refInput` supplied through workflow variables.
 - Every dependency or verification dependency with `refInput` in
-  `sdkwork.workflow.json` `MUST` be exposed by the thin package workflow as a
+  `agent.workflow.json` `MUST` be exposed by the thin package workflow as a
   matching `workflow_dispatch` input and passed through `dependency_refs_json`
   to the reusable workflow. For example `SDKWORK_WEB_FRAMEWORK_REF` maps to
   `github.event.inputs.sdkwork_web_framework_ref` with a
@@ -372,8 +372,8 @@ Rules:
 - GitHub Release upload steps `MUST` write framework-rendered Release notes through `--notes-file` or an equivalent first-party action input, not hard-coded generic release bodies in each application repository.
 - The framework `MUST` render Release notes before GitHub Release upload when `publish.githubRelease` and the caller release publication input are enabled.
 - When `publish.aggregateRelease: true`, the framework `MUST` download package workflow artifacts, run `lifecycle.publish` once in aggregate release context, render Release notes through the standard changelog planner, and upload only the configured aggregate upload globs to GitHub Release.
-- Application repositories `MUST NOT` copy final GitHub Release upload, aggregate artifact download, changelog rendering, release readiness, or manifest finalization logic into local workflow YAML. App-specific finalization commands belong in `sdkwork.workflow.json` `lifecycle.publish`.
-- Application repositories `MUST NOT` implement copied Release body generation in local workflow YAML. App-specific release note generation belongs in `sdkwork.workflow.json` `release.changelog` or in a local file/manifest consumed by the framework.
+- Application repositories `MUST NOT` copy final GitHub Release upload, aggregate artifact download, changelog rendering, release readiness, or manifest finalization logic into local workflow YAML. App-specific finalization commands belong in `agent.workflow.json` `lifecycle.publish`.
+- Application repositories `MUST NOT` implement copied Release body generation in local workflow YAML. App-specific release note generation belongs in `agent.workflow.json` `release.changelog` or in a local file/manifest consumed by the framework.
 - `release.changelog.source: auto` `MUST NOT` reuse stale `agent.app.config.json` `release.notes[]` entries whose version does not match the requested package version or release tag; it must fall back to `CHANGELOG.md` or git commit subjects instead.
 - When a workflow is triggered by a Git tag and no explicit `package_version` input is provided, changelog matching `MUST` use the tag-derived package version before `release.defaultVersion` so an old default manifest note cannot be reused for a newer tag.
 - Framework logs `MUST` redact secret-like values and must not print raw tokens, API keys, or credentials.
@@ -473,7 +473,7 @@ Rules:
 
 Application integration verification `MUST` check:
 
-- `sdkwork.workflow.json` validates with the framework planner.
+- `agent.workflow.json` validates with the framework planner.
 - `.github/workflows/package.yml` calls the standard reusable workflow.
 - Application workflow inputs use event-safe expressions for manual, tag push, and release events.
 - Matrix selection works for all declared deployment profiles, runtime targets,
@@ -511,7 +511,7 @@ node ../sdkwork-specs/tools/check-app-manifest-deployment-standard.mjs --root . 
 ```
 
 The validator checks the thin packaging workflow, pinned reusable workflow ref,
-`sdkwork.workflow.json` target metadata, absence of copied release workflow
+`agent.workflow.json` target metadata, absence of copied release workflow
 bodies, and the repository/application `AGENTS.md` dynamic loading contract.
 
 Framework verification `MUST` check:
@@ -542,7 +542,7 @@ Framework verification `MUST` check:
 
 ## 11. Acceptance Checklist
 
-- [ ] Application has `sdkwork.workflow.json`.
+- [ ] Application has `agent.workflow.json`.
 - [ ] Application has a thin `.github/workflows/package.yml` reusable workflow call.
 - [ ] Application workflow uses a pinned framework ref.
 - [ ] Config validates against the framework planner and schema.

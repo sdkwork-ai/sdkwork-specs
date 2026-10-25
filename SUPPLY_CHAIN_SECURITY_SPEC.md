@@ -32,7 +32,7 @@ Rules:
 
 - Package managers should use lockfiles or equivalent reproducible dependency manifests.
 - Dependency refs in workflow config must be pinned or validated as safe refs before checkout.
-- Application workflow YAML must not hide dependency checkout logic outside `sdkwork.workflow.json` and the reusable workflow framework.
+- Application workflow YAML must not hide dependency checkout logic outside `agent.workflow.json` and the reusable workflow framework.
 - Native build-tool dependency declarations, source/build dependency paths, release checkout refs, stale dependency cleanup, and dependency-owned SDK/API boundaries must follow `DEPENDENCY_MANAGEMENT_SPEC.md`.
 - Dependencies with known critical vulnerabilities require remediation, mitigation, or an approved exception.
 - New third-party runtime dependencies should have license, maintenance, security, and package-source review.

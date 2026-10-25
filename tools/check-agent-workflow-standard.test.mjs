@@ -25,8 +25,8 @@ function makeRepo(options = {}) {
   write(specsRoot, 'SOUL.md', '# SDKWork Agent Soul\n');
   write(specsRoot, 'AGENTS_SPEC.md', '# AGENTS.md Standard\n');
 
-  write(root, 'sdkwork.workflow.json', JSON.stringify({
-    schemaVersion: '2026-06-06.sdkwork.workflow.v1',
+  write(root, 'agent.workflow.json', JSON.stringify({
+    schemaVersion: '2026-06-06.agent.workflow.v1',
     app: {
       id: 'sdkwork-demo',
       name: 'SDKWork Demo',
@@ -115,7 +115,7 @@ function makeRepo(options = {}) {
     '  package:',
     '    uses: sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@b0829529b9277a3da32b90c2d36ff34ff09fa832',
     '    with:',
-    '      config_path: sdkwork.workflow.json',
+    '      config_path: agent.workflow.json',
     "      tag: ${{ github.event.inputs.tag || github.event.release.tag_name || github.ref_name }}",
     "      package_version: ${{ github.event.inputs.package_version || '' }}",
     "      platform: ${{ github.event.inputs.platform || 'all' }}",
@@ -153,7 +153,7 @@ function makeRepo(options = {}) {
     '## Local Dictionary Structure',
     '',
     '- `AGENTS.md`: local agent entrypoint.',
-    '- `sdkwork.workflow.json`: GitHub packaging manifest.',
+    '- `agent.workflow.json`: GitHub packaging manifest.',
     '',
     '## Spec Resolution Order',
     '',
@@ -254,7 +254,7 @@ describe('check-agent-workflow-standard', () => {
           'repository-kind: standards',
           '',
         ].join('\n'));
-        rmSync(path.join(repoRoot, 'sdkwork.workflow.json'), { force: true });
+        rmSync(path.join(repoRoot, 'agent.workflow.json'), { force: true });
         rmSync(path.join(repoRoot, '.github'), { recursive: true, force: true });
       },
     });
@@ -274,7 +274,7 @@ describe('check-agent-workflow-standard', () => {
           'repository-kind: foundation-dependency',
           '',
         ].join('\n'));
-        rmSync(path.join(repoRoot, 'sdkwork.workflow.json'), { force: true });
+        rmSync(path.join(repoRoot, 'agent.workflow.json'), { force: true });
         rmSync(path.join(repoRoot, '.github'), { recursive: true, force: true });
       },
     });
@@ -288,8 +288,8 @@ describe('check-agent-workflow-standard', () => {
   it('rejects workflow targets without deploymentProfile and runtimeTarget', () => {
     const root = makeRepo({
       mutate(repoRoot) {
-        write(repoRoot, 'sdkwork.workflow.json', JSON.stringify({
-          schemaVersion: '2026-06-06.sdkwork.workflow.v1',
+        write(repoRoot, 'agent.workflow.json', JSON.stringify({
+          schemaVersion: '2026-06-06.agent.workflow.v1',
           app: { id: 'sdkwork-demo', repository: 'sdkwork-ai/sdkwork-demo' },
           release: { artifactPrefix: 'sdkwork-demo', defaultVersion: '0.1.0' },
           targets: [
@@ -317,7 +317,7 @@ describe('check-agent-workflow-standard', () => {
   it('accepts a runtime-configurable client workflow target', () => {
     const root = makeRepo({
       mutate(repoRoot) {
-        const workflowPath = path.join(repoRoot, 'sdkwork.workflow.json');
+        const workflowPath = path.join(repoRoot, 'agent.workflow.json');
         const workflow = JSON.parse(readFileSync(workflowPath, 'utf8'));
         workflow.targets = [{
           id: 'ios-universal-dual-mobile-ipa',
@@ -332,7 +332,7 @@ describe('check-agent-workflow-standard', () => {
           runner: 'macos-15',
           outputGlobs: ['dist/*.ipa'],
         }];
-        write(repoRoot, 'sdkwork.workflow.json', JSON.stringify(workflow, null, 2));
+        write(repoRoot, 'agent.workflow.json', JSON.stringify(workflow, null, 2));
       },
     });
 
@@ -343,8 +343,8 @@ describe('check-agent-workflow-standard', () => {
   it('rejects dependency refInputs that are not exposed through the package workflow', () => {
     const root = makeRepo({
       mutate(repoRoot) {
-        write(repoRoot, 'sdkwork.workflow.json', JSON.stringify({
-          schemaVersion: '2026-06-06.sdkwork.workflow.v1',
+        write(repoRoot, 'agent.workflow.json', JSON.stringify({
+          schemaVersion: '2026-06-06.agent.workflow.v1',
           app: {
             id: 'sdkwork-demo',
             name: 'SDKWork Demo',

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sdkwork.com/schemas/sdkwork.app-assets.capture-report.schema.v1.json",
+  "title": "SDKWork App Asset Capture Report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "appKey", "generatedAt", "status", "surfaces"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "kind": { "const": "sdkwork.app-assets.capture-report" },
+    "appKey": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "appVersion": { "type": "string", "minLength": 1 },
+    "commit": { "type": "string", "minLength": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "tool": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["complete", "partial", "failed"] },
+    "surfaces": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "platform", "displayType", "captures"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "platform": { "type": "string", "minLength": 1 },
+          "displayType": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "captures": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["locale", "status", "outputPath"],
+              "properties": {
+                "locale": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Z]{2}|-[A-Z][a-z]{3})?$" },
+                "routeId": { "type": "string", "minLength": 1 },
+                "status": { "enum": ["captured", "skipped", "failed"] },
+                "outputPath": { "type": "string", "minLength": 1 },
+                "width": { "type": "integer", "minimum": 1 },
+                "height": { "type": "integer", "minimum": 1 },
+                "format": { "enum": ["PNG", "JPG", "JPEG", "WEBP"] },
+                "maskSelectors": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 }
+                },
+                "error": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -446,7 +446,7 @@ describe('check-pnpm-script-standard', () => {
         'release:package:cloud': 'pnpm exec sdkwork-app release:package --deployment-profile cloud',
       },
     });
-    writeFileSync(path.join(root, 'sdkwork.workflow.json'), JSON.stringify({
+    writeFileSync(path.join(root, 'agent.workflow.json'), JSON.stringify({
       targets: [{ deploymentProfile: 'cloud' }],
     }));
 
@@ -1375,7 +1375,7 @@ describe('check-pnpm-script-standard', () => {
       },
     });
     writeFileSync(
-      path.join(root, 'sdkwork.workflow.json'),
+      path.join(root, 'agent.workflow.json'),
       `${JSON.stringify({ targets: [{ command: 'pnpm dev:desktop -- --hosting cloud-hosted' }] }, null, 2)}\n`,
     );
 

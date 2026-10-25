@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { validateStoreMediaAssets } from './app-assets-lib.mjs';
 import { validateAppManifestDeployment } from './check-app-manifest-deployment-standard.mjs';
 
 const TOP_LEVEL_FIELDS = new Set([
@@ -34,7 +35,7 @@ const PLATFORM_VALUES = new Set([
   'MP_KUAISHOU', 'MP_JD', 'MP_360', 'MP_DINGTALK', 'MP_ALI', 'ADMIN', 'CLI',
   'API', 'OTHER',
 ]);
-const MEDIA_FORMATS = new Set(['PNG', 'JPG', 'JPEG', 'WEBP', 'MP4', 'MOV']);
+const MEDIA_FORMATS = new Set(['PNG', 'JPG', 'JPEG', 'WEBP', 'MP4', 'MOV', 'M4V']);
 const DIRECT_DISTRIBUTION_SOURCE_TYPES = new Set([
   'GIT_REPOSITORY', 'BINARY_URL', 'WEB_URL', 'CONTAINER_IMAGE', 'MINI_PROGRAM',
 ]);
@@ -57,44 +58,7 @@ function containsSecret(value, trail = []) {
 }
 
 function validateStoreMedia(manifest, label, issues) {
-  const assets = [
-    ...(manifest.media?.icons?.platform ?? []),
-    ...(manifest.media?.screenshots ?? []),
-    ...(manifest.media?.previews ?? []),
-  ];
-  const stores = new Set((manifest.publish?.stores ?? []).map((store) => store?.marketId ?? store?.storePlatform));
-  if (stores.has('GOOGLE_PLAY')) {
-    const google = assets.filter((asset) => asset?.storePlatform === 'GOOGLE_PLAY');
-    const icon = google.find((asset) => asset.type === 'ICON');
-    if (!icon) issues.push(`${label}: Google Play requires an icon`);
-    else if (icon.width !== 512 || icon.height !== 512) issues.push(`${label}: Google Play icon must be 512x512`);
-    const feature = google.find((asset) => asset.type === 'FEATURE_GRAPHIC');
-    if (!feature) issues.push(`${label}: Google Play requires a feature graphic`);
-    else if (feature.width !== 1024 || feature.height !== 500) issues.push(`${label}: Google Play feature graphic must be 1024x500`);
-    const screenshots = google.filter((asset) => asset.type === 'SCREENSHOT');
-    if (screenshots.length < 2) issues.push(`${label}: Google Play requires at least two screenshots`);
-    for (const asset of screenshots) {
-      if (asset.width < 320 || asset.width > 3840 || asset.height < 320 || asset.height > 3840
-        || Math.max(asset.width / asset.height, asset.height / asset.width) > 2) {
-        issues.push(`${label}: Google Play screenshot dimensions/aspect ratio are invalid`);
-      }
-    }
-  }
-  if (stores.has('APPLE_APP_STORE')) {
-    const apple = assets.filter((asset) => asset?.storePlatform === 'APPLE_APP_STORE');
-    const icon = apple.find((asset) => asset.type === 'ICON');
-    if (!icon) issues.push(`${label}: Apple App Store requires an icon`);
-    else if (icon.width !== 1024 || icon.height !== 1024) issues.push(`${label}: Apple App Store icon must be 1024x1024`);
-    const screenshots = apple.filter((asset) => asset.type === 'SCREENSHOT');
-    if (screenshots.length < 1) issues.push(`${label}: Apple App Store requires at least one screenshot`);
-    const videos = apple.filter((asset) => asset.type === 'PREVIEW_VIDEO');
-    const videoGroups = new Map();
-    for (const video of videos) {
-      const key = `${video.displayType ?? ''}|${video.locale ?? ''}`;
-      videoGroups.set(key, (videoGroups.get(key) ?? 0) + 1);
-    }
-    for (const [key, count] of videoGroups) if (count > 3) issues.push(`${label}: Apple preview video group ${key} exceeds three videos`);
-  }
+  issues.push(...validateStoreMediaAssets(manifest, label));
 }
 
 export function validateAppManifest(manifest, label = 'agent.app.config.json') {
@@ -173,7 +137,7 @@ export function validateAppManifest(manifest, label = 'agent.app.config.json') {
       if (mediaIds.has(asset.id)) issues.push(`${pointer}.id must be unique`);
       mediaIds.add(asset.id);
     }
-    if (asset.type && !['ICON', 'SCREENSHOT', 'PREVIEW_IMAGE', 'PREVIEW_VIDEO', 'FEATURE_GRAPHIC'].includes(asset.type)) {
+    if (asset.type && !['ICON', 'COVER', 'SCREENSHOT', 'PREVIEW_IMAGE', 'PREVIEW_VIDEO', 'FEATURE_GRAPHIC', 'POSTER'].includes(asset.type)) {
       issues.push(`${pointer}.type is not canonical`);
     }
     if (asset.format && !MEDIA_FORMATS.has(asset.format)) issues.push(`${pointer}.format is not canonical`);
@@ -192,7 +156,7 @@ export function validateAppManifest(manifest, label = 'agent.app.config.json') {
         issues.push(`${pointer}.url must be an HTTP(S) URL`);
       }
     }
-    if (!asset.url && !asset.driveUri && !asset.resource) issues.push(`${pointer}: media requires url, driveUri, or resource`);
+    if (!asset.url && !asset.driveUri && !asset.resource && !asset.path) issues.push(`${pointer}: media requires url, driveUri, resource, or path`);
   }
   if (typeof runtime.framework !== 'string' || !runtime.framework.trim()) {
     issues.push(`${label}: runtime.framework is required`);
