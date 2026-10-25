@@ -14,7 +14,7 @@ function writeJson(file, value) {
 test('classifies framework adoption and migration waves', () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-lifecycle-audit-'));
   const app = path.join(workspace, 'sdkwork-demo');
-  writeJson(path.join(app, 'sdkwork.app.config.json'), { app: { key: 'sdkwork-demo' } });
+  writeJson(path.join(app, 'agent.app.config.json'), { app: { key: 'sdkwork-demo' } });
   writeJson(path.join(app, 'specs', 'topology.spec.json'), { schemaVersion: 5 });
   writeJson(path.join(app, 'sdkwork.workflow.json'), { schemaVersion: 1 });
   fs.mkdirSync(path.join(app, 'deployments'), { recursive: true });
@@ -44,7 +44,7 @@ test('classifies framework adoption and migration waves', () => {
 test('reports missing cloud development and facade debt', () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-lifecycle-audit-'));
   const app = path.join(workspace, 'sdkwork-demo');
-  writeJson(path.join(app, 'sdkwork.app.config.json'), { app: { key: 'sdkwork-demo' } });
+  writeJson(path.join(app, 'agent.app.config.json'), { app: { key: 'sdkwork-demo' } });
   writeJson(path.join(app, 'package.json'), { scripts: { dev: 'vite' } });
   const report = auditPnpmLifecycleWorkspace(workspace);
   assert.ok(report.applications[0].debt.includes('missing-script:dev:cloud'));
@@ -55,7 +55,7 @@ test('reports missing cloud development and facade debt', () => {
 test('distinguishes an invalid topology contract from a missing topology contract', () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-lifecycle-audit-'));
   const app = path.join(workspace, 'sdkwork-demo');
-  writeJson(path.join(app, 'sdkwork.app.config.json'), { app: { key: 'sdkwork-demo' } });
+  writeJson(path.join(app, 'agent.app.config.json'), { app: { key: 'sdkwork-demo' } });
   writeJson(path.join(app, 'specs', 'topology.spec.json'), { schemaVersion: 4 });
   writeJson(path.join(app, 'package.json'), { scripts: {} });
 
@@ -70,7 +70,7 @@ test('distinguishes an invalid topology contract from a missing topology contrac
 test('reports public release phases that bypass the shared workflow facade', () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-lifecycle-audit-'));
   const app = path.join(workspace, 'sdkwork-demo');
-  writeJson(path.join(app, 'sdkwork.app.config.json'), { app: { key: 'sdkwork-demo' } });
+  writeJson(path.join(app, 'agent.app.config.json'), { app: { key: 'sdkwork-demo' } });
   writeJson(path.join(app, 'sdkwork.workflow.json'), { schemaVersion: 1 });
   writeJson(path.join(app, 'package.json'), {
     scripts: {
@@ -108,7 +108,7 @@ test('records malformed application manifests as debt instead of aborting the wo
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-lifecycle-audit-'));
   const app = path.join(workspace, 'sdkwork-broken');
   fs.mkdirSync(app, { recursive: true });
-  fs.writeFileSync(path.join(app, 'sdkwork.app.config.json'), '{ broken\n');
+  fs.writeFileSync(path.join(app, 'agent.app.config.json'), '{ broken\n');
   fs.writeFileSync(path.join(app, 'package.json'), '{ broken\n');
 
   const report = auditPnpmLifecycleWorkspace(workspace);
@@ -129,7 +129,7 @@ test('recognizes an app surface that explicitly delegates topology to its enclos
     schemaVersion: 1,
     kind: 'sdkwork.deployment-config',
   });
-  writeJson(path.join(app, 'sdkwork.app.config.json'), { app: { key: 'sdkwork-demo-pc' } });
+  writeJson(path.join(app, 'agent.app.config.json'), { app: { key: 'sdkwork-demo-pc' } });
   writeJson(path.join(app, 'etc', 'sdkwork.deployment.config.json'), {
     schemaVersion: 1,
     kind: 'sdkwork.component-deployment',
@@ -165,7 +165,7 @@ test('does not require pnpm lifecycle scripts for a native Flutter application r
     schemaVersion: 1,
     kind: 'sdkwork.deployment-index',
   });
-  writeJson(path.join(app, 'sdkwork.app.config.json'), {
+  writeJson(path.join(app, 'agent.app.config.json'), {
     app: { key: 'sdkwork-demo-flutter-mobile' },
     runtime: { family: 'mobile', framework: 'flutter' },
   });
@@ -206,7 +206,7 @@ test('recognizes Flutter framework declarations across supported application man
   };
 
   for (const [name, manifest] of Object.entries(manifests)) {
-    writeJson(path.join(workspace, name, 'sdkwork.app.config.json'), manifest);
+    writeJson(path.join(workspace, name, 'agent.app.config.json'), manifest);
   }
 
   const report = auditPnpmLifecycleWorkspace(workspace);

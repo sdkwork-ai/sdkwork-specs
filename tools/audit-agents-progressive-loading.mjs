@@ -16,7 +16,7 @@ function usage() {
     '',
     'Builds a deterministic, read-only AGENTS.md progressive-loading audit manifest.',
     'Discovery is limited to the workspace root, direct sdkwork-* .gitmodules roots,',
-    'tracked sdkwork.app.config.json roots, and tracked direct apps/* application roots.',
+    'tracked agent.app.config.json roots, and tracked direct apps/* application roots.',
   ].join('\n');
 }
 

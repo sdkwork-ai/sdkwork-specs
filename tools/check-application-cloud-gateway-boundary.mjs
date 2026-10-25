@@ -15,7 +15,7 @@ const ACTIVE_ROOT_FILES = [
   'Cargo.toml',
   'package.json',
   'pnpm-workspace.yaml',
-  'sdkwork.app.config.json',
+  'agent.app.config.json',
 ];
 const ACTIVE_DIRS = ['crates', 'apps', 'scripts', 'specs', 'etc', 'deployments'];
 const ACTIVE_EXTENSIONS = new Set([
@@ -48,7 +48,7 @@ function collectFiles(root) {
 }
 
 function isApplicationRoot(root) {
-  return fs.existsSync(path.join(root, 'sdkwork.app.config.json'));
+  return fs.existsSync(path.join(root, 'agent.app.config.json'));
 }
 
 export function checkApplicationCloudGatewayBoundary(root) {

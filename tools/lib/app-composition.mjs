@@ -458,7 +458,7 @@ const NON_ROOT_WORKSPACE_ALLOWLIST_SEGMENTS = [
 ];
 
 function qualifiesAsClientAppRoot(appRoot) {
-  if (!fs.existsSync(path.join(appRoot, 'sdkwork.app.config.json'))) return false;
+  if (!fs.existsSync(path.join(appRoot, 'agent.app.config.json'))) return false;
   return findCorePackages(appRoot).length > 0;
 }
 
@@ -517,7 +517,7 @@ export function hasClientAppSurfaceDirectories(repoRoot) {
 
 export function validateBackendReleaseComposition(repoRoot) {
   const issues = [];
-  const manifestPath = path.join(repoRoot, 'sdkwork.app.config.json');
+  const manifestPath = path.join(repoRoot, 'agent.app.config.json');
   if (!fs.existsSync(manifestPath)) return issues;
 
   const clientRoots = listClientAppRoots(repoRoot);
@@ -538,7 +538,7 @@ export function validateBackendReleaseComposition(repoRoot) {
     }
   } else if (!Array.isArray(manifest.sdkDependencies)) {
     issues.push(
-      'sdkwork.app.config.json#sdkDependencies required for legacy backend-only application roots',
+      'agent.app.config.json#sdkDependencies required for legacy backend-only application roots',
     );
   }
   return issues;

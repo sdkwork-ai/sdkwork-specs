@@ -88,7 +88,7 @@ function canonicalAssemblyCommand(root, toolName) {
 }
 
 function writeApplicationManifest(root) {
-  writeFileSync(path.join(root, 'sdkwork.app.config.json'), '{}\n');
+  writeFileSync(path.join(root, 'agent.app.config.json'), '{}\n');
 }
 
 function writeAssemblyScripts(root, commands = {}) {
@@ -195,8 +195,8 @@ describe('check-pnpm-script-standard', () => {
       kind: 'sdkwork.component.spec',
       component: { type: 'node-package' },
     }));
-    writeFileSync(path.join(root, 'sdkwork.app.config.json'), JSON.stringify({
-      kind: 'sdkwork.app',
+    writeFileSync(path.join(root, 'agent.app.config.json'), JSON.stringify({
+      kind: 'agent.app',
       runtime: { family: 'web' },
     }));
 
@@ -252,7 +252,7 @@ describe('check-pnpm-script-standard', () => {
         test: 'node --test',
       },
     }, { normalizeDevProfiles: false });
-    writeFileSync(path.join(root, 'sdkwork.app.config.json'), '');
+    writeFileSync(path.join(root, 'agent.app.config.json'), '');
 
     const result = runChecker(root);
 
@@ -273,7 +273,7 @@ describe('check-pnpm-script-standard', () => {
         clean: 'node scripts/sdkwork-command.mjs clean',
       },
     });
-    writeFileSync(path.join(root, 'sdkwork.app.config.json'), '{}\n');
+    writeFileSync(path.join(root, 'agent.app.config.json'), '{}\n');
 
     const result = runChecker(root);
 
@@ -367,8 +367,8 @@ describe('check-pnpm-script-standard', () => {
       },
     }, { normalizeDevProfiles: false });
     mkdirSync(path.join(root, 'etc'), { recursive: true });
-    writeFileSync(path.join(root, 'sdkwork.app.config.json'), JSON.stringify({
-      kind: 'sdkwork.app',
+    writeFileSync(path.join(root, 'agent.app.config.json'), JSON.stringify({
+      kind: 'agent.app',
       runtime: { family: 'desktop' },
     }));
     writeFileSync(path.join(root, 'etc', 'sdkwork.deployment.config.json'), JSON.stringify({
@@ -1334,7 +1334,7 @@ describe('check-pnpm-script-standard', () => {
       },
     });
     writeFileSync(
-      path.join(root, 'sdkwork.app.config.json'),
+      path.join(root, 'agent.app.config.json'),
       `${JSON.stringify({ devApp: { build: { targets: [{ command: 'pnpm demo:build' }, { command: 'pnpm tauri:dev' }] } } }, null, 2)}\n`,
     );
     const specsDir = path.join(root, 'specs');
@@ -1350,11 +1350,11 @@ describe('check-pnpm-script-standard', () => {
     assert.notEqual(result.status, 0);
     assert.match(
       result.stderr,
-      /sdkwork\.app\.config\.json: devApp\.build\.targets\.0\.command: pnpm demo:build: application-code-prefixed command examples are forbidden/,
+      /agent\.app\.config\.json: devApp\.build\.targets\.0\.command: pnpm demo:build: application-code-prefixed command examples are forbidden/,
     );
     assert.match(
       result.stderr,
-      /sdkwork\.app\.config\.json: devApp\.build\.targets\.1\.command: pnpm tauri:dev: use action-first runtime target script names such as dev:desktop/,
+      /agent\.app\.config\.json: devApp\.build\.targets\.1\.command: pnpm tauri:dev: use action-first runtime target script names such as dev:desktop/,
     );
     assert.match(
       result.stderr,

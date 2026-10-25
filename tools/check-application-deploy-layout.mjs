@@ -22,7 +22,7 @@ let repos;
 if (
   !values.workspace &&
   requireExists(path.join(targetRoot, 'Cargo.toml')) &&
-  requireExists(path.join(targetRoot, 'sdkwork.app.config.json'))
+  requireExists(path.join(targetRoot, 'agent.app.config.json'))
 ) {
   repos = [targetRoot];
 } else {

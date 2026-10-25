@@ -13,7 +13,7 @@ function makeRepo(scripts, { cargo = false, apps = false, eol = '\n', appConfig 
   const manifest = { name: 'sdkwork-demo', private: true, scripts };
   if (apps) mkdirSync(path.join(root, 'apps', 'sdkwork-demo-pc'), { recursive: true });
   if (cargo) writeFileSync(path.join(root, 'Cargo.toml'), '[workspace]\n');
-  if (appConfig) writeFileSync(path.join(root, 'sdkwork.app.config.json'), JSON.stringify(appConfig));
+  if (appConfig) writeFileSync(path.join(root, 'agent.app.config.json'), JSON.stringify(appConfig));
   const serialized = JSON.stringify(manifest, null, 2);
   writeFileSync(path.join(root, 'package.json'), (eol === '\r\n' ? serialized.replaceAll('\n', '\r\n') : serialized) + eol);
   return root;

@@ -158,7 +158,7 @@ export function listFrontendAppRoots(repoRoot) {
       const architecture = detectClientArchitecture(entry.name);
       if (!architecture) continue;
       const appRoot = path.join(appsDir, entry.name);
-      if (!fs.existsSync(path.join(appRoot, 'sdkwork.app.config.json'))) continue;
+      if (!fs.existsSync(path.join(appRoot, 'agent.app.config.json'))) continue;
       if (!fs.existsSync(path.join(appRoot, 'packages'))) continue;
       if (!roots.has(appRoot)) {
         roots.set(appRoot, { appRoot, appRootName: entry.name, architecture });

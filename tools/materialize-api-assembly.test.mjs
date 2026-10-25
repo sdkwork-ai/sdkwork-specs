@@ -15,7 +15,7 @@ test('API assembly materializer preserves custom library modules and exports byt
     fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-api-assembly-')),
     'sdkwork-demo',
   );
-  writeText(path.join(root, 'sdkwork.app.config.json'), '{}\n');
+  writeText(path.join(root, 'agent.app.config.json'), '{}\n');
   writeText(
     path.join(root, 'Cargo.toml'),
     '[workspace]\nmembers = []\nresolver = "2"\n\n[workspace.package]\nedition = "2021"\nversion = "0.1.0"\n',
@@ -65,7 +65,7 @@ test('API assembly Cargo dependencies use workspace declarations when root owns 
     'sdkwork-agents',
   );
   writeText(
-    path.join(root, 'sdkwork.app.config.json'),
+    path.join(root, 'agent.app.config.json'),
     `${JSON.stringify({ backend: { appId: 'sdkwork-agents' } }, null, 2)}\n`,
   );
   writeText(
@@ -190,7 +190,7 @@ test('API assembly discovers aggregate subdomain routes when app-code routes are
     'sdkwork-deployments',
   );
   writeText(
-    path.join(root, 'sdkwork.app.config.json'),
+    path.join(root, 'agent.app.config.json'),
     `${JSON.stringify({ backend: { appId: 'sdkwork-deployments' } }, null, 2)}\n`,
   );
   writeText(
@@ -268,7 +268,7 @@ test('API assembly dependency rendering deduplicates preserved Cargo keys', () =
     'sdkwork-agents',
   );
   writeText(
-    path.join(root, 'sdkwork.app.config.json'),
+    path.join(root, 'agent.app.config.json'),
     `${JSON.stringify({ backend: { appId: 'sdkwork-agents' } }, null, 2)}\n`,
   );
   writeText(
@@ -330,7 +330,7 @@ test('API assembly dependency rendering deduplicates preserved Cargo keys', () =
 test('API assembly materializer never writes an assembly for the platform cloud gateway', () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-api-assembly-'));
   const root = path.join(workspace, 'sdkwork-api-cloud-gateway');
-  writeText(path.join(root, 'sdkwork.app.config.json'), '{}\n');
+  writeText(path.join(root, 'agent.app.config.json'), '{}\n');
 
   const result = materializeApiAssembly(root);
 
@@ -347,7 +347,7 @@ test('replaces a legacy generated gateway bootstrap after route crates are retir
     fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-api-assembly-')),
     'sdkwork-agents',
   );
-  writeText(path.join(root, 'sdkwork.app.config.json'), '{}\n');
+  writeText(path.join(root, 'agent.app.config.json'), '{}\n');
   writeText(
     path.join(root, 'Cargo.toml'),
     '[workspace]\nmembers = []\nresolver = "2"\n\n[workspace.package]\nedition = "2021"\nversion = "0.1.0"\n',
@@ -374,7 +374,7 @@ test('replaces a legacy generated gateway bootstrap after route crates are retir
 test('API assembly includes application-code and capability-named route members together', () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-api-assembly-'));
   const root = path.join(workspace, 'sdkwork-demo');
-  writeText(path.join(root, 'sdkwork.app.config.json'), '{}\n');
+  writeText(path.join(root, 'agent.app.config.json'), '{}\n');
   writeText(
     path.join(root, 'Cargo.toml'),
     [
@@ -420,7 +420,7 @@ test('API assembly discovers internal-api route crates for application ingress',
     fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-api-assembly-')),
     'sdkwork-drive',
   );
-  writeText(path.join(root, 'sdkwork.app.config.json'), '{}\n');
+  writeText(path.join(root, 'agent.app.config.json'), '{}\n');
   writeText(
     path.join(root, 'Cargo.toml'),
     '[workspace]\nmembers = ["crates/sdkwork-routes-drive-internal-api"]\n',
@@ -465,7 +465,7 @@ test('refuses incompatible route mount parameters before writing an assembly', (
     fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-api-assembly-')),
     'sdkwork-demo',
   );
-  writeText(path.join(root, 'sdkwork.app.config.json'), '{}\n');
+  writeText(path.join(root, 'agent.app.config.json'), '{}\n');
   writeText(
     path.join(root, 'Cargo.toml'),
     [

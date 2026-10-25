@@ -53,7 +53,7 @@ Gateway rules:
 Effective credential-entry identity resolves in this order:
 
 1. Platform defaults from SDKWork specs
-2. Surface `sdkwork.app.config.json` (`backend.appId`, `backend.tenantId`, `backend.organizationId`, permission scope)
+2. Surface `agent.app.config.json` (`backend.appId`, `backend.tenantId`, `backend.organizationId`, permission scope)
 3. Optional module/composition overrides documented in local `specs/`
 4. Environment profile secrets and generated bootstrap artifacts
 

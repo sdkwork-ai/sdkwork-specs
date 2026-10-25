@@ -35,7 +35,7 @@ function findApplicationRoots(workspace) {
       if (entry.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name)
           && !entry.name.startsWith('_sdkwork-agents-local-archive')) walk(full);
-      } else if (entry.name === 'sdkwork.app.config.json') {
+      } else if (entry.name === 'agent.app.config.json') {
         roots.push(directory);
       }
     }
@@ -102,7 +102,7 @@ export function inspectApplicationRoot(workspace, root) {
   const packagePath = path.join(root, 'package.json');
   const packageManifestExists = fs.existsSync(packagePath);
   const packageManifest = packageManifestExists ? readJson(packagePath) : null;
-  const appManifest = readJson(path.join(root, 'sdkwork.app.config.json'));
+  const appManifest = readJson(path.join(root, 'agent.app.config.json'));
   const nativeFramework = resolveApplicationFramework(appManifest);
   const nativeApplication = nativeFramework === 'flutter'
     || nativeFramework.includes('android-native')

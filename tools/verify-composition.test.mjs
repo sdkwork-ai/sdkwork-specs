@@ -119,7 +119,7 @@ test('renderPnpmWorkspace round-trips package list parsing', () => {
 test('backend-only App Standard v3 roots use the root component SDK inventory', () => {
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-backend-v3-composition-'));
   try {
-    writeJson(path.join(tempRoot, 'sdkwork.app.config.json'), {
+    writeJson(path.join(tempRoot, 'agent.app.config.json'), {
       schemaVersion: 3,
       backend: {},
     });
@@ -136,7 +136,7 @@ test('backend-only App Standard v3 roots use the root component SDK inventory', 
 test('backend-only App Standard v3 roots fail without component SDK inventory', () => {
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-backend-v3-composition-'));
   try {
-    writeJson(path.join(tempRoot, 'sdkwork.app.config.json'), {
+    writeJson(path.join(tempRoot, 'agent.app.config.json'), {
       schemaVersion: 3,
       backend: {},
     });
@@ -197,7 +197,7 @@ test('verify-repo reports missing permissionComposition for HTTP sdkDependencies
   const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-verify-permission-composition-'));
   try {
     const appRoot = path.join(tempRoot, 'apps/sdkwork-shop-h5');
-    writeJson(path.join(appRoot, 'sdkwork.app.config.json'), {
+    writeJson(path.join(appRoot, 'agent.app.config.json'), {
       schemaVersion: 1,
       applicationCode: 'shop',
     });

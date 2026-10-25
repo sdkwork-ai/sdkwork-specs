@@ -58,7 +58,7 @@ test('workspace discovery excludes the standards authority repository', () => {
     const root = path.join(workspace, name);
     fs.mkdirSync(root, { recursive: true });
     fs.writeFileSync(path.join(root, 'package.json'), '{}\n');
-    if (name === 'magic-studio') fs.writeFileSync(path.join(root, 'sdkwork.app.config.json'), '{}\n');
+    if (name === 'magic-studio') fs.writeFileSync(path.join(root, 'agent.app.config.json'), '{}\n');
   }
   assert.deepEqual(workspaceRoots(workspace), [
     path.join(workspace, 'magic-studio'),

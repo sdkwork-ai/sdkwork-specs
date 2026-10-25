@@ -402,7 +402,7 @@ function validateStandaloneBrowserDeliveries(repoRoot, spec, rel, issues) {
 }
 
 function declaredDeploymentProfiles(repoRoot, spec, issues) {
-  const manifestPath = path.join(repoRoot, 'sdkwork.app.config.json');
+  const manifestPath = path.join(repoRoot, 'agent.app.config.json');
   if (fs.existsSync(manifestPath)) {
     try {
       const declared = readJson(manifestPath).runtime?.supportedDeploymentProfiles;

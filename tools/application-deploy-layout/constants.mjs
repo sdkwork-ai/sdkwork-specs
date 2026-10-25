@@ -14,7 +14,7 @@ export const LAYOUT_MARKER_START = '<!-- SDKWORK-DEPLOY-LAYOUT: v1 -->';
 export const LAYOUT_MARKER_END = '<!-- /SDKWORK-DEPLOY-LAYOUT -->';
 
 export const REQUIRED_ARTIFACTS = [
-  'sdkwork.app.config.json',
+  'agent.app.config.json',
   'specs/topology.spec.json',
   'etc',
   'deployments/deploy.yaml',

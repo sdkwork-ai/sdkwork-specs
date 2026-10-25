@@ -30,9 +30,9 @@ function writeIfMissing(targetPath, content, dryRun) {
 
 function bootstrapCoreArtifacts(repoRoot, appId, runtimeCode, dryRun) {
   const written = [];
-  const appConfigPath = path.join(repoRoot, 'sdkwork.app.config.json');
+  const appConfigPath = path.join(repoRoot, 'agent.app.config.json');
   if (writeIfMissing(appConfigPath, renderMinimalAppConfig(appId, runtimeCode), dryRun)) {
-    written.push('sdkwork.app.config.json');
+    written.push('agent.app.config.json');
   }
 
   const topologyPath = path.join(repoRoot, 'specs/topology.spec.json');

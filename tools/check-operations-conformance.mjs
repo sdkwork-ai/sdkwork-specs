@@ -30,7 +30,7 @@
  * `--workspace` audits every module repository below the workspace root in a
  * single pass. A *module* is a repository that follows the fleet repo-name
  * convention (`sdkwork-*`) and carries the module manifest
- * `sdkwork.app.config.json` at its root. Two kinds of directory are therefore
+ * `agent.app.config.json` at its root. Two kinds of directory are therefore
  * reported as skipped rather than failed:
  *
  *   - tooling / spec / doc repositories — no manifest, so they are not modules
@@ -103,7 +103,7 @@ async function runWorkspace(wsRoot, limit, json, offFleet) {
   for (const entry of readdirSync(wsRoot, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue;
     const dir = path.join(wsRoot, entry.name);
-    if (!existsSync(path.join(dir, 'sdkwork.app.config.json'))) { skipped.push(entry.name); continue; }
+    if (!existsSync(path.join(dir, 'agent.app.config.json'))) { skipped.push(entry.name); continue; }
     // Fleet convention: the platform's repo discovery filters on the same
     // `sdkwork-` prefix (tools/application-deploy-layout/discover.mjs).
     if (entry.name.startsWith('sdkwork-')) manifests.push(dir);
@@ -145,7 +145,7 @@ async function runWorkspace(wsRoot, limit, json, offFleet) {
 
   console.log(`\n[ops-conformance] workspace ${wsRoot}`);
   console.log(`  modules: ${audits.length}   clean: ${clean.length}   failed: ${failed.length}   not-applicable checks: ${naTotal}`);
-  if (skipped.length > 0) console.log(`  skipped (not a module — no sdkwork.app.config.json): ${skipped.sort().join(', ')}`);
+  if (skipped.length > 0) console.log(`  skipped (not a module — no agent.app.config.json): ${skipped.sort().join(', ')}`);
   if (offFleetManifests.length > 0) {
     console.log(`  skipped (manifest outside the sdkwork-* fleet convention, not audited${offFleet ? ' — audited via --include-off-fleet' : ''}): ${offFleetManifests.sort().join(', ')}`);
   }
@@ -192,7 +192,7 @@ const rel = (p) => path.relative(root, p).split(path.sep).join('/');
 
 // --- resolve module identity -------------------------------------------------
 const appId = path.basename(root);
-const appConfigPath = path.join(root, 'sdkwork.app.config.json');
+const appConfigPath = path.join(root, 'agent.app.config.json');
 let containerImageHint = '';
 if (existsSync(appConfigPath)) {
   try {

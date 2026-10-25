@@ -34,7 +34,7 @@ resolution **MUST** read `sdk-manifest.json`.
 
 Repository and application generation scripts **MUST** discover authored families from
 `sdks/<sdkFamily>/sdk-manifest.json`. Application dependency composition belongs in the existing
-`sdkwork.app.config.json` and `specs/component.spec.json` contracts. A parallel SDK registry that
+`agent.app.config.json` and `specs/component.spec.json` contracts. A parallel SDK registry that
 restates family ownership, dependencies, or generation inputs **MUST NOT** be introduced.
 
 ## 3. Required fields

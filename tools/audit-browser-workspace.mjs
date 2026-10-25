@@ -86,7 +86,7 @@ function auditRepo(repositoryRoot, repoName) {
   }
 
   // A. manifest
-  const manifestPath = path.join(repositoryRoot, 'sdkwork.app.config.json');
+  const manifestPath = path.join(repositoryRoot, 'agent.app.config.json');
   let declaredProfiles = null;
   if (fs.existsSync(manifestPath)) {
     try {
@@ -95,7 +95,7 @@ function auditRepo(repositoryRoot, repoName) {
       issues.push('A: manifest is not valid JSON');
     }
   } else {
-    issues.push('A: sdkwork.app.config.json missing');
+    issues.push('A: agent.app.config.json missing');
   }
   const isStandaloneOnly = repoName === 'sdkwork-webserver';
   if (isStandaloneOnly) {

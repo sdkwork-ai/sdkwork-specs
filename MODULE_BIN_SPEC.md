@@ -43,7 +43,7 @@ Every independent deployable module root (including every Rust
 `sdkwork-*` service root) `MUST` ship:
 
 Scoped to **product modules**: a directory named `sdkwork-*` carrying
-`sdkwork.app.config.json` at its root. A pure library (no deployable surface,
+`agent.app.config.json` at its root. A pure library (no deployable surface,
 therefore no manifest) is reported as skipped, not failed; §2.1 still applies
 to it. The two scopes are defined once in §7.
 
@@ -91,7 +91,7 @@ Rules:
   `MUST NOT` reimplement a shared concern — no raw `ssh`/`scp`, no
   `sha256sum`, no `tar -c`, no raw `docker save|push|load|pull`, and no
   hardcoded `SDKWORK_IMAGE_TAG_DEFAULT`.
-- The default image tag comes from `sdkwork.app.config.json`
+- The default image tag comes from `agent.app.config.json`
   `release.currentVersion` (`sdkwork_default_image_tag`), never from a
   literal in a wrapper.
 - Scripts are executable (`chmod +x`), pass `bash -n`, and `MUST NOT` contain
@@ -255,7 +255,7 @@ The library `MUST` provide (stable function names, `sdkwork_` prefix):
 | `sdkwork_push_dir <target> <src> <dest>` | Bundle/directory sync to a target: `tar` over ssh for remote, plain path for `wsl` |
 | `sdkwork_init` | One-shot startup: bash guard, specs self-check, module self-check, default image tag, evidence trap |
 | `sdkwork_specs_selfcheck` / `sdkwork_module_selfcheck` | Fail fast on an unresolved specs checkout or incomplete `module.sh` wiring |
-| `sdkwork_default_image_tag` | Default tag from `sdkwork.app.config.json release.currentVersion` |
+| `sdkwork_default_image_tag` | Default tag from `agent.app.config.json release.currentVersion` |
 | `sdkwork_validate_image_tag <tag>` | Rejects env-suffixed tags and `latest` (`DOCKER_SPEC.md` §2.1) |
 | `sdkwork_assert_image_present <ref>` | Asserts a build produced the canonical ref before the entrypoint returns |
 | `sdkwork_confirm_destructive <what>` | Independent destructive-option gate (e.g. `--purge`), requires `--yes` |
@@ -715,7 +715,7 @@ that have no deployable surface:
 | Clause | Governs | Fleet predicate | Tool |
 | --- | --- | --- | --- |
 | **§2.1 Script placement** | every *governed repository* — a directory named `sdkwork-*` carrying a root `AGENTS.md` | `listWorkspaceRepositoryRoots()` | `check-script-placement.mjs` |
-| **§2 entrypoint family / §2.2 naming** | every *product module* — a directory named `sdkwork-*` carrying `sdkwork.app.config.json` | manifest keyed | `check-module-bin.mjs` |
+| **§2 entrypoint family / §2.2 naming** | every *product module* — a directory named `sdkwork-*` carrying `agent.app.config.json` | manifest keyed | `check-module-bin.mjs` |
 
 Rationale: §2.1 constrains *where an authored script may live*, which is true
 of a library too — a library that scatters a shell script is still a second

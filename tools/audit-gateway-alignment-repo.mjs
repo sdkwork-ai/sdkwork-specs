@@ -123,7 +123,7 @@ export function auditGatewayAlignmentRepo(root) {
   const routeCrates = discoverRouteCrates(root, applicationCode);
   const issues = [];
   const warnings = [];
-  const isApplicationRoot = fs.existsSync(path.join(root, 'sdkwork.app.config.json'));
+  const isApplicationRoot = fs.existsSync(path.join(root, 'agent.app.config.json'));
   const hasAssembly = fs.existsSync(path.join(root, assemblyCrateDir(applicationCode)));
 
   if (routeCrates.length === 0 && !isApplicationRoot && !hasAssembly) {

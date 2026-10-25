@@ -50,8 +50,8 @@ function parseArgs(argv) {
 
 function resolveManifest(appRoot) {
   for (const candidate of [
-    path.join(appRoot, 'sdkwork.app.config.json'),
-    path.join(appRoot, '..', '..', 'sdkwork.app.config.json'),
+    path.join(appRoot, 'agent.app.config.json'),
+    path.join(appRoot, '..', '..', 'agent.app.config.json'),
   ]) {
     if (existsSync(candidate)) {
       return JSON.parse(readFileSync(candidate, 'utf8'));

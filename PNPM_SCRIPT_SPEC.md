@@ -638,7 +638,7 @@ Rules:
   to the canonical runner for `--environment prod --deployment-profile
   <profile>`. New automation `MUST` use the environment-scoped family above.
 - A repository that declares `runtime.supportedDeploymentProfiles =
-  ["standalone"]` in its `sdkwork.app.config.json` is exempt from the cloud
+  ["standalone"]` in its `agent.app.config.json` is exempt from the cloud
   command family (for example `sdkwork-webserver`, `SDKWORK_WEBSERVER_SPEC.md`
   §17.4). `tools/check-browser-build-scripts.mjs` reads that declaration and
   only requires the commands for the declared profiles. Every other repository
@@ -1255,7 +1255,7 @@ pnpm script validation `MUST` check:
 - App surface and package scripts use standard local names where applicable, and do not keep
   retired public namespaces such as `server:*`, `service:*`, `portal:*`, `product:*`,
   `alignment:*`, `apis:*`, `file-sdk:*`, or `prepare:*`.
-- Standards, `README.md`, `AGENTS.md`, active runbook examples, `sdkwork.app.config.json`,
+- Standards, `README.md`, `AGENTS.md`, active runbook examples, `agent.app.config.json`,
   `sdkwork.workflow.json`, active `specs/*.json`, and Tauri config command hooks do not
   introduce application-code-prefixed public root commands, platform/tool-first runtime aliases,
   retired deployment flags such as `--hosting self-hosted`, or retired command

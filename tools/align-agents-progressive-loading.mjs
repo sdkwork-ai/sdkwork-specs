@@ -344,7 +344,7 @@ function progressiveSpecResolutionBody(specsPath) {
     'Use dynamic progressive loading for the current task: resolve the selected root and task category before reading broad source context.',
     '',
     '1. Read this `AGENTS.md` routing material and classify the owned surface.',
-    '2. Read `sdkwork.app.config.json`, module `specs/`, repository/application `specs/`, and `.sdkwork/` only when the task reaches the contract each item governs.',
+    '2. Read `agent.app.config.json`, module `specs/`, repository/application `specs/`, and `.sdkwork/` only when the task reaches the contract each item governs.',
     `3. Locate only the relevant task-matrix row or navigation heading in \`${specFile(specsPath, 'README.md')}\`; do not load the full catalog.`,
     '4. Read only the task-specific global spec sections selected by that route, then inspect implementation files.',
   ].join('\n');
@@ -365,7 +365,7 @@ function soulSectionBody(specsPath) {
 }
 
 function applicationIdentitySectionBody() {
-  return 'Read `sdkwork.app.config.json` for application identity, registration, SDK/API inventory, release metadata, or app-owned capabilities. Read `etc/` for concrete environment, Base URL, bind, topology, and deployment values; the app manifest is not runtime configuration authority.';
+  return 'Read `agent.app.config.json` for application identity, registration, SDK/API inventory, release metadata, or app-owned capabilities. Read `etc/` for concrete environment, Base URL, bind, topology, and deployment values; the app manifest is not runtime configuration authority.';
 }
 
 function localDictionarySectionBody() {
@@ -630,7 +630,7 @@ function createAgentsText({ rootKind, specsPath }) {
     '',
     '## Application Identity',
     '',
-    'Read `sdkwork.app.config.json` for application identity, registration, SDK/API inventory, release metadata, or app-owned capabilities. Read `etc/` for concrete environment, Base URL, bind, topology, and deployment values.',
+    'Read `agent.app.config.json` for application identity, registration, SDK/API inventory, release metadata, or app-owned capabilities. Read `etc/` for concrete environment, Base URL, bind, topology, and deployment values.',
     '',
     '## Local Dictionary Structure',
     '',

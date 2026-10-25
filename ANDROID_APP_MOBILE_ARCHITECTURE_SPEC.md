@@ -36,7 +36,7 @@ Rules:
 ```text
 apps/sdkwork-<application-code>-android-mobile/
   AGENTS.md
-  sdkwork.app.config.json
+  agent.app.config.json
   .sdkwork/
     README.md
     skills/
@@ -273,7 +273,7 @@ Rules:
 - `config/app/` and `config/host/` examples must be safe checked-in templates only.
 - Android application id, package name, min/target SDK, ABI targets, permissions, app links, push environment, signing reference names, and store profile references belong to host config or Gradle/manifest templates.
 - Host config must not contain signing private keys, auth tokens, refresh tokens, API keys, database credentials, private service endpoints, SDK ownership, or business route constants.
-- `sdkwork.app.config.json` must include Google Play/private distribution metadata, icons, screenshots, package ids, checksums where applicable, signing metadata references, SBOM/provenance, and release notes.
+- `agent.app.config.json` must include Google Play/private distribution metadata, icons, screenshots, package ids, checksums where applicable, signing metadata references, SBOM/provenance, and release notes.
 - Publish platform should be `APP_ANDROID` for Android-only native roots. Generic `APP` or `APP_PLUS` may be listed only when the product actually supports a broader mobile app family.
 
 ## 10. Standard Commands

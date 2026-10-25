@@ -13,7 +13,7 @@ function fixture({ profileRoot = 'etc/topology', manifestAppId = 'sdkwork-demo' 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-deployment-index-'));
   fs.mkdirSync(path.join(root, 'specs'), { recursive: true });
   fs.writeFileSync(
-    path.join(root, 'sdkwork.app.config.json'),
+    path.join(root, 'agent.app.config.json'),
     `${JSON.stringify({ app: { key: manifestAppId } }, null, 2)}\n`,
   );
   const profileFiles = {

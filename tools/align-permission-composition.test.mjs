@@ -15,7 +15,7 @@ function writeJson(filePath, value) {
 
 function createCoreSpec(root) {
   const appRoot = path.join(root, 'apps/sdkwork-shop-h5');
-  writeJson(path.join(appRoot, 'sdkwork.app.config.json'), {
+  writeJson(path.join(appRoot, 'agent.app.config.json'), {
     schemaVersion: 1,
     applicationCode: 'shop',
   });
@@ -132,7 +132,7 @@ test('aligner resolves SDK dependency to sibling IMF module identity', () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-permission-align-sibling-'));
   const root = path.join(workspace, 'sdkwork-cloudrouter');
   const appRoot = path.join(root, 'apps/sdkwork-cloudrouter-pc');
-  writeJson(path.join(appRoot, 'sdkwork.app.config.json'), {
+  writeJson(path.join(appRoot, 'agent.app.config.json'), {
     schemaVersion: 1,
     applicationCode: 'cloudrouter',
   });

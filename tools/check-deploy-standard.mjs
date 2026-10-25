@@ -16,7 +16,7 @@
  *
  * Fleet predicate (identical to check-operations-conformance.mjs,
  * check-module-bin.mjs and the platform's own repo discovery): a *module* is a
- * directory named sdkwork-* carrying sdkwork.app.config.json at its root.
+ * directory named sdkwork-* carrying agent.app.config.json at its root.
  *
  * The fleet mode exists because the absence of one is why the standard drifted:
  * this check was only ever run one repository at a time, so 45 manifests
@@ -54,7 +54,7 @@ async function runWorkspace(wsRoot, limit, json, offFleet) {
   for (const entry of fs.readdirSync(wsRoot, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue;
     const dir = path.join(wsRoot, entry.name);
-    if (!fs.existsSync(path.join(dir, 'sdkwork.app.config.json'))) { skipped.push(entry.name); continue; }
+    if (!fs.existsSync(path.join(dir, 'agent.app.config.json'))) { skipped.push(entry.name); continue; }
     if (!fs.existsSync(path.join(dir, 'deployments', 'deploy.yaml'))) { skipped.push(entry.name); continue; }
     if (entry.name.startsWith('sdkwork-')) manifests.push(dir);
     else { offFleetManifests.push(entry.name); if (offFleet) manifests.push(dir); }

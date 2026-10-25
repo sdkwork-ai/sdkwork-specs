@@ -163,7 +163,7 @@ Every client root should align to this logical structure. Architecture standards
 ```text
 apps/sdkwork-<application-code>-<client-arch>/
   AGENTS.md
-  sdkwork.app.config.json
+  agent.app.config.json
   .sdkwork/
     README.md
     skills/

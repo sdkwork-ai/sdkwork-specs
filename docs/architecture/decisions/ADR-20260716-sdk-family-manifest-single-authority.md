@@ -18,7 +18,7 @@ could recreate a retired artifact after it was deleted.
 
 1. `sdks/<sdkFamily>/sdk-manifest.json` is the only SDK family metadata authority.
 2. Multi-family generation discovers family manifests directly from the `sdks/` directory.
-3. Application dependency composition uses existing `sdkwork.app.config.json`, package manifests,
+3. Application dependency composition uses existing `agent.app.config.json`, package manifests,
    and `specs/component.spec.json` contracts.
 4. No family, application, or repository SDK root may keep a parallel SDK registry.
 5. Standard validation reports the removed file as a hard violation. `--fix` does not merge,

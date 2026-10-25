@@ -36,7 +36,7 @@ Rules:
 ```text
 apps/sdkwork-<application-code>-harmony-mobile/
   AGENTS.md
-  sdkwork.app.config.json
+  agent.app.config.json
   .sdkwork/
     README.md
     skills/
@@ -274,7 +274,7 @@ Rules:
 - `config/app/` and `config/host/` examples must be safe checked-in templates only.
 - Harmony bundle id/app id, module ids, supported device types, permissions, app links, push environment, signing reference names, AppGallery/private distribution references, and store profile references belong to host config or platform templates.
 - Host config must not contain signing private keys, auth tokens, refresh tokens, API keys, database credentials, private service endpoints, SDK ownership, or business route constants.
-- `sdkwork.app.config.json` must include AppGallery/private distribution metadata, icons, screenshots, package ids, checksums where applicable, signing metadata references, SBOM/provenance, and release notes.
+- `agent.app.config.json` must include AppGallery/private distribution metadata, icons, screenshots, package ids, checksums where applicable, signing metadata references, SBOM/provenance, and release notes.
 - Publish platform should be `APP_HARMONY` for Harmony-only native roots. Generic `APP` or `APP_PLUS` may be listed only when the product actually supports a broader mobile app family.
 - Harmony direct packages declare `packageFormat` as `HAP` for HarmonyOS module packages or `HARMONY_APP` for AppGallery APP Pack submissions, following `APP_MANIFEST_SPEC.md`. They must not fall back to `OTHER` for a plain HAP/APP artifact.
 

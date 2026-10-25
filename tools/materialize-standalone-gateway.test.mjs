@@ -14,8 +14,8 @@ function fixture() {
   fs.mkdirSync(path.join(routeRoot, 'src'), { recursive: true });
   fs.mkdirSync(path.join(routeRoot, 'specs'), { recursive: true });
   fs.writeFileSync(
-    path.join(root, 'sdkwork.app.config.json'),
-    JSON.stringify({ kind: 'sdkwork.app', app: { key: 'sdkwork-demo' } }, null, 2),
+    path.join(root, 'agent.app.config.json'),
+    JSON.stringify({ kind: 'agent.app', app: { key: 'sdkwork-demo' } }, null, 2),
   );
   fs.writeFileSync(
     path.join(root, 'Cargo.toml'),

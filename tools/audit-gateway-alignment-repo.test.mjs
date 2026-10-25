@@ -18,7 +18,7 @@ function emptyApplication(t) {
   const root = path.join(workspace, 'sdkwork-demo');
   fs.mkdirSync(path.join(specsRoot, 'tools'), { recursive: true });
   fs.mkdirSync(root, { recursive: true });
-  fs.writeFileSync(path.join(root, 'sdkwork.app.config.json'), '{"backend":{"appId":"sdkwork-demo"}}\n');
+  fs.writeFileSync(path.join(root, 'agent.app.config.json'), '{"backend":{"appId":"sdkwork-demo"}}\n');
   fs.writeFileSync(path.join(root, 'package.json'), '{"scripts":{}}\n');
   fs.writeFileSync(
     path.join(root, 'Cargo.toml'),

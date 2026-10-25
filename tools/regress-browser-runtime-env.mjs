@@ -23,7 +23,7 @@ function readJson(filePath) {
 }
 
 function declaredProfiles(repositoryRoot) {
-  const manifestPath = path.join(repositoryRoot, 'sdkwork.app.config.json');
+  const manifestPath = path.join(repositoryRoot, 'agent.app.config.json');
   if (fs.existsSync(manifestPath)) {
     const profiles = readJson(manifestPath).runtime?.supportedDeploymentProfiles;
     if (Array.isArray(profiles) && profiles.length > 0) {

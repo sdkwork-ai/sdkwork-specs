@@ -72,7 +72,7 @@ function packageJsonAt(root) {
 }
 
 function manifestRequiresBootstrapToken(repoRoot) {
-  const manifestPath = path.join(repoRoot, 'sdkwork.app.config.json');
+  const manifestPath = path.join(repoRoot, 'agent.app.config.json');
   if (!fs.existsSync(manifestPath)) return false;
   try {
     const manifest = readJson(manifestPath);

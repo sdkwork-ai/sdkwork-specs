@@ -174,7 +174,7 @@ export function alignBrowserRuntimeEnv(repositoryRoot, options = {}) {
 
   // Respect a standalone-only declaration (for example sdkwork-webserver,
   // SDKWORK_WEBSERVER_SPEC.md §17.4): only the standalone matrix is aligned.
-  const manifestPath = path.join(repositoryRoot, 'sdkwork.app.config.json');
+  const manifestPath = path.join(repositoryRoot, 'agent.app.config.json');
   const manifestProfiles = fs.existsSync(manifestPath)
     ? readJson(manifestPath).runtime?.supportedDeploymentProfiles
     : undefined;

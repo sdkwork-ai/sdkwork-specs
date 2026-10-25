@@ -13,7 +13,7 @@ import {
 function validManifest() {
   return {
     schemaVersion: 3,
-    kind: 'sdkwork.app',
+    kind: 'agent.app',
     app: {
       key: 'sdkwork-demo',
       name: 'sdkwork-demo',
@@ -83,7 +83,7 @@ test('accepts an etc deployment index instead of a legacy environment map', () =
 
 test('keeps the app type vocabulary aligned with the published schema', () => {
   const schema = JSON.parse(fs.readFileSync(
-    path.join(import.meta.dirname, '..', 'schemas', 'sdkwork.app.config.schema.v3.json'),
+    path.join(import.meta.dirname, '..', 'schemas', 'agent.app.config.schema.v3.json'),
     'utf8',
   ));
   const declared = schema.properties.app.properties.appType.enum;
@@ -120,7 +120,7 @@ test('workspace discovery rejects duplicate global app keys', () => {
     const appRoot = path.join(root, name);
     fs.mkdirSync(appRoot, { recursive: true });
     fs.writeFileSync(
-      path.join(appRoot, 'sdkwork.app.config.json'),
+      path.join(appRoot, 'agent.app.config.json'),
       JSON.stringify(validManifest()),
     );
   }
@@ -136,16 +136,16 @@ test('workspace discovery excludes local application archives', () => {
   fs.mkdirSync(activeRoot, { recursive: true });
   fs.mkdirSync(archiveRoot, { recursive: true });
   fs.writeFileSync(
-    path.join(activeRoot, 'sdkwork.app.config.json'),
+    path.join(activeRoot, 'agent.app.config.json'),
     JSON.stringify(validManifest()),
   );
   fs.writeFileSync(
-    path.join(archiveRoot, 'sdkwork.app.config.json'),
+    path.join(archiveRoot, 'agent.app.config.json'),
     JSON.stringify(validManifest()),
   );
 
   assert.deepEqual(findAppManifests(root), [
-    path.join(activeRoot, 'sdkwork.app.config.json'),
+    path.join(activeRoot, 'agent.app.config.json'),
   ]);
 });
 
@@ -155,18 +155,18 @@ test('workspace validation reports malformed manifests and continues checking va
   const validRoot = path.join(root, 'sdkwork-valid');
   fs.mkdirSync(invalidRoot, { recursive: true });
   fs.mkdirSync(validRoot, { recursive: true });
-  fs.writeFileSync(path.join(invalidRoot, 'sdkwork.app.config.json'), '');
+  fs.writeFileSync(path.join(invalidRoot, 'agent.app.config.json'), '');
   const manifest = validManifest();
   manifest.legacyConfig = {};
   fs.writeFileSync(
-    path.join(validRoot, 'sdkwork.app.config.json'),
+    path.join(validRoot, 'agent.app.config.json'),
     JSON.stringify(manifest),
   );
 
   const issues = validateAppManifestFiles(findAppManifests(root), root);
-  assert.ok(issues.includes('sdkwork-invalid/sdkwork.app.config.json: invalid JSON'));
+  assert.ok(issues.includes('sdkwork-invalid/agent.app.config.json: invalid JSON'));
   assert.ok(issues.some((issue) => (
-    issue.includes('sdkwork-valid/sdkwork.app.config.json')
+    issue.includes('sdkwork-valid/agent.app.config.json')
     && issue.includes('unknown top-level field')
   )));
 });

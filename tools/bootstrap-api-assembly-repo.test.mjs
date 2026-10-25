@@ -19,7 +19,7 @@ function workspaceFixture(t, { withRoute = false } = {}) {
   fs.mkdirSync(path.join(specsRoot, 'tools'), { recursive: true });
   fs.mkdirSync(root, { recursive: true });
   fs.writeFileSync(
-    path.join(root, 'sdkwork.app.config.json'),
+    path.join(root, 'agent.app.config.json'),
     `${JSON.stringify({ backend: { appId: 'sdkwork-demo' } }, null, 2)}\n`,
   );
   fs.writeFileSync(path.join(root, 'package.json'), '{"scripts":{}}\n');
@@ -145,7 +145,7 @@ test('fails closed instead of deriving assembly identity from manifest fields', 
   const root = path.join(workspace, 'application-root');
   fs.mkdirSync(root, { recursive: true });
   fs.writeFileSync(
-    path.join(root, 'sdkwork.app.config.json'),
+    path.join(root, 'agent.app.config.json'),
     '{"app":{"key":"sdkwork-demo"},"backend":{"appId":"sdkwork-demo-pc"}}\n',
   );
 

@@ -143,7 +143,7 @@ export function resolveRepositoryKind(repoRoot, options = {}) {
     return declaredKind;
   }
 
-  if (fs.existsSync(path.join(repoRoot, 'sdkwork.app.config.json')) || listApplicationRoots(repoRoot).length > 0) {
+  if (fs.existsSync(path.join(repoRoot, 'agent.app.config.json')) || listApplicationRoots(repoRoot).length > 0) {
     return 'application';
   }
 

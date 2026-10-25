@@ -6,7 +6,7 @@ Requirement: [REQ-2026-0713](../../product/requirements/REQ-2026-0713-progressiv
 ## Scope
 
 The migration covers the workspace root, direct SDKWork git repositories, and
-independent application roots identified by `sdkwork.app.config.json`. It does
+independent application roots identified by `agent.app.config.json`. It does
 not recursively adopt vendored, external, generated, fixture, runtime, or
 user-modified paths.
 

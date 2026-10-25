@@ -16,7 +16,7 @@ One-page authority for **where configuration lives** and **how deployable module
 
 Ownership sentence (`SOURCE_CONFIG_SPEC.md`):
 
-> `sdkwork.app.config.json` declares identity; `specs/` declares contracts; `etc/` declares profile instances; `deployments/` declares install/orchestration; installed OS files are materialized runtime.
+> `agent.app.config.json` declares identity; `specs/` declares contracts; `etc/` declares profile instances; `deployments/` declares install/orchestration; installed OS files are materialized runtime.
 
 ## 2. Deployable Root (Source)
 
@@ -24,7 +24,7 @@ Every independently deployable repository **MUST** contain:
 
 ```text
 <repo>/
-  sdkwork.app.config.json
+  agent.app.config.json
   specs/topology.spec.json
   etc/                              # profile env files, examples, README
   deployments/

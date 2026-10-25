@@ -73,7 +73,7 @@ Rules:
 - App SDK constructors may differ by application, but injected method surfaces `MUST` remain resource-oriented and stable.
 - Reusable UI IAM capability work belongs in `apps/sdkwork-iam-pc/packages/` and cross-architecture IAM packages in `apps/sdkwork-iam-common/packages/`; do not introduce compatibility package roots outside the canonical IAM boundary.
 - Dependency direction is consumer-to-IAM only. IAM authored code, tests, manifests, and runtime configuration `MUST NOT` enumerate consumer application IDs, repository paths, product-specific environment keys, route files, or source layouts. Consumer-specific integration and topology tests belong to the consuming repository.
-- IAM accepts consumer identity and application-root facts only through generic public contracts such as `sdkwork.app.config.json`, `SDKWORK_APP_ROOT`, generated SDK facades, assembly contributions, context contracts, and documented adapter exports. A consumer may map its product-specific configuration to those contracts at its own composition boundary.
+- IAM accepts consumer identity and application-root facts only through generic public contracts such as `agent.app.config.json`, `SDKWORK_APP_ROOT`, generated SDK facades, assembly contributions, context contracts, and documented adapter exports. A consumer may map its product-specific configuration to those contracts at its own composition boundary.
 
 ## 3. Core Model
 

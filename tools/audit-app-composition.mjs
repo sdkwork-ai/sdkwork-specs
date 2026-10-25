@@ -34,7 +34,7 @@ for (const entry of fs.readdirSync(workspace, { withFileTypes: true })) {
     }
   }
 
-  const manifestPath = path.join(repoRoot, 'sdkwork.app.config.json');
+  const manifestPath = path.join(repoRoot, 'agent.app.config.json');
   if (!fs.existsSync(manifestPath)) continue;
   const manifest = readJson(manifestPath);
   if (!manifest.backend) continue;

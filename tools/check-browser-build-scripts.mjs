@@ -32,12 +32,12 @@ function usesCanonicalRunner(commandText) {
 
 /**
  * Deployment profiles the repository declares for itself
- * (sdkwork.app.config.json runtime.supportedDeploymentProfiles). A repository
+ * (agent.app.config.json runtime.supportedDeploymentProfiles). A repository
  * that declares only `standalone` is exempt from the cloud build command
  * family (for example sdkwork-webserver, which is standalone-only).
  */
 export function declaredDeploymentProfiles(root) {
-  const manifestPath = path.join(root, 'sdkwork.app.config.json');
+  const manifestPath = path.join(root, 'agent.app.config.json');
   if (!fs.existsSync(manifestPath)) {
     return DEPLOYMENT_PROFILES;
   }

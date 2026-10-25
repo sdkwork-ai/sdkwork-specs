@@ -26,7 +26,7 @@ test('workspace bootstrap infrastructure is present', () => {
 test('accepts a repository that routes lifecycle through sdkwork-app', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-bootstrap-lifecycle-'));
   try {
-    fs.writeFileSync(path.join(root, 'sdkwork.app.config.json'), `${JSON.stringify({
+    fs.writeFileSync(path.join(root, 'agent.app.config.json'), `${JSON.stringify({
       backend: { accessTokenPermissionScope: ['iam.applications.read'] },
     }, null, 2)}\n`);
     fs.writeFileSync(path.join(root, 'package.json'), `${JSON.stringify({
@@ -43,13 +43,13 @@ test('rejects credential-entry surfaces without lifecycle token ensure', () => {
   const appRoot = path.join(root, 'apps', 'sdkwork-demo-pc');
   try {
     fs.mkdirSync(path.join(appRoot, 'src'), { recursive: true });
-    fs.writeFileSync(path.join(root, 'sdkwork.app.config.json'), `${JSON.stringify({
+    fs.writeFileSync(path.join(root, 'agent.app.config.json'), `${JSON.stringify({
       backend: { accessTokenPermissionScope: ['iam.applications.read'] },
     }, null, 2)}\n`);
     fs.writeFileSync(path.join(root, 'package.json'), `${JSON.stringify({
       scripts: { dev: 'pnpm --dir apps/sdkwork-demo-pc dev' },
     }, null, 2)}\n`);
-    fs.writeFileSync(path.join(appRoot, 'sdkwork.app.config.json'), '{"kind":"sdkwork.app"}\n');
+    fs.writeFileSync(path.join(appRoot, 'agent.app.config.json'), '{"kind":"agent.app"}\n');
     fs.writeFileSync(path.join(appRoot, 'index.html'), '<div id="root"></div>\n');
     fs.writeFileSync(path.join(appRoot, 'package.json'), JSON.stringify({
       scripts: { dev: 'vite' },

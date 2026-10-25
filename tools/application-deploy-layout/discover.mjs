@@ -7,7 +7,7 @@ export function isDeployableRepo(repoRoot) {
   const name = path.basename(repoRoot);
   if (FRAMEWORK_REPOS.has(name)) return false;
   if (!fs.existsSync(path.join(repoRoot, 'Cargo.toml'))) return false;
-  if (fs.existsSync(path.join(repoRoot, 'sdkwork.app.config.json'))) return true;
+  if (fs.existsSync(path.join(repoRoot, 'agent.app.config.json'))) return true;
   const cratesDir = path.join(repoRoot, 'crates');
   if (!fs.existsSync(cratesDir)) return false;
   return fs.readdirSync(cratesDir).some((entry) => /assembly|standalone-gateway|gateway-assembly/iu.test(entry));
@@ -26,7 +26,7 @@ export function discoverRepos(workspaceRoot, options = {}) {
     }
     if (
       includeAppConfigOnly &&
-      fs.existsSync(path.join(repoRoot, 'sdkwork.app.config.json'))
+      fs.existsSync(path.join(repoRoot, 'agent.app.config.json'))
     ) {
       repos.push(repoRoot);
     }

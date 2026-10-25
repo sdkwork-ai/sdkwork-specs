@@ -815,14 +815,14 @@ Required shape:
 }
 ```
 
-The `appId` above is read from the application's own `sdkwork.app.config.json`; it is illustrative of that file, not a fixed literal. An implementation `MUST NOT` copy a value from this example: copy the application's own `backend.appId`.
+The `appId` above is read from the application's own `agent.app.config.json`; it is illustrative of that file, not a fixed literal. An implementation `MUST NOT` copy a value from this example: copy the application's own `backend.appId`.
 
 Field rules:
 
 | Field | Requirement |
 | --- | --- |
 | `schemaVersion` | `MUST` be `1`. A new schema revision is a Drive-governed change. |
-| `appId` | `MUST` equal the application's canonical `appId` from `sdkwork.app.config.json`, which is the `backend.appId` field of that file. It is declared here for cross-checking only; Drive still derives the authoritative `appId` from the authenticated runtime. An application root with no `sdkwork.app.config.json` of its own declares the `backend.appId` of the runnable application root that hosts it. |
+| `appId` | `MUST` equal the application's canonical `appId` from `agent.app.config.json`, which is the `backend.appId` field of that file. It is declared here for cross-checking only; Drive still derives the authoritative `appId` from the authenticated runtime. An application root with no `agent.app.config.json` of its own declares the `backend.appId` of the runnable application root that hosts it. |
 | `declarations[]` | `MUST` contain one entry per distinct upload purpose. Two purposes that differ in `appResourceType`, `scene`, or `uploadProfileCode` `MUST` be two entries. Two surfaces of one application that differ **only** in `source` `MUST` also be two entries (see the `source` rule below), but they are one purpose: they share one identity triple. |
 | `appResourceType` | `MUST` be a stable dotted business resource type. |
 | `appResourceIdKind` | `MUST` be one of `application`, `entity`, or `draft`. It states what the `appResourceId` passed at call time identifies. |
@@ -880,7 +880,7 @@ These rules exist because unconstrained naming has already produced conflicting 
 An application's declaration is verified structurally and against its call sites:
 
 - The file exists at the declared path and parses as JSON.
-- `schemaVersion` is `1`, `appId` matches `sdkwork.app.config.json`, and every required field is present with the right type.
+- `schemaVersion` is `1`, `appId` matches `agent.app.config.json`, and every required field is present with the right type.
 - Every `uploadProfileCode` is one of the section 8.1 profiles.
 - Every `source` matches the lowercase kebab-case label rule, is not a package name or module path, and is identical across that application's call sites for the entry.
 - Every `scene` matches the lowercase kebab-case rule and is not a reserved Drive scene.

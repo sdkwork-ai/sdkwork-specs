@@ -11,7 +11,7 @@ function fixture() {
   fs.mkdirSync(path.join(root, 'etc'), { recursive: true });
   fs.mkdirSync(path.join(root, 'scripts'), { recursive: true });
   fs.mkdirSync(path.join(root, 'tests'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'sdkwork.app.config.json'), '{}\n');
+  fs.writeFileSync(path.join(root, 'agent.app.config.json'), '{}\n');
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ scripts: {
     'gateway:package:cloud': 'node package-cloud.mjs',
     'gateway:cloud:bundle': 'node package-cloud.mjs',
@@ -70,7 +70,7 @@ test('never mutates the platform cloud gateway owner repository', () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-platform-gateway-owner-'));
   const root = path.join(workspace, 'sdkwork-api-cloud-gateway');
   fs.mkdirSync(root, { recursive: true });
-  fs.writeFileSync(path.join(root, 'sdkwork.app.config.json'), '{}\n');
+  fs.writeFileSync(path.join(root, 'agent.app.config.json'), '{}\n');
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ scripts: {
     'gateway:package:cloud': 'node package-cloud.mjs',
   } }, null, 2));

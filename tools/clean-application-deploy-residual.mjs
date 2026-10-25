@@ -188,7 +188,7 @@ function listRepos(workspaceRoot) {
     .filter((repoRoot) => {
       return (
         fs.existsSync(path.join(repoRoot, 'Cargo.toml')) ||
-        fs.existsSync(path.join(repoRoot, 'sdkwork.app.config.json'))
+        fs.existsSync(path.join(repoRoot, 'agent.app.config.json'))
       );
     });
 }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sdkwork.com/schemas/sdkwork.app.config.schema.v3.json",
+  "$id": "https://sdkwork.com/schemas/agent.app.config.schema.v3.json",
   "title": "SDKWork Application Manifest v3",
   "type": "object",
   "additionalProperties": false,
@@ -21,7 +21,7 @@
   "properties": {
     "$schema": { "type": "string" },
     "schemaVersion": { "const": 3 },
-    "kind": { "const": "sdkwork.app" },
+    "kind": { "const": "agent.app" },
     "app": {
       "type": "object",
       "required": ["key", "name", "displayName", "officialWebsiteUrl", "appType"],

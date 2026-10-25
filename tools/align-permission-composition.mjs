@@ -304,7 +304,7 @@ function buildPermissionComposition(repoRoot, core, deps, registry, options) {
     ...(appManifestRef ? { applicationModule: { ...(existing.applicationModule ?? {}), manifestRef: appManifestRef } } : {}),
     moduleCatalogRefs: [...refsByKey.values()].sort((a, b) => String(a.moduleId).localeCompare(String(b.moduleId))),
     bootstrapAccessTokenScope: {
-      inheritFrom: 'sdkwork.app.config.json#backend.accessTokenPermissionScope',
+      inheritFrom: 'agent.app.config.json#backend.accessTokenPermissionScope',
       supplement: existing.bootstrapAccessTokenScope?.supplement ?? [],
       overrideReplace: existing.bootstrapAccessTokenScope?.overrideReplace ?? false,
       ...(existing.bootstrapAccessTokenScope ?? {}),
@@ -372,7 +372,7 @@ function listWorkspaceRepos(workspaceRoot) {
   return fs.readdirSync(workspaceRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && entry.name !== 'node_modules' && entry.name !== '.git')
     .map((entry) => path.join(workspaceRoot, entry.name))
-    .filter((repoRoot) => fs.existsSync(path.join(repoRoot, 'AGENTS.md')) || fs.existsSync(path.join(repoRoot, 'sdkwork.app.config.json')) || fs.existsSync(path.join(repoRoot, 'apps')));
+    .filter((repoRoot) => fs.existsSync(path.join(repoRoot, 'AGENTS.md')) || fs.existsSync(path.join(repoRoot, 'agent.app.config.json')) || fs.existsSync(path.join(repoRoot, 'apps')));
 }
 
 function main() {

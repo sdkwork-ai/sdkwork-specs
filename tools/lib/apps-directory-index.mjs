@@ -43,7 +43,7 @@ function isFile(absolutePath) {
 }
 
 function hasApplicationManifest(absoluteDir) {
-  return isFile(path.join(absoluteDir, 'sdkwork.app.config.json'));
+  return isFile(path.join(absoluteDir, 'agent.app.config.json'));
 }
 
 export function isStandardsRepository(root) {
@@ -103,7 +103,7 @@ export function inferSurfaceRole(directoryName) {
 }
 
 function readManifestDisplayName(absoluteDir) {
-  const manifestPath = path.join(absoluteDir, 'sdkwork.app.config.json');
+  const manifestPath = path.join(absoluteDir, 'agent.app.config.json');
   if (!isFile(manifestPath)) {
     return '';
   }
@@ -174,7 +174,7 @@ function renderPrimarySurfaceSection(primary) {
   if (primary.repositoryRootIsPrimary) {
     lines.push(
       'The repository root is the primary runnable app surface.',
-      'The repository root `sdkwork.app.config.json` governs the primary application manifest.',
+      'The repository root `agent.app.config.json` governs the primary application manifest.',
     );
     return lines;
   }
@@ -183,7 +183,7 @@ function renderPrimarySurfaceSection(primary) {
     lines.push(
       'This repository uses a hybrid layout. Primary runnable app surfaces currently live outside `apps/`:',
       '',
-      ...primary.rootLevelSurfaces.map((surface) => `- \`${surface}/\` with \`${surface}/sdkwork.app.config.json\``),
+      ...primary.rootLevelSurfaces.map((surface) => `- \`${surface}/\` with \`${surface}/agent.app.config.json\``),
     );
   } else {
     lines.push('Runnable application roots live under `apps/<application-root>/`.');

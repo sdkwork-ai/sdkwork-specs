@@ -90,7 +90,7 @@ function readModuleFacts(root) {
     facts.wired = Boolean(hook) && !hook[1].includes('sdkwork_die');
     facts.assemblyOnly = Boolean(hook) && hook[1].includes('assembly-only');
   }
-  const appConfig = path.join(root, 'sdkwork.app.config.json');
+  const appConfig = path.join(root, 'agent.app.config.json');
   if (fs.existsSync(appConfig)) {
     try {
       const cfg = JSON.parse(fs.readFileSync(appConfig, 'utf8'));
@@ -230,7 +230,7 @@ function deployZh(f) {
   const deployRoot = `/opt/deploy/${f.id}`;
   return `# Runbook — ${f.id} 部署 / 升级 / 回滚（中文）
 
-适用环境：\`development|test|staging|demo|production\`。所有命令默认在本机 WSL 执行，远程主机加 \`--host ssh://[user@]host[:port]\`。镜像参考：\`registry.sdkwork.com/apps/${f.image}:${f.version}\`（tag 取自 \`sdkwork.app.config.json\` → \`release.currentVersion\`）。
+适用环境：\`development|test|staging|demo|production\`。所有命令默认在本机 WSL 执行，远程主机加 \`--host ssh://[user@]host[:port]\`。镜像参考：\`registry.sdkwork.com/apps/${f.image}:${f.version}\`（tag 取自 \`agent.app.config.json\` → \`release.currentVersion\`）。
 ${wiringBlockZh(f)}
 ## 1. 安装（首次）
 
@@ -285,7 +285,7 @@ function deployEn(f) {
 Environments: \`development|test|staging|demo|production\`. Commands run on the
 local WSL host by default; append \`--host ssh://[user@]host[:port]\` for remote
 targets. Image reference: \`registry.sdkwork.com/apps/${f.image}:${f.version}\`
-(tag from \`sdkwork.app.config.json\` → \`release.currentVersion\`).
+(tag from \`agent.app.config.json\` → \`release.currentVersion\`).
 ${wiringBlockEn(f)}
 ## 1. Install (first time)
 

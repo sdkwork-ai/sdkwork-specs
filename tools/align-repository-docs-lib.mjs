@@ -241,7 +241,7 @@ function titleCaseFromRepo(repoName) {
 
 export function resolveRepositoryIdentity(root) {
   const repoName = path.basename(root);
-  const manifestPath = path.join(root, 'sdkwork.app.config.json');
+  const manifestPath = path.join(root, 'agent.app.config.json');
   let applicationCode = repoName.replace(/^sdkwork-/u, '');
   let productName = titleCaseFromRepo(repoName);
   let owner = 'SDKWork maintainers';

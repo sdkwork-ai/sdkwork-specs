@@ -11,7 +11,7 @@ instances, infrastructure descriptors, installed runtime configuration, and secr
 
 The canonical ownership sentence is:
 
-> `sdkwork.app.config.json` declares what an application is; `specs/` declares what configuration
+> `agent.app.config.json` declares what an application is; `specs/` declares what configuration
 > is valid; source `etc/` declares how a deployable root is configured; `deployments/` declares how
 > artifacts are installed or orchestrated.
 
@@ -37,7 +37,7 @@ Rules:
 
 | Source | Authority |
 | --- | --- |
-| `sdkwork.app.config.json` | Application identity, registration, supported runtime families, owned capabilities, API/SDK inventory, release and distribution metadata |
+| `agent.app.config.json` | Application identity, registration, supported runtime families, owned capabilities, API/SDK inventory, release and distribution metadata |
 | `specs/` | Schemas, invariants, allowed vocabulary, ownership rules, references, and verification commands |
 | `etc/` | Safe source-controlled environment/profile instances, browser bootstrap inputs, service config templates, gateway config, local DNS examples, and secret-file references |
 | `deployments/` | Docker, Kubernetes, system service, reverse proxy, installer, packaging handoff, rollout, rollback, and infrastructure descriptors |
@@ -48,7 +48,7 @@ Rules:
 
 - Concrete environment URLs, bind addresses, ports, SDK Base URLs, CORS origins, database targets,
   Redis targets, feature-flag values, and topology profile selections `MUST` live in `etc/`, not in
-  `sdkwork.app.config.json` or `specs/`.
+  `agent.app.config.json` or `specs/`.
 - The deployment profile that owns a public API ingress `MUST` own the complete CORS origin set for
   that ingress. Every browser, desktop WebView, H5, or other web-runtime origin that calls the
   ingress directly `MUST` appear as an exact origin in the same production or production-like
@@ -83,7 +83,7 @@ Every deployable root uses this minimum layout:
 
 ```text
 <deployable-root>/
-  sdkwork.app.config.json          # when the root is an application
+  agent.app.config.json          # when the root is an application
   specs/
     component.spec.json            # module root, when applicable
   etc/
@@ -198,7 +198,7 @@ missing or stale.
 
 ## 5. Application Manifest Boundary
 
-`sdkwork.app.config.json` `MUST NOT` own concrete environment deployment values.
+`agent.app.config.json` `MUST NOT` own concrete environment deployment values.
 
 Forbidden manifest fields for new manifests include concrete environment maps such as:
 

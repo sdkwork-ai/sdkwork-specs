@@ -35,7 +35,7 @@ Rules:
 ```text
 apps/sdkwork-<application-code>-flutter-mobile/
   AGENTS.md
-  sdkwork.app.config.json
+  agent.app.config.json
   .sdkwork/
     README.md
     skills/
@@ -255,7 +255,7 @@ Rules:
 - `config/app/` and `config/host/` examples must be safe checked-in templates only.
 - iOS bundle id, Android package id, entitlements/permissions, push environment, app links, universal links, and signing reference names belong to host config or native platform config.
 - Host config must not contain signing private keys, auth tokens, refresh tokens, API keys, database credentials, private service endpoints, SDK ownership, or business route constants.
-- `sdkwork.app.config.json` must include App Store/Google Play/private distribution metadata, icons, screenshots, package ids, checksums where applicable, signing metadata references, SBOM/provenance, and release notes.
+- `agent.app.config.json` must include App Store/Google Play/private distribution metadata, icons, screenshots, package ids, checksums where applicable, signing metadata references, SBOM/provenance, and release notes.
 
 ## 10. Standard Commands
 

@@ -288,7 +288,7 @@ const RETIRED_LOCAL_FIRST_SEGMENTS = new Set([
 const DOC_FILE_EXTENSIONS = new Set(['.md', '.mdx']);
 const RUNNER_SCRIPT_EXTENSIONS = new Set(['.js', '.cjs', '.mjs', '.ts', '.cts', '.mts', '.sh', '.ps1', '.cmd', '.bat']);
 const RUNNER_SCRIPT_ROOTS = new Set(['scripts', 'tools']);
-const COMMAND_JSON_FILENAMES = new Set(['sdkwork.app.config.json', 'sdkwork.workflow.json', 'tauri.conf.json']);
+const COMMAND_JSON_FILENAMES = new Set(['agent.app.config.json', 'sdkwork.workflow.json', 'tauri.conf.json']);
 const PNPM_NATIVE_COMMANDS = new Set([
   'add',
   'approve-builds',
@@ -450,7 +450,7 @@ export function isApplicationRepositoryRoot(root) {
   const componentType = String(component?.component?.type ?? '').trim().toLowerCase();
   if (new Set(['domain-library', 'node-package']).has(componentType)) return false;
 
-  const appPath = path.join(root, 'sdkwork.app.config.json');
+  const appPath = path.join(root, 'agent.app.config.json');
   const app = fs.existsSync(appPath) ? readJsonIfValid(appPath) : null;
   if (String(app?.runtime?.family ?? '').trim().toLowerCase() === 'library') return false;
 
@@ -928,7 +928,7 @@ function workflowReleaseProfiles(root) {
 
 export function supportedDeploymentProfiles(root) {
   const profiles = workflowReleaseProfiles(root);
-  const appConfigPath = path.join(root, 'sdkwork.app.config.json');
+  const appConfigPath = path.join(root, 'agent.app.config.json');
   if (fs.existsSync(appConfigPath)) {
     const appConfig = readJsonIfValid(appConfigPath);
     const declared = appConfig?.runtime?.supportedDeploymentProfiles;
@@ -1185,7 +1185,7 @@ function validateRootScripts(root, productPrefixes) {
       || fs.existsSync(path.join(root, 'crates'))
         && fs.readdirSync(path.join(root, 'crates')).some((name) => /^sdkwork-api-[a-z0-9-]+-assembly$/u.test(name));
     const isApplicationRoot = independentApplicationRoot
-      && fs.existsSync(path.join(root, 'sdkwork.app.config.json'));
+      && fs.existsSync(path.join(root, 'agent.app.config.json'));
     if (ownsHttpRoutes || isApplicationRoot) {
       pushApiAssemblyCommandIssues(root, scripts, issues);
     }

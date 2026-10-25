@@ -7,7 +7,7 @@ Authority: `MODULE_BIN_SPEC.md` §2 / §2.1 / §2.2 / §7、`sdkwork-specs/gates
 ## 1. 审计范围与方法
 
 - **受治理仓库谓词**：`sdkwork-*` 目录且带根 `AGENTS.md` → **100 个**，全部命中。
-  其中带 `sdkwork.app.config.json`（产品模块）的为 **79 个**；21 个为库/工具
+  其中带 `agent.app.config.json`（产品模块）的为 **79 个**；21 个为库/工具
   （无 manifest，多数无 `bin/`）。非 `sdkwork-` 前缀但带 manifest 的
   `hub-installer`、`magic-studio` 属 off-fleet，只列出不受审。
 - **门禁运行**：`node sdkwork-specs/tools/run-gate-matrix.mjs --workspace . --json`
@@ -59,7 +59,7 @@ guardrail 层其余 12 条均在基线内（`items ≤ baseline` 即为通过，
 ### 3.3 §7 的仓库谓词与实现自相矛盾
 
 §7 原文称两种模式“apply the same fleet predicate … carrying
-`sdkwork.app.config.json`”，把 §2.1 与 §2 的谓词合并成一个。实际：
+`agent.app.config.json`”，把 §2.1 与 §2 的谓词合并成一个。实际：
 
 - `check-script-placement.mjs` 用 `listWorkspaceRepositoryRoots()`
   （`sdkwork-*` + `AGENTS.md`）→ **100** 仓；
@@ -587,10 +587,10 @@ const statement = /CREATE TABLE(?: IF NOT EXISTS)?\s+([a-z0-9_]+)|ALTER TABLE(?:
 
 ### 11.8 遗留 owner 决策（本轮不擅自处置）
 
-1. **`sdkwork-audio` 的 profile 声明自相矛盾**：`sdkwork.app.config.json` 声明 `supportedDeploymentProfiles = ["cloud"]`，但必需命令契约无条件要求 `dev`/`dev:standalone`。当前按门禁语义补齐了 `dev:standalone`；需确认是"补 profile 声明"还是"放宽必需命令契约"。
+1. **`sdkwork-audio` 的 profile 声明自相矛盾**：`agent.app.config.json` 声明 `supportedDeploymentProfiles = ["cloud"]`，但必需命令契约无条件要求 `dev`/`dev:standalone`。当前按门禁语义补齐了 `dev:standalone`；需确认是"补 profile 声明"还是"放宽必需命令契约"。
 2. ~~**15 仓缺 `build`**~~ —— **第八轮已解决**：`deriveBuildParts` 按「cargo `--release` 优先 ＋ `CLIENT_SURFACE_ORDER` 逐面取 `build:prod`」派生；仍无法派生的表面（如 `image` / `log` / `search` 的若干面）逐条上报为 owner 决策。
 3. ~~**3 仓缺 `check`**（`drama`、`log`、`sandbox`）~~ —— **第八轮已解决**：三仓均聚合出 `_sdkwork:check`（`drama` 3 条 / `log` 4 条 / `sandbox` 3 条既有校验命令）。
-4. **`sdkwork-superpowers`**：无 `sdkwork.app.config.json`、无 `Cargo.toml`、无 `apps/`，仅 2 条脚本，却因 README 被判为 `application`。需确认其归属（上游插件仓？）与是否应被必需命令契约约束。
+4. **`sdkwork-superpowers`**：无 `agent.app.config.json`、无 `Cargo.toml`、无 `apps/`，仅 2 条脚本，却因 README 被判为 `application`。需确认其归属（上游插件仓？）与是否应被必需命令契约约束。
 5. **`sdkwork-birdcoder2` 的 571 条命名空间发现**：来自上游 dsh 脚本面，非机械可改，属品牌/架构决策（同 §10.8）。
 6. ~~**`sdkwork-web-framework` 的 `schema-registry:*`**~~ —— **第八轮已解决**：`schema-registry` 是 `SCHEMA_REGISTRY_SPEC.md` 的工具命名空间（框架实现即 `sdkwork-web-framework`），规范 §4 允许首段遗漏了它；已补入规范与 checker，并加双向漂移守卫测试。
 

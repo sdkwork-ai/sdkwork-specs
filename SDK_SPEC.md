@@ -294,7 +294,7 @@ Rules:
 - A Rust gateway host `MUST NOT` introduce a parallel host catalog as the
   primary source of dependency surface facts. Validators must reconstruct host executable integration
   from `cargo metadata`, root `[workspace.dependencies]`, runtime Cargo features, and public
-  executable exports, then compare those facts with `sdkwork.app.config.json`,
+  executable exports, then compare those facts with `agent.app.config.json`,
   `specs/component.spec.json`, and SDK family manifest metadata.
 - Platform cloud gateway surfaces that proxy split upstream services are dependency surface facts, not
   executable Cargo facts. They must be validated through their `requiredBaseUrlKey`, upstream

@@ -52,7 +52,7 @@ export function resolveApplicationCode(root) {
   if (match) {
     return match[1];
   }
-  if (fs.existsSync(path.join(root, 'sdkwork.app.config.json'))) {
+  if (fs.existsSync(path.join(root, 'agent.app.config.json'))) {
     throw new Error(
       `application root directory must be sdkwork-<application-code>; cannot derive API assembly identity from ${base}`,
     );

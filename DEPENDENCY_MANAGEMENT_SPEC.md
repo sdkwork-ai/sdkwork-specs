@@ -35,7 +35,7 @@ Rules:
 - JSON, YAML, TOML, package manifests, workspace manifests, and SDKWork config files `MUST` use POSIX-style `/` separators for source/build paths unless a native tool format requires otherwise.
 - Runtime install paths may be OS-specific when they are the actual target system contract, for example `/etc/sdkwork/...`, `/var/lib/sdkwork/...`, `%ProgramFiles%/...`, or `%USERPROFILE%/...`; they must not be reused as source dependency paths.
 - Documentation `MUST` use placeholders such as `<workspace-root>`, `<repository-root>`, `<application-root>`, `<release-root>`, and `<dependency-id>` when describing variable local or release paths.
-- Client application roots must express runtime composition semantics through existing manifests (`component.spec.json`, `sdkwork.app.config.json`) and must not introduce a parallel dependency manifest. Cross-stack composition follows `COMPOSABLE_ARCHITECTURE_SPEC.md`.
+- Client application roots must express runtime composition semantics through existing manifests (`component.spec.json`, `agent.app.config.json`) and must not introduce a parallel dependency manifest. Cross-stack composition follows `COMPOSABLE_ARCHITECTURE_SPEC.md`.
 
 ## 1.1 Native Composition Bridge
 
@@ -385,7 +385,7 @@ Rules:
 - `cargo metadata` is the machine-readable entrypoint for identifying which foundation crates and
   features the Rust platform host can compile. Standards tooling `MUST` read Cargo metadata before asking
   for any SDKWork-specific dependency catalog.
-- SDKWork semantic evidence remains in existing SDKWork files: `sdkwork.app.config.json`
+- SDKWork semantic evidence remains in existing SDKWork files: `agent.app.config.json`
   `sdkDependencies`, `specs/component.spec.json` dependency surfaces, dependency SDK family manifest
   metadata, and runtime config. Cargo proves executable linkage; SDKWork specs prove SDK family,
   API authority, surface, prefix, runtime mode, and coverage semantics.
@@ -420,7 +420,7 @@ Rules:
   gain duplicate `integrationMode`, `applicationBundle`, or `httpPlane` fields
   for this purpose.
 - Application API assembly crates `MUST NOT` duplicate SDK dependency catalogs already expressed in
-  `sdkwork.app.config.json` `sdkDependencies` or Cargo `[workspace.dependencies]`. API assembly only
+  `agent.app.config.json` `sdkDependencies` or Cargo `[workspace.dependencies]`. API assembly only
   merges application-owned route crates discovered in the owning repository workspace.
 
 ## 5.2 Local CI Packaging Rehearsal

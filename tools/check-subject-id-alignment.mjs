@@ -99,7 +99,7 @@ for (const entry of fs.readdirSync(workspaceRoot, { withFileTypes: true })) {
   }
   const repoRoot = path.join(workspaceRoot, entry.name);
   walk(repoRoot).forEach((absolute) => {
-    if (path.basename(absolute) === 'sdkwork.app.config.json') {
+    if (path.basename(absolute) === 'agent.app.config.json') {
       assertManifest(path.relative(workspaceRoot, absolute).replaceAll('\\', '/'));
     }
   });

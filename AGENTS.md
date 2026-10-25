@@ -33,7 +33,7 @@ This is the layer-1 standards self-root. `SOUL.md` section 2, `COMPONENT_SPEC.md
 
 ## Application Identity
 
-This repository is a standards repository, not an SDKWork application. If a future standards portal or app is added, its `sdkwork.app.config.json` owns identity/release declarations and its `etc/` owns concrete environment/runtime/deployment values.
+This repository is a standards repository, not an SDKWork application. If a future standards portal or app is added, its `agent.app.config.json` owns identity/release declarations and its `etc/` owns concrete environment/runtime/deployment values.
 
 ## Local Dictionary Structure
 
@@ -55,7 +55,7 @@ This repository is a standards repository, not an SDKWork application. If a futu
 Use dynamic progressive loading for the current task: resolve the selected root and task category before reading broad source context.
 
 1. Read this `AGENTS.md` routing material and classify the owned surface.
-2. Read `sdkwork.app.config.json`, module `specs/`, repository/application `specs/`, and `.sdkwork/` only when the task reaches the contract each item governs.
+2. Read `agent.app.config.json`, module `specs/`, repository/application `specs/`, and `.sdkwork/` only when the task reaches the contract each item governs.
 3. Locate only the relevant task-matrix row or navigation heading in `README.md`; do not load the full catalog.
 4. Read only the task-specific global spec sections selected by that route, then inspect implementation files.
 <!-- /SDKWORK-PROGRESSIVE-LOADING: v1 -->

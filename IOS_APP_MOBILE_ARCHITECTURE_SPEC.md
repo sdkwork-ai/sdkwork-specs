@@ -36,7 +36,7 @@ Rules:
 ```text
 apps/sdkwork-<application-code>-ios-mobile/
   AGENTS.md
-  sdkwork.app.config.json
+  agent.app.config.json
   .sdkwork/
     README.md
     skills/
@@ -261,7 +261,7 @@ Rules:
 - `config/app/` and `config/host/` examples must be safe checked-in templates only.
 - iOS bundle id, minimum supported iOS version, entitlements, permissions, associated domains, universal links, push environment, signing reference names, Apple team/profile references, and store profile references belong to host config or Xcode project templates.
 - Host config must not contain signing private keys, auth tokens, refresh tokens, API keys, database credentials, private service endpoints, SDK ownership, or business route constants.
-- `sdkwork.app.config.json` must include App Store/TestFlight/private distribution metadata, icons, screenshots, package ids, checksums where applicable, signing metadata references, SBOM/provenance, and release notes.
+- `agent.app.config.json` must include App Store/TestFlight/private distribution metadata, icons, screenshots, package ids, checksums where applicable, signing metadata references, SBOM/provenance, and release notes.
 - Publish platform should be `APP_IOS` for iOS-only native roots. Generic `APP` or `APP_PLUS` may be listed only when the product actually supports a broader mobile app family.
 
 ## 10. Standard Commands

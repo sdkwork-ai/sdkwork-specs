@@ -584,7 +584,7 @@ test('validateApiAssembly includes route path collision validation', () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-gateway-route-collision-'));
   const root = path.join(workspace, 'sdkwork-shop');
   fs.mkdirSync(root, { recursive: true });
-  writeJson(path.join(root, 'sdkwork.app.config.json'), {
+  writeJson(path.join(root, 'agent.app.config.json'), {
     backend: { appId: 'sdkwork-shop' },
   });
   writeText(

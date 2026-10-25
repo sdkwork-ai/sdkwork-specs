@@ -31,13 +31,13 @@ Forbidden:
 
 | Layer | Owner | Authority files | Consumer writes |
 | --- | --- | --- | --- |
-| L0 Dependency integration defaults | Dependency repository / SDK family | SDK family `sdk-manifest.json`, dependency `component.spec.json#integration`, `iam.module.manifest.json`, route `gateway_mount` exports, and application `sdkwork.app.config.json#sdkDependencies` | Nothing |
+| L0 Dependency integration defaults | Dependency repository / SDK family | SDK family `sdk-manifest.json`, dependency `component.spec.json#integration`, `iam.module.manifest.json`, route `gateway_mount` exports, and application `agent.app.config.json#sdkDependencies` | Nothing |
 | L1 Consumer composition | Consumer application core package | `*-core/specs/component.spec.json#contracts.sdkDependencies`, `composition.overrides` | Dependency list + optional overrides only |
 | L2 Deployment wiring | Consumer repository | `specs/topology.spec.json`, `etc/topology/*.env` | Profile and surface URLs; standalone bind only when locally owned |
 
 Consumer application roots should converge on three authoritative files:
 
-1. `sdkwork.app.config.json` — application identity and bootstrap scope for owned capabilities.
+1. `agent.app.config.json` — application identity and bootstrap scope for owned capabilities.
 2. `specs/topology.spec.json` — deployment profile and connectivity planes.
 3. `*-core/specs/component.spec.json` — `sdkDependencies` and `composition.overrides`.
 
@@ -192,7 +192,7 @@ Resolver inputs:
 1. consumer core `component.spec.json#contracts.sdkDependencies`
 2. `contracts.composition.overrides`
 3. `specs/topology.spec.json` active profile
-4. dependency SDK family `sdk-manifest.json`, dependency `component.spec.json#integration`, and application `sdkwork.app.config.json#sdkDependencies` when resolvable from workspace siblings
+4. dependency SDK family `sdk-manifest.json`, dependency `component.spec.json#integration`, and application `agent.app.config.json#sdkDependencies` when resolvable from workspace siblings
 5. migration-only legacy `specs/dependency-api-surfaces.json` when present under an approved exception
 
 Resolver outputs:

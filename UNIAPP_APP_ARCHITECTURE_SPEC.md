@@ -41,7 +41,7 @@ Rules:
 ```text
 apps/sdkwork-<application-code>-uniapp/
   AGENTS.md
-  sdkwork.app.config.json
+  agent.app.config.json
   .sdkwork/
     README.md
     skills/
@@ -112,7 +112,7 @@ Rules:
 - `config/host/` owns per-platform app ids, platform profiles, permission references, upload environment, and signing/app-store reference metadata. It must not contain private keys, tokens, or API keys.
 - `src/pages/__generated__/` and the generated `pages.json` fragments are projection targets; business code stays in packages.
 - uni-app env files `MUST` use `.env.<profile-id>` with `VITE_SDKWORK_*` public keys per `ENVIRONMENT_SPEC.md` section 5.1. The `uni build -p` value (`mp-weixin`, `h5`, `app`, and so on) is a target platform axis, never an environment or deployment-profile value.
-- `sdkwork.app.config.json` uses `runtime.family = "mini-program"` for mini-program-only roots, `"mobile"` when App packages are delivered, and `"web"` for H5-only roots; `runtime.framework = "uni-app"`; `publish.platforms` lists only the actually delivered `MP_*`, `APP_*`, or `H5` values.
+- `agent.app.config.json` uses `runtime.family = "mini-program"` for mini-program-only roots, `"mobile"` when App packages are delivered, and `"web"` for H5-only roots; `runtime.framework = "uni-app"`; `publish.platforms` lists only the actually delivered `MP_*`, `APP_*`, or `H5` values.
 
 ## 3. Package Taxonomy
 

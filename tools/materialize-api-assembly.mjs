@@ -711,7 +711,7 @@ export function materializeApiAssembly(root) {
     return { ok: false, applicationCode: null, message: error.message };
   }
   const routeCrates = discoverRouteCrates(root, applicationCode);
-  if (routeCrates.length === 0 && !fs.existsSync(path.join(root, 'sdkwork.app.config.json'))) {
+  if (routeCrates.length === 0 && !fs.existsSync(path.join(root, 'agent.app.config.json'))) {
     return {
       ok: false,
       applicationCode,

@@ -53,7 +53,7 @@ function relative(root, filePath) {
 function findApplicationRoot(filePath, repositoryRoot) {
   let current = path.dirname(filePath);
   while (current.startsWith(repositoryRoot)) {
-    if (fs.existsSync(path.join(current, 'sdkwork.app.config.json'))) return current;
+    if (fs.existsSync(path.join(current, 'agent.app.config.json'))) return current;
     if (current === repositoryRoot) break;
     current = path.dirname(current);
   }

@@ -16,7 +16,7 @@ function createRouteRepo(libRs) {
     'sdkwork-agents',
   );
   writeText(
-    path.join(root, 'sdkwork.app.config.json'),
+    path.join(root, 'agent.app.config.json'),
     `${JSON.stringify({ backend: { appId: 'sdkwork-agents' } }, null, 2)}\n`,
   );
   writeText(

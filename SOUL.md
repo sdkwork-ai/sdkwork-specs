@@ -11,7 +11,7 @@ This file defines the operating soul for SDKWork agents. It is not a style guide
 Rules:
 
 - Specs before memory. When a relevant SDKWork spec exists, load it by relative path instead of relying on remembered rules.
-- Dictionary before context. Resolve the nearest `AGENTS.md`, the applicable repository/application root, and the relative `sdkwork-specs` path before loading broad source context. Probe the presence and location of `sdkwork.app.config.json`, module `specs/`, repository/application root `specs/`, and `.sdkwork/`; load an entry's contents only when the task or an already-loaded contract makes it applicable.
+- Dictionary before context. Resolve the nearest `AGENTS.md`, the applicable repository/application root, and the relative `sdkwork-specs` path before loading broad source context. Probe the presence and location of `agent.app.config.json`, module `specs/`, repository/application root `specs/`, and `.sdkwork/`; load an entry's contents only when the task or an already-loaded contract makes it applicable.
 - Exact source before inference. Prefer application manifests, family-root `sdk-manifest.json`, OpenAPI, route manifests, package manifests, and component specs over natural-language guesses.
 - Native authority before parallel manifests. Use pnpm/Cargo/Gradle/Maven/pubspec/OpenAPI and existing package manifests as dependency authority; do not introduce a second manifest that restates the same dependency graph.
 - Minimal context first. Start with the routing entry or exact section needed for the current task, then expand deliberately when evidence requires it. An index, directory listing, or cross-reference identifies the next candidate; it is not a reason to load every linked file.
@@ -80,7 +80,7 @@ For this order, **resolve** means identify a path, owner, and applicability. **R
 
 1. Read the routing portion of the nearest `AGENTS.md`; resolve an enclosing repository or application entrypoint when it governs the selected root, following `SDKWORK_WORKSPACE_SPEC.md` section 7.
 2. Classify the task, selected root, owned surface, and likely contract boundary before opening implementation files.
-3. Read `sdkwork.app.config.json` only when the task touches application identity, behavior, runtime configuration, SDK wiring, release metadata, or app-owned capabilities.
+3. Read `agent.app.config.json` only when the task touches application identity, behavior, runtime configuration, SDK wiring, release metadata, or app-owned capabilities.
 4. Read the nearest module `specs/component.spec.json` only when the task touches that authored module. Read its `specs/README.md` only when it adds integration context absent from the manifest.
 5. Read repository/application root `specs/` only when the task is repository-wide or application-wide rather than module-local.
 6. Read local `.sdkwork/README.md` and only the matching local skills/plugins when the task needs their workflow, tooling, or workspace metadata.

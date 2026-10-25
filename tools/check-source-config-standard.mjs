@@ -333,7 +333,7 @@ function inspectGatewayCors(file, relative, issues) {
 
 export function checkSourceConfigStandard(root, { deployable, enforceProfileIdentity = false } = {}) {
   const resolvedRoot = path.resolve(root);
-  const manifestPath = path.join(resolvedRoot, 'sdkwork.app.config.json');
+  const manifestPath = path.join(resolvedRoot, 'agent.app.config.json');
   const isDeployable = deployable ?? fs.existsSync(manifestPath);
   const issues = [];
   if (!isDeployable) return issues;
@@ -375,13 +375,13 @@ export function checkSourceConfigStandard(root, { deployable, enforceProfileIden
   if (fs.existsSync(manifestPath)) {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     if (manifest.environments) {
-      issues.push('sdkwork.app.config.json#/environments: concrete environment config belongs in etc/');
+      issues.push('agent.app.config.json#/environments: concrete environment config belongs in etc/');
     }
     const envBindings = manifest.envBindings;
     if (envBindings && typeof envBindings === 'object') {
       for (const key of Object.keys(envBindings)) {
         if (/byEnv(?:ironment)?$/iu.test(key)) {
-          issues.push(`sdkwork.app.config.json#/envBindings/${key}: per-environment values belong in etc/`);
+          issues.push(`agent.app.config.json#/envBindings/${key}: per-environment values belong in etc/`);
         }
       }
     }

@@ -120,7 +120,7 @@ registry.sdkwork.com/apps/<docker-name>:<version>
 Rules:
 
 - `<version>` is the application release version (SemVer, from
-  `sdkwork.app.config.json` release metadata). Tag `MUST NOT` contain an
+  `agent.app.config.json` release metadata). Tag `MUST NOT` contain an
   environment segment (`:0.1.0-dev`, `:0.1.0-prod` are forbidden): one image,
   every environment — environment selection happens at deploy time
   (`DEPLOYMENT_SPEC.md` §6).

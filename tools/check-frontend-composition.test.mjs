@@ -25,7 +25,7 @@ function writeText(filePath, value) {
 function createClientRoot() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-frontend-composition-'));
   const appRoot = path.join(root, 'apps/sdkwork-demo-pc');
-  writeJson(path.join(appRoot, 'sdkwork.app.config.json'), {
+  writeJson(path.join(appRoot, 'agent.app.config.json'), {
     schemaVersion: 1,
     applicationCode: 'demo',
   });
@@ -160,7 +160,7 @@ test('CLI scans child repositories with --workspace', () => {
   const repoRoot = path.join(workspace, 'sdkwork-demo');
   writeText(path.join(repoRoot, 'AGENTS.md'), '# Repository Guidelines\n');
   const appRoot = path.join(repoRoot, 'apps/sdkwork-demo-pc');
-  writeJson(path.join(appRoot, 'sdkwork.app.config.json'), {
+  writeJson(path.join(appRoot, 'agent.app.config.json'), {
     schemaVersion: 1,
     applicationCode: 'demo',
   });

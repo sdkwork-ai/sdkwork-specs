@@ -17,7 +17,7 @@ function writeJson(filePath, value) {
 
 function createClientAppRoot(root, componentContracts) {
   const appRoot = path.join(root, 'apps/sdkwork-shop-h5');
-  writeJson(path.join(appRoot, 'sdkwork.app.config.json'), {
+  writeJson(path.join(appRoot, 'agent.app.config.json'), {
     schemaVersion: 1,
     applicationCode: 'shop',
   });

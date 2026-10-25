@@ -35,7 +35,7 @@ Rules:
 ```text
 apps/sdkwork-<application-code>-unity/
   AGENTS.md
-  sdkwork.app.config.json
+  agent.app.config.json
   .sdkwork/
     README.md
     skills/
@@ -261,7 +261,7 @@ Rules:
 - The build selects exactly one `config/app/runtime-env.<deployment-profile>.<environment>.json`, validates its identity fields (`environment`, `deploymentProfile`, `profileId`, `runtimeTarget`), and projects it into `Assets/StreamingAssets/RuntimeConfig/` before the player build. Unity build targets, scripting backend (IL2CPP/Mono), and store channels remain separate axes.
 - `config/host/` owns per-target bundle ids, signing reference names, and store metadata references; keystore/keymaterial files stay ignored or in CI secure storage.
 - Release preflight must validate signing references, icons, screenshots, checksums/SBOM/provenance, store metadata, and secret absence in built players, including a scan proving no tokens/secrets reached `StreamingAssets` or ScriptableObjects.
-- `sdkwork.app.config.json` uses `runtime.family = "mobile"` for app-store delivery, `"desktop"` for standalone delivery, `"web"` for WebGL, and `"mini-program"` for mini-game delivery, with `runtime.framework = "unity"`; `publish.platforms` lists only delivered values (`APP_ANDROID`, `APP_IOS`, `DESKTOP_*`, `WEB`, `MP_WEIXIN_GAME`, and so on).
+- `agent.app.config.json` uses `runtime.family = "mobile"` for app-store delivery, `"desktop"` for standalone delivery, `"web"` for WebGL, and `"mini-program"` for mini-game delivery, with `runtime.framework = "unity"`; `publish.platforms` lists only delivered values (`APP_ANDROID`, `APP_IOS`, `DESKTOP_*`, `WEB`, `MP_WEIXIN_GAME`, and so on).
 - Mini-game delivery (WebGL converted to platform mini-game packages) additionally follows the platform package rules of `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md` section 10 for `MP_*_GAME` platforms, including platform package-size budgets.
 - Unity version, render pipeline, and UPM dependency versions are pinned per root and recorded in release evidence.
 

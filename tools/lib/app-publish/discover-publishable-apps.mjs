@@ -3,7 +3,7 @@
  *
  * Mirrors lib/sdk-publish/discover-publishable-sdks.mjs: it scans every
  * repository's `apps/<app>/` directory, resolves the app architecture from
- * `sdkwork.app.config.json#runtime` plus the conventional directory suffix
+ * `agent.app.config.json#runtime` plus the conventional directory suffix
  * (`-pc`, `-h5`, `-flutter-mobile`, `-mini-program`), and produces
  * publishable app records.
  *
@@ -26,7 +26,7 @@ import { readJson, toDisplayPath } from './util.mjs';
 export const SUPPORTED_ARCHITECTURES = ['pc', 'h5', 'flutter-mobile', 'mini-program'];
 
 /**
- * Map an `sdkwork.app.config.json#runtime.framework` value to a canonical
+ * Map an `agent.app.config.json#runtime.framework` value to a canonical
  * architecture. Falls back to `null` when the framework is not one of the
  * supported app runtime families.
  */
@@ -49,8 +49,8 @@ const FRAMEWORK_TO_ARCH = {
  * @property {string} architecture    - one of SUPPORTED_ARCHITECTURES
  * @property {string} version         - version (from package.json)
  * @property {string} appName         - package.json#name (e.g. @sdkwork/im-pc)
- * @property {object} appConfig       - parsed sdkwork.app.config.json (may be {})
- * @property {string} appConfigPath   - absolute path to sdkwork.app.config.json
+ * @property {object} appConfig       - parsed agent.app.config.json (may be {})
+ * @property {string} appConfigPath   - absolute path to agent.app.config.json
  * @property {object} packageJson     - parsed package.json
  * @property {boolean} manifestDriven - true when arch came from manifest
  */
@@ -100,7 +100,7 @@ export function discoverRepoApps(repoRoot) {
  * packages.
  *
  * Architecture resolution order:
- *  1. `sdkwork.app.config.json#runtime.framework` (declared)
+ *  1. `agent.app.config.json#runtime.framework` (declared)
  *  2. Conventional directory suffix (`-pc`, `-h5`, `-flutter-mobile`,
  *     `-mini-program`)
  *
@@ -114,7 +114,7 @@ export function resolveApp(repoRoot, appRoot, appDirName) {
   const packageJson = readJson(pkgPath);
   if (!packageJson || !packageJson.name) return null;
 
-  const appConfigPath = path.join(appRoot, 'sdkwork.app.config.json');
+  const appConfigPath = path.join(appRoot, 'agent.app.config.json');
   const appConfig = readJson(appConfigPath) ?? {};
 
   const appKey = appConfig?.app?.key ?? appDirName;
@@ -152,7 +152,7 @@ export function resolveApp(repoRoot, appRoot, appDirName) {
 }
 
 /**
- * Resolve the publishable version. `sdkwork.app.config.json#app.versionSource`
+ * Resolve the publishable version. `agent.app.config.json#app.versionSource`
  * is `package.json` by default; we honor that and fall back to the release
  * block only when package.json has no version.
  */

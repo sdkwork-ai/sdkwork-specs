@@ -72,7 +72,7 @@ are identical.
    surfaces, and no local API/gateway/database/cache bootstrap.
 5. Add phase-first standalone/cloud release and deploy variants. Keep package,
    publish, and deployment as separate gates.
-6. Align `sdkwork.app.config.json`, `sdkwork.workflow.json`, package ids,
+6. Align `agent.app.config.json`, `sdkwork.workflow.json`, package ids,
    `deployments/deploy.yaml`, GitHub Environments, and rollback evidence.
 7. Classify client packages as fixed or runtime-configurable. Runtime-configurable
    clients declare both supported profiles, target platform, client architecture,

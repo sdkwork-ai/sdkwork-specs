@@ -28,7 +28,7 @@ Rules:
 - Shared modules receive typed config from runtime/bootstrap.
 - Every independently deployable root owns source-controlled `etc/` according to `SOURCE_CONFIG_SPEC.md`.
 - Concrete environment URLs, ports, topology values, database targets, and Redis targets `MUST NOT`
-  be stored in `sdkwork.app.config.json`; they belong to the selected source `etc/` profile.
+  be stored in `agent.app.config.json`; they belong to the selected source `etc/` profile.
 - Repository-root `configs/` is retired for runtime/deployment configuration. New config instances
   use `etc/`; infrastructure descriptors remain under `deployments/`.
 - Secrets `MUST NOT` be stored in app manifests or committed config files.

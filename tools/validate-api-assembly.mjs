@@ -156,7 +156,7 @@ export function validateApiAssembly(root, { strict = false } = {}) {
   const crateRoot = path.join(root, crateDir);
   if (
     routeCrates.length === 0
-    && !fs.existsSync(path.join(root, 'sdkwork.app.config.json'))
+    && !fs.existsSync(path.join(root, 'agent.app.config.json'))
     && !fs.existsSync(crateRoot)
   ) {
     return { ok: true, skipped: true, applicationCode, message: 'no route crates' };

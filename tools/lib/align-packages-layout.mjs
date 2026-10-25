@@ -96,7 +96,7 @@ export function normalizeApplicationCode(raw) {
 }
 
 export function inferApplicationCode(repoRoot) {
-  const manifestPath = path.join(repoRoot, 'sdkwork.app.config.json');
+  const manifestPath = path.join(repoRoot, 'agent.app.config.json');
   if (fs.existsSync(manifestPath)) {
     try {
       const manifest = JSON.parse(readText(manifestPath));
@@ -275,7 +275,7 @@ function resolveFlatPackageAppRoot(repoRoot, applicationCode, entry) {
   if (/^sdkwork-[a-z0-9-]+-(?:app|backend|open)?-?sdk$/u.test(entry)) {
     return `apps/sdkwork-${applicationCode}-common`;
   }
-  if (fs.existsSync(path.join(repoRoot, 'sdkwork.app.config.json')) || listApplicationRoots(repoRoot).length > 0) {
+  if (fs.existsSync(path.join(repoRoot, 'agent.app.config.json')) || listApplicationRoots(repoRoot).length > 0) {
     return `apps/sdkwork-${applicationCode}-pc`;
   }
   return null;

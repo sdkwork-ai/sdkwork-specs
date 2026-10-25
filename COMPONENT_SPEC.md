@@ -348,7 +348,7 @@ Authored component roots are discovered from standard language manifests:
 - PHP: `composer.json`
 - Ruby: `*.gemspec`
 - SDK families: `sdk-manifest.json`
-- SDKWork apps: `sdkwork.app.config.json`
+- SDKWork apps: `agent.app.config.json`
 
 The standard tooling excludes archived, generated, and third-party paths such as `backup`, `external`, `vendor`, `generated`, `node_modules`, `dist`, `target`, `tmp`, `.worktrees`, and deprecated removed projects.
 

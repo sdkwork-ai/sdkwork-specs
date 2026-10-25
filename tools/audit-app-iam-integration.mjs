@@ -13,7 +13,7 @@ const ignoredDirectories = new Set([
 const sourceExtensions = new Set([
   '.dart', '.js', '.jsx', '.kt', '.kts', '.mjs', '.swift', '.ts', '.tsx', '.ets',
 ]);
-const manifests = findFiles(workspaceRoot, 'sdkwork.app.config.json');
+const manifests = findFiles(workspaceRoot, 'agent.app.config.json');
 const appRoots = selectApplicationSurfaceRoots(manifests.map((file) => path.dirname(file)));
 const results = [];
 

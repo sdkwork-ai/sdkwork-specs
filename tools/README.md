@@ -17,7 +17,7 @@ Rules:
   command names, retired deployment flags, and active Markdown/AGENTS plus
   command-bearing JSON examples against `PNPM_SCRIPT_SPEC.md`.
 - `audit-pnpm-lifecycle-framework.mjs` discovers application roots from
-  `sdkwork.app.config.json`, reports development/build/release/deploy framework
+  `agent.app.config.json`, reports development/build/release/deploy framework
   coverage, and assigns deterministic migration waves without modifying
   consumers. Use `--json` for migration automation and `--fail-on-debt` only
   after the approved consumer wave has completed.

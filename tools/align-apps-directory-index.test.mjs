@@ -17,10 +17,10 @@ describe('align-apps-directory-index', () => {
   it('creates compliant apps/README.md for multi-surface repositories', () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-align-apps-'));
     write(root, 'AGENTS.md', '# Repo\n');
-    write(root, 'sdkwork.app.config.json', JSON.stringify({ app: { key: 'demo', displayName: 'Demo' } }, null, 2));
+    write(root, 'agent.app.config.json', JSON.stringify({ app: { key: 'demo', displayName: 'Demo' } }, null, 2));
     write(root, 'README.md', '# Demo\n');
     write(root, 'apps/sdkwork-demo-pc/README.md', '# Demo PC\n');
-    write(root, 'apps/sdkwork-demo-pc/sdkwork.app.config.json', JSON.stringify({ app: { displayName: 'Demo PC' } }));
+    write(root, 'apps/sdkwork-demo-pc/agent.app.config.json', JSON.stringify({ app: { displayName: 'Demo PC' } }));
     write(root, 'apps/sdkwork-demo-common/README.md', '# Demo Common\n');
 
     const result = alignAppsDirectoryIndex(root);
@@ -38,7 +38,7 @@ describe('align-apps-directory-index', () => {
   it('creates apps/ for root-primary repositories without apps/', () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-align-apps-'));
     write(root, 'AGENTS.md', '# Repo\n');
-    write(root, 'sdkwork.app.config.json', '{}');
+    write(root, 'agent.app.config.json', '{}');
     write(root, 'README.md', '# Root Primary\n');
 
     alignAppsDirectoryIndex(root);

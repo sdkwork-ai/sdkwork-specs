@@ -223,7 +223,7 @@ function sameOriginBrowserFiles({
 
 function appManifestFile(supportedDeploymentProfiles) {
   return {
-    'sdkwork.app.config.json': JSON.stringify({
+    'agent.app.config.json': JSON.stringify({
       runtime: { supportedDeploymentProfiles },
     }),
   };

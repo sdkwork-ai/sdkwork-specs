@@ -324,7 +324,7 @@ export function auditRoot(root, options = {}) {
  *
  * The authoritative governed-repository predicate is
  * `listWorkspaceRepositoryRoots()`: a directory named `sdkwork-*` that carries a
- * root `AGENTS.md`. `sdkwork.app.config.json` declares *product identity*, not
+ * root `AGENTS.md`. `agent.app.config.json` declares *product identity*, not
  * governance — 21 governed repositories (catalog, core, database, id, log,
  * specs, ui, utils, …) ship no manifest and were therefore invisible to every
  * manifest-keyed gate. Manifest-only enumeration silently under-reports the
@@ -340,7 +340,7 @@ function findModules(workspace) {
     if (!entry.isDirectory()) continue;
     if (DEFAULT_EXCLUDES.includes(entry.name)) continue;
     const dir = path.join(workspace, entry.name);
-    const hasManifest = fs.existsSync(path.join(dir, 'sdkwork.app.config.json'));
+    const hasManifest = fs.existsSync(path.join(dir, 'agent.app.config.json'));
     if (entry.name.startsWith('sdkwork-')) {
       if (governed.has(entry.name) || hasManifest) modules.push(dir);
       continue;

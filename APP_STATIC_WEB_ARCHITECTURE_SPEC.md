@@ -33,7 +33,7 @@ Rules:
 ```text
 apps/sdkwork-<application-code>-static-web/
   AGENTS.md
-  sdkwork.app.config.json
+  agent.app.config.json
   .sdkwork/
     README.md
     skills/
@@ -175,7 +175,7 @@ Rules:
 - The build must fail when the output contains secrets, localhost production endpoints, unresolved placeholders, or undeclared third-party scripts.
 - Installed delivery follows `RUNTIME_DIRECTORY_SPEC.md` and `SDKWORK_DEPLOY_SPEC.md`: static output installs to `<share>/web/static/`, and the optional module-owned fallback source lives under `deployments/webserver/static/` per `SDKWORK_WEBSERVER_SPEC.md` static mounting rules. The webserver serves it read-only; the root must not write runtime files into the share.
 - Cache headers are the webserver's responsibility (`SDKWORK_WEBSERVER_SPEC.md`); the root provides content-hashed asset filenames when a build step exists, or stable paths when hand-authored.
-- `sdkwork.app.config.json` uses `runtime.family = "web"`, `runtime.framework = "static-html"`, `clientArchitectures = ["static-web"]`, and `publish.platforms = ["WEB"]`.
+- `agent.app.config.json` uses `runtime.family = "web"`, `runtime.framework = "static-html"`, `clientArchitectures = ["static-web"]`, and `publish.platforms = ["WEB"]`.
 - Security headers (CSP, `X-Content-Type-Options`, referrer policy) are declared in webserver config; the root's markup must be CSP-compatible: no inline event handler attributes for logic, no `eval`, and documented nonces/hashes for required inline blocks.
 
 ## 8. Standard Commands

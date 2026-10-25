@@ -18,7 +18,7 @@ Plus backend-only application roots with `apps/` metadata but no standard client
 ## Actions
 
 1. Extended `validateBackendReleaseComposition` in `tools/lib/app-composition.mjs`:
-   - Backend-only roots must declare `sdkwork.app.config.json#sdkDependencies` when `backend` section exists
+   - Backend-only roots must declare `agent.app.config.json#sdkDependencies` when `backend` section exists
    - Skipped when standard client app surfaces exist under `apps/`
 2. Added `sdkDependencies: []` to ten backend-only manifests missing the field:
    - `sdkwork-audio`, `sdkwork-codebox`, `sdkwork-discovery`, `sdkwork-github-workflow`, `sdkwork-kernel`, `sdkwork-llm`, `sdkwork-memory`, `sdkwork-sdk-generator`, `sdkwork-tts`, `sdkwork-video-cut`

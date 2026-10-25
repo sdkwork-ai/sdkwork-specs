@@ -10,7 +10,7 @@ function createFixture({ installPlugin = true, publicToken = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-credential-entry-'));
   const appRoot = path.join(root, 'apps', 'sdkwork-demo-pc');
   fs.mkdirSync(path.join(appRoot, 'src'), { recursive: true });
-  fs.writeFileSync(path.join(appRoot, 'sdkwork.app.config.json'), '{"kind":"sdkwork.app"}\n');
+  fs.writeFileSync(path.join(appRoot, 'agent.app.config.json'), '{"kind":"agent.app"}\n');
   fs.writeFileSync(path.join(appRoot, 'index.html'), '<div id="root"></div>\n');
   fs.writeFileSync(path.join(appRoot, 'package.json'), JSON.stringify({
     name: '@sdkwork/demo-pc',
@@ -190,7 +190,7 @@ function createMarkerFreeRendererFixture({ repositoryName = 'sdkwork-demo' } = {
   const root = path.join(scratch, repositoryName);
   const appRoot = path.join(root, 'apps', `${repositoryName}-h5`);
   fs.mkdirSync(path.join(appRoot, 'src'), { recursive: true });
-  fs.writeFileSync(path.join(appRoot, 'sdkwork.app.config.json'), '{"kind":"sdkwork.app"}\n');
+  fs.writeFileSync(path.join(appRoot, 'agent.app.config.json'), '{"kind":"agent.app"}\n');
   fs.writeFileSync(path.join(appRoot, 'index.html'), '<div id="root"></div>\n');
   fs.writeFileSync(path.join(appRoot, 'package.json'), JSON.stringify({
     name: `@sdkwork/${repositoryName}-h5`,

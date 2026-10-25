@@ -14,7 +14,7 @@ function fixture() {
   fs.mkdirSync(path.join(app, 'etc'), { recursive: true });
   fs.writeFileSync(path.join(repo, 'specs', 'topology.spec.json'), JSON.stringify({ schemaVersion: 5 }));
   fs.writeFileSync(path.join(repo, 'etc', 'sdkwork.deployment.config.json'), '{}');
-  fs.writeFileSync(path.join(app, 'sdkwork.app.config.json'), JSON.stringify({ app: { key: 'sdkwork-demo-pc' } }));
+  fs.writeFileSync(path.join(app, 'agent.app.config.json'), JSON.stringify({ app: { key: 'sdkwork-demo-pc' } }));
   fs.writeFileSync(path.join(app, 'etc', 'browser.runtime.json'), '{}');
   return { app, repo };
 }
@@ -80,7 +80,7 @@ test('refuses delegation when the enclosing deployment authority is missing', ()
   fs.mkdirSync(path.join(repo, 'specs'), { recursive: true });
   fs.mkdirSync(app, { recursive: true });
   fs.writeFileSync(path.join(repo, 'specs', 'topology.spec.json'), '{"schemaVersion":5}\n');
-  fs.writeFileSync(path.join(app, 'sdkwork.app.config.json'), '{"app":{"key":"sdkwork-demo-pc"}}\n');
+  fs.writeFileSync(path.join(app, 'agent.app.config.json'), '{"app":{"key":"sdkwork-demo-pc"}}\n');
 
   const plans = planTopologyDelegation(repo);
   assert.equal(plans.length, 1);

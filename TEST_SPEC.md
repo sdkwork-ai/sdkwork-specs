@@ -405,7 +405,7 @@ Rules:
   `desktop:*`, `tauri:*`, `docker:*`, `android:*`, `ios:*`, `harmony:*`,
   `flutter:*`, `mini-program:*`, and `*:tauri`, while ignoring generated SDK
   package manifests under generated output.
-- Tests `MUST` scan active command-bearing JSON such as `sdkwork.app.config.json`,
+- Tests `MUST` scan active command-bearing JSON such as `agent.app.config.json`,
   `sdkwork.workflow.json`, active `specs/*.json`, and Tauri config command hooks
   for the same application-code-prefix, action-first runtime target, and gateway command
   order rules, plus retired deployment flags and values.
@@ -566,7 +566,7 @@ IAM application bootstrap tests make `IAM_APPLICATION_BOOTSTRAP_SPEC.md` executa
 
 Rules:
 
-- Application repositories that declare `sdkwork.app.config.json` or own `scripts/bootstrap/*` `MUST` depend on `@sdkwork/iam-application-bootstrap`, `sdkwork-iam-embedded-application-bootstrap`, or the IAM-owned `sdkwork-api-iam-assembly` entrypoint that encapsulates the shared embedded bootstrap lifecycle.
+- Application repositories that declare `agent.app.config.json` or own `scripts/bootstrap/*` `MUST` depend on `@sdkwork/iam-application-bootstrap`, `sdkwork-iam-embedded-application-bootstrap`, or the IAM-owned `sdkwork-api-iam-assembly` entrypoint that encapsulates the shared embedded bootstrap lifecycle.
 - Bootstrap scripts `MUST NOT` embed raw bootstrap HTTP paths.
 - Multi-surface bootstrap tests `MUST` cover PC, H5, Flutter, native Android, native iOS, native HarmonyOS, and mini-program-shaped manifest roots. They must prove discovery is architecture-independent, `backend.appId` is preserved exactly, template identities are distinct, repeated mapping is idempotent, and architecture metadata cannot produce inferred ids such as duplicated or cross-platform suffixes.
 - Application repositories with IAM bootstrap `MUST` expose `admin:bootstrap:app` and `check:iam-application-bootstrap` (or `test:contract:iam-application-bootstrap`).

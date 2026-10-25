@@ -43,7 +43,7 @@ Rules:
 | Role grant extensions for platform roles | kernel base only | yes | no |
 | Root org / general dept / member position skeleton | yes | no | no |
 | Domain dept/position subtree templates | no | yes | no |
-| Enabled module set | default bundled list | no | yes (`sdkwork.app.config.json`) |
+| Enabled module set | default bundled list | no | yes (`agent.app.config.json`) |
 | Tenant custom roles | no | no | runtime only |
 
 ## 2.1 Role Relationship And Grant Governance

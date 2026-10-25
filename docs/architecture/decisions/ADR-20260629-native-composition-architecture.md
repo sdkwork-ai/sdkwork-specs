@@ -20,7 +20,7 @@ Adopt a native-authority composition architecture:
 3. Keep runtime composition and policy metadata in existing component/app manifests:
    - core SDK inventory in `*-core/specs/component.spec.json#contracts.sdkDependencies`
    - permission inheritance in app-surface `specs/component.spec.json#contracts.permissionComposition`
-   - backend/release dependency inventory in `sdkwork.app.config.json#sdkDependencies`
+   - backend/release dependency inventory in `agent.app.config.json#sdkDependencies`
 4. Standardize core package public import surface through `package.json#exports` (`.`, `./sdk`, `./modules`, `./host`, `./session`, `./composition`).
 5. Enforce with centralized tooling in `sdkwork-specs/tools`:
    - `sync-workspace.mjs`

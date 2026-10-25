@@ -1388,7 +1388,7 @@ never use the `cloud` deployment profile:
 
 | Surface | Standard |
 | --- | --- |
-| Manifest | `sdkwork.app.config.json` declares `runtime.supportedDeploymentProfiles = ["standalone"]` |
+| Manifest | `agent.app.config.json` declares `runtime.supportedDeploymentProfiles = ["standalone"]` |
 | Browser apps | `apps/sdkwork-webserver-{pc,h5}` expose `build:pc|h5:<env>` (canonical runner) only; no `:cloud` variants are required or shipped |
 | Runtime env | Only `runtime-env.standalone.<environment>.json` sources exist; every SDK API base URL is the same-origin root `/` with `browserOriginMode = same-origin` |
 | Release | `scripts/webserver-release.mjs` and deb/rpm packaging accept `--deployment-profile standalone` only; no cloud server artifact exists |

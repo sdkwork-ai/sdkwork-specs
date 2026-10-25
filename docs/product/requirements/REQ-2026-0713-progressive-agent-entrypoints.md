@@ -38,7 +38,7 @@ entrypoints.
 ## Acceptance Criteria
 
 - Managed targets are discovered from the workspace root, direct SDKWork git
-  repositories, and non-excluded `sdkwork.app.config.json` application roots.
+  repositories, and non-excluded `agent.app.config.json` application roots.
 - Each managed target has an `AGENTS.md` that resolves its relative
   `sdkwork-specs` authority and includes the progressive-loading route.
 - The route distinguishes path discovery from content loading, reads only the

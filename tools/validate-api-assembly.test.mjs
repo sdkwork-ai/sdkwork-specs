@@ -11,7 +11,7 @@ function fixture() {
   const root = path.join(workspace, 'sdkwork-demo');
   fs.mkdirSync(root, { recursive: true });
   fs.writeFileSync(
-    path.join(root, 'sdkwork.app.config.json'),
+    path.join(root, 'agent.app.config.json'),
     JSON.stringify({ backend: { appId: 'sdkwork-demo' } }, null, 2),
   );
   fs.writeFileSync(
@@ -159,7 +159,7 @@ test('rejects a retired gateway assembly manifest kind', () => {
 test('accepts UTF-8 BOM in application and component JSON inputs', () => {
   const root = fixture();
   for (const filePath of [
-    path.join(root, 'sdkwork.app.config.json'),
+    path.join(root, 'agent.app.config.json'),
     path.join(root, 'crates', 'sdkwork-routes-demo-app-api', 'specs', 'component.spec.json'),
   ]) {
     const value = fs.readFileSync(filePath, 'utf8');
@@ -175,7 +175,7 @@ test('does not require an application assembly from the platform cloud gateway r
   const root = path.join(workspace, 'sdkwork-api-cloud-gateway');
   fs.mkdirSync(root, { recursive: true });
   fs.writeFileSync(
-    path.join(root, 'sdkwork.app.config.json'),
+    path.join(root, 'agent.app.config.json'),
     JSON.stringify({ backend: { appId: 'sdkwork-api-cloud-gateway' } }, null, 2),
   );
 
@@ -479,7 +479,7 @@ test('rejects apiMode none assemblies with stale route crate bootstrap reference
 
 test('does not skip a non-application repository whose served assembly references missing route crates', () => {
   const root = fixture();
-  fs.rmSync(path.join(root, 'sdkwork.app.config.json'));
+  fs.rmSync(path.join(root, 'agent.app.config.json'));
   fs.rmSync(path.join(root, 'crates', 'sdkwork-routes-demo-app-api'), { recursive: true });
   fs.writeFileSync(
     path.join(root, 'Cargo.toml'),

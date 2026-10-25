@@ -89,7 +89,7 @@ export function isPreRelease(version) {
 
 /**
  * Compute the SHA-256 checksum of a file. Returns a hex digest, or `null`
- * when the file cannot be read. Required by `sdkwork.app.config.json#security`
+ * when the file cannot be read. Required by `agent.app.config.json#security`
  * when `checksumRequired: true`.
  * @param {string} filePath
  * @returns {string|null}

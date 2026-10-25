@@ -24,7 +24,7 @@ export function renderMinimalAppConfig(appId, runtimeCode) {
   return `${JSON.stringify(
     {
       schemaVersion: 3,
-      kind: 'sdkwork.app',
+      kind: 'agent.app',
       app: {
         key: appId,
         name: displayName,

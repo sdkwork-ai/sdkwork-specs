@@ -103,9 +103,9 @@ test('resolveApp picks up architecture from manifest runtime.framework', () => {
   const appRoot = path.join(repoRoot, 'apps', 'sdkwork-fake-pc');
   fs.mkdirSync(appRoot, { recursive: true });
   writeJson(path.join(appRoot, 'package.json'), { name: '@sdkwork/fake-pc', version: '1.0.0' });
-  writeJson(path.join(appRoot, 'sdkwork.app.config.json'), {
+  writeJson(path.join(appRoot, 'agent.app.config.json'), {
     schemaVersion: 3,
-    kind: 'sdkwork.app',
+    kind: 'agent.app',
     app: { key: 'sdkwork-fake-pc', versionSource: 'package.json' },
     runtime: { family: 'desktop', framework: 'react-tauri' },
     artifacts: {
@@ -132,7 +132,7 @@ test('resolveApp falls back to directory suffix when manifest is silent', () => 
   const appRoot = path.join(repoRoot, 'apps', 'sdkwork-fake2-h5');
   fs.mkdirSync(appRoot, { recursive: true });
   writeJson(path.join(appRoot, 'package.json'), { name: '@sdkwork/fake2-h5', version: '0.4.0' });
-  // No sdkwork.app.config.json present.
+  // No agent.app.config.json present.
 
   const resolved = resolveApp(repoRoot, appRoot, 'sdkwork-fake2-h5');
   assert.ok(resolved);
@@ -186,7 +186,7 @@ test('pc packager detect resolves platform matrix from manifest', () => {
   const appRoot = path.join(ws, 'apps', 'sdkwork-fake-pc');
   fs.mkdirSync(appRoot, { recursive: true });
   writeJson(path.join(appRoot, 'package.json'), { name: '@sdkwork/fake-pc', version: '1.0.0' });
-  writeJson(path.join(appRoot, 'sdkwork.app.config.json'), {
+  writeJson(path.join(appRoot, 'agent.app.config.json'), {
     runtime: { framework: 'react-tauri' },
     artifacts: { installConfig: { packages: [
       { id: 'web', platform: 'WEB' },
@@ -195,7 +195,7 @@ test('pc packager detect resolves platform matrix from manifest', () => {
   });
 
   const packager = getPackager('pc');
-  const detected = packager.detect(appRoot, readJsonLocal(path.join(appRoot, 'sdkwork.app.config.json')), {});
+  const detected = packager.detect(appRoot, readJsonLocal(path.join(appRoot, 'agent.app.config.json')), {});
   assert.ok(detected);
   assert.equal(detected.appKey, 'sdkwork-fake-pc');
   assert.ok(detected.platforms.includes('web'));
@@ -207,7 +207,7 @@ test('pc packager detect filters by platform', () => {
   const appRoot = path.join(ws, 'apps', 'sdkwork-fake-pc');
   fs.mkdirSync(appRoot, { recursive: true });
   writeJson(path.join(appRoot, 'package.json'), { name: '@sdkwork/fake-pc', version: '1.0.0' });
-  writeJson(path.join(appRoot, 'sdkwork.app.config.json'), {
+  writeJson(path.join(appRoot, 'agent.app.config.json'), {
     runtime: { framework: 'react-tauri' },
     artifacts: { installConfig: { packages: [
       { id: 'web', platform: 'WEB' },
@@ -216,7 +216,7 @@ test('pc packager detect filters by platform', () => {
   });
 
   const packager = getPackager('pc');
-  const detected = packager.detect(appRoot, readJsonLocal(path.join(appRoot, 'sdkwork.app.config.json')), { platformFilter: 'web' });
+  const detected = packager.detect(appRoot, readJsonLocal(path.join(appRoot, 'agent.app.config.json')), { platformFilter: 'web' });
   assert.ok(detected);
   assert.deepEqual(detected.platforms, ['web']);
 });
@@ -268,13 +268,13 @@ test('mini-program packager detect resolves weixin platform', () => {
   const appRoot = path.join(ws, 'apps', 'sdkwork-fake-mini-program');
   fs.mkdirSync(appRoot, { recursive: true });
   writeJson(path.join(appRoot, 'package.json'), { name: '@sdkwork/fake-mp', version: '0.1.0' });
-  writeJson(path.join(appRoot, 'sdkwork.app.config.json'), {
+  writeJson(path.join(appRoot, 'agent.app.config.json'), {
     runtime: { framework: 'mp-weixin' },
     artifacts: { installConfig: { packages: [{ id: 'wx', platform: 'WEIXIN' }] } },
   });
 
   const packager = getPackager('mini-program');
-  const detected = packager.detect(appRoot, readJsonLocal(path.join(appRoot, 'sdkwork.app.config.json')), {});
+  const detected = packager.detect(appRoot, readJsonLocal(path.join(appRoot, 'agent.app.config.json')), {});
   assert.ok(detected);
   assert.deepEqual(detected.platforms, ['weixin']);
 });

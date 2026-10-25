@@ -210,7 +210,7 @@ function delegatedApplicationRoots(repoRoot) {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
       if (!entry.isDirectory() || SKIP_DIRECTORIES.has(entry.name)) continue;
       const child = path.join(directory, entry.name);
-      if (fs.existsSync(path.join(child, 'sdkwork.app.config.json'))
+      if (fs.existsSync(path.join(child, 'agent.app.config.json'))
         && fs.existsSync(path.join(child, 'package.json'))
         && fs.existsSync(path.join(child, 'etc', 'sdkwork.deployment.config.json'))) {
         roots.push(child);

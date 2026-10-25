@@ -15,7 +15,7 @@
  *
  * Fleet predicate (identical to check-operations-conformance.mjs and to the
  * platform's own repo discovery in tools/application-deploy-layout/discover.mjs):
- * a *module* is a directory named sdkwork-* that carries sdkwork.app.config.json
+ * a *module* is a directory named sdkwork-* that carries agent.app.config.json
  * at its root. Directories without a manifest are reported as skipped; a
  * manifest outside the sdkwork-* convention (a product repo such as
  * hub-installer) is reported separately and audited only with
@@ -54,7 +54,7 @@ const FORBIDDEN_IN_MODULE_SH = Object.freeze([
   { pattern: /sha256sum/, issue: 'sha256sum (use sdkwork_write_checksum)' },
   { pattern: /tar\s+-[^\s]*c/, issue: 'tar create (use sdkwork_tar_artifact)' },
   { pattern: /docker\s+(save|push|load|pull)\b/, issue: 'raw docker transport (use the docker-image entrypoint)' },
-  { pattern: /^SDKWORK_IMAGE_TAG_DEFAULT=/m, issue: 'hardcoded SDKWORK_IMAGE_TAG_DEFAULT (the tag comes from sdkwork.app.config.json release.currentVersion)' },
+  { pattern: /^SDKWORK_IMAGE_TAG_DEFAULT=/m, issue: 'hardcoded SDKWORK_IMAGE_TAG_DEFAULT (the tag comes from agent.app.config.json release.currentVersion)' },
 ]);
 
 function checkModuleBin(root) {
@@ -236,7 +236,7 @@ async function runWorkspace(wsRoot, limit, json, offFleet) {
   for (const entry of fs.readdirSync(wsRoot, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue;
     const dir = path.join(wsRoot, entry.name);
-    if (!fs.existsSync(path.join(dir, 'sdkwork.app.config.json'))) { skipped.push(entry.name); continue; }
+    if (!fs.existsSync(path.join(dir, 'agent.app.config.json'))) { skipped.push(entry.name); continue; }
     if (entry.name.startsWith('sdkwork-')) manifests.push(dir);
     else { offFleetManifests.push(entry.name); if (offFleet) manifests.push(dir); }
   }
@@ -277,7 +277,7 @@ async function runWorkspace(wsRoot, limit, json, offFleet) {
   // 0 for every run and the gate could never fail — the placement gates were
   // unwired from both tiers entirely before this line existed.
   console.log(`  violations:      ${failed.reduce((n, r) => n + (r.issues?.length ?? 0), 0)}`);
-  if (skipped.length > 0) console.log(`  skipped (not a module — no sdkwork.app.config.json): ${skipped.sort().join(', ')}`);
+  if (skipped.length > 0) console.log(`  skipped (not a module — no agent.app.config.json): ${skipped.sort().join(', ')}`);
   if (offFleetManifests.length > 0) {
     console.log(`  skipped (manifest outside the sdkwork-* fleet convention, not audited${offFleet ? ' — audited via --include-off-fleet' : ''}): ${offFleetManifests.sort().join(', ')}`);
   }

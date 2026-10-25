@@ -46,7 +46,7 @@ Rules:
 | Sibling dependencies | Declared via `sdkwork-specs/workspace/consumers/<repo>.yaml` + `sync-workspace.mjs` |
 | Frontend SDK inventory | `*-core/specs/component.spec.json#contracts.sdkDependencies` |
 | Permission inheritance | App surface root `specs/component.spec.json#contracts.permissionComposition` |
-| Backend/release SDK inventory | `sdkwork.app.config.json#sdkDependencies` |
+| Backend/release SDK inventory | `agent.app.config.json#sdkDependencies` |
 | Verification | `pnpm verify` → `verify-repo.mjs` suite passes per repo |
 
 ## 2. Repository Batches
@@ -231,14 +231,14 @@ rg "dependency\.composition" --glob "*.md"
 
 ### Step 7 — Backend / Gateway Wave (type B)
 
-**Objective:** Align backend-only repos (Cargo + `sdkwork.app.config.json`; no client core pattern).
+**Objective:** Align backend-only repos (Cargo + `agent.app.config.json`; no client core pattern).
 
 **Repos:** `sdkwork-api-cloud-gateway`, `sdkwork-webserver`, others identified in Step 0
 
 **Tasks:**
 
 1. Add/align `consumers/*.yaml` cargo fragments where applicable
-2. Ensure `sdkwork.app.config.json#sdkDependencies` is authoritative for backend
+2. Ensure `agent.app.config.json#sdkDependencies` is authoritative for backend
 3. Remove any client-style composition artifacts if present
 4. `verify-repo.mjs` with backend profile
 

@@ -105,7 +105,7 @@ Allowed values:
 
 Inference rules when `repository-kind` is omitted:
 
-- `sdkwork.app.config.json` or `apps/sdkwork-<application-code>-*` present → treat as `application`
+- `agent.app.config.json` or `apps/sdkwork-<application-code>-*` present → treat as `application`
 - README states the repository is not an independent SDKWork application root → treat as `foundation-dependency`
 - repository-root `packages/` plus application-line `apis/`, `crates/`, or `sdks/` → treat as `legacy-application`
 
@@ -236,7 +236,7 @@ Recommended initial skeleton:
     README.md
     sdkwork-<application-code>-pc/
       README.md
-      sdkwork.app.config.json
+      agent.app.config.json
       src/ | lib/ | App/ | entry/        # selected architecture standard owns this level
       packages/                         # only when that architecture standard requires it
       config/                           # only when that architecture standard requires it
@@ -469,14 +469,14 @@ Standard root examples:
 ```text
 <single-surface-app-repository>/
   AGENTS.md
-  sdkwork.app.config.json
+  agent.app.config.json
   .sdkwork/
   apis/
   apps/
     README.md
     sdkwork-<application-code>-pc/
       README.md
-      sdkwork.app.config.json
+      agent.app.config.json
       packages/
       src/
       config/
@@ -496,7 +496,7 @@ Standard root examples:
 ```text
 <multi-surface-app-repository>/
   AGENTS.md
-  sdkwork.app.config.json
+  agent.app.config.json
   .sdkwork/
   apis/app-api/<domain>/openapi.yaml
   apps/
@@ -508,11 +508,11 @@ Standard root examples:
       specs/
       packages/
     sdkwork-<application-code>-pc/
-      sdkwork.app.config.json
+      agent.app.config.json
       packages/
       config/
     sdkwork-<application-code>-h5/
-      sdkwork.app.config.json
+      agent.app.config.json
       packages/
       config/
   crates/
@@ -621,7 +621,7 @@ Rules:
   repository root. The subtree `README.md` becomes that repository root `README.md` and `MUST`
   continue to index every direct child application root. The standalone repository `MUST NOT` be
   onboarded as an independent SDKWork application repository: it declares no `apis/`, `crates/`,
-  `sdks/`, or repository-root `sdkwork.app.config.json` of its own.
+  `sdks/`, or repository-root `agent.app.config.json` of its own.
 - The owning repository `MUST` register the subtree in `.gitmodules` with `path = apps` and the
   standalone repository URL, and that path `MUST` be a gitlink (mode `160000`) in the current
   index, under the same gitlink discipline section 6 requires of `external/` submodules.
@@ -709,7 +709,7 @@ Rules:
 - `.sdkwork/plugins/README.md` `MUST` explain how to add repository/application plugins.
 - `.sdkwork/.gitignore` `MUST` ignore local-only state when those paths may be created.
 - `.sdkwork/skills/` and `.sdkwork/plugins/` `MUST` be committed or otherwise represented by tracked files.
-- A monorepo root `.sdkwork/` contains shared repository skills/plugins. An application root inside that monorepo still needs its own `.sdkwork/` when it is independently built, distributed, launched, or represented by `sdkwork.app.config.json`.
+- A monorepo root `.sdkwork/` contains shared repository skills/plugins. An application root inside that monorepo still needs its own `.sdkwork/` when it is independently built, distributed, launched, or represented by `agent.app.config.json`.
 - Application-root `.sdkwork/` may reference repository-root skills/plugins, but it must not rely on user-global skills as its only project knowledge.
 
 ## 3. Skills Directory
@@ -823,7 +823,7 @@ Rules:
 - The consuming application root `MUST` own a single `pnpm-workspace.yaml` and/or a single root `Cargo.toml`. The pnpm workspace and the Cargo workspace are aligned by relative path; do not create separate pnpm workspaces that overlap.
 - Each sibling SDKWork source path `MUST` be declared exactly once at the consuming workspace root.
 - Local development resolves these paths from sibling checkouts. Release/CI resolves them from the framework checkout (see `DEPENDENCY_MANAGEMENT_SPEC.md` §5) without changing consumer `package.json` / `Cargo.toml` files.
-- The layout `SHOULD` be documented in the application root `README.md` and `sdkwork.app.config.json` when present, listing the expected sibling SDKWork repositories.
+- The layout `SHOULD` be documented in the application root `README.md` and `agent.app.config.json` when present, listing the expected sibling SDKWork repositories.
 
 ## 5.2 Multi-Repository Checkout Root vs Repository Workspace
 
@@ -861,7 +861,7 @@ Rules:
 Recommended discovery order:
 
 1. Nearest `AGENTS.md`.
-2. Current application root `sdkwork.app.config.json` when present.
+2. Current application root `agent.app.config.json` when present.
 3. Nearest module `specs/` when the task touches an authored module.
 4. Current repository/application root `specs/` when the task is repository-wide or application-wide.
 5. Current application root `.sdkwork/`.

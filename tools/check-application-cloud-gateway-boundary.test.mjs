@@ -7,7 +7,7 @@ import { checkApplicationCloudGatewayBoundary } from './check-application-cloud-
 
 function appRoot() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-cloud-boundary-'));
-  fs.writeFileSync(path.join(root, 'sdkwork.app.config.json'), '{}\n');
+  fs.writeFileSync(path.join(root, 'agent.app.config.json'), '{}\n');
   return root;
 }
 

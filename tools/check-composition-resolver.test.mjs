@@ -55,14 +55,14 @@ function createOwnershipResolutionFixture({ integrationOverrides = {} } = {}) {
   const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-composition-ownership-'));
   const root = path.join(workspaceRoot, 'sdkwork-demo');
   const appRoot = path.join(root, 'apps/sdkwork-demo-pc');
-  writeJson(path.join(root, 'sdkwork.app.config.json'), {
+  writeJson(path.join(root, 'agent.app.config.json'), {
     schemaVersion: 3,
-    kind: 'sdkwork.app',
+    kind: 'agent.app',
     app: { key: 'sdkwork-demo' },
   });
-  writeJson(path.join(appRoot, 'sdkwork.app.config.json'), {
+  writeJson(path.join(appRoot, 'agent.app.config.json'), {
     schemaVersion: 3,
-    kind: 'sdkwork.app',
+    kind: 'agent.app',
     app: { key: 'sdkwork-demo' },
   });
 
@@ -348,7 +348,7 @@ test('resolveComposition rejects consumer overrides that attempt to change conne
 test('resolveComposition prefers verified standalone-host assembly mounts over dependency surface defaults', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-composition-embedded-iam-'));
   const appRoot = path.join(root, 'apps/sdkwork-demo-pc');
-  writeJson(path.join(appRoot, 'sdkwork.app.config.json'), {
+  writeJson(path.join(appRoot, 'agent.app.config.json'), {
     schemaVersion: 1,
     applicationCode: 'demo',
   });
@@ -434,7 +434,7 @@ test('resolveComposition includes cross-stack architecture summary', () => {
     },
   });
   const appRoot = path.join(root, 'apps/sdkwork-demo-pc');
-  writeJson(path.join(appRoot, 'sdkwork.app.config.json'), {
+  writeJson(path.join(appRoot, 'agent.app.config.json'), {
     schemaVersion: 1,
     applicationCode: 'demo',
   });
@@ -529,14 +529,14 @@ test('resolveComposition classifies sibling internal SDKs on the internal servic
   const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-composition-internal-'));
   const root = path.join(workspaceRoot, 'sdkwork-demo');
   const appRoot = path.join(root, 'apps/sdkwork-demo-pc');
-  writeJson(path.join(root, 'sdkwork.app.config.json'), {
+  writeJson(path.join(root, 'agent.app.config.json'), {
     schemaVersion: 3,
-    kind: 'sdkwork.app',
+    kind: 'agent.app',
     app: { key: 'sdkwork-demo' },
   });
-  writeJson(path.join(appRoot, 'sdkwork.app.config.json'), {
+  writeJson(path.join(appRoot, 'agent.app.config.json'), {
     schemaVersion: 3,
-    kind: 'sdkwork.app',
+    kind: 'agent.app',
     app: { key: 'sdkwork-demo' },
   });
   writeJson(path.join(appRoot, 'packages/sdkwork-demo-pc-core/package.json'), {

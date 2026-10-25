@@ -11,7 +11,7 @@
 //      `<application-root>/specs/upload.declaration.json`.
 //   2. The file parses, uses `schemaVersion` 1, and carries no unknown field
 //      (§18.1: unknown fields must be rejected, not ignored).
-//   3. `appId` equals the root's `sdkwork.app.config.json` `backend.appId`.
+//   3. `appId` equals the root's `agent.app.config.json` `backend.appId`.
 //   4. Every entry has the required fields with the right types; `retention` is
 //      `long_term` or `temporary`, and a `temporary` entry declares its TTL.
 //   5. `appResourceType` is dotted lowercase with >= 2 segments, `scene` and
@@ -32,7 +32,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const DECLARATION_RELATIVE_PATH = 'specs/upload.declaration.json';
-const APP_CONFIG_NAME = 'sdkwork.app.config.json';
+const APP_CONFIG_NAME = 'agent.app.config.json';
 
 /** DRIVE_SPEC.md §8.1 standard upload profiles. */
 const STANDARD_UPLOAD_PROFILES = new Set([
@@ -412,9 +412,9 @@ function validateDeclarationShape(root, declaration, issues) {
  * §18.1: `appId` must equal this root's canonical config appId.
  *
  * Authority order, because the fleet is not uniform:
- *   1. the root's own `sdkwork.app.config.json`, `backend.appId`;
+ *   1. the root's own `agent.app.config.json`, `backend.appId`;
  *   2. the root's own config `app.key`, when `backend` is declared but empty;
- *   3. the repository's `sdkwork.app.config.json`, `backend.appId` then `app.key`;
+ *   3. the repository's `agent.app.config.json`, `backend.appId` then `app.key`;
  *   4. the hosting runnable sibling root's value, for a shared `-common` root
  *      (`APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §2 makes `-common` a shared
  *      package-family root rather than a runnable surface, so it inherits the app identity

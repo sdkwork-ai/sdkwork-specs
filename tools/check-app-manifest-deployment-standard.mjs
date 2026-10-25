@@ -48,7 +48,7 @@ function uniqueStrings(value) {
     && new Set(value).size === value.length;
 }
 
-export function validateAppManifestDeployment(manifest, label = 'sdkwork.app.config.json') {
+export function validateAppManifestDeployment(manifest, label = 'agent.app.config.json') {
   const issues = [];
   const runtime = manifest?.runtime ?? {};
   const supported = runtime.supportedDeploymentProfiles;
@@ -189,7 +189,7 @@ export function validateAppManifestDeployment(manifest, label = 'sdkwork.app.con
 export function validateAppManifestWorkflowAlignment(
   manifest,
   workflow,
-  manifestLabel = 'sdkwork.app.config.json',
+  manifestLabel = 'agent.app.config.json',
   workflowLabel = 'sdkwork.workflow.json',
 ) {
   const issues = [];
@@ -239,7 +239,7 @@ function main() {
     allowPositionals: false,
   });
   const root = path.resolve(parsed.values.root ?? '.');
-  const configPath = path.resolve(root, parsed.values.config ?? 'sdkwork.app.config.json');
+  const configPath = path.resolve(root, parsed.values.config ?? 'agent.app.config.json');
   if (!fs.existsSync(configPath)) {
     console.error(`app manifest deployment check failed: missing ${configPath}`);
     process.exit(1);

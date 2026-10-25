@@ -69,7 +69,7 @@ export function bootstrapApiAssemblyRepo(root, { specsRoot = SPECS_ROOT } = {}) 
     return { ok: false, applicationCode: null, errors: [error.message], warnings: [] };
   }
   const routeCrates = discoverRouteCrates(root, applicationCode);
-  const isApplicationRoot = fs.existsSync(path.join(root, 'sdkwork.app.config.json'));
+  const isApplicationRoot = fs.existsSync(path.join(root, 'agent.app.config.json'));
   if (!isApplicationRoot && routeCrates.length === 0) {
     return { ok: true, skipped: true, applicationCode, reason: 'not-application-root' };
   }

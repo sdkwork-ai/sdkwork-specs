@@ -31,7 +31,7 @@ function canonicalProfileIds(spec) {
 }
 
 function declaredDeploymentProfiles(repoRoot, spec) {
-  const manifestPath = path.join(repoRoot, 'sdkwork.app.config.json');
+  const manifestPath = path.join(repoRoot, 'agent.app.config.json');
   const manifestProfiles = fs.existsSync(manifestPath)
     ? readJson(manifestPath).runtime?.supportedDeploymentProfiles
     : undefined;
@@ -862,7 +862,7 @@ function retireDatabaseTopologyConfig(spec, actions) {
 }
 
 function updateAppConfig(repoRoot, deploymentProfiles, dryRun, actions) {
-  const manifestPath = path.join(repoRoot, 'sdkwork.app.config.json');
+  const manifestPath = path.join(repoRoot, 'agent.app.config.json');
   if (!fs.existsSync(manifestPath)) return;
   const manifest = readJson(manifestPath);
   manifest.runtime ??= {};
@@ -873,13 +873,13 @@ function updateAppConfig(repoRoot, deploymentProfiles, dryRun, actions) {
     : [...deploymentProfiles];
   if (JSON.stringify(current) !== JSON.stringify(next)) {
     manifest.runtime.supportedDeploymentProfiles = next;
-    actions.push('update sdkwork.app.config.json supportedDeploymentProfiles');
+    actions.push('update agent.app.config.json supportedDeploymentProfiles');
     if (!dryRun) writeJson(manifestPath, manifest, false);
   }
 }
 
 function ensureRootAppConfig(repoRoot, meta, deploymentProfiles, dryRun, actions) {
-  const rootPath = path.join(repoRoot, 'sdkwork.app.config.json');
+  const rootPath = path.join(repoRoot, 'agent.app.config.json');
   if (fs.existsSync(rootPath)) return;
 
   let source = null;
@@ -887,7 +887,7 @@ function ensureRootAppConfig(repoRoot, meta, deploymentProfiles, dryRun, actions
   if (fs.existsSync(appsDir)) {
     for (const name of fs.readdirSync(appsDir, { withFileTypes: true })) {
       if (!name.isDirectory()) continue;
-      const candidate = path.join(appsDir, name.name, 'sdkwork.app.config.json');
+      const candidate = path.join(appsDir, name.name, 'agent.app.config.json');
       if (fs.existsSync(candidate)) {
         source = readJson(candidate);
         break;
@@ -899,7 +899,7 @@ function ensureRootAppConfig(repoRoot, meta, deploymentProfiles, dryRun, actions
     ? structuredClone(source)
     : {
         schemaVersion: 3,
-        kind: 'sdkwork.app',
+        kind: 'agent.app',
         app: { key: meta.appId, name: meta.appId },
         runtime: {},
       };
@@ -913,7 +913,7 @@ function ensureRootAppConfig(repoRoot, meta, deploymentProfiles, dryRun, actions
       : deploymentProfiles[0];
   }
 
-  actions.push('create sdkwork.app.config.json at repository root');
+  actions.push('create agent.app.config.json at repository root');
   if (!dryRun) writeJson(rootPath, manifest, false);
 }
 
@@ -960,7 +960,7 @@ function deriveAppMeta(repoRoot) {
   const repoAppId = path.basename(repoRoot);
   if (!repoAppId.startsWith('sdkwork-')) return null;
 
-  const rootManifestPath = path.join(repoRoot, 'sdkwork.app.config.json');
+  const rootManifestPath = path.join(repoRoot, 'agent.app.config.json');
   let manifest = null;
   if (fs.existsSync(rootManifestPath)) {
     manifest = readJson(rootManifestPath);
@@ -1159,7 +1159,7 @@ function main() {
     if (hasTopology) return true;
     if (!bootstrapMissing) return false;
     return (
-      fs.existsSync(path.join(repo, 'sdkwork.app.config.json'))
+      fs.existsSync(path.join(repo, 'agent.app.config.json'))
       && fs.existsSync(path.join(repo, 'Cargo.toml'))
     );
   });

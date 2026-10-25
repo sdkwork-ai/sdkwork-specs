@@ -160,7 +160,7 @@ Sources, in priority order:
 1. `iam.runtime.retrieve`
 2. `iam.accountBindingPolicy.retrieve`
 3. `iam.verificationPolicy.retrieve`
-4. `sdkwork.app.config.json` fallback only when server metadata is unavailable
+4. `agent.app.config.json` fallback only when server metadata is unavailable
 
 `iam.runtime.retrieve` `MUST` expose at minimum:
 

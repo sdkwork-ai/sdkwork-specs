@@ -48,7 +48,7 @@ const CAPACITOR_BUNDLE_ROOTS = [
 
 /** Resolve the desktop host kind from the app manifest, defaulting to tauri. */
 function desktopHostKind(appRoot, appConfig) {
-  const config = appConfig ?? readJson(path.join(appRoot, 'sdkwork.app.config.json')) ?? {};
+  const config = appConfig ?? readJson(path.join(appRoot, 'agent.app.config.json')) ?? {};
   const pkgs = config?.artifacts?.installConfig?.packages;
   if (Array.isArray(pkgs)) {
     for (const p of pkgs) {

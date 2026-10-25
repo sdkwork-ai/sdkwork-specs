@@ -17,7 +17,7 @@ function relativePosix(from, to) {
 }
 
 function existingApplicationId(repoRoot) {
-  const manifestPath = path.join(repoRoot, 'sdkwork.app.config.json');
+  const manifestPath = path.join(repoRoot, 'agent.app.config.json');
   if (!fs.existsSync(manifestPath)) return null;
   const manifest = readJson(manifestPath);
   return manifest?.app?.key ?? manifest?.backend?.appId ?? null;
@@ -27,7 +27,7 @@ export function planDeploymentIndex(repoRoot) {
   const root = path.resolve(repoRoot);
   const topologyPath = path.join(root, 'specs', 'topology.spec.json');
   const configPath = path.join(root, 'etc', 'sdkwork.deployment.config.json');
-  if (!fs.existsSync(topologyPath) || !fs.existsSync(path.join(root, 'sdkwork.app.config.json'))) {
+  if (!fs.existsSync(topologyPath) || !fs.existsSync(path.join(root, 'agent.app.config.json'))) {
     return { root, skipped: true, actions: [], conflict: null };
   }
   if (fs.existsSync(configPath)) {

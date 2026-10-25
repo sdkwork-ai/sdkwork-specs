@@ -26,7 +26,7 @@ export function loadTopology(repoRoot) {
 }
 
 export function loadAppConfig(repoRoot) {
-  const configPath = path.join(repoRoot, 'sdkwork.app.config.json');
+  const configPath = path.join(repoRoot, 'agent.app.config.json');
   if (!fs.existsSync(configPath)) {
     return null;
   }

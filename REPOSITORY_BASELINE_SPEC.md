@@ -153,7 +153,7 @@ Rules:
 
 ## 4. L3 Release Baseline (Publishable Application Roots)
 
-Repositories or application roots with `sdkwork.app.config.json` that are packaged or deployed `SHOULD` also contain:
+Repositories or application roots with `agent.app.config.json` that are packaged or deployed `SHOULD` also contain:
 
 - `etc/README.md` and a typed source configuration entrypoint per `SOURCE_CONFIG_SPEC.md`.
 - Environment/deployment profile instances under `etc/`, not concrete environment values in the app manifest.

@@ -80,8 +80,8 @@ Rules:
 - `app.name`, when present, `MUST` be a non-empty string.
 - `app.repository` and dependency repositories `MUST` use `owner/repo` form.
 - `release.changelog`, when present, `MUST` declare a framework-supported changelog source: `auto`, `app-manifest`, `file`, `git`, or `none`.
-- `release.changelog.source: auto` `MUST` resolve release notes from `sdkwork.app.config.json` `release.notes[]`, then a repository-root `CHANGELOG.md`, then recent git commit subjects.
-- `release.changelog.source: app-manifest` `MUST` read the application manifest selected by `app.configPath` or `sdkwork.app.config.json` and require a matching release note for the package version, tag, or current manifest note.
+- `release.changelog.source: auto` `MUST` resolve release notes from `agent.app.config.json` `release.notes[]`, then a repository-root `CHANGELOG.md`, then recent git commit subjects.
+- `release.changelog.source: app-manifest` `MUST` read the application manifest selected by `app.configPath` or `agent.app.config.json` and require a matching release note for the package version, tag, or current manifest note.
 - `release.changelog.source: file` `MUST` require `release.changelog.path`, and that path `MUST` be a safe relative markdown path.
 - `release.changelog.maxCommitSubjects`, when present, `MUST` be an integer from 1 to 200.
 - Package version resolution `MUST` be consistent across matrix planning, lifecycle steps, and changelog rendering. Explicit `package_version` input wins; when it is omitted, the framework `MUST` derive the package version from the release tag or tag ref by stripping `refs/tags/` and a leading `v` before falling back to `release.defaultVersion`.
@@ -242,7 +242,7 @@ Rules:
   Multi-format fixed ids use
   `<platform>-<architecture>-<deployment-profile>-<profile>`; runtime-configurable
   ids use `<platform>-<architecture>-dual-<profile>`.
-- When `sdkwork.app.config.json` has a current release note, every enabled
+- When `agent.app.config.json` has a current release note, every enabled
   `release.notes[].packageIds` entry `MUST` resolve to one exact single-format
   workflow target. The package id, runtime target, deployment profile, and
   architecture must match. This includes container packages whose manifest URL
@@ -374,7 +374,7 @@ Rules:
 - When `publish.aggregateRelease: true`, the framework `MUST` download package workflow artifacts, run `lifecycle.publish` once in aggregate release context, render Release notes through the standard changelog planner, and upload only the configured aggregate upload globs to GitHub Release.
 - Application repositories `MUST NOT` copy final GitHub Release upload, aggregate artifact download, changelog rendering, release readiness, or manifest finalization logic into local workflow YAML. App-specific finalization commands belong in `sdkwork.workflow.json` `lifecycle.publish`.
 - Application repositories `MUST NOT` implement copied Release body generation in local workflow YAML. App-specific release note generation belongs in `sdkwork.workflow.json` `release.changelog` or in a local file/manifest consumed by the framework.
-- `release.changelog.source: auto` `MUST NOT` reuse stale `sdkwork.app.config.json` `release.notes[]` entries whose version does not match the requested package version or release tag; it must fall back to `CHANGELOG.md` or git commit subjects instead.
+- `release.changelog.source: auto` `MUST NOT` reuse stale `agent.app.config.json` `release.notes[]` entries whose version does not match the requested package version or release tag; it must fall back to `CHANGELOG.md` or git commit subjects instead.
 - When a workflow is triggered by a Git tag and no explicit `package_version` input is provided, changelog matching `MUST` use the tag-derived package version before `release.defaultVersion` so an old default manifest note cannot be reused for a newer tag.
 - Framework logs `MUST` redact secret-like values and must not print raw tokens, API keys, or credentials.
 - Reusable workflows that expose application signing or container publication

@@ -47,7 +47,7 @@ describe('check-apps-directory-index', () => {
 
   it('accepts a compliant application repository', () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-apps-index-'));
-    write(root, 'sdkwork.app.config.json', '{}\n');
+    write(root, 'agent.app.config.json', '{}\n');
     write(root, 'README.md', '# Demo\n\n- [apps index](apps/README.md)\n');
     write(root, 'apps/README.md', makeAppsReadme(['sdkwork-demo-pc']));
     write(root, 'apps/sdkwork-demo-pc/README.md', '# PC\n');
@@ -58,7 +58,7 @@ describe('check-apps-directory-index', () => {
 
   it('fails when apps/README.md is missing', () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-apps-index-'));
-    write(root, 'sdkwork.app.config.json', '{}\n');
+    write(root, 'agent.app.config.json', '{}\n');
     write(root, 'apps/.gitkeep', '');
     const result = validateAppsDirectoryIndex(root);
     assert.ok(result.issues.some((issue) => issue.includes('apps/README.md')));
@@ -66,7 +66,7 @@ describe('check-apps-directory-index', () => {
 
   it('fails when a child directory is not indexed', () => {
     const root = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-apps-index-'));
-    write(root, 'sdkwork.app.config.json', '{}\n');
+    write(root, 'agent.app.config.json', '{}\n');
     write(root, 'README.md', '# Demo\n\n- [apps index](apps/README.md)\n');
     write(root, 'apps/README.md', makeAppsReadme());
     write(root, 'apps/sdkwork-demo-pc/README.md', '# PC\n');

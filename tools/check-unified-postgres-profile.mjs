@@ -100,7 +100,7 @@ const RUNTIME_SCAN_EXTENSIONS = new Set([
 ]);
 const RUNTIME_ROOT_FILES = new Set([
   'package.json',
-  'sdkwork.app.config.json',
+  'agent.app.config.json',
   'sdkwork.workflow.json',
 ]);
 const RUNTIME_ROOT_SCRIPT_EXTENSIONS = new Set(['.bat', '.cmd', '.ps1', '.sh']);

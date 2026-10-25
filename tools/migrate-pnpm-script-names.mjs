@@ -363,7 +363,7 @@ export function workspaceRoots(workspace, repo) {
     .map((entry) => path.join(workspace, entry.name))
     .filter((root) => fs.existsSync(path.join(root, 'package.json')))
     .filter((root) => path.basename(root).startsWith('sdkwork-')
-      || fs.existsSync(path.join(root, 'sdkwork.app.config.json')));
+      || fs.existsSync(path.join(root, 'agent.app.config.json')));
 }
 
 function main() {

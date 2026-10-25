@@ -12,7 +12,7 @@ import { readJson } from '../util.mjs';
 
 /**
  * Read the publishable artifact package entries declared in
- * `sdkwork.app.config.json#artifacts.installConfig.packages[]`.
+ * `agent.app.config.json#artifacts.installConfig.packages[]`.
  *
  * Each entry shape (SDKWork App Standard v3):
  *   { id, name, packageFormat, platform, architecture,
@@ -23,7 +23,7 @@ import { readJson } from '../util.mjs';
  * produced the artifact. `metadata.releaseBuildDeferred: true` means the
  * package is declared but not yet built.
  *
- * @param {object} appConfig - parsed sdkwork.app.config.json
+ * @param {object} appConfig - parsed agent.app.config.json
  * @param {string} [platform] - optional platform filter (e.g. 'web', 'windows')
  * @returns {object[]}
  */

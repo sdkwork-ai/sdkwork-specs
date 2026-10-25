@@ -182,7 +182,7 @@ Rules:
 | Backend SDK family | `sdkwork-<sdk-family-stem>-backend-sdk` | `sdkwork-im-backend-sdk` |
 | RPC SDK family | `sdkwork-<sdk-family-stem>-rpc-sdk` | `sdkwork-im-rpc-sdk` |
 | Component spec | `specs/component.spec.json` | `packages/foo/specs/component.spec.json` |
-| App manifest | `sdkwork.app.config.json` | `apps/sdkwork-drive-pc/sdkwork.app.config.json` |
+| App manifest | `agent.app.config.json` | `apps/sdkwork-drive-pc/agent.app.config.json` |
 | GitHub package id | `<platform>-<architecture>-<deployment-profile>-<profile>-<format-token>`; Linux native packages use `linux-<distribution>-<architecture>-<deployment-profile>-<profile>-<format-token>`; variant packages insert `<variant>` before `<format-token>` | `windows-x64-standalone-desktop-msi`, `linux-debian-x64-standalone-server-deb`, `container-x64-cloud-container-nvidia-cuda-tar-gz` |
 | GitHub artifact name | `<artifact-prefix>-<package-id>` | `sdkwork-drive-android-arm64-standalone-mobile-aab` |
 | Agent entrypoint | `AGENTS.md` | `AGENTS.md` |

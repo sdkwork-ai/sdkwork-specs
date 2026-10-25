@@ -53,7 +53,7 @@ export function resolveApiSurfaces(appConfig, repoRoot) {
       fromManifest.push({
         kind: surface.kind ?? 'unknown',
         prefix: surface.apiPrefix,
-        source: 'sdkwork.app.config.json',
+        source: 'agent.app.config.json',
       });
     }
   }
@@ -152,7 +152,7 @@ export function detectApiPrefixConflicts(apiSurfaces) {
   const conflicts = [];
   for (const [prefix, items] of byPrefix) {
     const sources = new Set(items.map((i) => i.source));
-    if (sources.size > 1 && items.some((i) => i.source === 'sdkwork.app.config.json')) {
+    if (sources.size > 1 && items.some((i) => i.source === 'agent.app.config.json')) {
       conflicts.push(`api prefix "${prefix}" declared in multiple authorities: ${[...sources].join(', ')}`);
     }
   }

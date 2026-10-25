@@ -47,7 +47,7 @@ Rules:
 ```text
 apps/sdkwork-<application-code>-mini-program/
   AGENTS.md
-  sdkwork.app.config.json
+  agent.app.config.json
   .sdkwork/
     README.md
     skills/
@@ -314,7 +314,7 @@ Rules:
   developer settings stay in ignored `project.private.config.json`.
 - `config/host/` owns platform app ids, platform profiles, permission references, upload environment, platform package settings, and signing/reference metadata.
 - Host config must not contain platform private keys, auth tokens, refresh tokens, API keys, database credentials, private endpoints, business API constants, or SDK package ownership.
-- `sdkwork.app.config.json` should set `runtime.family = "mini-program"` and a specific `runtime.framework` such as `weixin-mini-program` or `multi-mini-program`.
+- `agent.app.config.json` should set `runtime.family = "mini-program"` and a specific `runtime.framework` such as `weixin-mini-program` or `multi-mini-program`.
 - `publish.platforms` and package matrix should use backend `PlusPlatform` values such as `MP_WEIXIN`, `MP_ALIPAY`, `MP_DINGTALK`, or `MP_LARK`.
 - Store/review screenshots and icons must represent the actual mini program.
 

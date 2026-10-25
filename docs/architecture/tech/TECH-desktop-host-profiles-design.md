@@ -698,7 +698,7 @@ function desktopBundleRoot(appRoot, clientArchitecture) {
 ### 8.3 发布一致性
 
 - 两种宿主的发布元数据（productName、identifier、version、icons、签名引用）必须一致，来自同一 manifest。
-- 双宿主不得各自定义版本号；版本只由 `sdkwork.app.config.json`/release 流程持有。
+- 双宿主不得各自定义版本号；版本只由 `agent.app.config.json`/release 流程持有。
 
 ---
 

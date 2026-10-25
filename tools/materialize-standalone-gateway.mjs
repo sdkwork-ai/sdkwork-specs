@@ -154,7 +154,7 @@ function writeIfChanged(filePath, content, write) {
 
 export function materializeStandaloneGateway(root, { write = false } = {}) {
   const resolved = path.resolve(root);
-  if (!fs.existsSync(path.join(resolved, 'sdkwork.app.config.json'))) {
+  if (!fs.existsSync(path.join(resolved, 'agent.app.config.json'))) {
     return { root: resolved, skipped: true, reason: 'not-application-root', actions: [] };
   }
   if (path.basename(resolved) === 'sdkwork-api-cloud-gateway') {

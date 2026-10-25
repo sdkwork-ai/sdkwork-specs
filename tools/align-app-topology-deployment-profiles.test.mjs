@@ -15,10 +15,10 @@ function makeWorkspace({ supportedDeploymentProfiles = ['standalone', 'cloud'] }
   fs.mkdirSync(path.join(repoRoot, 'specs'), { recursive: true });
   fs.mkdirSync(path.join(repoRoot, 'etc', 'topology'), { recursive: true });
   fs.writeFileSync(
-    path.join(repoRoot, 'sdkwork.app.config.json'),
+    path.join(repoRoot, 'agent.app.config.json'),
     `${JSON.stringify({
       schemaVersion: 3,
-      kind: 'sdkwork.app',
+      kind: 'agent.app',
       app: { key: 'sdkwork-demo', name: 'Demo' },
       runtime: { supportedDeploymentProfiles },
     }, null, 2)}\n`,
@@ -69,7 +69,7 @@ function runTopologyValidator(repoRoot) {
 
 test('migrates topology specs from retired serviceLayout profiles to two-segment profiles', () => {
   const { workspace, repoRoot } = makeWorkspace();
-  const appManifestPath = path.join(repoRoot, 'sdkwork.app.config.json');
+  const appManifestPath = path.join(repoRoot, 'agent.app.config.json');
   const appManifest = JSON.parse(fs.readFileSync(appManifestPath, 'utf8'));
   appManifest.runtime.supportedDeploymentProfiles = ['self-hosted', 'cloud-hosted'];
   fs.writeFileSync(appManifestPath, `${JSON.stringify(appManifest, null, 2)}\n`);

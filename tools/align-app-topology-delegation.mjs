@@ -38,7 +38,7 @@ function nestedApplicationRoots(repoRoot) {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
       if (!entry.isDirectory() || SKIP_DIRS.has(entry.name)) continue;
       const child = path.join(directory, entry.name);
-      if (fs.existsSync(path.join(child, 'sdkwork.app.config.json'))) roots.push(child);
+      if (fs.existsSync(path.join(child, 'agent.app.config.json'))) roots.push(child);
       walk(child);
     }
   }
@@ -90,7 +90,7 @@ export function planTopologyDelegation(repoRoot, { migrateRetiredReferences = fa
       }
       continue;
     }
-    const appManifest = readJson(path.join(appRoot, 'sdkwork.app.config.json'));
+    const appManifest = readJson(path.join(appRoot, 'agent.app.config.json'));
     const isRetiredReference = current?.kind === 'sdkwork.deployment-reference';
     if (
       current

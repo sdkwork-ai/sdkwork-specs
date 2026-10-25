@@ -126,7 +126,7 @@ function makeWorkspace() {
   const alphaRoot = path.join(workspace, 'sdkwork-alpha');
   initGitRepository(alphaRoot);
   write(alphaRoot, 'AGENTS.md', agentsText('../sdkwork-specs'));
-  write(alphaRoot, 'apps/demo/sdkwork.app.config.json', '{"app":{"key":"demo"}}\n');
+  write(alphaRoot, 'apps/demo/agent.app.config.json', '{"app":{"key":"demo"}}\n');
   write(alphaRoot, 'apps/demo/AGENTS.md', agentsText('../../../sdkwork-specs'));
   write(alphaRoot, 'apps/no-config/README.md', '# no-config\n');
   write(alphaRoot, 'apps/bad/README.md', '# bad\n');
@@ -141,16 +141,16 @@ function makeWorkspace() {
     'Legacy duplicate two.',
     '',
   ].join('\n'));
-  write(alphaRoot, 'legacy-client/sdkwork.app.config.json', '{"app":{"key":"legacy"}}\n');
+  write(alphaRoot, 'legacy-client/agent.app.config.json', '{"app":{"key":"legacy"}}\n');
   write(alphaRoot, 'legacy-client/AGENTS.md', agentsText('../../sdkwork-specs'));
   write(alphaRoot, 'crates/sdkwork-alpha-tool/AGENTS.md', '# Component-local entrypoint\n');
-  write(alphaRoot, 'external/vendor/sdkwork.app.config.json', '{"app":{"key":"external"}}\n');
+  write(alphaRoot, 'external/vendor/agent.app.config.json', '{"app":{"key":"external"}}\n');
   write(alphaRoot, 'external/vendor/AGENTS.md', agentsText('../../sdkwork-specs'));
-  write(alphaRoot, 'generated/client/sdkwork.app.config.json', '{"app":{"key":"generated"}}\n');
+  write(alphaRoot, 'generated/client/agent.app.config.json', '{"app":{"key":"generated"}}\n');
   write(alphaRoot, 'generated/client/AGENTS.md', agentsText('../../sdkwork-specs'));
-  write(alphaRoot, 'runtime/cache/sdkwork.app.config.json', '{"app":{"key":"runtime"}}\n');
+  write(alphaRoot, 'runtime/cache/agent.app.config.json', '{"app":{"key":"runtime"}}\n');
   write(alphaRoot, 'runtime/cache/AGENTS.md', agentsText('../../sdkwork-specs'));
-  write(alphaRoot, 'data/drive-objects/sdkwork.app.config.json', '{"app":{"key":"drive"}}\n');
+  write(alphaRoot, 'data/drive-objects/agent.app.config.json', '{"app":{"key":"drive"}}\n');
   write(alphaRoot, 'data/drive-objects/AGENTS.md', agentsText('../../sdkwork-specs'));
   stageAll(alphaRoot);
 
@@ -201,7 +201,7 @@ test('builds a deterministic tracked-root manifest without mutating AGENTS.md', 
   assert.equal(manifest.alignment.summary.ensurePaginationCount, 6);
 
   const demo = target(manifest, 'sdkwork-alpha/apps/demo');
-  assert.deepEqual(demo.discoveryReasons, ['tracked-direct-apps-child', 'tracked-sdkwork-app-config']);
+  assert.deepEqual(demo.discoveryReasons, ['tracked-direct-apps-child', 'tracked-agent-app-config']);
   assert.equal(demo.agent.state, 'existing');
   assert.equal(demo.agent.relativeSpecReferences.relativeSpecsPath, '../../../sdkwork-specs');
   assert.equal(demo.agent.relativeSpecReferences.valid, true);

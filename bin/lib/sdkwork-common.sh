@@ -95,7 +95,7 @@ sdkwork_module_selfcheck() {
 # Canonical default image tag: module override -> app manifest release version.
 sdkwork_default_image_tag() {
   [[ -n "${SDKWORK_IMAGE_TAG_DEFAULT:-}" ]] && { printf '%s' "${SDKWORK_IMAGE_TAG_DEFAULT}"; return 0; }
-  local manifest="${SDKWORK_MODULE_ROOT}/sdkwork.app.config.json" version=""
+  local manifest="${SDKWORK_MODULE_ROOT}/agent.app.config.json" version=""
   if [[ -f "${manifest}" ]]; then
     if command -v node >/dev/null 2>&1; then
       version="$(node -e 'const fs=require("fs");try{const c=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const v=c&&c.release&&c.release.currentVersion;if(typeof v==="string"&&v.trim())process.stdout.write(v.trim())}catch(e){}' "${manifest}" 2>/dev/null || true)"
@@ -118,7 +118,7 @@ sdkwork_init() {
   # corrupt release.currentVersion must fail here, not later inside a glob.
   case "${SDKWORK_IMAGE_TAG_DEFAULT}" in
     ''|*[!A-Za-z0-9._-]*) sdkwork_die "${SDKWORK_BIN_E_STATE}" \
-      "sdkwork.app.config.json release.currentVersion is not a valid image tag: '${SDKWORK_IMAGE_TAG_DEFAULT}'" ;;
+      "agent.app.config.json release.currentVersion is not a valid image tag: '${SDKWORK_IMAGE_TAG_DEFAULT}'" ;;
   esac
   trap sdkwork_evidence_flush EXIT
 }

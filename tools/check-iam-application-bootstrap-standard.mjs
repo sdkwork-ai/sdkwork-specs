@@ -61,7 +61,7 @@ function listFiles(rootDir, predicate, maxDepth = 8, depth = 0, results = []) {
 }
 
 function findAppManifests(rootDir) {
-  return listFiles(rootDir, (filePath) => path.basename(filePath) === 'sdkwork.app.config.json');
+  return listFiles(rootDir, (filePath) => path.basename(filePath) === 'agent.app.config.json');
 }
 
 function findBootstrapScripts(rootDir) {
@@ -115,7 +115,7 @@ function validateManifestPermissions(manifestPath, failures) {
   try {
     manifest = readJson(manifestPath);
   } catch (error) {
-    failures.push(`${manifestPath}: invalid sdkwork.app.config.json (${error.message})`);
+    failures.push(`${manifestPath}: invalid agent.app.config.json (${error.message})`);
     return;
   }
 

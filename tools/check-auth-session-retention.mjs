@@ -77,7 +77,7 @@ function scanWorkspaceApplications() {
     }
     const repositoryRoot = path.join(workspaceRoot, entry.name);
     const appsRoot = path.join(repositoryRoot, 'apps');
-    if (fs.existsSync(path.join(repositoryRoot, 'sdkwork.app.config.json'))) {
+    if (fs.existsSync(path.join(repositoryRoot, 'agent.app.config.json'))) {
       walkApplicationSources(repositoryRoot);
     } else if (fs.existsSync(appsRoot)) {
       walkApplicationSources(appsRoot);

@@ -78,7 +78,7 @@ Every client application root with modular admin/console/app surfaces and HTTP `
       }
     ],
     "bootstrapAccessTokenScope": {
-      "inheritFrom": "sdkwork.app.config.json#backend.accessTokenPermissionScope",
+      "inheritFrom": "agent.app.config.json#backend.accessTokenPermissionScope",
       "supplement": [],
       "overrideReplace": false
     },
@@ -162,7 +162,7 @@ Feature packages **may**:
 
 ## 6. Bootstrap and Credential Entry
 
-Bootstrap access token scope (`sdkwork.app.config.json` `backend.accessTokenPermissionScope`) is **not** a substitute for user session RBAC. It only gates credential-entry and pre-login SDK transport.
+Bootstrap access token scope (`agent.app.config.json` `backend.accessTokenPermissionScope`) is **not** a substitute for user session RBAC. It only gates credential-entry and pre-login SDK transport.
 
 Rules:
 

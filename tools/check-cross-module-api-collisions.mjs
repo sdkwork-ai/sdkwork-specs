@@ -179,7 +179,7 @@ function main() {
     const name = path.basename(d);
     if (name === "sdkwork-api-cloud-gateway") return false; // platform gateway, not an application
     if (name === "sdkwork-specs") return false;
-    return name.startsWith("sdkwork-") && fs.existsSync(path.join(d, "sdkwork.app.config.json"));
+    return name.startsWith("sdkwork-") && fs.existsSync(path.join(d, "agent.app.config.json"));
   });
 
   const seen = new Map(); // key -> [{applicationCode, source, operationId}]

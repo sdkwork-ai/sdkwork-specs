@@ -372,7 +372,7 @@ follows:
 
 | Axis | Owner | Default | Meaning |
 | --- | --- | --- | --- |
-| Build default profile | `sdkwork.app.config.json` `runtime.defaultDeploymentProfile`; canonical runner `build:<client>:<env>` without a `:cloud` suffix | `standalone` (same-origin `/`) | Which dist subtree a bare `pnpm build` / `build:<client>:<env>` produces (`dist/standalone/<alias>/`) |
+| Build default profile | `agent.app.config.json` `runtime.defaultDeploymentProfile`; canonical runner `build:<client>:<env>` without a `:cloud` suffix | `standalone` (same-origin `/`) | Which dist subtree a bare `pnpm build` / `build:<client>:<env>` produces (`dist/standalone/<alias>/`) |
 | Serve/import default profile | `SDKWORK_WEBSERVER_IMPORT_PROFILE` (data-plane import set, `SDKWORK_WEBSERVER_SPEC.md` §17.3.1) | `cloud` (unified `api-*` edge) | Which sibling-module edge set activates and which dist profile the Adaptive Web static roots serve (`SDKWORK_WEBSERVER_STATIC_SOURCE_PROFILE` follows it) |
 
 Normative rules:
@@ -422,7 +422,7 @@ Every application architecture separates these layers:
 | Host-local/private overlay | Ignored local file or secure store | `.env.cloud.development.local`, `sdkwork.cloud.development.bootstrap.local.json`, `project.private.config.json` | Secrets, developer overrides, platform credentials; never committed. |
 | Runtime/operator override | Process env, installed config, secret manager, CLI | `/etc/sdkwork/...`, mounted secret, one-shot flag | Explicit late override with validation and provenance. |
 
-`sdkwork.app.config.json` declares application identity, supported runtimes, and
+`agent.app.config.json` declares application identity, supported runtimes, and
 release capabilities. It does not own concrete URLs, ports, environment maps, or
 per-profile env values. `SOURCE_CONFIG_SPEC.md` owns source materialization and
 precedence.

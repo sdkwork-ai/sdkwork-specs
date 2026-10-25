@@ -13,14 +13,14 @@ This standard defines application composition without a parallel dependency mani
 | Source dependency paths and versions | Native build-tool roots (`pnpm-workspace.yaml`, Cargo workspace, etc.) |
 | Frontend SDK inventory (per surface) | `*-core/specs/component.spec.json#contracts.sdkDependencies` |
 | Permission inheritance/overrides | App-surface `specs/component.spec.json#contracts.permissionComposition` |
-| Backend/release SDK inventory | App Standard v3 root `specs/component.spec.json#contracts.sdkDependencies`; legacy v2 `sdkwork.app.config.json#sdkDependencies` only during migration |
+| Backend/release SDK inventory | App Standard v3 root `specs/component.spec.json#contracts.sdkDependencies`; legacy v2 `agent.app.config.json#sdkDependencies` only during migration |
 | Dependency API export/runtime policy | `component.spec.json#contracts.dependencyApiExports`; runtime mount/base-url facts derived by composition resolver |
 | Integration defaults | Dependency `sdk-manifest.json`, dependency `component.spec.json#integration`, and the consuming component's `contracts.sdkDependencies` |
 | Cross-stack resolved graph | generated `generated/composition.resolved.json#architecture` from `resolve-composition.mjs` |
 
 Rules:
 
-- Consumer repositories should converge on three authoritative files: `sdkwork.app.config.json`, `specs/topology.spec.json`, and `*-core/specs/component.spec.json`.
+- Consumer repositories should converge on three authoritative files: `agent.app.config.json`, `specs/topology.spec.json`, and `*-core/specs/component.spec.json`.
 - Integration prefixes, planes, runtime modes, permission manifest refs, and bootstrap env defaults are derived by `APP_INTEGRATION_CONVENTIONS.md` and `resolve-composition.mjs`.
 - Consumer-side hand-maintained `specs/dependency-api-surfaces.json` is migration-only input under an approved exception; new or pre-launch consumers must not add one.
 - Do not introduce `specs/dependency.composition.json` or equivalent parallel manifest.
@@ -78,7 +78,7 @@ Rules:
 - Protected open-api dependencies use the credential mode matching the authority contract: `protected-open-api-api-key`, `protected-open-api-oauth`, `protected-open-api-flexible` for API-key-or-OAuth, or `protected-open-api-api-key-or-dual-token` for the mutually exclusive API-key/dual-token profile.
 - Backend-only App Standard v3 roots must declare release/runtime SDK inventory through root
   `specs/component.spec.json#contracts.sdkDependencies`; they must not restore the retired top-level
-  manifest field. Legacy v2 roots may retain `sdkwork.app.config.json#sdkDependencies` only until
+  manifest field. Legacy v2 roots may retain `agent.app.config.json#sdkDependencies` only until
   their v3 migration moves that inventory to the component contract.
 - Bootstrap runtime must derive SDK wiring from core composition and component manifests; no second handwritten inventory.
 

@@ -49,7 +49,7 @@ test('accepts standard Java and TypeScript application layering', () => {
   );
 
   const appRoot = path.join(root, 'apps/sdkwork-demo-pc');
-  writeJson(path.join(appRoot, 'sdkwork.app.config.json'), { schemaVersion: 1, applicationCode: 'demo' });
+  writeJson(path.join(appRoot, 'agent.app.config.json'), { schemaVersion: 1, applicationCode: 'demo' });
   writeJson(path.join(appRoot, 'packages/sdkwork-demo-pc-orders/package.json'), {
     name: '@sdkwork/demo-pc-orders',
     version: '0.0.0',
@@ -99,7 +99,7 @@ test('rejects Java repository code that imports HTTP framework concerns', () => 
 test('rejects frontend UI and service raw HTTP or local SDK construction', () => {
   const root = makeRepo();
   const appRoot = path.join(root, 'apps/sdkwork-demo-pc');
-  writeJson(path.join(appRoot, 'sdkwork.app.config.json'), { schemaVersion: 1, applicationCode: 'demo' });
+  writeJson(path.join(appRoot, 'agent.app.config.json'), { schemaVersion: 1, applicationCode: 'demo' });
   writeJson(path.join(appRoot, 'packages/sdkwork-demo-pc-orders/package.json'), {
     name: '@sdkwork/demo-pc-orders',
     version: '0.0.0',

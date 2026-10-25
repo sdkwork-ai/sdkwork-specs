@@ -48,7 +48,7 @@ Rules:
 - `deploymentProfile` values are only `standalone` and `cloud`.
 - `vocabulary.deploymentProfile.allowed` `MUST` be a non-empty subset of
   `standalone`, `cloud` in that canonical order, mirroring
-  `runtime.supportedDeploymentProfiles` in `sdkwork.app.config.json`
+  `runtime.supportedDeploymentProfiles` in `agent.app.config.json`
   (`APP_MANIFEST_SPEC.md` section 10.1). A profile-limited application declares
   the single profile it ships; an application that owns both deployment
   architectures declares both.
@@ -775,7 +775,7 @@ device/edge protocol process defined by `NAMING_SPEC.md` section 4.3; background
 jobs that terminate no edge ingress remain `worker`.
 Client processes `MAY` declare a repository-relative `applicationRoot` when
 the client is an independently configured application surface. The path must
-stay inside the repository and contain its own `sdkwork.app.config.json`;
+stay inside the repository and contain its own `agent.app.config.json`;
 non-client processes must not declare this field.
 The retired `api-listener` role is not valid in schema v5; HTTP API processes
 must be represented by the single `api-standalone-gateway` role.

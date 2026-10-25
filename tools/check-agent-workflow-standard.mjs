@@ -160,7 +160,7 @@ function walkFiles(root, predicate) {
 
 function collectApplicationRoots(root) {
   const roots = new Set([root]);
-  for (const manifestPath of walkFiles(root, (_file, name) => name === 'sdkwork.app.config.json')) {
+  for (const manifestPath of walkFiles(root, (_file, name) => name === 'agent.app.config.json')) {
     const posixPath = toPosix(manifestPath);
     // Generated SDK output and ephemeral build staging (e.g. docker
     // build-context staging under .sdkwork/runtime/) are not application roots.

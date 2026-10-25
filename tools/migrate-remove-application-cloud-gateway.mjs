@@ -159,7 +159,7 @@ function rootsFromArgs(values) {
   return fs.readdirSync(workspace, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && entry.name.startsWith('sdkwork-'))
     .map((entry) => path.join(workspace, entry.name))
-    .filter((root) => fs.existsSync(path.join(root, 'sdkwork.app.config.json')))
+    .filter((root) => fs.existsSync(path.join(root, 'agent.app.config.json')))
     .filter((root) => path.basename(root) !== PLATFORM_GATEWAY)
     .filter((root) => !values.repo || path.basename(root) === values.repo);
 }

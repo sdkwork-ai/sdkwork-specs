@@ -126,7 +126,7 @@ Forbidden in application-owned bootstrap code:
 
 ## 4. Manifest Mapping
 
-`sdkwork.app.config.json` remains the registration source of truth. See `APP_MANIFEST_SPEC.md` for field semantics.
+`agent.app.config.json` remains the registration source of truth. See `APP_MANIFEST_SPEC.md` for field semantics.
 
 Minimum manifest fields for IAM bootstrap:
 
@@ -179,7 +179,7 @@ The same framework `MUST` work across these environments by swapping only the tr
 | SaaS/private backend SDK runtime | `createIamApplicationBootstrapClientFromBackend` | Uses generated `@sdkwork/iam-backend-sdk` or approved backend SDK |
 | Existing IAM service runtime | `createIamApplicationBootstrapClientFromIamService` | Uses `@sdkwork/iam-service` without raw HTTP |
 | Server/container service bootstrap | fetch or backend SDK adapter | May write `.sdkwork.local.env` or inject env through approved secret store |
-| Embedded standalone / installer runtime | `sdkwork-iam-embedded-application-bootstrap` (Rust) | Reads `sdkwork.app.config.json`, calls `ensure_tenant_application_runtime` directly on the IAM Postgres profile |
+| Embedded standalone / installer runtime | `sdkwork-iam-embedded-application-bootstrap` (Rust) | Reads `agent.app.config.json`, calls `ensure_tenant_application_runtime` directly on the IAM Postgres profile |
 
 ### 5.1 Embedded Rust Runtime Bootstrap
 
@@ -294,7 +294,7 @@ Rules:
 Application repositories that provide IAM bootstrap tooling `SHOULD` expose:
 
 ```text
-pnpm run admin:bootstrap:app -- --config <app-root>/sdkwork.app.config.json --domain <primary-domain>
+pnpm run admin:bootstrap:app -- --config <app-root>/agent.app.config.json --domain <primary-domain>
 ```
 
 Workspace-level batch bootstrap lives in `sdkwork-space/bin/`:
@@ -310,8 +310,8 @@ Rules:
 
 - Batch bootstrap `MUST` delegate per-app execution to `@sdkwork/iam-application-bootstrap` through `sdkwork-appbase/scripts/bootstrap/bootstrap-app.mjs`.
 - Batch bootstrap `MUST` load tracked environment profile values from `configs/bootstrap/profiles/<profile>.env`; ignored developer overrides use `configs/bootstrap/profiles/<profile>.local.env`.
-- Batch bootstrap `MUST` resolve per-app domains and API Base URLs from `etc/sdkwork.deployment.config.json` and its referenced typed profiles unless an explicit command-line override is provided. It `MUST NOT` read concrete environment values from `sdkwork.app.config.json`.
-- Legacy `schemaVersion: 1` `sdkwork.app.config` and `schemaVersion: 2` backend gateway manifests `MAY` be upgraded in place through `bin/scaffold-app-manifest-bootstrap.mjs` before batch bootstrap.
+- Batch bootstrap `MUST` resolve per-app domains and API Base URLs from `etc/sdkwork.deployment.config.json` and its referenced typed profiles unless an explicit command-line override is provided. It `MUST NOT` read concrete environment values from `agent.app.config.json`.
+- Legacy `schemaVersion: 1` `agent.app.config` and `schemaVersion: 2` backend gateway manifests `MAY` be upgraded in place through `bin/scaffold-app-manifest-bootstrap.mjs` before batch bootstrap.
 - Public script first segment `MUST` be `admin` per `PNPM_SCRIPT_SPEC.md` for application repositories; workspace `bin/` utilities `MAY` use neutral names such as `bootstrap-all-apps`.
 - Database seed/bootstrap scripts `MUST NOT` be confused with IAM application bootstrap; database lifecycle remains under `db:*`.
 
@@ -380,7 +380,7 @@ Each embedded IAM repository `MUST` provide `scripts/dev/*-iam-application-boots
 
 ## 8. New Application Checklist
 
-- [ ] Declare non-empty `backend.accessTokenPermissionScope` in `sdkwork.app.config.json`.
+- [ ] Declare non-empty `backend.accessTokenPermissionScope` in `agent.app.config.json`.
 - [ ] Use `@sdkwork/iam-application-bootstrap` for bootstrap orchestration.
 - [ ] Keep CLI/bootstrap scripts thin; no raw bootstrap HTTP in app code.
 - [ ] Wire backend SDK or IAM service adapter for non-CLI environments.

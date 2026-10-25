@@ -359,7 +359,7 @@ Two invocation modes:
   mode that catches a module which was never onboarded at all.
 
 A *module* is a repository that follows the fleet repo-name convention
-(`sdkwork-*`) and ships `sdkwork.app.config.json` at its root. Repositories with
+(`sdkwork-*`) and ships `agent.app.config.json` at its root. Repositories with
 no manifest are not modules, and manifest-carrying repositories outside the
 `sdkwork-*` convention are standalone product repos — the platform's own repo
 discovery (`tools/application-deploy-layout/discover.mjs`) filters on the same

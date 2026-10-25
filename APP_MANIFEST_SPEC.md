@@ -11,7 +11,7 @@ SDKWork App Manifest Standard v3 defines the canonical app configuration used by
 Every registered application owns one manifest:
 
 ```text
-<app-root>/sdkwork.app.config.json
+<app-root>/agent.app.config.json
 ```
 
 The manifest must use:
@@ -19,12 +19,12 @@ The manifest must use:
 ```json
 {
   "schemaVersion": 3,
-  "kind": "sdkwork.app"
+  "kind": "agent.app"
 }
 ```
 
 This standard is the current manifest field authority. The canonical repository-level schema and
-validator are [schemas/sdkwork.app.config.schema.v3.json](schemas/sdkwork.app.config.schema.v3.json),
+validator are [schemas/agent.app.config.schema.v3.json](schemas/agent.app.config.schema.v3.json),
 `tools/check-app-manifest-standard.mjs`, and
 `tools/check-app-manifest-deployment-standard.mjs`. Application framework repositories may add a
 media/store projection validator, but they must not replace this deployment/profile gate or invent a
@@ -37,8 +37,8 @@ When the application is independently deployable, the same root `MUST` contain s
 
 ## 2. Design Principles
 
-- `sdkwork.app.config.json` is the source of truth for registration, package distribution, update checks, and release governance.
-- `sdkwork.app.config.json` is an application declaration, not an environment deployment file.
+- `agent.app.config.json` is the source of truth for registration, package distribution, update checks, and release governance.
+- `agent.app.config.json` is an application declaration, not an environment deployment file.
   Concrete environment domains, ports, SDK Base URLs, bind addresses, database/Redis targets,
   feature-flag values, and CORS origins belong to source `etc/`.
 - New manifests `MUST NOT` declare concrete environment maps such as
@@ -64,7 +64,7 @@ When the application is independently deployable, the same root `MUST` contain s
 ```json
 {
   "schemaVersion": 3,
-  "kind": "sdkwork.app",
+  "kind": "agent.app",
   "app": {},
   "backend": {},
   "runtime": {},
@@ -128,7 +128,7 @@ Shape:
 ```json
 {
   "schemaVersion": 3,
-  "kind": "sdkwork.app",
+  "kind": "agent.app",
   "metadata": {
     "publishing": {
       "appIdByTarget": {
@@ -147,7 +147,7 @@ Rules:
 | Target keys | `<mode>.<environment>` where `mode` is `standalone` or `cloud` and `environment` is one of `development`, `test`, `staging`, `demo`, `production`. The key equals the deployment profile id (`deployProfileId`). |
 | Values | Platform application id strings only. Never store secrets, tokens, or connection strings in `metadata.publishing`. |
 | Write discipline | Writers MUST read the file fresh, merge the single new target key, and write back (read-modify-write). All other top-level fields (`app`, `runtime`, `environments`, unrelated `metadata` subtrees) MUST be preserved. |
-| Stub manifests | When the file does not exist, the console MAY create a minimal `schemaVersion: 3` / `kind: "sdkwork.app"` stub containing only `metadata.publishing.appIdByTarget`. The stub is not a complete manifest; the next full authoring pass must fill the required sections. |
+| Stub manifests | When the file does not exist, the console MAY create a minimal `schemaVersion: 3` / `kind: "agent.app"` stub containing only `metadata.publishing.appIdByTarget`. The stub is not a complete manifest; the next full authoring pass must fill the required sections. |
 | Corrupted files | A file that fails JSON parsing or schema sanity is rebuilt as a stub rather than blocking publishing: the console never blocks a successful publish on manifest bookkeeping. |
 | Read degradation | Any read failure (missing file, unreadable, oversized) degrades to "no linked app id" and never blocks the dialog flow. |
 | Text bound | The manifest is a governed config text file with a 1 MiB upper bound; larger files are rejected by the host file capability. |
@@ -720,7 +720,7 @@ The schema and validators must stay aligned with this standard:
 
 ## 16. New App Checklist
 
-- [ ] Create `sdkwork.app.config.json` from the v3 full example.
+- [ ] Create `agent.app.config.json` from the v3 full example.
 - [ ] Create `.sdkwork/README.md`, `.sdkwork/skills/README.md`, and `.sdkwork/plugins/README.md` for the same app root.
 - [ ] Choose one immutable `app.key`.
 - [ ] Use backend enum names exactly.

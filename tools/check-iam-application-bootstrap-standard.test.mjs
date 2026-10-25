@@ -28,7 +28,7 @@ const APP_MANIFEST = `${JSON.stringify({
 
 test('accepts the shared embedded Rust bootstrap framework for manifest-owning runtimes', async () => {
   await withFixture({
-    'sdkwork.app.config.json': APP_MANIFEST,
+    'agent.app.config.json': APP_MANIFEST,
     'Cargo.toml': `[workspace.dependencies]\nsdkwork-iam-embedded-application-bootstrap = { path = "../sdkwork-iam/crates/sdkwork-iam-embedded-application-bootstrap" }\n`,
   }, async (root) => {
     const result = validateIamApplicationBootstrapStandard(root);
@@ -39,7 +39,7 @@ test('accepts the shared embedded Rust bootstrap framework for manifest-owning r
 
 test('accepts the IAM assembly when it owns the embedded bootstrap lifecycle', async () => {
   await withFixture({
-    'sdkwork.app.config.json': APP_MANIFEST,
+    'agent.app.config.json': APP_MANIFEST,
     'Cargo.toml': `[workspace.dependencies]\nsdkwork-api-iam-assembly = { path = "../sdkwork-iam/crates/sdkwork-api-iam-assembly" }\n`,
   }, async (root) => {
     const result = validateIamApplicationBootstrapStandard(root);
@@ -50,7 +50,7 @@ test('accepts the IAM assembly when it owns the embedded bootstrap lifecycle', a
 
 test('rejects an application manifest without a shared bootstrap owner', async () => {
   await withFixture({
-    'sdkwork.app.config.json': APP_MANIFEST,
+    'agent.app.config.json': APP_MANIFEST,
     'Cargo.toml': '[workspace]\nmembers = []\n',
   }, async (root) => {
     const result = validateIamApplicationBootstrapStandard(root);

@@ -418,7 +418,7 @@ function discoverRepositoryTargets({ repoRoot, repoPath, source, workspaceRoot, 
   for (const relativePath of allTrackedFiles) {
     const reason = excludedPathReason(relativePath);
     if (reason) {
-      if (path.posix.basename(relativePath) === 'AGENTS.md' || path.posix.basename(relativePath) === 'sdkwork.app.config.json') {
+      if (path.posix.basename(relativePath) === 'AGENTS.md' || path.posix.basename(relativePath) === 'agent.app.config.json') {
         addExcluded(excluded, workspaceRoot, path.join(repoRoot, relativePath), reason);
       }
       continue;
@@ -427,14 +427,14 @@ function discoverRepositoryTargets({ repoRoot, repoPath, source, workspaceRoot, 
   }
 
   for (const relativePath of nonExcludedFiles) {
-    if (path.posix.basename(relativePath) !== 'sdkwork.app.config.json') {
+    if (path.posix.basename(relativePath) !== 'agent.app.config.json') {
       continue;
     }
     const appRoot = path.dirname(path.join(repoRoot, relativePath));
     if (path.resolve(appRoot) === path.resolve(repoRoot)) {
       addCandidate(candidates, repoRoot, rootClassification, 'tracked-root-app-config');
     } else {
-      addCandidate(candidates, appRoot, 'application-root', 'tracked-sdkwork-app-config');
+      addCandidate(candidates, appRoot, 'application-root', 'tracked-agent-app-config');
     }
   }
 

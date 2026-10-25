@@ -506,11 +506,11 @@ function findApplicationRoots(repoRoot) {
   return fs.readdirSync(appsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => path.join(appsDir, entry.name))
-    .filter((appRoot) => fs.existsSync(path.join(appRoot, 'sdkwork.app.config.json')));
+    .filter((appRoot) => fs.existsSync(path.join(appRoot, 'agent.app.config.json')));
 }
 
 function resolveApplicationIdentity(appRoot) {
-  const manifest = JSON.parse(readText(path.join(appRoot, 'sdkwork.app.config.json')));
+  const manifest = JSON.parse(readText(path.join(appRoot, 'agent.app.config.json')));
   const repoName = path.basename(path.dirname(path.dirname(appRoot)));
   return {
     profile: 'application',

@@ -21,7 +21,7 @@ Each deployable application repository MUST contain:
 
 ```text
 <repository-root>/
-  sdkwork.app.config.json
+  agent.app.config.json
   specs/topology.spec.json
   sdkwork.workflow.json
   deployments/
@@ -56,7 +56,7 @@ Deploy resolves three identifiers:
 | --- | --- | --- | --- |
 | `appId` | `sdkwork-im` | repository directory name and `topology.spec.json` `appId` | source-tree paths, surface directory names |
 | `runtimeCode` | `im` | `topology.applicationCode` | `/etc/sdkwork/`, `/usr/lib/sdkwork/`, `/usr/share/sdkwork/` |
-| `app.key` | `chat` | `sdkwork.app.config.json` | app.key / IAM only; MUST NOT be used for deploy paths |
+| `app.key` | `chat` | `agent.app.config.json` | app.key / IAM only; MUST NOT be used for deploy paths |
 
 Rules:
 
@@ -425,7 +425,7 @@ Surfaces referenced by `expose.web` are built and deployed automatically and
 
 API location prefixes are inferred in this order:
 
-1. `sdkwork.app.config.json` `apiSurfaces[].apiPrefix`
+1. `agent.app.config.json` `apiSurfaces[].apiPrefix`
 2. `apis/**` OpenAPI path prefixes
 
 WebSocket path:
@@ -495,7 +495,7 @@ Allowed names:
 
 `pc` and `h5` MUST NOT appear in `packages`.
 
-Package IDs, signing, and workflow targets come from `sdkwork.app.config.json` and `sdkwork.workflow.json`.
+Package IDs, signing, and workflow targets come from `agent.app.config.json` and `sdkwork.workflow.json`.
 
 ## 11. overrides
 

@@ -97,14 +97,14 @@ function validateStoreMedia(manifest, label, issues) {
   }
 }
 
-export function validateAppManifest(manifest, label = 'sdkwork.app.config.json') {
+export function validateAppManifest(manifest, label = 'agent.app.config.json') {
   const issues = [];
   if (!object(manifest)) return [`${label}: manifest must be an object`];
   for (const field of Object.keys(manifest)) {
     if (!TOP_LEVEL_FIELDS.has(field)) issues.push(`${label}: unknown top-level field ${field}`);
   }
   if (manifest.schemaVersion !== 3) issues.push(`${label}: schemaVersion must be 3`);
-  if (manifest.kind !== 'sdkwork.app') issues.push(`${label}: kind must be sdkwork.app`);
+  if (manifest.kind !== 'agent.app') issues.push(`${label}: kind must be agent.app`);
   for (const section of REQUIRED_SECTIONS) {
     if (!object(manifest[section])) issues.push(`${label}: ${section} must be an object`);
   }
@@ -272,7 +272,7 @@ export function findAppManifests(root) {
         ) {
           walk(full);
         }
-      } else if (entry.name === 'sdkwork.app.config.json') {
+      } else if (entry.name === 'agent.app.config.json') {
         files.push(full);
       }
     }
@@ -307,7 +307,7 @@ function main() {
   const { values } = parseArgs({
     options: {
       root: { type: 'string', default: '.' },
-      config: { type: 'string', default: 'sdkwork.app.config.json' },
+      config: { type: 'string', default: 'agent.app.config.json' },
       workspace: { type: 'string' },
       json: { type: 'boolean', default: false },
     },
@@ -316,7 +316,7 @@ function main() {
   const files = values.workspace
     ? findAppManifests(root)
     : [path.resolve(root, values.config)];
-  if (files.length === 0) throw new Error(`no sdkwork.app.config.json files found under ${root}`);
+  if (files.length === 0) throw new Error(`no agent.app.config.json files found under ${root}`);
   for (const file of files) if (!fs.existsSync(file)) throw new Error(`missing ${file}`);
   const issues = validateAppManifestFiles(files, root);
   if (values.json) console.log(JSON.stringify({ valid: issues.length === 0, manifests: files.length, issues }, null, 2));

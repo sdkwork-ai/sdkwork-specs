@@ -84,7 +84,7 @@ Canonical SDKWORK specs path from this repository:
 `AGENTS.md` must require agents to resolve standards in this order:
 
 1. Current or nearest `AGENTS.md`.
-2. `sdkwork.app.config.json` when present.
+2. `agent.app.config.json` when present.
 3. Nearest module `specs/README.md` and `specs/component.spec.json` when the task touches an authored module.
 4. Repository/application root `specs/` when the task is repository-wide or application-wide.
 5. Local `.sdkwork/README.md`, `.sdkwork/skills/`, and `.sdkwork/plugins/` when relevant.
@@ -107,7 +107,7 @@ Rules:
   by the current task.
 - Agents `MUST NOT` eagerly load all language, runtime, UI, deployment, or SDK
   specs for unrelated work.
-- `sdkwork.app.config.json`, local `specs/`, and local `.sdkwork/` are loaded
+- `agent.app.config.json`, local `specs/`, and local `.sdkwork/` are loaded
   when the task touches the application identity, component contract, local
   skills/plugins, runtime, SDK wiring, release, or packaging behavior they
   govern. They are not a reason to scan the entire repository first.
@@ -172,7 +172,7 @@ Language specs are on-demand. Do not require agents to load Rust, Java, TypeScri
 `AGENTS.md` must identify the local convention dictionary:
 
 - `AGENTS.md`: agent execution rules and relative spec entrypoint.
-- `sdkwork.app.config.json`: application identity, app metadata, release surfaces, and owned capabilities.
+- `agent.app.config.json`: application identity, app metadata, release surfaces, and owned capabilities.
 - `etc/`: safe source-controlled deployment/runtime configuration for independently deployable roots; load it for environment, Base URL, bind, topology, or packaging-input work.
 - `.sdkwork/`: local skills, plugins, manifests, and repository/application AI workspace metadata.
 - `specs/`: module-local spec systems (`README.md`, `component.spec.json`, optional narrowing extensions) for authored apps, packages, crates, services, and SDK families; repository/application root `specs/` for cross-module machine contracts such as topology manifests.
@@ -198,7 +198,7 @@ This repository follows `../sdkwork-specs/README.md`. Do not copy root standards
 
 ## Application Identity
 
-Read `sdkwork.app.config.json` for application identity, registration, SDK/API inventory, release metadata, or app-owned capabilities. Read `etc/` for concrete environment, runtime, Base URL, bind, topology, and deployment values. Do not treat the app manifest as runtime configuration authority.
+Read `agent.app.config.json` for application identity, registration, SDK/API inventory, release metadata, or app-owned capabilities. Read `etc/` for concrete environment, runtime, Base URL, bind, topology, and deployment values. Do not treat the app manifest as runtime configuration authority.
 
 ## Local Dictionary Structure
 

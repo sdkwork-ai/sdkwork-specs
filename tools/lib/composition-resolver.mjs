@@ -124,7 +124,7 @@ function isBrowserSameOriginApiEdgeAllowed(value, {
 }
 
 function loadConsumerSdkOwner(repoRoot) {
-  const appManifest = readJsonIfExists(path.join(repoRoot, 'sdkwork.app.config.json'));
+  const appManifest = readJsonIfExists(path.join(repoRoot, 'agent.app.config.json'));
   if (appManifest?.app?.key) return appManifest.app.key;
   if (appManifest?.applicationCode) {
     return String(appManifest.applicationCode).startsWith('sdkwork-')
@@ -430,7 +430,7 @@ export function resolveComposition(repoRoot, options = {}) {
   const consumerSdkOwner = loadConsumerSdkOwner(repoRoot);
 
   if (sdkDependencies.length > 0 && !consumerSdkOwner) {
-    issues.push('consumer application SDK owner is missing from sdkwork.app.config.json#app.key');
+    issues.push('consumer application SDK owner is missing from agent.app.config.json#app.key');
   }
 
   for (const dep of sdkDependencies) {

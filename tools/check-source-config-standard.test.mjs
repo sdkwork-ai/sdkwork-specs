@@ -40,7 +40,7 @@ function writeDeploymentIndex(root, profiles = ['standalone.development']) {
 
 test('accepts a deployable root with etc authority', () => {
   const root = fixture();
-  write(root, 'sdkwork.app.config.json', '{"schemaVersion":3,"kind":"sdkwork.app"}\n');
+  write(root, 'agent.app.config.json', '{"schemaVersion":3,"kind":"agent.app"}\n');
   write(root, 'etc/README.md', '# Config\n');
   writeDeploymentIndex(root);
   assert.deepEqual(checkSourceConfigStandard(root), []);
@@ -48,7 +48,7 @@ test('accepts a deployable root with etc authority', () => {
 
 test('accepts the complete canonical profile matrix', () => {
   const root = fixture();
-  write(root, 'sdkwork.app.config.json', '{"schemaVersion":3,"kind":"sdkwork.app"}\n');
+  write(root, 'agent.app.config.json', '{"schemaVersion":3,"kind":"agent.app"}\n');
   write(root, 'etc/README.md', '# Config\n');
   writeDeploymentIndex(root, [
     'standalone.development',
@@ -65,7 +65,7 @@ test('accepts the complete canonical profile matrix', () => {
 
 test('rejects invalid profile ids, missing files, and identity drift', () => {
   const root = fixture();
-  write(root, 'sdkwork.app.config.json', '{}\n');
+  write(root, 'agent.app.config.json', '{}\n');
   write(root, 'etc/README.md', '# Config\n');
   write(root, 'etc/topology/cloud.production.env', [
     'SDKWORK_ENVIRONMENT=staging',
@@ -93,7 +93,7 @@ test('rejects invalid profile ids, missing files, and identity drift', () => {
 
 test('rejects deployment profile paths that escape etc', () => {
   const root = fixture();
-  write(root, 'sdkwork.app.config.json', '{}\n');
+  write(root, 'agent.app.config.json', '{}\n');
   write(root, 'etc/README.md', '# Config\n');
   write(root, 'outside.env', 'SDKWORK_ENVIRONMENT=development\n');
   write(root, 'etc/sdkwork.deployment.config.json', JSON.stringify({
@@ -109,7 +109,7 @@ test('rejects deployment profile paths that escape etc', () => {
 
 test('supports legacy identity-free profiles only outside strict migration mode', () => {
   const root = fixture();
-  write(root, 'sdkwork.app.config.json', '{}\n');
+  write(root, 'agent.app.config.json', '{}\n');
   write(root, 'etc/README.md', '# Config\n');
   write(root, 'etc/topology/standalone.development.env', 'PORT=10240\n');
   write(root, 'etc/sdkwork.deployment.config.json', JSON.stringify({
@@ -127,7 +127,7 @@ test('supports legacy identity-free profiles only outside strict migration mode'
 
 test('accepts canonical identity in TOML, nested JSON, and YAML profiles', () => {
   const root = fixture();
-  write(root, 'sdkwork.app.config.json', '{}\n');
+  write(root, 'agent.app.config.json', '{}\n');
   write(root, 'etc/README.md', '# Config\n');
   write(root, 'etc/topology/standalone.development.toml', `
 [runtime]
@@ -168,7 +168,7 @@ sdkwork:
 
 test('rejects manifest environment debt and retired configs', () => {
   const root = fixture();
-  write(root, 'sdkwork.app.config.json', '{"environments":{"development":{"accessUrl":"http://localhost"}}}\n');
+  write(root, 'agent.app.config.json', '{"environments":{"development":{"accessUrl":"http://localhost"}}}\n');
   write(root, 'etc/README.md', '# Config\n');
   write(root, 'etc/sdkwork.deployment.config.json', '{}\n');
   write(root, 'configs/topology/dev.env', 'PORT=1\n');
@@ -179,7 +179,7 @@ test('rejects manifest environment debt and retired configs', () => {
 
 test('rejects committed secret values', () => {
   const root = fixture();
-  write(root, 'sdkwork.app.config.json', '{}\n');
+  write(root, 'agent.app.config.json', '{}\n');
   write(root, 'etc/README.md', '# Config\n');
   write(root, 'etc/sdkwork.deployment.config.json', '{"database":{"password":"secret"}}\n');
   assert.ok(checkSourceConfigStandard(root).some((issue) => issue.includes('secret value')));
@@ -187,7 +187,7 @@ test('rejects committed secret values', () => {
 
 test('accepts an exact production app-api origin allowlist', () => {
   const root = fixture();
-  write(root, 'sdkwork.app.config.json', '{}\n');
+  write(root, 'agent.app.config.json', '{}\n');
   write(root, 'etc/README.md', '# Config\n');
   write(root, 'etc/sdkwork.deployment.config.json', '{}\n');
   write(root, 'etc/sdkwork-api-cloud-gateway.production.toml', `
@@ -204,7 +204,7 @@ allowedOrigins = ["https://app.sdkwork.com"]
 
 test('rejects empty or permissive production app-api CORS', () => {
   const root = fixture();
-  write(root, 'sdkwork.app.config.json', '{}\n');
+  write(root, 'agent.app.config.json', '{}\n');
   write(root, 'etc/README.md', '# Config\n');
   write(root, 'etc/sdkwork.deployment.config.json', '{}\n');
   write(root, 'etc/sdkwork-api-cloud-gateway.production.toml', `
@@ -223,7 +223,7 @@ allowedOrigins = []
 
 test('rejects wildcard and path-bearing production origins', () => {
   const root = fixture();
-  write(root, 'sdkwork.app.config.json', '{}\n');
+  write(root, 'agent.app.config.json', '{}\n');
   write(root, 'etc/README.md', '# Config\n');
   write(root, 'etc/sdkwork.deployment.config.json', '{}\n');
   write(root, 'etc/sdkwork-api-cloud-gateway.staging.toml', `
@@ -241,7 +241,7 @@ allowedOrigins = ["https://*.sdkwork.com", "https://app.sdkwork.com/login"]
 
 test('accepts production-like desktop custom-scheme origins beside HTTP(S)', () => {
   const root = fixture();
-  write(root, 'sdkwork.app.config.json', '{}\n');
+  write(root, 'agent.app.config.json', '{}\n');
   write(root, 'etc/README.md', '# Config\n');
   write(root, 'etc/sdkwork.deployment.config.json', '{}\n');
   write(root, 'etc/sdkwork-api-cloud-gateway.production.toml', `
@@ -259,7 +259,7 @@ allowedOrigins = ["https://api.sdkwork.com", "app://dsh"]
 test('accepts an app surface that delegates deployment and topology to its enclosing application', () => {
   const repository = fixture();
   const root = path.join(repository, 'apps', 'sdkwork-demo-pc');
-  write(root, 'sdkwork.app.config.json', '{}\n');
+  write(root, 'agent.app.config.json', '{}\n');
   write(root, 'etc/README.md', '# Config\n');
   write(repository, 'etc/sdkwork.deployment.config.json', '{"kind":"sdkwork.deployment-index"}\n');
   write(repository, 'specs/topology.spec.json', '{"schemaVersion":5,"kind":"sdkwork.app.topology"}\n');
@@ -275,7 +275,7 @@ test('accepts an app surface that delegates deployment and topology to its enclo
 test('rejects missing or competing component topology authorities', () => {
   const repository = fixture();
   const root = path.join(repository, 'apps', 'sdkwork-demo-pc');
-  write(root, 'sdkwork.app.config.json', '{}\n');
+  write(root, 'agent.app.config.json', '{}\n');
   write(root, 'etc/README.md', '# Config\n');
   write(root, 'etc/sdkwork.deployment.config.json', JSON.stringify({
     schemaVersion: 1,

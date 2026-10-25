@@ -68,7 +68,7 @@ function main() {
     } else {
       report.profiles.other.push({ moduleName, profiles });
     }
-    if (!fs.existsSync(path.join(repoRoot, "sdkwork.app.config.json"))) {
+    if (!fs.existsSync(path.join(repoRoot, "agent.app.config.json"))) {
       report.noAppConfig.push(moduleName);
     }
     for (const app of discoverBrowserAppRoots(repoRoot)) {
