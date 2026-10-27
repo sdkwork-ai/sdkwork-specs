@@ -368,7 +368,7 @@ function validatePackageWorkflow(root) {
     } else if (!/^[0-9a-f]{40}$/iu.test(reusableMatch[1]) && !/^v?\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/u.test(reusableMatch[1])) {
       issues.push(`${packageLabel} must use a pinned sdkwork-github-workflow ref, not "${reusableMatch[1]}"`);
     }
-    if (!/config_path:\s*sdkwork\.workflow\.json/u.test(workflowText)) {
+    if (!/config_path:\s*agent\.workflow\.json/u.test(workflowText)) {
       issues.push(`${packageLabel} must pass config_path: agent.workflow.json`);
     }
     if (/runs-on:\s|steps:\s|actions\/checkout|gh\s+release\s+|npm\s+test|pnpm\s+verify/iu.test(workflowText)) {

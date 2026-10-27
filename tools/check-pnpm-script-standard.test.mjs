@@ -1384,7 +1384,7 @@ describe('check-pnpm-script-standard', () => {
     assert.notEqual(result.status, 0);
     assert.match(
       result.stderr,
-      /sdkwork\.workflow\.json: targets\.0\.command: pnpm dev:desktop: command example uses retired deployment token "--hosting"/,
+      /agent\.workflow\.json: targets\.0\.command: pnpm dev:desktop: command example uses retired deployment token "--hosting"/,
     );
   });
 
