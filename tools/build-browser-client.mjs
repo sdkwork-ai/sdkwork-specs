@@ -410,6 +410,7 @@ export async function buildBrowserClient(options) {
       // credential-free (ENVIRONMENT_SPEC §6.1).
       allowTestTokenGeneration: true,
       appRoot: app.root,
+      deploymentProfile,
       environment,
     });
   } catch (error) {

@@ -911,10 +911,18 @@ Bootstrap lifecycle policy:
 
 | Environment | Private bootstrap source | Missing-token behavior | Browser artifact rule |
 | --- | --- | --- | --- |
-| `development` | Existing private `SDKWORK_ACCESS_TOKEN`, otherwise the shared IAM manifest-based local generator | May generate a disposable local JWT | The IAM serve-only Vite plugin may inject the canonical credential-entry global before application modules execute. |
-| `test` | Explicit test token, otherwise the shared generator only when the isolated runner opts in | Fail unless a token exists or `allowTestTokenGeneration: true` is set | Injection requires the separate `allowTestInjection: true` opt-in. |
-| `staging` | Secret manager, mounted secret, protected host env, or equivalent private runtime source | Fail closed | Never embed in HTML, bundles, public env, or static runtime config. |
-| `production` | Secret manager, mounted secret, protected host env, or equivalent private runtime source | Fail closed | Never embed in HTML, bundles, public env, or static runtime config. |
+| `development` | Repository environment-scoped artifact, an existing private `SDKWORK_ACCESS_TOKEN`, otherwise the shared IAM manifest-based local generator | Reuse the cached token; generate a disposable local JWT only when no reusable token exists | The IAM serve-only Vite plugin may inject the canonical credential-entry global before application modules execute. |
+| `test` | Explicit test token or a reusable environment-scoped artifact, otherwise the shared generator only when the isolated runner opts in | Reuse the cached token; fail unless a reusable token exists or `allowTestTokenGeneration: true` is set | Injection requires the separate `allowTestInjection: true` opt-in. |
+| `staging` | Secret manager, mounted secret, protected host env, or equivalent private runtime source | Reuse the provisioned token; fail closed when absent | Never embed in HTML, bundles, public env, or static runtime config. |
+| `production` | Secret manager, mounted secret, protected host env, or equivalent private runtime source | Reuse the provisioned token; fail closed when absent | Never embed in HTML, bundles, public env, or static runtime config. |
+
+Bootstrap tokens are cached per independent Git repository and per lifecycle environment at
+`.env.<deployment-profile>.<lifecycle>.bootstrap.local`. A token that is present and still valid
+MUST be reused unchanged: startup, build, test, check, verify, and clean MUST NOT re-register,
+re-provision, or re-sign it. Regeneration happens only when the cache is absent, expired,
+identity-incompatible with the selected manifest/environment, or explicitly requested with
+`--refresh`. The normative reuse and regeneration contract is
+`IAM_APPLICATION_BOOTSTRAP_SPEC.md` section 5.4.
 
 The canonical Node owners are `@sdkwork/iam-application-bootstrap` `ensureRepoBootstrapAccessToken(...)`, `sdkwork-iam/scripts/dev/ensure-repo-bootstrap-access-token.mjs`, `sdkwork-space/bin/with-bootstrap-token.mjs`, and loopback fixture merge through `sdkwork-iam/scripts/dev/create-dev-bootstrap-access-token-env.mjs`. The canonical Vite owner is `@sdkwork/iam-credential-entry/vite`. Application repositories `MUST NOT` copy fixture JWT creation, manifest identity lookup, env merge, private bootstrap env-file parsing, inline serialization, or canonical global assignment. `process.env.SDKWORK_ACCESS_TOKEN` Vite define replacement is forbidden as the browser handoff because it is not reliable for linked client source in Vite 6.
 

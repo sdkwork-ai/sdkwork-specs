@@ -1,6 +1,6 @@
 # SDKWork IAM Credential Entry Integration Standard
 
-- Version: 1.2
+- Version: 1.3
 - Scope: login, registration, password reset, OAuth session creation, QR/device authorization bootstrap transport, manifest identity, lifecycle-aware bootstrap env, and Vite development handoff
 - Related: `IAM_SPEC.md`, `IAM_APPLICATION_BOOTSTRAP_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `API_SPEC.md`, `SDK_SPEC.md`, `WEB_FRAMEWORK_SPEC.md`, `ENVIRONMENT_SPEC.md`
 
@@ -109,9 +109,13 @@ Rules:
   silently. Only pass `repoRoot` when the artifact genuinely lives outside the app's ancestor
   chain.
 - The artifact file names the reader accepts are exactly:
-  `.sdkwork.local.env`, `.env.standalone.<lifecycle>.bootstrap.local`,
-  `.env.<lifecycle>.bootstrap.local`. A writer that emits any other name or location is
-  non-conforming.
+  `.env.<deployment-profile>.<lifecycle>.bootstrap.local`,
+  `.env.standalone.<lifecycle>.bootstrap.local`,
+  `.env.<lifecycle>.bootstrap.local`, and the legacy unscoped
+  `.sdkwork.local.env`. A writer that emits any other name or location is
+  non-conforming. Writers `MUST` emit the environment-scoped
+  `.env.<deployment-profile>.<lifecycle>.bootstrap.local`; the remaining names
+  are compatibility readers only.
 - Staging and production `MUST NOT` inject; the plugin's own gate refuses, and callers `MUST NOT`
   widen it (`allowTestInjection` is the only widening, and only for `test`).
 
@@ -146,7 +150,12 @@ Canonical helpers:
   - `mergeRepoDevBootstrapAccessTokenEnv`
   - `resolveRepoApplicationManifestPath`
 - `@sdkwork/iam-credential-entry/node-bootstrap`
+  - `inspectBootstrapAccessToken`
+  - `isBootstrapAccessTokenReusable`
   - `readBootstrapAccessTokenEnvFile`
+  - `readRepoBootstrapAccessToken`
+  - `writeRepoBootstrapAccessToken`
+  - `resolveRepoBootstrapAccessTokenEnvPaths`
 - `@sdkwork/iam-credential-entry/vite`
   - `createSdkworkCredentialEntryBootstrapVitePlugin`
 - `sdkwork_iam_flutter_mobile_core`
@@ -162,9 +171,28 @@ Rules:
 - The lifecycle facade `MUST` pass the resolved renderer bind/port and bootstrap env to the same child process plan; package scripts `MUST NOT` override the topology-selected port with a hard-coded value.
 - Standalone IAM PC packages `MUST` route `dev` through `run-pc-renderer-dev-with-bootstrap.mjs` unless a repository-local orchestrator already merges bootstrap env.
 - BirdCoder and other apps with public-runtime env denylists `MUST` inject bootstrap credentials through approved private dev channels only.
-- A configured token is preserved in every lifecycle. Shared helpers generate only for development or explicitly isolated tests and fail closed when a required staging/production private token is absent.
+- A configured token is preserved in every lifecycle. Reuse is the default: helpers `MUST` read the repository's environment-scoped artifact and `MUST NOT` provision, sign, or rewrite while a reusable token exists (`IAM_APPLICATION_BOOTSTRAP_SPEC.md` section 5.4). Shared helpers generate only for development or explicitly isolated tests and fail closed when a required staging/production private token is absent.
 - Login, registration completion, refresh, and current-session bootstrap `MUST` replace bootstrap credentials through the global TokenManager. Feature code must not retain or reapply the bootstrap value.
 - Development Flutter builds may receive the generated private bootstrap token through a Dart define prepared from the explicit surface manifest by the canonical IAM Node helper. Staging and production Flutter artifacts `MUST NOT` embed it and must use a trusted native host channel or approved short-lived exchange.
+
+### 5.4 Per-Repository Token Cache
+
+The normative cache, reuse, and regeneration contract is
+`IAM_APPLICATION_BOOTSTRAP_SPEC.md` section 5.4. This section states the client
+handoff consequences:
+
+- The Vite plugin `MUST` read the repository's environment-scoped artifact for
+  the lifecycle it serves. It `MUST NOT` fall back to another lifecycle's
+  artifact when the environment-scoped file exists but is invalid.
+- A development Vite serve process that finds a reusable token `MUST NOT`
+  trigger registration, provisioning, or signing of a replacement token in
+  order to serve the page.
+- Test injection requires both the test generation and test injection opt-ins;
+  a cached fixture that is still valid satisfies the generation requirement
+  without minting a new one.
+- Each repository keeps its own artifact. A browser build or dev server `MUST
+  NOT` read another repository's bootstrap file, and a workspace-level shared
+  token is not a valid cache.
 
 ## 6. Acceptance Checklist
 
@@ -172,6 +200,7 @@ Rules:
 - [ ] OpenAPI requires only `AccessToken`; SDK transport injects only bootstrap `Access-Token` and fails before dispatch when it is absent.
 - [ ] Host apps consume `@sdkwork/iam-credential-entry`; no duplicated local wrappers remain.
 - [ ] Host app Vite configs consume `@sdkwork/iam-credential-entry/vite`; no local serializer or `process.env.SDKWORK_ACCESS_TOKEN` define remains.
+- [ ] Each repository's bootstrap artifact is environment-scoped and reused on a second start without registration, provisioning, signing, or rewriting (`IAM_APPLICATION_BOOTSTRAP_SPEC.md` section 5.4).
 - [ ] `sdkwork-app` invokes the canonical IAM dev bootstrap provider before renderer spawn; no application-local token generation/helper fork remains.
 - [ ] Browser `device_authorizations.create`, retrieve, and session exchange dispatch without `Access-Token` or `Authorization`; QR scan and password-completion credential-entry calls still require only bootstrap `Access-Token`.
 - [ ] Development/test lifecycle gates and production browser bootstrap exchange/host channels fail closed under the exact environment policy.
