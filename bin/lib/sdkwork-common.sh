@@ -467,8 +467,15 @@ sdkwork_remote() {
 
   local login=()
   [[ -n "${SDKWORK_SSH_USER}" ]] && login=(-l "${SDKWORK_SSH_USER}")
+  # OpenSSH joins trailing arguments with single spaces and hands the result to
+  # the remote login shell, so passing the argv array verbatim loses every
+  # quoting boundary (`bash -lc "a && b"` degenerates into `bash -lc a && b`
+  # executed by the remote shell). Serialize the command into one POSIX-quoted
+  # string so the remote shell re-parses exactly the intended command.
+  local remote_command
+  remote_command="$(sdkwork_shell_quote "$@")"
   sdkwork_run ssh -p "${SDKWORK_SSH_PORT}" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-    ${login[@]+"${login[@]}"} "${SDKWORK_SSH_HOST}" -- "$@"
+    ${login[@]+"${login[@]}"} "${SDKWORK_SSH_HOST}" -- "${remote_command}"
 }
 
 sdkwork_push_dir() {
@@ -741,8 +748,10 @@ sdkwork_remote_capture() {
   fi
   local login=()
   [[ -n "${SDKWORK_SSH_USER}" ]] && login=(-l "${SDKWORK_SSH_USER}")
+  local remote_command
+  remote_command="$(sdkwork_shell_quote "$@")"
   ssh -p "${SDKWORK_SSH_PORT}" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-    ${login[@]+"${login[@]}"} "${SDKWORK_SSH_HOST}" -- "$@"
+    ${login[@]+"${login[@]}"} "${SDKWORK_SSH_HOST}" -- "${remote_command}"
 }
 
 # Print a remote file on stdout (empty under --dry-run).
