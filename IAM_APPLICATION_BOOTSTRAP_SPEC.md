@@ -230,12 +230,78 @@ Start, build, test, check, verify, and clean commands that call protected app-ap
 
 Resolution order:
 
-1. Process env when the token is a usable signed JWT, or a loopback-only local fixture JWT when the backend URL is loopback.
-2. Registered private overlays: `.sdkwork.local.env`, then `.env.standalone.<lifecycle>.bootstrap.local`.
-3. IAM application bootstrap through `@sdkwork/iam-application-bootstrap` `ensureRepoBootstrapAccessToken(...)` when bootstrap operator credentials exist.
-4. Loopback-only credential-entry fixture generation through `@sdkwork/iam-credential-entry/node-bootstrap` for `development` or isolated `test` runners.
+1. Process env when the token is reusable: a signed JWT, or a local fixture JWT where the selected lifecycle permits one.
+2. The repository's environment-scoped private overlay: `.env.<deployment-profile>.<lifecycle>.bootstrap.local`, then the compatible spellings `.env.standalone.<lifecycle>.bootstrap.local` and `.env.<lifecycle>.bootstrap.local`.
+3. Legacy unscoped registration output `.sdkwork.local.env`, only when its token validates for the selected lifecycle and deployment identity.
+4. IAM application bootstrap through `@sdkwork/iam-application-bootstrap` `ensureRepoBootstrapAccessToken(...)` when bootstrap operator credentials exist.
+5. Credential-entry fixture generation through `@sdkwork/iam-credential-entry/node-bootstrap` for `development`, or an isolated `test` runner with the explicit test-generation opt-in and a loopback gateway.
 
-Remote gateway backends `MUST` reject `alg:none` fixture JWTs from gitignored overlays. Operators `MUST` register a real token through IAM bootstrap or supply a signed JWT from a secret store.
+Remote gateway backends `MUST` reject `alg:none` fixture JWTs in `staging` and `production`. Operators `SHOULD` register a real token through IAM bootstrap or supply a signed JWT from a secret store for any shared or remote gateway; a development fixture is disposable and expires within 24 hours.
+
+### 5.4 Per-Repository Access Token Reuse And Regeneration
+
+Each independent Git repository owns its bootstrap access token. A multi-surface repository `MAY` own one token per manifest-bearing application root when those surfaces declare distinct `backend.appId` values. Tokens `MUST NOT` be shared between repositories, between lifecycle environments, between deployment profiles, or between surfaces with different application identities. The reused value is the manifest root's own private artifact; a token inherited through process env is an explicit operator override, not another repository's cache.
+
+#### 5.4.1 Cache Artifact
+
+| Concern | Rule |
+| --- | --- |
+| Canonical path | `<manifest-root>/.env.<deployment-profile>.<lifecycle>.bootstrap.local`, for example `.env.standalone.development.bootstrap.local` or `.env.cloud.test.bootstrap.local` |
+| Compatible read spellings | `.env.standalone.<lifecycle>.bootstrap.local` and `.env.<lifecycle>.bootstrap.local` |
+| Legacy read-only spelling | `.sdkwork.local.env` is an unscoped registration output. It `MUST` be read last and `MUST NOT` be used as the reusable cache when an environment-scoped artifact exists. |
+| Content | One `SDKWORK_ACCESS_TOKEN=<JWT>` assignment plus non-secret metadata comments: `sdkwork-bootstrap-environment`, `sdkwork-bootstrap-deployment-profile`, `sdkwork-bootstrap-backend`, `sdkwork-bootstrap-app-id`, `sdkwork-bootstrap-issued-at`, `sdkwork-bootstrap-expires-at`, `sdkwork-bootstrap-source` |
+| Git | The artifact `MUST` be gitignored and `MUST NOT` appear in a commit, package, browser bundle, HTML, `/runtime-env.js`, or public runtime config |
+| File mode | POSIX writers `MUST` create the file with owner-only permissions (`0600`) |
+| Write discipline | Writers `MUST` write a temporary file in the same directory and rename it over the target. Readers `MUST` never observe a partially written token. |
+| Scope | Exactly one active token per manifest root (repository root or `apps/<surface>` application root), deployment profile, lifecycle environment, backend origin, and manifest `backend.appId` |
+
+An application repository that resolves `SDKWORK_ACCESS_TOKEN` from any other path or from a workspace-level shared file is non-conforming. Existing repositories `MUST` migrate the token into the canonical path on the next write; readers `MAY` accept the compatible spellings during the migration window.
+
+#### 5.4.2 Reuse Contract
+
+Before any IAM provisioning, fixture signing, or artifact write, the resolver `MUST` inspect every candidate token and reuse the first one that satisfies all of these conditions:
+
+- It is non-empty. A token that is not a three-part JWT is treated as an opaque operator-supplied value and is reused without rewriting; the runtime JWT parser still rejects it if the backend requires a JWT.
+- `exp` is absent or the current time is earlier than `exp` minus the configured clock skew. Implementations `MUST` use a skew of at least 60 seconds and `SHOULD` use 300 seconds.
+- `nbf` is absent or already satisfied.
+- The `environment` claim, when present on a JWT, normalizes to the selected lifecycle (`dev`/`local` normalize to `development`, `prod` to `production`) and matches it. A JWT that omits the claim cannot be scope-validated for that dimension and is treated as opaque.
+- `app_id` matches the selected surface manifest `backend.appId` when both the manifest and the token declare one. A JWT that omits `app_id` is treated as opaque for that dimension.
+- `tenant_id` and `organization_id` match the manifest defaults when both the manifest and the token declare them.
+- A fixture JWT (`alg: none` with the literal `signature` segment) is accepted only where fixture generation is allowed: `development`, isolated `test` with the explicit test-generation opt-in or a loopback gateway, and never `staging` or `production`.
+- When the artifact carries `sdkwork-bootstrap-backend`, its normalized origin matches the active backend base URL; when it carries `sdkwork-bootstrap-environment`, it matches the selected lifecycle.
+
+When a token is reusable, the lifecycle resolver `MUST`:
+
+- return it unchanged,
+- skip IAM application bootstrap registration, provisioning, enable, and access-credential issuance,
+- skip fixture generation,
+- leave the artifact byte-identical,
+- emit only a non-secret diagnostic such as `configured` or `reused` with the artifact path.
+
+Reuse is the default. A resolver `MUST NOT` re-register, must not re-provision, and `MUST NOT` re-sign a token that already satisfies section 5.4.2. The same resolver MUST NOT re-register a reusable token merely because a launch command ran. Canonical readers and writers are `readRepoBootstrapAccessToken` and `writeRepoBootstrapAccessToken` from `@sdkwork/iam-credential-entry/node-bootstrap`.
+
+Repeated starts, builds, tests, checks, verifies, and cleans against an unchanged manifest and backend `MUST` be idempotent for the token artifact.
+
+#### 5.4.3 Regeneration Contract
+
+Regeneration is an exception, not the per-start default. A resolver `MUST` regenerate or re-provision only when:
+
+- no candidate token exists,
+- the token is expired or outside its `nbf` window,
+- the token claims contradict the selected lifecycle, manifest application identity, or tenant/organization,
+- the artifact metadata records a different backend origin,
+- the token is a fixture that the selected environment may not use,
+- an operator explicitly passes `--refresh` / `refresh: true`, or
+- IAM revokes or rotates the credential and the next authenticated request fails with the declared credential error.
+
+On regeneration the resolver `MUST` use the same repository, deployment profile, and lifecycle scope, replace only that scope's artifact, and `MUST NOT` delete or overwrite another environment's artifact. If operator credentials allow IAM application bootstrap, that path runs before fixture generation. `staging` and `production` `MUST` fail closed instead of generating a fixture.
+
+#### 5.4.4 Concurrency And Diagnostics
+
+- Concurrent starts of the same repository `MUST` converge on one complete artifact. Last-writer-wins is acceptable because every writer renames a complete file.
+- A failed artifact write `MUST` not silently discard a token the resolver already holds in memory; the resolver warns and continues with the in-memory value.
+- Diagnostics `MUST` name the repository, lifecycle, artifact path, and outcome (`reused`, `generated`, `provisioned`, `unavailable`, `refresh`), and `MUST NOT` include token values.
+- The lifecycle checker `check-bootstrap-access-token-lifecycle-standard.mjs` is the machine gate for this section. It `MUST` fail a repository that has credential-entry surfaces but no lifecycle owner, that generates a token on every start without reuse, or that writes a non-conforming artifact path.
 
 Canonical owners:
 
@@ -245,10 +311,12 @@ Canonical owners:
 | `sdkwork-iam/scripts/dev/ensure-repo-bootstrap-access-token.mjs` | CLI ensure for any manifest-bearing repo root |
 | `sdkwork-space/bin/with-bootstrap-token.mjs` | Cross-repo wrapper: workspace profile + repo launch env + home auth → ensure → spawn command |
 | `@sdkwork/iam-application-bootstrap` | `ensureRepoBootstrapAccessToken`, `writeRegisteredBootstrapEnvFiles`, auth profile loaders |
-| Application-specific packages such as `@sdkwork/sdkwork-env-bootstrap` | `MAY` narrow BirdCoder launch env; `MUST` delegate token ensure to the framework helpers |
+| `@sdkwork/iam-credential-entry/node-bootstrap` | Token inspection/reuse, environment-scoped artifact read/write, fixture generation, env merge |
+| Application-specific packages such as `@sdkwork/sdkwork-env-bootstrap` | `MAY` narrow BirdCoder launch env; `MUST` delegate token ensure to the framework helpers and `MUST NOT` re-provision or sign while a reusable token exists |
 
 Rules:
 
+- Every lifecycle resolver `MUST` implement section 5.4 reuse-first semantics. Re-provisioning a registered token on every start is forbidden.
 - Application repositories `SHOULD` expose an `env:token:ensure` script when they do not route lifecycle commands through `sdkwork-app` but still own credential-entry surfaces.
 - Workspace batch bootstrap `MUST` load tracked profile values from `configs/bootstrap/profiles/<profile>.env`; ignored overrides use `configs/bootstrap/profiles/<profile>.local.env`.
 - Browser/renderer runtimes `MUST NOT` execute bootstrap registration or token ensure directly; Node orchestrators and topology facades own lifecycle resolution.
@@ -257,7 +325,7 @@ Forbidden in application-owned lifecycle code:
 
 - copied fixture JWT signing
 - primary reads of `~/.sdkwork/users/super-admin.json` outside documented legacy fallback
-- sending fixture `alg:none` tokens to non-loopback `SDKWORK_BACKEND_BASE_URL` values
+- sending fixture `alg:none` tokens to `staging` or `production` gateway URLs
 
 Forbidden in application-owned embedded bootstrap code:
 
@@ -386,6 +454,7 @@ Each embedded IAM repository `MUST` provide `scripts/dev/*-iam-application-boots
 - [ ] Wire backend SDK or IAM service adapter for non-CLI environments.
 - [ ] For embedded standalone/installer runtimes, delegate to `sdkwork-iam-embedded-application-bootstrap` instead of local SQL/bootstrap copies.
 - [ ] Document `admin:bootstrap:app`, `env:token:ensure`, or approved `sdkwork-app` lifecycle wiring in the app runbook.
+- [ ] Keep one environment-scoped bootstrap artifact per repository and verify that a second start reuses it without provisioning or regenerating.
 - [ ] Store bootstrap operator credentials under `~/.sdkwork/iam-bootstrap/<lifecycle>.json` or approved secret store; do not commit passwords.
 - [ ] Run `check-iam-application-bootstrap-standard.mjs` before merge.
 - [ ] For embedded IAM runtimes, run `audit-iam-embedded-bootstrap-workspace.mjs` and the repository `*-iam-application-bootstrap-standard.test.mjs` governance test before merge.

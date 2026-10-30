@@ -256,6 +256,7 @@ function validateLocalForks(repositoryRoot) {
     const basename = path.basename(filePath).toLowerCase();
     if (
       /\/(?:test|tests|__tests__|fixtures?|mocks?)(?:\/|$)/u.test(normalizedPath)
+      || /\/(?:lib|dist|build|target)\//u.test(normalizedPath)
       || /(?:^|[._-])(?:test|spec|fixture|mock)(?:[._-]|$)/u.test(basename)
     ) {
       continue;

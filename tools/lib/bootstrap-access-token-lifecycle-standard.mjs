@@ -17,7 +17,6 @@ const IGNORED_DIRECTORIES = new Set([
 ]);
 
 const SCRIPT_EXTENSIONS = new Set(['.js', '.mjs', '.ts']);
-const LIFECYCLE_SCRIPT_NAMES = new Set(['dev', 'build', 'test', 'check', 'verify', 'clean']);
 
 const FORBIDDEN_PRIMARY_SUPER_ADMIN_MARKERS = [
   '~/.sdkwork/users/super-admin.json',
@@ -31,7 +30,30 @@ const IAM_APPLICATION_BOOTSTRAP_SPEC_MARKERS = [
   'with-bootstrap-token.mjs',
   'prepareLifecycleAccessTokenEnv',
   'bootstrap operator credentials',
+  '### 5.4 Per-Repository Access Token Reuse And Regeneration',
+  '.env.<deployment-profile>.<lifecycle>.bootstrap.local',
+  'Reuse is the default',
+  'MUST NOT re-register',
+  'readRepoBootstrapAccessToken',
+  'writeRepoBootstrapAccessToken',
 ];
+
+const TOKEN_CACHE_SPELLINGS = [
+  '.env.<deployment-profile>.<lifecycle>.bootstrap.local',
+  '.env.standalone.<lifecycle>.bootstrap.local',
+  '.env.<lifecycle>.bootstrap.local',
+];
+
+const TOKEN_GENERATION_CALL = /\bbuildBootstrapAccessTokenEnvRecord\s*\(\s*(?:''|"")\s*,/u;
+const LOCAL_JWT_FORK = /function\s+(?:createTestJwt|createDevBootstrapAccessTokenJwt)\s*\(/u;
+const REUSE_HELPER_MARKERS = [
+  'inspectBootstrapAccessToken',
+  'isBootstrapAccessTokenReusable',
+  'isReusableBootstrapAccessToken',
+  'isReusableConfiguredBootstrapToken',
+];
+const UNCONDITIONAL_PROVISION_CALL = /\btryProvisionRegisteredBootstrapToken\s*\(/u;
+const CONFIGURED_CHECK = /\b(?:configured|existing|reusable|isReusable)/u;
 
 function readText(filePath) {
   return fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/u, '');
@@ -88,10 +110,9 @@ function manifestRequiresBootstrapToken(repoRoot) {
 
 function usesSdkworkAppLifecycle(packageJson) {
   if (!packageJson?.scripts) return false;
-  return Object.entries(packageJson.scripts).some(([name, command]) => (
-    LIFECYCLE_SCRIPT_NAMES.has(name)
-    && typeof command === 'string'
-    && command.includes('sdkwork-app')
+  return Object.values(packageJson.scripts).some((command) => (
+    typeof command === 'string'
+    && (command.includes('sdkwork-app') || command.includes('sdkwork-command.mjs'))
   ));
 }
 
@@ -210,6 +231,77 @@ export function scanForbiddenPrimarySuperAdminPaths(repoRoot) {
   return issues;
 }
 
+function hasLifecycleOwner(packageJson) {
+  return usesSdkworkAppLifecycle(packageJson)
+    || hasEnvTokenEnsureScript(packageJson)
+    || lifecycleScriptsUseBootstrapTokenEnsure(packageJson)
+    || dependsOnSdkworkEnvBootstrap(packageJson);
+}
+
+function repositoryLifecycleOwner(repoRoot) {
+  return hasLifecycleOwner(packageJsonAt(repoRoot));
+}
+
+function gitignoreCoversBootstrapArtifacts(repoRoot) {
+  const gitignorePath = path.join(repoRoot, '.gitignore');
+  if (!fs.existsSync(gitignorePath)) return false;
+  const lines = readText(gitignorePath)
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('#'));
+  return lines.some((line) => (
+    line === '.env'
+    || line === '.env.*'
+    || line === '.env*'
+    || line.includes('.bootstrap.local')
+    || line.startsWith('.env.*.')
+  ));
+}
+
+function validateBootstrapArtifactGitignore(repoRoot) {
+  if (gitignoreCoversBootstrapArtifacts(repoRoot)) return [];
+  return [
+    `${path.basename(repoRoot)} must gitignore the bootstrap token artifact (${TOKEN_CACHE_SPELLINGS[0]})`,
+  ];
+}
+
+function sourceFilesForReuseScan(repoRoot) {
+  return walkFiles(repoRoot, (filePath) => {
+    if (!SCRIPT_EXTENSIONS.has(path.extname(filePath))) return false;
+    const normalized = relative(repoRoot, filePath);
+    return !/(?:^|\/)(?:generated|external|lib|dist|build|target|node_modules)\//u.test(normalized)
+      && !/\.(?:test|spec)\.(?:mjs|js|ts)$/u.test(normalized)
+      && !/(?:^|\/)(?:tests?|__tests__|fixtures?|mocks?)\//u.test(normalized);
+  }, 10);
+}
+
+function validateTokenReuseSource(repoRoot) {
+  const issues = [];
+  for (const filePath of sourceFilesForReuseScan(repoRoot)) {
+    const source = readText(filePath);
+    const displayPath = relative(repoRoot, filePath);
+
+    if (TOKEN_GENERATION_CALL.test(source)) {
+      issues.push(`${displayPath} generates a bootstrap token from an empty value instead of reusing a configured token`);
+    }
+    if (LOCAL_JWT_FORK.test(source)) {
+      issues.push(`${displayPath} contains an application-local JWT signing fork`);
+    }
+
+    const provisionIndex = source.search(UNCONDITIONAL_PROVISION_CALL);
+    if (provisionIndex < 0) continue;
+    if (!REUSE_HELPER_MARKERS.some((marker) => source.includes(marker))) {
+      issues.push(`${displayPath} provisions an IAM bootstrap token without a canonical reuse check (${REUSE_HELPER_MARKERS.join(' / ')})`);
+      continue;
+    }
+    const configuredIndex = source.search(CONFIGURED_CHECK);
+    if (configuredIndex < 0 || configuredIndex > provisionIndex) {
+      issues.push(`${displayPath} calls IAM bootstrap provisioning before checking for a reusable configured token`);
+    }
+  }
+  return [...new Set(issues)];
+}
+
 export function validateRepositoryBootstrapLifecycle(repoRoot) {
   const issues = [];
   if (!manifestRequiresBootstrapToken(repoRoot)) {
@@ -224,23 +316,20 @@ export function validateRepositoryBootstrapLifecycle(repoRoot) {
     return issues;
   }
 
-  const hasLifecycleOwner =
-    usesSdkworkAppLifecycle(packageJson)
-    || hasEnvTokenEnsureScript(packageJson)
-    || lifecycleScriptsUseBootstrapTokenEnsure(packageJson)
-    || dependsOnSdkworkEnvBootstrap(packageJson);
-
-  if (!hasLifecycleOwner && requiresCredentialEntrySurfaces(repoRoot)) {
+  if (!hasLifecycleOwner(packageJson) && requiresCredentialEntrySurfaces(repoRoot)) {
     issues.push(
       `${path.basename(repoRoot)} declares bootstrap permission scope and credential-entry surfaces but exposes neither sdkwork-app lifecycle commands nor env:token:ensure`,
     );
   }
 
+  issues.push(...validateBootstrapArtifactGitignore(repoRoot));
+  issues.push(...validateTokenReuseSource(repoRoot));
   issues.push(...scanForbiddenPrimarySuperAdminPaths(repoRoot));
   return issues;
 }
 
-export function collectWorkspaceBootstrapLifecycleIssues(workspaceRoot) {
+export function auditWorkspaceBootstrapLifecycle(workspaceRoot) {
+  const repositories = [];
   const issues = [
     ...validateIamBootstrapAuthProfileSpec(path.join(workspaceRoot, 'sdkwork-specs')),
     ...validateWorkspaceBootstrapInfrastructure(workspaceRoot),
@@ -248,9 +337,23 @@ export function collectWorkspaceBootstrapLifecycleIssues(workspaceRoot) {
 
   for (const entry of fs.readdirSync(workspaceRoot, { withFileTypes: true })) {
     if (!entry.isDirectory() || !entry.name.startsWith('sdkwork-')) continue;
+    if (entry.name === 'sdkwork-specs') continue;
     const repoRoot = path.join(workspaceRoot, entry.name);
-    issues.push(...validateRepositoryBootstrapLifecycle(repoRoot));
+    const repositoryIssues = validateRepositoryBootstrapLifecycle(repoRoot);
+    issues.push(...repositoryIssues);
+    repositories.push({
+      repository: entry.name,
+      isGitRepository: fs.existsSync(path.join(repoRoot, '.git')),
+      requiresBootstrapToken: manifestRequiresBootstrapToken(repoRoot),
+      hasLifecycleOwner: repositoryLifecycleOwner(repoRoot),
+      hasEnvironmentScopedArtifact: gitignoreCoversBootstrapArtifacts(repoRoot),
+      issues: repositoryIssues,
+    });
   }
 
-  return issues;
+  return { repositories, issues };
+}
+
+export function collectWorkspaceBootstrapLifecycleIssues(workspaceRoot) {
+  return auditWorkspaceBootstrapLifecycle(workspaceRoot).issues;
 }
