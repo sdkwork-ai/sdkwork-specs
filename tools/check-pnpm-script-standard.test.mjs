@@ -928,6 +928,49 @@ describe('check-pnpm-script-standard', () => {
     assert.equal(result.status, 0, result.stderr);
   });
 
+  // PNPM_SCRIPT_SPEC.md section 3.1: `prod` is the local development surface for
+  // an already deployed production environment. It is accepted only when it
+  // pins the cloud profile and the production lifecycle environment.
+  it('accepts a prod development surface pinned to cloud production', () => {
+    const root = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'node scripts/sdkwork-command.mjs dev',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+        prod: 'node scripts/sdkwork-command.mjs dev --deployment-profile cloud --environment production',
+      },
+    });
+
+    const result = runChecker(root);
+
+    assert.equal(result.status, 0, result.stderr);
+  });
+
+  it('rejects prod entries that drift off cloud production or select a local database', () => {
+    const root = makeRepo({
+      name: 'sdkwork-demo',
+      scripts: {
+        dev: 'node scripts/sdkwork-command.mjs dev',
+        build: 'node scripts/sdkwork-command.mjs build',
+        test: 'node scripts/sdkwork-command.mjs test',
+        check: 'node scripts/sdkwork-command.mjs check',
+        verify: 'node scripts/sdkwork-command.mjs verify',
+        clean: 'node scripts/sdkwork-command.mjs clean',
+        prod: 'node scripts/sdkwork-command.mjs dev --deployment-profile standalone --environment production --database postgres',
+      },
+    });
+
+    const result = runChecker(root);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /prod: must resolve only to deployment profile "cloud"/);
+    assert.match(result.stderr, /prod: must not select or bootstrap a local database/);
+  });
+
   it('rejects nonstandard desktop host family actions and tool-first aliases', () => {
     const root = makeRepo({
       name: 'sdkwork-demo',

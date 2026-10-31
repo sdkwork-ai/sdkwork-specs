@@ -1,6 +1,6 @@
 # SDKWork pnpm Script Standard
 
-- Version: 1.1
+- Version: 1.2
 - Scope: public `package.json#scripts` command names for SDKWork application repositories, application roots, app surface roots, and TypeScript/JavaScript packages, plus the pnpm runtime and dependency-install policy those commands run under
 - Related: `README.md`, `SOUL.md`, `SDKWORK_WORKSPACE_SPEC.md`, `NAMING_SPEC.md`, `APPLICATION_GATEWAY_SPEC.md`, `APP_RUNTIME_TOPOLOGY_SPEC.md`, `APP_RUNTIME_TOPOLOGY_NAMING.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `DEPLOYMENT_SPEC.md`, `RELEASE_SPEC.md`, `APP_MANIFEST_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `SDKWORK_DEPLOY_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `TEST_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`
 
@@ -183,6 +183,51 @@ Development profile rules:
 - `stop` after `dev:cloud` stops only processes created by the local
   development session and never operates on deployed cloud services.
 
+### 3.1 `prod` — local development surface against a deployed environment
+
+`prod` is the single governed exception to "development commands exist only for
+`development`". It exists so a developer can run a fully live-reloading local
+client against an already deployed production environment (for example to
+reproduce a production-only defect) without building, packaging, or mutating any
+deployment. It is a development surface, not a deployment command.
+
+Rules:
+
+- A repository that exposes `prod` `MUST` resolve it to
+  `deploymentProfile = cloud` and `environment = production` through its
+  delegation chain (for example
+  `pnpm exec sdkwork-app dev --deployment-profile cloud --environment production`).
+  It `MUST NOT` infer the environment from shell state or from a default.
+- `prod` `MUST` start only the developer-facing client surface and its local dev
+  tooling. It `MUST NOT` start a local API gateway, edge runtime, database,
+  worker, migration, or seed process; those surfaces stay the deployed
+  environment's responsibility.
+- The browser-visible runtime document `MUST` stay the canonical same-origin
+  relative `/` document (`APP_RUNTIME_ENV_SPEC.md` §2-§3). The deployed
+  production edge is reached by the local ingress **server-side fan-out**, never
+  by a cross-origin browser base URL: a deployed environment's CORS allow-list
+  contains that environment's page domains only, so a cross-origin dev call is a
+  guaranteed preflight failure and a dev surface `MUST NOT` be built on it.
+- The selected profile's deployment values `MUST` stay domain-only (no loopback
+  and no port-bearing URL) so that no build or deploy artifact can inherit a
+  developer workstation origin. Only the profile's declared local dev binds
+  (`WEB_DEV_INGRESS_BIND`, renderer ports) may carry ip+port values.
+- `prod` `MUST` fail closed: an unreachable remote surface aborts startup rather
+  than falling back to a local stack, and a production lifecycle environment
+  `MUST` receive a provisioned access credential from a private secret source.
+  A generated local fixture credential is never valid for a production
+  environment.
+- `prod` `MUST NOT` be treated as release, deploy, or packaging evidence.
+  Shipping to a deployed environment stays with `release:*`, `deploy:*`, and the
+  module's `bin/` entrypoints.
+- `prod` is optional. A repository that exposes it `MUST` record the local
+  surface (ingress bind, renderer ports, fan-out target) in its topology profile
+  and `MUST` document the command in its browser access contract.
+- The name is fixed: `prod` carries no runtime-target, database, or profile axes,
+  because it selects exactly one lifecycle environment and one deployment
+  profile. Environment-suffixed forms such as `dev:prod`, `prod:staging`, or
+  `preview:prod:*` are not part of this exception.
+
 Cloud-mode development domain access (normative body and SDK base URL
 resolution: `APP_RUNTIME_TOPOLOGY_SPEC.md` §4.2, `SDK_SPEC.md` §5.1):
 
@@ -220,7 +265,9 @@ resolution: `APP_RUNTIME_TOPOLOGY_SPEC.md` §4.2, `SDK_SPEC.md` §5.1):
   `build:<client>:prod:cloud`) against the deployed
   `api-test`/`api-staging`/`api` edge. They `MUST NOT` become additional
   `dev:<environment>:*` public entry points; `dev` and `dev:cloud` remain the
-  only development commands.
+  only `dev:`-prefixed development commands. A local development surface aimed
+  at a deployed higher environment uses the separately named `prod` entry point
+  of §3.1, never an environment-suffixed `dev:` name.
 - A repository that serves or exercises the API edge on a developer workstation
   `MAY` expose an idempotent local DNS binding helper (for example
   `install:hosts`) that maps the registered `api-<suffix>.<base-domain>` host
@@ -262,6 +309,7 @@ Allowed command or namespace first segments:
 
 ```text
 dev
+prod
 start
 stop
 preview
@@ -1270,6 +1318,9 @@ pnpm script validation `MUST` check:
   value or root-script delegation chain to PostgreSQL, standalone, and
   `development` defaults, and fail when they resolve to SQLite, cloud, retired
   process-layout flags, or retired `--hosting` flags.
+- A `prod` entry point resolves through its delegation chain to `cloud` and
+  `production`, and fails when it selects `standalone`, omits the production
+  environment, or selects a local database (section 3.1).
 
 - Host family commands use only their section 4.1 actions and axes:
   `desktop:*` accepts the desktop host axes and `mobile:*` accepts the mobile
@@ -1371,6 +1422,11 @@ Validation:
 - [ ] A repository invoking `pnpm exec sdkwork-app` declares a pinned `@sdkwork/app-topology` dependency; `check:pnpm-script-standard` enforces both of these, and `align:pnpm-lifecycle-facade` performs the conversion without inventing commands it cannot derive.
 - [ ] `dev` directly delegates to `dev:standalone`; both profile entrypoints resolve to the matching `development` profile.
 - [ ] `dev:cloud` consumes explicit deployed cloud API surfaces without starting a local API, gateway, or database.
+- [ ] A `prod` entry point, when present, resolves to `cloud.production`, starts
+      only client/dev-tooling processes, keeps the profile's deployment URLs
+      domain-only, keeps the browser document same-origin relative, and is
+      documented in the repository browser access contract. `prod` is
+      development-surface evidence only, never release or deploy evidence.
 - [ ] Capability-specific root commands exist for release, deploy, API, SDK, database, gateway, topology, and supply-chain workflows when those capabilities exist.
 - [ ] No repository root public script starts with a application-code prefix such as `drive`, `im`, or `cloudrouter`.
 - [ ] Runtime-target commands are action-first, for example `dev:browser`, `dev:desktop`, `build:desktop`, `build:container`, `build:android-native`, `build:ios-native`, and `build:mini-program`; the `desktop:*` host family uses only section 4.1 actions/axes; no public script uses platform/tool-first aliases such as `browser:*`, `tauri:*`, `electron:*`, `docker:*`, `android:*`, `ios:*`, `harmony:*`, `flutter:*`, `mini-program:*`, or `*:tauri`.

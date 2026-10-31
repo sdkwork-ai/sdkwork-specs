@@ -49,6 +49,10 @@ export const WORKSPACE_WIDE_STOP_PATTERN = /stop-sdkwork-workspace-processes/u;
 // textual comparison; `check-pnpm-script-standard.test.mjs` asserts equality.
 export const ALLOWED_FIRST_SEGMENTS = new Set([
   'dev',
+  // Governed exception (PNPM_SCRIPT_SPEC.md section 3.1): `prod` is a
+  // DEVELOPMENT-surface command that serves the production lifecycle
+  // environment from the local adaptive ingress, never a deployment command.
+  'prod',
   'start',
   'stop',
   'preview',
@@ -902,6 +906,23 @@ function pushProfileDevelopmentEntrypointIssues(scripts, issues) {
   }
   if (scripts['_sdkwork:stop']) {
     issues.push('private _sdkwork:stop is forbidden; declare owned bindings and managed resources in topology');
+  }
+
+  // PNPM_SCRIPT_SPEC.md section 3.1: `prod` is a development surface pinned to
+  // the cloud production profile. It must stay a client-only, no-database entry
+  // point, because a `prod` that selects a local stack is a deployment command
+  // wearing a development name.
+  if (scripts.prod) {
+    const state = resolvedProfileState('prod', scripts);
+    if (!state.hasCloud || state.hasStandalone) {
+      issues.push('prod: must resolve only to deployment profile "cloud"');
+    }
+    if (!commandHasFlagValue(state.commandText, 'environment', 'production')) {
+      issues.push('prod: must resolve to environment "production"');
+    }
+    if (state.hasPostgres || state.hasSqlite || /(?:^|\s)--database(?:\s|=|$)/iu.test(state.commandText)) {
+      issues.push('prod: must not select or bootstrap a local database');
+    }
   }
 }
 
