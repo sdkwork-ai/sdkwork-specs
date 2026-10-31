@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sdkwork.com/schemas/sdkwork.tablet-adaptation.spec.schema.v1.json",
+  "title": "SDKWork Tablet Adaptation Specification v1",
+  "description": "Machine contract for APP_PAD_ARCHITECTURE_SPEC.md section 5.12. Declares tablet window classes, multitasking, input, capabilities, test coverage, and evidence for a pad root or a PC root with tablet targets.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "applicationCode",
+    "runtimeTargets",
+    "windowClasses",
+    "orientations",
+    "multitasking",
+    "input",
+    "capabilities",
+    "testMatrix",
+    "evidence"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "applicationCode": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "runtimeTargets": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["tablet-ipados", "tablet-android"] }
+    },
+    "windowClasses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compact", "medium", "expanded", "large"],
+      "properties": {
+        "compact": { "$ref": "#/$defs/windowClass" },
+        "medium": { "$ref": "#/$defs/windowClass" },
+        "expanded": { "$ref": "#/$defs/windowClass" },
+        "large": { "$ref": "#/$defs/windowClass" }
+      }
+    },
+    "orientations": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": { "enum": ["portrait", "landscape"] }
+    },
+    "multitasking": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["splitView", "slideOver", "stageManager", "androidFreeform", "externalDisplay"],
+      "properties": {
+        "splitView": { "type": "boolean" },
+        "slideOver": { "type": "boolean" },
+        "stageManager": { "type": "boolean" },
+        "androidFreeform": { "type": "boolean" },
+        "externalDisplay": { "type": "boolean" }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["touch", "pointer", "trackpad", "hardwareKeyboard", "stylus"],
+      "properties": {
+        "touch": { "type": "boolean" },
+        "pointer": { "type": "boolean" },
+        "trackpad": { "type": "boolean" },
+        "hardwareKeyboard": { "type": "boolean" },
+        "stylus": { "type": "boolean" }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "multitasking",
+          "externalDisplay",
+          "windowControls",
+          "keyboardShortcuts",
+          "stylus",
+          "filePicker",
+          "shareSheet",
+          "camera",
+          "qrScanner",
+          "secureStorage",
+          "pushNotifications",
+          "biometric",
+          "networkStatus",
+          "appLifecycle",
+          "clipboard",
+          "deepLinks"
+        ]
+      }
+    },
+    "testMatrix": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/testCase" }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["screenshots", "tests"],
+      "properties": {
+        "screenshots": { "type": "string", "minLength": 1 },
+        "tests": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "windowClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supported", "minWidth", "layout"],
+      "properties": {
+        "supported": { "const": true },
+        "minWidth": { "type": "integer", "minimum": 320 },
+        "layout": { "type": "string", "minLength": 1 }
+      }
+    },
+    "testCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtimeTarget", "windowClass", "orientation", "multitasking"],
+      "properties": {
+        "runtimeTarget": { "enum": ["tablet-ipados", "tablet-android"] },
+        "windowClass": { "enum": ["compact", "medium", "expanded", "large"] },
+        "orientation": { "enum": ["portrait", "landscape"] },
+        "multitasking": {
+          "enum": [
+            "full-screen",
+            "split-view",
+            "slide-over",
+            "stage-manager",
+            "freeform",
+            "external-display"
+          ]
+        }
+      }
+    }
+  }
+}

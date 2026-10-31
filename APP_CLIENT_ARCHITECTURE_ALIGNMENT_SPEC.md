@@ -1,10 +1,10 @@
 # App Client Architecture Alignment Standard
 
-- Version: 1.0
-- Scope: cross-client application architecture alignment for SDKWork PC, H5/mobile React, Flutter, mini program, uni-app, Unity, static web (pure HTML), native Android, native iOS, native HarmonyOS, backend/admin UI, and future client roots
-- Related: `COMPOSABLE_ARCHITECTURE_SPEC.md`, `APPLICATION_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `UNIAPP_APP_ARCHITECTURE_SPEC.md`, `UNITY_APP_ARCHITECTURE_SPEC.md`, `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `BACKEND_UI_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `I18N_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
+- Version: 1.1
+- Scope: cross-client application architecture alignment for SDKWork PC, pad/tablet, H5/mobile React, Flutter, mini program, uni-app, Unity, static web (pure HTML), native Android, native iOS, native HarmonyOS, backend/admin UI, and future client roots
+- Related: `COMPOSABLE_ARCHITECTURE_SPEC.md`, `APPLICATION_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `UNIAPP_APP_ARCHITECTURE_SPEC.md`, `UNITY_APP_ARCHITECTURE_SPEC.md`, `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `BACKEND_UI_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `I18N_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
-This standard defines the common client architecture contract that keeps SDKWork application roots readable, composable, and aligned across PC, H5/Capacitor, Flutter, mini program, native Android, native iOS, native HarmonyOS, and future client surfaces. Cross-stack layer roles, component ports, and package composition closure follow `COMPOSABLE_ARCHITECTURE_SPEC.md`.
+This standard defines the common client architecture contract that keeps SDKWork application roots readable, composable, and aligned across PC, pad/tablet, H5/Capacitor, Flutter, mini program, native Android, native iOS, native HarmonyOS, and future client surfaces. Cross-stack layer roles, component ports, and package composition closure follow `COMPOSABLE_ARCHITECTURE_SPEC.md`.
 
 Architecture-specific standards own technology details. This file owns the shared structure: package taxonomy, dependency direction, route identity, component boundaries, SDK/IAM/runtime composition, and verification rules. Client applications should feel like different implementations of one system, not unrelated projects with different vocabulary.
 
@@ -40,6 +40,7 @@ SDKWork client roots use stable architecture identifiers.
 | --- | --- | --- | --- |
 | Cross-architecture shared packages | `apps/sdkwork-<application-code>-common` | `common` | `APPLICATION_SPEC.md`, `MODULE_SPEC.md` |
 | PC browser/desktop/large-screen tablet | `apps/sdkwork-<application-code>-pc` | `pc` | `APP_PC_ARCHITECTURE_SPEC.md` |
+| Pad/tablet-first app | `apps/sdkwork-<application-code>-pad` | `pad` | `APP_PAD_ARCHITECTURE_SPEC.md` |
 | H5 mobile plus Capacitor iOS/Android | `apps/sdkwork-<application-code>-h5` | `h5` | `APP_H5_ARCHITECTURE_SPEC.md` |
 | Flutter mobile app | `apps/sdkwork-<application-code>-flutter-mobile` | `flutter-mobile` root segment; `flutter_mobile` Dart package segment | `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md` |
 | Mini program | `apps/sdkwork-<application-code>-mini-program` | `mp` unless a platform-specific profile is approved | `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md` |
@@ -49,12 +50,11 @@ SDKWork client roots use stable architecture identifiers.
 | uni-app cross-platform app (H5/`MP_*`/App) | `apps/sdkwork-<application-code>-uniapp` | `uniapp` | `UNIAPP_APP_ARCHITECTURE_SPEC.md` |
 | Unity game/3D app | `apps/sdkwork-<application-code>-unity` | `unity` UPM id segment (`com.sdkwork.<application-code>-unity-*`) | `UNITY_APP_ARCHITECTURE_SPEC.md` |
 | Static web (pure HTML) app | `apps/sdkwork-<application-code>-static-web` | `static-web` | `APP_STATIC_WEB_ARCHITECTURE_SPEC.md` |
-| Pad tablet app | `apps/sdkwork-<application-code>-pad` | `pad` | per-target mobile standard (see `APPLICATION_SPEC.md` UI selection table) |
 
 Rules:
 
 - The `-common` application root is a shared package-family root, not a runnable client surface. It owns contracts, service ports, runtime, bootstrap, SDK adapter boundaries, and domain RPC proto packages with no UI runtime dependency.
-- `apps/` is the application-root collection under a larger repository or workspace. Each child directory is the root of one runnable application surface for a selected language and architecture, such as PC React/Tauri, H5 React/Capacitor, Flutter, mini program, native Android, native iOS, or native HarmonyOS, or one shared `-common` package-family root. Do not treat `apps/` itself as the source root for one language or collapse multiple architecture roots into one child directory.
+- `apps/` is the application-root collection under a larger repository or workspace. Each child directory is the root of one runnable application surface for a selected language and architecture, such as PC React/Tauri, pad React/Tauri, H5 React/Capacitor, Flutter, mini program, native Android, native iOS, or native HarmonyOS, or one shared `-common` package-family root. Do not treat `apps/` itself as the source root for one language or collapse multiple architecture roots into one child directory.
 - New application roots `MUST` use the root naming in this table unless `GOVERNANCE_SPEC.md` records an exception.
 - The package segment `MUST` appear in every app-root package name owned by that architecture.
 - Architecture standards may define language-specific package naming, such as lower snake case for Dart packages.
@@ -116,7 +116,7 @@ process `[app_roots]` owns roots (`SDKWORK_WEBSERVER_SPEC.md` §13.6).
    installed). The active deployment profile selects the profile subtree;
    `standalone` is the default.
 
-Native / mini-program roots are additive and do not replace the PC/H5 pair.
+Native / mini-program roots are additive and do not replace the PC/H5 pair. A pad root is a native tablet packaging root and is not a third browser surface; browser access from tablets continues to resolve through the PC/H5 Adaptive Web pair.
 
 ### 2.3 Industry Pattern Coverage Registry
 
@@ -133,7 +133,7 @@ The client roots in section 2 are the closed set of SDKWork-owned client archite
 | Mini programs and mini games | WeChat/Alipay/DingTalk/Lark, `MP_*_GAME` | covered: mini program root platform rules, plus Unity root mini-game delivery | — |
 | Native phone | Kotlin/Swift/ArkTS | covered: Android/iOS/Harmony mobile roots | — |
 | Game engine 3D/2D client | Unity | covered: Unity root | — |
-| Tablet | iPadOS/Android tablet/HarmonyOS tablet | covered: pad root per-target standards | — |
+| Tablet | iPadOS/Android tablet | covered: pad root for tablet-first products; PC-root `tablet-ipados`/`tablet-android` targets for tablet packages of a PC product | — |
 | PWA installability | Web app manifests, service workers | alias: delivery attribute of PC/H5 roots, not a separate root | declare through webserver/manifest configuration; no new root |
 | Reactive-native cross-platform | React Native (Expo) | deferred | ADR + governance review, new root standard, `clientArchitectures` registration |
 | Kotlin/C# cross-platform | Kotlin Multiplatform, Compose Multiplatform, .NET MAUI | deferred | same adoption path as React Native |
@@ -177,6 +177,7 @@ apps/sdkwork-<application-code>-<client-arch>/
       README.md
   config/
     browser/ or app/
+    tablet/
     host/
     server/
     container/
@@ -221,6 +222,7 @@ Rules:
 - `config/browser/` owns browser-visible public runtime config. H5 application roots use this because H5 is a browser runtime.
 - `assets/` owns the application asset root defined by `APP_ASSETS_SPEC.md`: type resources, catalog and store media, and the creation-time capture configuration. Client roots `MUST NOT` bury catalog screenshots or covers inside a package's `src/`, `public/`, or build output.
 - `config/app/` is allowed for non-browser app runtime public templates where the architecture standard defines it, such as Flutter, native Android, native iOS, and native HarmonyOS.
+- `config/tablet/` owns installed tablet runtime defaults for a pad root, such as secure storage provider, cache policy, and target metadata references. It is not a server/container config store.
 - `config/host/` owns native, platform, or container-host packaging metadata and permission references. It is not a business runtime config store.
 - `src/bootstrap/` or `lib/bootstrap/` is the application bootstrap entry. It assembles providers, routes, and shell wiring only.
 - Runtime composition metadata is declared through app/core `component.spec.json` contracts and core composition entrypoints required by `APP_COMPOSITION_SPEC.md`.
@@ -355,13 +357,15 @@ export interface SdkworkUiRouteContribution {
     uniapp?: "page" | "tab" | "subpackagePage";
     unity?: "scene" | "overlay" | "addressable";
     staticWeb?: "page";
+    pad?: "page" | "split" | "inspector" | "sheet" | "popover" | "dialog";
   };
 }
 ```
 
 Rules:
 
-- Route `id`, `surface`, `domain`, `capability`, `screen`, `titleKey`, and `permissionHint` should be consistent across PC, H5, Flutter, mini program, uni-app, Unity, static web, Android, iOS, and Harmony implementations of the same product workflow.
+- Route `id`, `surface`, `domain`, `capability`, `screen`, `titleKey`, and `permissionHint` should be consistent across PC, pad, H5, Flutter, mini program, uni-app, Unity, static web, Android, iOS, and Harmony implementations of the same product workflow.
+- The `pad` presentation hint describes tablet composition intent (`split`, `inspector`, `sheet`, or `popover`) and does not encode a physical breakpoint. The pad shell maps it to the current window class.
 - Physical paths may differ by platform. For example, PC may use `/app/orders/:orderId`, H5 may use `/orders/:orderId`, Flutter may use a named route, mini program may use a subpackage page path, Android may use a navigation destination, iOS may use a navigation route, and Harmony may use a page path.
 - Route metadata `MUST NOT` declare HTTP API paths, SDK methods, raw URL constants, or transport details.
 - Route guards are shell/runtime responsibilities. Capability packages declare auth and permission hints only.
@@ -383,7 +387,7 @@ Rules:
 
 ## 9. Host Adapter Boundary
 
-Host adapters are local or platform capability boundaries. For PC desktop roots with multiple native hosts (Tauri, Electron, and Capacitor), the adapter interfaces and bridge protocol are defined once by the shared contract package `@sdkwork/desktop-host-contract` and detailed in `DESKTOP_APP_ARCHITECTURE_SPEC.md` sections 5.5 and 5.6. Every host implementation lives in its own per-architecture host package and satisfies the same `DesktopHost` interface.
+Host adapters are local or platform capability boundaries. For PC desktop roots with multiple native hosts (Tauri, Electron, and Capacitor), the adapter interfaces and bridge protocol are defined once by the shared contract package `@sdkwork/desktop-host-contract` and detailed in `DESKTOP_APP_ARCHITECTURE_SPEC.md` sections 5.5 and 5.6. Every host implementation lives in its own per-architecture host package and satisfies the same `DesktopHost` interface. A pad root uses the same contract through its single `pad-tauri` host, with the tablet capability categories in `APP_PAD_ARCHITECTURE_SPEC.md` section 5.10.
 
 Standard host adapter categories:
 
@@ -404,6 +408,11 @@ filesystemSandbox
 geolocation
 deviceInfo
 haptics
+multitasking
+externalDisplay
+windowControls
+keyboardShortcuts
+stylus
 ```
 
 Host capability declaration and degradation:
@@ -418,6 +427,8 @@ Rules:
 - Feature packages depend on host adapter interfaces or injected services, not platform globals.
 - Feature packages `MUST NOT` reference `window.__TAURI__`, `window.electron`, `Capacitor.*`, `ipcRenderer`, or import `@tauri-apps/api` / `electron` / `@capacitor/core` directly; they consume host adapter contracts only.
 - A PC root `MUST` keep one host package per desktop architecture. Two architectures `MUST NOT` share a host package, and `pc-core` `MUST NOT` implement a native host adapter or depend on a native host package.
+- A pad root `MUST` keep exactly one `sdkwork-<application-code>-pad-tauri` host package. It `MUST NOT` add an Electron, Capacitor, generic host, or second-architecture package, and `pad-core` `MUST NOT` implement a native host adapter or depend on the host package.
+- Tablet-only capabilities such as multitasking, external display, window controls, keyboard shortcuts, and stylus are declared through the host capability set and must degrade to `unsupported` where the platform does not provide them.
 - Host adapters may obtain platform facts such as push tokens or selected files, but business registration, upload, and binding workflows must call generated SDKs through services.
 - Host adapters must not own login, token refresh, permission evaluation, business authorization, direct database access, or raw business API transport.
 
@@ -433,7 +444,7 @@ Rules:
   client root uses canonical profile id
   `<deploymentProfile>.<environment>` and materializes framework-specific files
   from its own or delegated `etc/` authority.
-- PC and H5 Vite roots use `.env.<profile-id>`; Flutter uses
+- PC and H5 Vite roots use `.env.<profile-id>`; pad roots use the same Vite `.env.<profile-id>` contract plus `config/tablet/` user runtime templates; Flutter uses
   `env/sdkwork.<profile-id>.json`; native WeChat mini programs use
   `config/mini-program/runtime-env.<profile-id>.json`; uni-app uses the Vite
   `.env.<profile-id>` contract; native mobile roots use
@@ -457,9 +468,14 @@ Rules:
   `profileBinding = runtime-configurable`. Bootstrap selects one active profile,
   isolates credentials/cache/offline data by profile/environment/origin, and
   requires re-authentication when the security boundary changes.
-- H5 browser, Capacitor, Flutter, and native iOS/Android are distinct client
+- H5 browser, Capacitor, Flutter, pad, and native iOS/Android are distinct client
   architectures. Running H5 in a mobile browser does not create a native
-  mobile package.
+  mobile package. Running a tablet-sized browser window does not create a pad
+  root; browser tablets use the PC/H5 Adaptive Web pair.
+- A pad root `MUST` declare only `tablet-ipados` and/or `tablet-android` runtime
+  targets and `clientArchitecture = "tauri"`. It `MUST NOT` declare `browser`,
+  `desktop`, `server`, `container`, `capacitor-*`, `flutter-*`, or native-mobile
+  runtime targets.
 - Release preflight must fail when production client config contains localhost endpoints, development secrets, test databases, writable developer paths, unresolved placeholders, or source-controlled secret files.
 
 ## 11. Verification
@@ -477,6 +493,7 @@ Required cross-client architecture checks:
 | SDK boundary | Static scan proves no raw HTTP, manual auth/API key headers, generated SDK edits, or architecture SDK mismatches were introduced. |
 | IAM boundary | Tests prove appbase IAM runtime, global token manager, token/context persistence, logout clearing, refresh failure, tenant switch, and account switch behavior. |
 | Host boundary | Static scan proves feature packages use host adapter contracts, not platform globals. |
+| Tablet adaptation | Pad roots and PC roots with tablet targets prove the `APP_PAD_ARCHITECTURE_SPEC.md` section 5 contract: window classes, orientations, multitasking, input parity, safe areas, accessibility, performance, and `specs/tablet-adaptation.spec.json` evidence. |
 | Config boundary | Tests prove public/private/secret config separation and target-specific profile validation. |
 | Package build | Changed packages pass typecheck/analyze/build and focused tests for the selected architecture. |
 
@@ -491,5 +508,6 @@ Acceptance checklist:
 - [ ] Route identity is stable across client architectures where the same workflow exists.
 - [ ] SDK/IAM/runtime/bootstrap boundaries follow `APP_SDK_INTEGRATION_SPEC.md`.
 - [ ] Host adapters are typed and local-only.
+- [ ] Pad roots use the `pad` segment, one `pad-tauri` host, tablet runtime targets only, and the tablet adaptation contract; PC roots with tablet targets apply the same contract without creating a pad root.
 - [ ] Config and release metadata do not leak secrets.
 - [ ] Verification evidence is recorded before completion.

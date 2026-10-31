@@ -1,8 +1,8 @@
 # SDKWork App Manifest Standard v3
 
-- Version: 1.0
+- Version: 1.1
 - Scope: app registration, app manifest, release metadata, install packages, media assets, platform_app projection
-- Related: `SOURCE_CONFIG_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `NAMING_SPEC.md`, `APPLICATION_SPEC.md`, `IAM_APPLICATION_BOOTSTRAP_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `CONFIG_SPEC.md`, `DEPENDENCY_MANAGEMENT_SPEC.md`, `DEPLOYMENT_SPEC.md`, `DRIVE_SPEC.md`, `MEDIA_RESOURCE_SPEC.md`, `APP_ASSETS_SPEC.md`, `SECURITY_SPEC.md`, `DOCUMENTATION_SPEC.md`
+- Related: `SOURCE_CONFIG_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `NAMING_SPEC.md`, `APPLICATION_SPEC.md`, `IAM_APPLICATION_BOOTSTRAP_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `CONFIG_SPEC.md`, `DEPENDENCY_MANAGEMENT_SPEC.md`, `DEPLOYMENT_SPEC.md`, `DRIVE_SPEC.md`, `MEDIA_RESOURCE_SPEC.md`, `APP_ASSETS_SPEC.md`, `SECURITY_SPEC.md`, `DOCUMENTATION_SPEC.md`
 
 SDKWork App Manifest Standard v3 defines the canonical app configuration used by new applications under `apps/`. The standard is intentionally strict: new apps do not carry legacy compatibility branches, and every field is designed to map cleanly into `platform_app` while retaining enough metadata for professional multi-platform release operations.
 
@@ -260,7 +260,8 @@ Client roots must keep manifest runtime metadata aligned with their root archite
 
 | Root architecture | Runtime family | Runtime framework examples | Publish platform examples |
 | --- | --- | --- | --- |
-| PC browser/desktop/tablet root | `web` or `desktop` | `react`, `react-tauri`, `react-electron`, `electron` | `WEB`, `DESKTOP_WINDOWS`, `DESKTOP_MACOS`, `DESKTOP_LINUX` |
+| PC browser/desktop/tablet root | `web` or `desktop` | `react`, `react-tauri`, `react-electron`, `electron` | `WEB`, `DESKTOP_WINDOWS`, `DESKTOP_MACOS`, `DESKTOP_LINUX`, plus `APP_IOS`/`APP_ANDROID` when tablet targets ship |
+| Pad tablet-first root | `desktop` | `react-tauri` | `APP_IOS`, `APP_ANDROID` for the iPadOS/Android tablet targets |
 | H5/Capacitor application root | `mobile` | `react-h5`, `react-capacitor` | `H5`, `H5_WEIXIN`, `APP_IOS`, `APP_ANDROID` |
 | Flutter mobile root | `mobile` | `flutter` | `APP_IOS`, `APP_ANDROID`, `APP_HARMONY` when supported |
 | Mini program root | `mini-program` | `weixin-mini-program`, `alipay-mini-program`, `multi-mini-program` | `MP_WEIXIN`, `MP_ALIPAY`, `MP_DINGTALK`, `MP_LARK` |
@@ -280,13 +281,14 @@ Rules:
 - Native Android apps should use `runtime.family = "mobile"` and `runtime.framework = "android-native"`.
 - Native iOS apps should use `runtime.family = "mobile"` and `runtime.framework = "ios-native"`.
 - Native HarmonyOS apps should use `runtime.family = "mobile"` and `runtime.framework = "harmony-native"`.
+- Pad tablet-first roots should use `runtime.family = "desktop"`, `runtime.framework = "react-tauri"`, `clientArchitectures = ["tauri"]`, and only `tablet-ipados`/`tablet-android` package `runtimeTarget` entries. They must not declare `browser`, `desktop`, `server`, `container`, or mobile-framework targets.
 - uni-app roots should use `runtime.framework = "uni-app"` with the family of their primary delivery: `"mini-program"` for `MP_*`-only delivery, `"mobile"` when App packages are delivered, and `"web"` for H5-only roots. Package `runtimeTarget` records the delivery runtime (`mini-program`, `android-native`/`ios-native`, or `browser`), never the authoring framework.
 - Unity roots should use `runtime.framework = "unity"` with `runtime.family` per delivery lane: `"mobile"` for app-store builds, `"desktop"` for standalone builds, `"web"` for WebGL, and `"mini-program"` for mini-game delivery (`MP_*_GAME` platforms with `runtimeTarget = "mini-program"`).
 - Static web roots should use `runtime.family = "web"`, `runtime.framework = "static-html"`, and `clientArchitectures = ["static-web"]`.
 - Package ids and artifact names in the manifest follow `NAMING_SPEC.md`; source package names follow the matching architecture standard and are not copied into release package ids unless they are also the release artifact identity.
 - PC desktop hosts map `clientArchitecture` values to host packages: `tauri` -> `sdkwork-<application-code>-pc-tauri`, `electron` -> `sdkwork-<application-code>-pc-electron`, `capacitor` -> `sdkwork-<application-code>-pc-capacitor`, one host package per architecture. A desktop package entry `MUST` declare exactly one `clientArchitecture` value and `MUST` agree with the host package that produced the artifact.
 - When an application ships more than one desktop host, its manifest `clientArchitectures` `MUST` include every shipped host value (`tauri`, `electron`, `capacitor`), and each `artifacts.installConfig.packages[]` entry `MUST` pin exactly one `clientArchitecture` naming its own per-architecture host package so release lookup and artifact collection stay deterministic.
-- `clientArchitecture = "capacitor"` `MUST` be paired with exactly one Capacitor `runtimeTarget`: `"desktop"` for the PC desktop host, or `"capacitor-ios"` / `"capacitor-android"` for the one H5 mobile host. A `runtimeTarget = "desktop"` entry `MUST NOT` be declared by an H5 root, and `"capacitor-ios"` / `"capacitor-android"` entries `MUST NOT` be declared by a PC root. Tablet runtime targets (`tablet-ipados`, `tablet-android`) `MUST NOT` declare `electron` or `capacitor`; their desktop host is Tauri, and the matching `ios-native` / `android-native` value is also accepted for the same target platform.
+- `clientArchitecture = "capacitor"` `MUST` be paired with exactly one Capacitor `runtimeTarget`: `"desktop"` for the PC desktop host, or `"capacitor-ios"` / `"capacitor-android"` for the one H5 mobile host. A `runtimeTarget = "desktop"` entry `MUST NOT` be declared by an H5 root, and `"capacitor-ios"` / `"capacitor-android"` entries `MUST NOT` be declared by a PC root. Tablet runtime targets (`tablet-ipados`, `tablet-android`) `MUST NOT` declare `electron` or `capacitor`; their host is Tauri, and the matching `ios-native` / `android-native` value is also accepted in a PC root for the same target platform. A pad root `MUST` declare `clientArchitecture = "tauri"` for each shipped tablet target.
 - `publish.platforms` must list only actually supported platforms. Do not list `APP_IOS`, `APP_ANDROID`, `APP_HARMONY`, or `MP_*` values just because the source architecture could support them later.
 
 ## 7. Media Assets

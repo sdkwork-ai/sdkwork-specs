@@ -648,10 +648,13 @@ function evaluateRoleAssets({
         counts.set(key, (counts.get(key) ?? 0) + 1);
       }
       for (const [displayType, definition] of Object.entries(config.groups)) {
-        const platformRequired = definition.requiredWhenTargetPlatform
-          ? targetPlatforms.includes(definition.requiredWhenTargetPlatform)
-          : false;
-        const minimum = platformRequired ? Math.max(definition.min ?? 0, 1) : definition.min ?? 0;
+        const requiredPlatform = definition.requiresTargetPlatform ?? definition.requiredWhenTargetPlatform;
+        const platformApplies = !requiredPlatform
+          || targetPlatforms.includes(requiredPlatform)
+          || (targetPlatforms.length === 0 && (definition.min ?? 0) > 0);
+        const minimum = requiredPlatform
+          ? (platformApplies ? Math.max(definition.min ?? 0, 1) : 0)
+          : definition.min ?? 0;
         const maximum = definition.max;
         const applicableLocales = new Set([...requiredLocales, ...[...counts.keys()]
           .filter((key) => key.startsWith(`${displayType}|`))
@@ -943,13 +946,33 @@ function validateMatrix({ manifest, assets, label, issues, catalogReady, familie
     issues.push(`${label}: a catalog COVER is required for the default locale ${defaultLocale}`);
   }
   if (typeInfo.screenshots && families && families.size > 0) {
+    const targetPlatforms = new Set(targetPlatformsOf(manifest));
     for (const [family, descriptor] of families) {
-      const match = catalog.find((asset) => asset.type === 'SCREENSHOT'
-        && surfaceFamily(asset.platform) === family
-        && asset.deviceClass === descriptor.deviceClass
-        && asset.displayType === descriptor.displayType);
-      if (!match) {
-        issues.push(`${label}: a catalog SCREENSHOT is required for the ${family} UI surface (${descriptor.platforms.join(', ')}, ${descriptor.displayType})`);
+      const requirements = [];
+      if (family === 'ios') {
+        const hasPhone = targetPlatforms.size === 0 || targetPlatforms.has('ios');
+        const hasTablet = targetPlatforms.has('ipados');
+        if (hasPhone) requirements.push({ deviceClass: descriptor.deviceClass, displayType: descriptor.displayType, label: descriptor.displayType });
+        if (hasTablet) requirements.push({ deviceClass: 'IPAD', displayType: 'IPAD_13', label: 'IPAD_13' });
+      } else if (family === 'android') {
+        const hasPhone = targetPlatforms.size === 0 || targetPlatforms.has('android');
+        const hasTablet = targetPlatforms.has('android-tablet');
+        if (hasPhone) requirements.push({ deviceClass: descriptor.deviceClass, displayType: descriptor.displayType, label: descriptor.displayType });
+        if (hasTablet) requirements.push({ deviceClass: 'ANDROID_TABLET', displayType: 'ANDROID_TABLET', label: 'ANDROID_TABLET' });
+      } else {
+        requirements.push({ deviceClass: descriptor.deviceClass, displayType: descriptor.displayType, label: descriptor.displayType });
+      }
+      for (const requirement of requirements) {
+        const match = catalog.find((asset) => {
+          if (asset.type !== 'SCREENSHOT' || surfaceFamily(asset.platform) !== family) return false;
+          if (asset.deviceClass !== requirement.deviceClass) return false;
+          if (requirement.deviceClass === 'IPAD') return String(asset.displayType ?? '').startsWith('IPAD_');
+          if (requirement.deviceClass === 'ANDROID_TABLET') return String(asset.displayType ?? '').startsWith('ANDROID_TABLET');
+          return asset.displayType === requirement.displayType;
+        });
+        if (!match) {
+          issues.push(`${label}: a catalog SCREENSHOT is required for the ${family} UI surface (${descriptor.platforms.join(', ')}, ${requirement.label})`);
+        }
       }
     }
   }
@@ -1089,7 +1112,7 @@ export function captureToolForPlatform(platform) {
   return familyTools[family];
 }
 
-export function captureSurfacesForType(appType, platforms) {
+export function captureSurfacesForType(appType, platforms, targetPlatforms = []) {
   const typeInfo = APP_TYPE_MEDIA[appType] ?? APP_TYPE_MEDIA.NONE;
   if (!typeInfo.capture) return { tool: undefined, surfaces: [] };
   if (CONTENT_APP_TYPES.has(appType)) {
@@ -1122,19 +1145,52 @@ export function captureSurfacesForType(appType, platforms) {
   for (const [family, descriptor] of families) {
     const size = sizes[family];
     if (!size) continue;
-    surfaces.push({
-      id: `${family}-primary`,
-      kind: 'ui',
-      tool: captureToolForPlatform(size.platform),
-      platform: size.platform,
-      deviceClass: descriptor.deviceClass,
-      displayType: descriptor.displayType,
-      viewport: { width: size.width, height: size.height, deviceScaleFactor: size.scale },
-      locales: ['en-US'],
-      routes: [{ id: `${manifestRoutePrefix(appType)}.home`, path: '/' }],
-      theme: 'light',
-      readySelector: '[data-sdkwork-app-ready]',
-    });
+    const pushSurface = (id, platform, deviceClass, displayType, viewport) => {
+      surfaces.push({
+        id,
+        kind: 'ui',
+        tool: captureToolForPlatform(platform),
+        platform,
+        deviceClass,
+        displayType,
+        viewport,
+        locales: ['en-US'],
+        routes: [{ id: `${manifestRoutePrefix(appType)}.home`, path: '/' }],
+        theme: 'light',
+        readySelector: '[data-sdkwork-app-ready]',
+      });
+    };
+    if (family === 'ios') {
+      const hasPhone = targetPlatforms.length === 0 || targetPlatforms.includes('ios');
+      const hasTablet = targetPlatforms.includes('ipados');
+      if (hasPhone) {
+        pushSurface(`${family}-primary`, size.platform, descriptor.deviceClass, descriptor.displayType, {
+          width: size.width, height: size.height, deviceScaleFactor: size.scale,
+        });
+      }
+      if (hasTablet) {
+        pushSurface(`${family}-tablet`, 'APP_IOS', 'IPAD', 'IPAD_13', {
+          width: 1024, height: 1366, deviceScaleFactor: 2,
+        });
+      }
+    } else if (family === 'android') {
+      const hasPhone = targetPlatforms.length === 0 || targetPlatforms.includes('android');
+      const hasTablet = targetPlatforms.includes('android-tablet');
+      if (hasPhone) {
+        pushSurface(`${family}-primary`, size.platform, descriptor.deviceClass, descriptor.displayType, {
+          width: size.width, height: size.height, deviceScaleFactor: size.scale,
+        });
+      }
+      if (hasTablet) {
+        pushSurface(`${family}-tablet`, 'APP_ANDROID', 'ANDROID_TABLET', 'ANDROID_TABLET', {
+          width: 1280, height: 800, deviceScaleFactor: 1,
+        });
+      }
+    } else {
+      pushSurface(`${family}-primary`, size.platform, descriptor.deviceClass, descriptor.displayType, {
+        width: size.width, height: size.height, deviceScaleFactor: size.scale,
+      });
+    }
   }
   if (surfaces.length === 0) {
     const platform = Array.isArray(platforms) && platforms[0] ? platforms[0] : 'WEB';

@@ -11,3 +11,4 @@ Retired layout: `docs/adr/` must not be used for new ADRs.
 - [ADR-20260724 PostgreSQL Authority And SQLite Client-Local Storage](ADR-20260724-postgresql-authority-sqlite-client-local.md)
 - [ADR-20260730 Repository Generated-State Boundary](ADR-20260730-repository-generated-state-boundary.md)
 - [ADR-20260917 Web Framework Table Prefix](ADR-20260917-web-framework-table-prefix.md)
+- [ADR-20261031 Pad Application Root Architecture](ADR-20261031-pad-application-root-architecture.md)

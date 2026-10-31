@@ -261,6 +261,76 @@ test('requires a catalog screenshot for every shipped Flutter platform', () => {
   assert.deepEqual(check(makeManifest({ appType: 'APP_FLUTTER', platforms: ['APP_IOS', 'APP_ANDROID'], media }), root), []);
 });
 
+test('requires a tablet screenshot when targetPlatforms ships a tablet', () => {
+  const root = tempRoot();
+  bootstrapAppAssets({
+    root,
+    appType: 'APP_REACT',
+    appKey: 'sample-app',
+    platforms: ['APP_IOS'],
+    targetPlatforms: ['ipados'],
+  });
+  writePng(path.join(root, 'assets/media/icons/icon-1024.png'), 1024, 1024, 2);
+  writePng(path.join(root, 'assets/media/covers/en-US/cover-1920x1080.png'), 1920, 1080, 2);
+  writePng(path.join(root, 'assets/media/screenshots/app-ios/ipad-13/en-US/01-home.png'), 2048, 2732, 2);
+  const media = emptyMedia();
+  media.icons.primary = iconAsset(root);
+  media.screenshots = [screenshotAsset(root, 'assets/media/screenshots/app-ios/ipad-13/en-US/01-home.png', {
+    id: 'ipad-catalog',
+    platform: 'APP_IOS',
+    deviceClass: 'IPAD',
+    displayType: 'IPAD_13',
+  })];
+  media.previews = [coverAsset(root)];
+  const manifest = makeManifest({
+    platforms: ['APP_IOS'],
+    targetPlatforms: ['ipados'],
+    media,
+  });
+  assert.deepEqual(check(manifest, root), []);
+
+  media.screenshots = [];
+  assertIncludes(check(manifest, root), 'IPAD_13');
+});
+
+test('accepts an iPad-only Apple submission without a phone screenshot', () => {
+  const root = tempRoot();
+  bootstrapAppAssets({
+    root,
+    appType: 'APP_REACT',
+    appKey: 'sample-app',
+    platforms: ['APP_IOS'],
+    targetPlatforms: ['ipados'],
+  });
+  writePng(path.join(root, 'assets/media/icons/icon-1024.png'), 1024, 1024, 2);
+  writePng(path.join(root, 'assets/media/store/apple-app-store/icon-1024.png'), 1024, 1024, 2);
+  writePng(path.join(root, 'assets/media/covers/en-US/cover-1920x1080.png'), 1920, 1080, 2);
+  writePng(path.join(root, 'assets/media/screenshots/app-ios/ipad-13/en-US/01-home.png'), 2048, 2732, 2);
+  writePng(path.join(root, 'assets/media/store/apple-app-store/screenshots/ipad-13/en-US/01-home.png'), 2048, 2732, 2);
+  const media = emptyMedia();
+  media.icons.primary = iconAsset(root);
+  media.icons.platform = [{
+    ...assetFrom(root, 'assets/media/store/apple-app-store/icon-1024.png'),
+    id: 'apple-icon', type: 'ICON', purpose: 'STORE_LISTING', storePlatform: 'APPLE_APP_STORE', locale: 'en-US', enabled: true,
+  }];
+  media.screenshots = [
+    screenshotAsset(root, 'assets/media/screenshots/app-ios/ipad-13/en-US/01-home.png', {
+      id: 'ipad-catalog', platform: 'APP_IOS', deviceClass: 'IPAD', displayType: 'IPAD_13',
+    }),
+    screenshotAsset(root, 'assets/media/store/apple-app-store/screenshots/ipad-13/en-US/01-home.png', {
+      id: 'ipad-store', platform: 'APP_IOS', deviceClass: 'IPAD', displayType: 'IPAD_13', storePlatform: 'APPLE_APP_STORE', purpose: 'STORE_SUBMISSION',
+    }),
+  ];
+  media.previews = [coverAsset(root)];
+  const manifest = makeManifest({
+    platforms: ['APP_IOS'],
+    stores: [{ marketId: 'APPLE_APP_STORE' }],
+    targetPlatforms: ['ipados'],
+    media,
+  });
+  assert.deepEqual(check(manifest, root), []);
+});
+
 test('validates an Apple App Store submission set', () => {
   const root = tempRoot();
   bootstrapAppAssets({ root, appType: 'APP_REACT', appKey: 'sample-app', platforms: ['APP_IOS'] });

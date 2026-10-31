@@ -1,12 +1,12 @@
 ﻿# UI Architecture Selection Standard
 
-- Version: 1.0
+- Version: 1.1
 - Scope: UI architecture selection, package-family ownership, app/backend surface separation, SDK boundary verification
-- Related: `FRONTEND_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `UNIAPP_APP_ARCHITECTURE_SPEC.md`, `UNITY_APP_ARCHITECTURE_SPEC.md`, `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `BACKEND_UI_SPEC.md`, `SDK_SPEC.md`, `API_SPEC.md`, `TEST_SPEC.md`
+- Related: `FRONTEND_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `UNIAPP_APP_ARCHITECTURE_SPEC.md`, `UNITY_APP_ARCHITECTURE_SPEC.md`, `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `BACKEND_UI_SPEC.md`, `SDK_SPEC.md`, `API_SPEC.md`, `TEST_SPEC.md`
 
 This standard is the required entrypoint for UI package placement. It decides which architecture-specific UI standard owns the work. It does not replace the detailed UI standards; it prevents package drift before files are created.
 
-For client application roots, apply `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` and the matching root architecture standard before choosing the detailed UI package standard. PC roots apply `APP_PC_ARCHITECTURE_SPEC.md`; H5/Capacitor roots apply `APP_H5_ARCHITECTURE_SPEC.md`; Flutter mobile roots apply `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`; mini program roots apply `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`; native Android roots apply `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`; native iOS roots apply `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`; native HarmonyOS roots apply `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`; uni-app roots apply `UNIAPP_APP_ARCHITECTURE_SPEC.md`; Unity roots apply `UNITY_APP_ARCHITECTURE_SPEC.md`; static web (pure HTML) roots apply `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`. The uni-app, Unity, and static web root standards own their package-local UI rules directly; no separate detailed UI standard exists for those architectures.
+For client application roots, apply `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` and the matching root architecture standard before choosing the detailed UI package standard. PC roots apply `APP_PC_ARCHITECTURE_SPEC.md`; pad roots apply `APP_PAD_ARCHITECTURE_SPEC.md`; H5/Capacitor roots apply `APP_H5_ARCHITECTURE_SPEC.md`; Flutter mobile roots apply `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`; mini program roots apply `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`; native Android roots apply `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`; native iOS roots apply `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`; native HarmonyOS roots apply `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`; uni-app roots apply `UNIAPP_APP_ARCHITECTURE_SPEC.md`; Unity roots apply `UNITY_APP_ARCHITECTURE_SPEC.md`; static web (pure HTML) roots apply `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`. The uni-app, Unity, and static web root standards own their package-local UI rules directly; no separate detailed UI standard exists for those architectures.
 
 ## 1. Selection Gate
 
@@ -18,6 +18,9 @@ Every UI change `MUST` declare exactly one primary UI architecture before implem
 | App PC React | `apps/sdkwork-<application-code>-pc/packages/sdkwork-<application-code>-pc-<capability>` | `/app/v3/api` | generated TypeScript app SDK or approved appbase wrapper | `@sdkwork/iam-runtime`, `@sdkwork/iam-react`, `@sdkwork/auth-pc-react`, global TokenManager | `APP_PC_ARCHITECTURE_SPEC.md`, then `APP_PC_REACT_UI_SPEC.md` |
 | PC user console React | `apps/sdkwork-<application-code>-pc/packages/sdkwork-<application-code>-pc-console-<capability>` | `/app/v3/api` or approved console-facing app SDK surface | generated TypeScript app SDK or approved appbase/console wrapper | appbase IAM runtime, console route guards, global TokenManager | `APP_PC_ARCHITECTURE_SPEC.md`, then `APP_PC_REACT_UI_SPEC.md` |
 | PC internal admin React | `apps/sdkwork-<application-code>-pc/packages/sdkwork-<application-code>-pc-admin-<capability>` | `/backend/v3/api` | generated TypeScript backend SDK or approved backend wrapper for `backend-admin` | appbase backend SDK for IAM administration; no user-facing auth sessions | `APP_PC_ARCHITECTURE_SPEC.md`, then `BACKEND_UI_SPEC.md` |
+| Pad tablet app React | `apps/sdkwork-<application-code>-pad/packages/sdkwork-<application-code>-pad-<capability>` | `/app/v3/api` | generated TypeScript app SDK plus tablet host adapters | appbase IAM runtime, global TokenManager, tablet secure storage through host adapter | `APP_PAD_ARCHITECTURE_SPEC.md`, then `APP_PC_REACT_UI_SPEC.md` |
+| Pad user console React | `apps/sdkwork-<application-code>-pad/packages/sdkwork-<application-code>-pad-console-<capability>` | `/app/v3/api` or approved console-facing app SDK surface | generated TypeScript app SDK plus tablet host adapters | appbase IAM runtime, console route guards, global TokenManager | `APP_PAD_ARCHITECTURE_SPEC.md`, then `APP_PC_REACT_UI_SPEC.md` |
+| Pad internal admin React | `apps/sdkwork-<application-code>-pad/packages/sdkwork-<application-code>-pad-admin-<capability>` | `/backend/v3/api` | generated TypeScript backend SDK or approved backend wrapper for `backend-admin` | appbase backend SDK for IAM administration; no user-facing auth sessions | `APP_PAD_ARCHITECTURE_SPEC.md`, then `BACKEND_UI_SPEC.md` |
 | H5 mobile React | `apps/sdkwork-<application-code>-h5/packages/sdkwork-<application-code>-h5-<capability>` | `/app/v3/api` | generated TypeScript app SDK plus typed H5/Capacitor host adapters | appbase mobile wrapper or approved appbase IAM runtime adapter, global TokenManager | `APP_H5_ARCHITECTURE_SPEC.md`, then `APP_MOBILE_REACT_UI_SPEC.md` |
 | H5 user console React | `apps/sdkwork-<application-code>-h5/packages/sdkwork-<application-code>-h5-console-<capability>` | `/app/v3/api` or approved console-facing app SDK surface | generated TypeScript app SDK plus typed H5/Capacitor host adapters | appbase mobile wrapper or approved appbase IAM runtime adapter, console route guards, global TokenManager | `APP_H5_ARCHITECTURE_SPEC.md`, then `APP_MOBILE_REACT_UI_SPEC.md` |
 | H5 internal admin React | `apps/sdkwork-<application-code>-h5/packages/sdkwork-<application-code>-h5-admin-<capability>` | `/backend/v3/api` | generated TypeScript backend SDK or approved backend wrapper for `backend-admin` | appbase backend SDK for IAM administration; no user-facing auth sessions | `APP_H5_ARCHITECTURE_SPEC.md`, then `BACKEND_UI_SPEC.md` |
@@ -46,7 +49,7 @@ Every UI change `MUST` declare exactly one primary UI architecture before implem
 Rules:
 
 - A single UI package `MUST NOT` mix app UI and backend/admin UI.
-- A single UI package `MUST NOT` mix PC React, H5 mobile React, Flutter, mini program, uni-app, Unity, static web, Android native, iOS native, Harmony native, and backend/admin React implementations.
+- A single UI package `MUST NOT` mix PC React, pad React, H5 mobile React, Flutter, mini program, uni-app, Unity, static web, Android native, iOS native, Harmony native, and backend/admin React implementations.
 - Cross-architecture reuse belongs in contract, service, i18n, token, or generated SDK packages with no UI imports.
 - If an existing package path does not match the selected architecture, move or wrap the capability before adding new business behavior.
 - User-facing auth, registration, session, OAuth, verification-code login, QR login, password reset, and current user flows belong to app UI and app-api.
@@ -67,8 +70,8 @@ Rules:
 - App UI packages `MUST` be split by user-facing domain and capability.
 - Client app-root packages `MUST` follow `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` for core, commons, shell, capability, optional console/admin, host package roles, route id, and dependency direction.
 - Backend/admin UI packages are `backend-admin` packages. They `MUST` be split as `@sdkwork/react-backend-<domain>` and aligned with permission prefixes.
-- Client user-facing console packages `MUST` be split with the architecture-specific `console-<capability>` role, such as `sdkwork-<application-code>-pc-console-<capability>`, `sdkwork-<application-code>-h5-console-<capability>`, or `sdkwork_<application_code>_flutter_mobile_console_<capability>`. They must not be named or treated as internal admin packages.
-- Client internal admin packages are `backend-admin` packages. They `MUST` be split with the architecture-specific `admin-<capability>` role, such as `sdkwork-<application-code>-pc-admin-<capability>`, `sdkwork-<application-code>-android-mobile-admin-<capability>`, or `sdkwork_<application_code>_flutter_mobile_admin_<capability>`. They must not be placed in user app or console package families.
+- Client user-facing console packages `MUST` be split with the architecture-specific `console-<capability>` role, such as `sdkwork-<application-code>-pc-console-<capability>`, `sdkwork-<application-code>-pad-console-<capability>`, `sdkwork-<application-code>-h5-console-<capability>`, or `sdkwork_<application_code>_flutter_mobile_console_<capability>`. They must not be named or treated as internal admin packages.
+- Client internal admin packages are `backend-admin` packages. They `MUST` be split with the architecture-specific `admin-<capability>` role, such as `sdkwork-<application-code>-pc-admin-<capability>`, `sdkwork-<application-code>-pad-admin-<capability>`, `sdkwork-<application-code>-android-mobile-admin-<capability>`, or `sdkwork_<application_code>_flutter_mobile_admin_<capability>`. They must not be placed in user app or console package families.
 - `@sdkwork/react-backend-ui` may contain only domain-neutral primitives.
 - `@sdkwork/react-backend-core` may contain only SDK/runtime/provider infrastructure.
 - Packages named `common`, `misc`, `manager`, `base`, `core`, `admin`, `backend`, or `console` `MUST NOT` own business pages, business services, repositories, route records, menu records, permission constants, or domain i18n unless a root spec explicitly defines their bounded context.
@@ -83,6 +86,9 @@ UI architecture decides the SDK surface.
 | App PC React | injected app SDK client or appbase service wrapper | backend SDK, backend UI packages, raw HTTP |
 | PC user console React | injected app SDK client or approved console-facing appbase app wrapper | admin package internals, backend SDK packages, appbase backend SDK clients, backend wrapper functions, raw HTTP |
 | PC internal admin React | injected backend SDK client or backend-core/admin wrapper | app SDK login/session creation, app/console package internals, raw HTTP |
+| Pad tablet app React | injected app SDK client, tablet host adapters | backend SDK, backend UI packages, native globals for business API calls |
+| Pad user console React | injected app SDK client or approved console-facing appbase app wrapper, tablet host adapters | admin package internals, backend SDK packages, appbase backend SDK clients, backend wrapper functions, raw HTTP |
+| Pad internal admin React | injected backend SDK client or backend-core/admin wrapper, tablet host adapters | app SDK login/session creation, app/console package internals, raw HTTP |
 | H5/Flutter/mini program/native user console packages | injected app SDK client or approved console-facing appbase app wrapper for the selected architecture | admin package internals, backend SDK packages, appbase backend SDK clients, backend wrapper functions, raw HTTP |
 | H5/Flutter/mini program/native internal admin packages | injected backend SDK client or backend-core/admin wrapper for the selected architecture | app SDK login/session creation, app/console package internals, raw HTTP |
 | H5 mobile React | injected app SDK client, typed H5/Capacitor host adapters | backend SDK, backend UI packages, native globals for business API calls |
@@ -118,6 +124,7 @@ Architecture standards own platform-specific interaction rules.
 Rules:
 
 - App PC React optimizes for keyboard, pointer, route persistence, dense desktop layout, multitasking, and adaptive iPadOS/Android tablet large-screen behavior when those targets are enabled.
+- Pad React optimizes for tablet-first window classes, navigation rail/sidebar, master-detail and split panes, multitasking (Split View, Slide Over, Stage Manager, Android freeform), pointer/trackpad/keyboard parity, touch and optional stylus input, safe areas, and tablet information density. It `MUST` apply the tablet adaptation contract in `APP_PAD_ARCHITECTURE_SPEC.md` section 5 and `MUST NOT` degrade to a stretched phone shell.
 - H5 mobile React optimizes for touch, safe areas, compact widths, H5/Capacitor host adapters, and app lifecycle transitions.
 - App Flutter optimizes for platform widgets, responsive mobile/tablet/foldable/desktop surfaces, and platform adapter interfaces.
 - Mini program app optimizes for platform page/subpackage constraints, touch, safe areas, platform permission prompts, and platform review/package-size requirements.
@@ -141,11 +148,13 @@ Every touched UI package `MUST` prove the selected architecture boundary.
 | No bypass | Static scan proves no raw HTTP, manual token/API key headers, backend/app cross-surface calls, open-api token-manager misuse, or generated SDK edits were introduced. |
 | Domain split | Backend/admin business code is not placed in `@sdkwork/react-backend-ui`, `@sdkwork/react-backend-core`, or any catch-all package. |
 | UI states | Tests cover loading, empty, validation-error, permission-denied, unavailable, and unknown-error states where applicable. |
+| Tablet adaptation | Pad packages prove the window-class, multitasking, input parity, safe-area, accessibility, and performance coverage required by `APP_PAD_ARCHITECTURE_SPEC.md` sections 5 and 13. |
 | i18n | User-facing or operator-facing copy lives in package-local i18n fragments or configured message catalogs that follow `I18N_SPEC.md`; app/root/package locale monoliths are rejected unless generated from fragments. |
 
 ## 6. Acceptance Checklist
 
 - [ ] Exactly one primary UI architecture was selected.
+- [ ] A pad root selected `APP_PAD_ARCHITECTURE_SPEC.md` before `APP_PC_REACT_UI_SPEC.md`, and its tablet adaptation evidence is present.
 - [ ] The package path matches the selected architecture table.
 - [ ] The detailed architecture standard was applied.
 - [ ] Client app roots applied `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` and their root architecture standard before detailed package work.

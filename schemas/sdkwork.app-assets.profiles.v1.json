@@ -81,6 +81,7 @@
             "IPHONE_6_9": {
               "min": 1,
               "max": 10,
+              "requiresTargetPlatform": "ios",
               "sizes": [
                 [1320, 2868],
                 [1290, 2796],
@@ -154,17 +155,16 @@
           "groups": {
             "ANDROID_PHONE": {
               "min": 2,
-              "max": 8
+              "max": 8,
+              "requiresTargetPlatform": "android"
             },
             "ANDROID_TABLET_7": {
               "min": 0,
-              "max": 8,
-              "requiresTargetPlatform": "android-tablet"
+              "max": 8
             },
             "ANDROID_TABLET_10": {
               "min": 0,
-              "max": 8,
-              "requiresTargetPlatform": "android-tablet"
+              "max": 8
             }
           }
         },

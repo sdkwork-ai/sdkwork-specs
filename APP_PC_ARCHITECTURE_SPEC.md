@@ -1,12 +1,12 @@
 # PC Application Architecture Standard
 
-- Version: 1.0
+- Version: 1.1
 - Scope: SDKWork PC application roots that support PC browser web, desktop, and large-screen tablet native packaging, including app modules, user-facing console modules, internal admin modules, shared renderer packages, one host package per desktop architecture (Tauri, Electron, Capacitor), and iPadOS/Android tablet runtime/package targets
-- Related: `SDKWORK_WORKSPACE_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `APPLICATION_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `DESKTOP_APP_ARCHITECTURE_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `BACKEND_UI_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
+- Related: `SDKWORK_WORKSPACE_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `APPLICATION_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `DESKTOP_APP_ARCHITECTURE_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `BACKEND_UI_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines the application-root architecture for SDKWork PC applications. A PC application is one application root that can run as a browser web application and, when required, as a desktop or large-screen tablet native application through one or more per-architecture native host packages.
 
-This file is the PC application root standard. `APP_PC_REACT_UI_SPEC.md` remains the detailed React UI package standard, and `DESKTOP_APP_ARCHITECTURE_SPEC.md` remains the detailed desktop host standard for the Tauri, Electron, and Capacitor host profiles. New SDKWork application architecture standards for H5, Flutter, WeChat Mini Program, iOS, Android, and HarmonyOS should keep a similar root layout, package taxonomy, SDK boundary, appbase IAM boundary, and app/console/admin separation.
+This file is the PC application root standard. `APP_PC_REACT_UI_SPEC.md` remains the detailed React UI package standard, and `DESKTOP_APP_ARCHITECTURE_SPEC.md` remains the detailed desktop host standard for the Tauri, Electron, and Capacitor host profiles. `APP_PAD_ARCHITECTURE_SPEC.md` owns the tablet-first pad root and the shared tablet adaptation contract. New SDKWork application architecture standards for H5, Flutter, WeChat Mini Program, iOS, Android, and HarmonyOS should keep a similar root layout, package taxonomy, SDK boundary, appbase IAM boundary, and app/console/admin separation.
 
 Reference inputs:
 
@@ -31,6 +31,7 @@ PC application root
 Rules:
 
 - One PC application root `MUST` support browser web mode. If desktop, iPadOS, or Android tablet native mode is required, it `MUST` reuse the same renderer and packages where possible.
+- Tablet packaging is a package target of this PC root when the product keeps its PC identity, feature roadmap, and store listing. A tablet-first product with a dedicated tablet UX or its own app identity uses `APP_PAD_ARCHITECTURE_SPEC.md` instead; the two paths `MUST NOT` be combined for one product surface.
 - PC version means large-screen, productivity-oriented application behavior. It includes PC browsers, Windows/macOS/Linux desktop shells, and tablet-native packages such as iPadOS and Android tablets when the app keeps the same large-screen workflow model. Phone-first H5 remains a separate architecture standard.
 - Root `src/` `MUST` stay thin: bootstrap, providers, global layout, router assembly, AuthGate wiring, environment selection, and package registration.
 - Business pages, services, route contributions, i18n, domain state, and workflow-specific components `MUST` live in packages.
@@ -277,6 +278,7 @@ Rules:
 - Tablet native packaging `MUST NOT` create phone-first H5 pages, mobile-only business services, or a separate auth/runtime model inside the PC root.
 - iPadOS and Android tablet targets `MUST` use adaptive large-screen UI patterns: navigation rail/sidebar, split panes, tabs, drawers, resizable detail panels, keyboard shortcuts where available, touch/stylus support, and safe-area handling.
 - iPadOS and Android tablet targets `MUST` keep app, console, and admin route ownership identical to web/desktop mode unless a local component spec documents a platform-specific route exclusion.
+- iPadOS and Android tablet targets `MUST` apply the tablet adaptation contract in `APP_PAD_ARCHITECTURE_SPEC.md` section 5 and provide `specs/tablet-adaptation.spec.json` per that standard. The PC root remains a PC root; it does not become a pad root.
 - Tauri platform-specific config files such as `tauri.windows.conf.json`, `tauri.macos.conf.json`, `tauri.linux.conf.json`, `tauri.ios.conf.json`, and `tauri.android.conf.json` may override target-specific packaging, identifiers, bundle metadata, permissions, and capabilities. They `MUST NOT` override business API contracts or SDK package ownership.
 - iOS/iPadOS development and build commands require a macOS host with Apple tooling. Android tablet builds require Android tooling. These prerequisites belong in the app runbook and CI/release documentation.
 
@@ -604,8 +606,10 @@ Rules:
 
 ## 8.1 Tablet And iPadOS Runtime And Package Profile
 
-Tablet packaging is a PC large-screen runtime/package target, not a deployment
-profile and not a replacement for H5 or phone-native architectures.
+For a PC root, tablet packaging is a PC large-screen runtime/package target,
+not a deployment profile and not a replacement for H5 or phone-native
+architectures. A tablet-first product uses the pad root defined by
+`APP_PAD_ARCHITECTURE_SPEC.md` instead.
 
 Rules:
 
@@ -615,6 +619,7 @@ Rules:
 - Android tablet packaging `MUST` document Android package name, min/target SDK, signing key handling, ABI targets, APK/AAB output, Play/private distribution path, and large-screen manifest behavior.
 - iPadOS builds `MUST` be performed on macOS hosts. CI may orchestrate the build, but the signing/build runner must satisfy Apple tooling requirements.
 - Tablet targets `MUST` handle safe areas, virtual keyboard, orientation, pointer/keyboard input, touch/stylus input, split view or multi-window where supported, and offline/foreground/background lifecycle events.
+- Tablet targets `MUST` apply `APP_PAD_ARCHITECTURE_SPEC.md` section 5: window classes, navigation rail/sidebar, master-detail, resizable panes, input parity, safe areas, accessibility, performance, and `specs/tablet-adaptation.spec.json` evidence.
 - Tablet targets `MUST NOT` store tokens, refresh tokens, signing secrets, or API keys in generated platform directories or committed native config.
 
 ## 9. Route And Navigation Standards
@@ -732,7 +737,7 @@ Required verification for PC application architecture changes:
 | Config profile boundary | Static and runtime tests prove `development/test/staging/demo/production`, profile aliases, deployment profile, build mode, and runtime target are separated; browser, desktop, server, container, and each host config family (Tauri, Electron, Capacitor) do not leak into each other. |
 | Environment file hygiene | Static scan proves checked-in files are safe examples only and ignored host-local files include `.env.local`, `.env.<profile>.local`, `.env.postgres`, `.env.release.local`, and `config/*.local.toml`. |
 | Root thinness | Static scan or code review proves root `src/` owns bootstrap/composition only, not business services or mock data. |
-| Desktop and tablet parity | When native targets exist, each shipped host's config, platform config files, host adapter, web fallback, and renderer reuse pass `DESKTOP_APP_ARCHITECTURE_SPEC.md`; iPadOS and Android tablet packaging pass the Tauri-only tablet rules. |
+| Desktop and tablet parity | When native targets exist, each shipped host's config, platform config files, host adapter, web fallback, and renderer reuse pass `DESKTOP_APP_ARCHITECTURE_SPEC.md`; iPadOS and Android tablet packaging pass the Tauri-only tablet rules and the `APP_PAD_ARCHITECTURE_SPEC.md` section 5 adaptation contract, including `specs/tablet-adaptation.spec.json`. |
 | Host package separation | Static scan proves each shipped desktop architecture has its own host package with its own adapter, config family, and native dependencies, and that no host package contains a second architecture's scaffold, dependencies, or config. |
 | Package build | Changed packages pass typecheck, tests, and build or smoke commands. |
 
@@ -753,4 +758,5 @@ Acceptance checklist:
 - [ ] Desktop and tablet native modes, when present, reuse the PC renderer and keep native host code local-only.
 - [ ] Each shipped desktop architecture has its own host package (`pc-tauri`, `pc-electron`, `pc-capacitor`) with its own adapter, config family, and native dependencies.
 - [ ] iPadOS and Android tablet packaging rules are documented and verified when tablet native targets are enabled, and tablet targets declare the Tauri architecture only.
+- [ ] Tablet-enabled roots provide `specs/tablet-adaptation.spec.json` and pass the `APP_PAD_ARCHITECTURE_SPEC.md` section 5 adaptation contract.
 - [ ] Verification evidence is recorded in the application PR or change note.

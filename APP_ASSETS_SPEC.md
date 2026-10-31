@@ -1,8 +1,8 @@
 # SDKWork App Assets Standard v1
 
-- Version: 1.0
+- Version: 1.2
 - Scope: application asset root, media roles, per-`appType` media matrix, creation-time screenshot capture, cover and preview composition, store submission media profiles, SDKWork appstore projection, validation
-- Related: `APP_MANIFEST_SPEC.md`, `MEDIA_RESOURCE_SPEC.md`, `DRIVE_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `UNIAPP_APP_ARCHITECTURE_SPEC.md`, `UNITY_APP_ARCHITECTURE_SPEC.md`, `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`, `PRIVACY_SPEC.md`, `SECURITY_SPEC.md`, `I18N_SPEC.md`, `NAMING_SPEC.md`, `TEST_SPEC.md`
+- Related: `APP_MANIFEST_SPEC.md`, `MEDIA_RESOURCE_SPEC.md`, `DRIVE_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `UNIAPP_APP_ARCHITECTURE_SPEC.md`, `UNITY_APP_ARCHITECTURE_SPEC.md`, `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`, `PRIVACY_SPEC.md`, `SECURITY_SPEC.md`, `I18N_SPEC.md`, `NAMING_SPEC.md`, `TEST_SPEC.md`
 
 Every registered application owns one governed asset root. Product media is not an afterthought of a release script and it is not a set of loose files next to a build output: it is versioned source that is reviewed together with the code that renders it, captured from a reproducible application state, validated against the delivery channel, and only then published to Drive and projected into the SDKWork appstore.
 
@@ -308,7 +308,7 @@ Rules:
 | `POSTER` | Poster/graphic content | `poster/` | `POSTER` | render |
 | `APP_HTML` | HTML/static web or web-hosted app | `ui/` | `SCREENSHOT` per shipped UI surface | browser |
 | `APP_VUE` | Vue web app | `ui/` | `SCREENSHOT` per shipped UI surface | browser |
-| `APP_REACT` | React web/desktop/H5 app | `ui/` | `SCREENSHOT` per shipped UI surface | browser or device |
+| `APP_REACT` | React web/desktop/H5/pad app | `ui/` | `SCREENSHOT` per shipped UI surface | browser or device |
 | `APP_FLUTTER` | Flutter mobile app | `ui/` | `SCREENSHOT` per shipped mobile platform | device |
 | `APP_UNIAPP` | uni-app multi-target | `ui/` | `SCREENSHOT` per shipped target | browser or device |
 | `APP_UNITY` | Unity game/interactive client | `game/`, `ui/` | `SCREENSHOT` per shipped target; `PREVIEW_VIDEO` when a declared store lane expects one | recorder |
@@ -340,6 +340,9 @@ Rules:
 - Each distinct surface family present in `publish.platforms` `MUST` have at least one enabled catalog screenshot (`storePlatform` absent or `SDKWORK_APPSTORE`) with the matching `platform`, `deviceClass`, and `displayType`.
 - Multiple platform values in one family (`DESKTOP_WINDOWS` and `DESKTOP_MACOS`) `MAY` share one screenshot when the UI is identical; the entry names the primary platform and the capture config may prove both.
 - A catalog screenshot group is `(platform, displayType, locale)`. It holds 1 to 10 enabled screenshots. Three to six is the recommended catalog density.
+- A surface that ships an iPadOS or Android tablet target `MUST` include a tablet screenshot group in addition to phone or desktop groups: `APP_IOS` with `deviceClass = IPAD` and a tablet display profile such as `IPAD_13` when `ipados` ships, and `APP_ANDROID` with `deviceClass = ANDROID_TABLET` when `android-tablet` ships. A scaled phone screenshot is not a tablet screenshot.
+- A pad root or tablet-enabled PC root `MUST` capture the tablet window classes it claims in `specs/tablet-adaptation.spec.json` and use those captures for the tablet listing group.
+- `runtime.targetPlatforms` is the authority for tablet media: `ipados` adds an `IPAD` catalog screenshot group and an iPad capture surface; `android-tablet` adds an `ANDROID_TABLET` group and an Android tablet capture surface. A target that declares only `ipados` or only `android-tablet` is not required to provide a phone catalog screenshot for that family; store profiles may add their own device requirements.
 - `sortOrder` is contiguous from `0` inside each group; the first screenshot is the gallery lead image.
 
 ### 5.3 Appstore Listing Presets
@@ -407,7 +410,7 @@ Application creation is not complete when the manifest exists. It is complete wh
   ],
   "capture": {
     "tool": "playwright",
-    "command": "node tools/capture-app-assets.mjs",
+    "command": "node scripts/capture-assets.mjs",
     "outputRoot": ".sdkwork/tmp/assets-capture",
     "locales": ["en-US", "zh-CN"],
     "freezeAnimations": true,
@@ -420,7 +423,8 @@ Application creation is not complete when the manifest exists. It is complete wh
 Rules:
 
 - The config `MUST` exist for every capture-bearing type from section 5.1, including drafts, so creation never depends on tribal knowledge.
-- `surfaces[]` `MUST` cover every shipped UI surface family in `publish.platforms`. The validator fails a missing `h5`, `ios`, `android`, `harmony`, `desktop`, `web`, or `mini-program` surface.
+- Scaffold capture surfaces with `node tools/bootstrap-app-assets.mjs --root . --app-type <type> --platforms <platforms> --target-platforms <targets>`; `--target-platforms ipados` or `android-tablet` adds the tablet surface before the manifest declares it.
+- `surfaces[]` `MUST` cover every shipped UI surface family in `publish.platforms`. The validator fails a missing `h5`, `ios`, `android`, `harmony`, `desktop`, `web`, or `mini-program` surface. When the manifest ships `ipados` or `android-tablet`, the `ios` or `android` surface entry `MUST` include the tablet capture viewport and device class.
 - `capture.command` `MUST` be a deterministic, non-interactive command that exits non-zero when a declared surface cannot be captured. It `MUST` write a machine-readable report to `<capture.outputRoot>/capture-report.json` matching [`schemas/sdkwork.app-assets.capture-report.schema.v1.json`](schemas/sdkwork.app-assets.capture-report.schema.v1.json), and it `MUST NOT` write catalog media directly into `assets/media/`.
 - A report with `status = partial` or `status = failed` `MUST` name every skipped or failed capture and its surface. The appstore creation flow treats an incomplete report as not listable.
 - `capture.tool` names the primary adapter: `playwright`, `host-webview`, `flutter-integration-test`, `android-instrumentation`, `ios-xctest`, `harmony-test`, `mini-program-automator`, `unity-recorder`, `render-pipeline`, or `manual` (manual requires a written exception in `assets/README.md`). A surface `MAY` declare its own `tool` when the application mixes browser and device surfaces (for example uni-app H5 plus WeChat mini program).
@@ -533,8 +537,8 @@ The machine authority is [`schemas/sdkwork.app-assets.profiles.v1.json`](schemas
 | Profile | Icon | Cover/feature graphic | Screenshots | Preview video |
 | --- | --- | --- | --- | --- |
 | `SDKWORK_APPSTORE` (catalog) | 1024 x 1024 PNG, no alpha | `COVER` 1920 x 1080, no alpha, one per locale and theme | 1 to 10 per surface group, 320-3840 px per side, max aspect 2.25:1 | Up to 3, 10-60 s |
-| `APPLE_APP_STORE` | 1024 x 1024 PNG, no alpha | No store feature graphic; the catalog cover is not submitted | Per display type; at least one `IPHONE_6_9`; `IPAD_13` when iPad is shipped; 1 to 10 per group | Up to 3 per group, 15-30 s, MOV/MP4/M4V |
-| `GOOGLE_PLAY` | 512 x 512 32-bit PNG, alpha allowed, 1 MiB or smaller | `FEATURE_GRAPHIC` 1024 x 500, PNG/JPEG, no alpha | Phone: 2 to 8; 320-3840 px per side; max aspect 2:1; no alpha. Tablet groups optional per shipped tablet target | YouTube URL only (`external = true`) |
+| `APPLE_APP_STORE` | 1024 x 1024 PNG, no alpha | No store feature graphic; the catalog cover is not submitted | Per display type; `IPHONE_6_9` when iPhone ships, `IPAD_13` when iPad ships; 1 to 10 per required group | Up to 3 per group, 15-30 s, MOV/MP4/M4V |
+| `GOOGLE_PLAY` | 512 x 512 32-bit PNG, alpha allowed, 1 MiB or smaller | `FEATURE_GRAPHIC` 1024 x 500, PNG/JPEG, no alpha | Phone 2 to 8 when Android phone ships; tablet groups optional per shipped tablet target; 320-3840 px per side; max aspect 2:1; no alpha | YouTube URL only (`external = true`) |
 | `HUAWEI_APPGALLERY` | 216 x 216 PNG | AppGallery promotional graphic per profile | At least 3, portrait-first; per profile side limits | Optional, per profile |
 | `MICROSOFT_STORE` | 300 x 300 PNG | Store hero art per profile | At least 1; 16:9 or larger desktop captures; up to 10 | Optional trailer, per profile |
 

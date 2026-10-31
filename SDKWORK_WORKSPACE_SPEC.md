@@ -1,8 +1,8 @@
 # SDKWork Repository Workspace Standard
 
-- Version: 1.1
+- Version: 1.2
 - Scope: standard project root directory dictionary, read-only upstream source boundaries, and source-controlled `.sdkwork/` workspace metadata at every git repository root and every SDKWork application root
-- Related: `README.md`, `SOUL.md`, `AGENTS_SPEC.md`, `DEPENDENCY_MANAGEMENT_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `APPLICATION_SPEC.md`, `COMPONENT_SPEC.md`, `DOCUMENTATION_SPEC.md`, `GOVERNANCE_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `RPC_SDK_WORKSPACE_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
+- Related: `README.md`, `SOUL.md`, `AGENTS_SPEC.md`, `DEPENDENCY_MANAGEMENT_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `APPLICATION_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `COMPONENT_SPEC.md`, `DOCUMENTATION_SPEC.md`, `GOVERNANCE_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `RPC_SDK_WORKSPACE_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines the repository/application root directory dictionary and the `.sdkwork/` directory. `.sdkwork/` is the local knowledge and extension workspace for SDKWork development. It stores reusable skills, repository-local plugins, and optional machine-readable workspace manifests that help agents, developers, and CI use the same standards.
 
@@ -46,7 +46,7 @@ SDKWork uses a two-layer source layout:
   other directories required by its selected architecture standard.
 - `apps/` itself is a collection of application roots, not a language source root. Each direct child
   under `apps/` represents one selected application language/architecture root, such as
-  `apps/sdkwork-<application-code>-pc/`, `apps/sdkwork-<application-code>-h5/`,
+  `apps/sdkwork-<application-code>-pc/`, `apps/sdkwork-<application-code>-pad/`, `apps/sdkwork-<application-code>-h5/`,
   `apps/sdkwork-<application-code>-flutter-mobile/`, `apps/sdkwork-<application-code>-mini-program/`,
   `apps/sdkwork-<application-code>-android-mobile/`, `apps/sdkwork-<application-code>-ios-mobile/`,
   `apps/sdkwork-<application-code>-uniapp/`, `apps/sdkwork-<application-code>-unity/`,

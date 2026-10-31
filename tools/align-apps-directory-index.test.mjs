@@ -21,6 +21,8 @@ describe('align-apps-directory-index', () => {
     write(root, 'README.md', '# Demo\n');
     write(root, 'apps/sdkwork-demo-pc/README.md', '# Demo PC\n');
     write(root, 'apps/sdkwork-demo-pc/agent.app.config.json', JSON.stringify({ app: { displayName: 'Demo PC' } }));
+    write(root, 'apps/sdkwork-demo-pad/README.md', '# Demo Pad\n');
+    write(root, 'apps/sdkwork-demo-pad/agent.app.config.json', JSON.stringify({ app: { displayName: 'Demo Pad' } }));
     write(root, 'apps/sdkwork-demo-common/README.md', '# Demo Common\n');
 
     const result = alignAppsDirectoryIndex(root);
@@ -32,6 +34,8 @@ describe('align-apps-directory-index', () => {
     const text = renderAppsReadme(root, result.identity);
     assert.match(text, /Directory Index/u);
     assert.match(text, /sdkwork-demo-pc/u);
+    assert.match(text, /sdkwork-demo-pad/u);
+    assert.match(text, /\| sdkwork-demo-pad \| pad \| yes \|/u);
     assert.match(text, /sdkwork-demo-common/u);
   });
 

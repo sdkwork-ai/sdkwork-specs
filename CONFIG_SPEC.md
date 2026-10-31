@@ -1,8 +1,8 @@
 # Configuration And Environment Standard
 
-- Version: 1.2
-- Scope: environment config, SDK client initialization, secrets, feature flags, typed runtime config, dev/test/staging/prod profiles, desktop/server/container/web/H5/Flutter/mini-program/native Android/native iOS/native Harmony switching
-- Related: `SOURCE_CONFIG_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `ENVIRONMENT_SPEC.md`, `DEPENDENCY_MANAGEMENT_SPEC.md`, `DEPLOYMENT_SPEC.md`, `REGION_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `APPLICATION_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `DESKTOP_APP_ARCHITECTURE_SPEC.md`, `I18N_SPEC.md`
+- Version: 1.3
+- Scope: environment config, SDK client initialization, secrets, feature flags, typed runtime config, dev/test/staging/prod profiles, desktop/server/container/web/H5/Flutter/mini-program/native Android/native iOS/native Harmony/tablet switching
+- Related: `SOURCE_CONFIG_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `ENVIRONMENT_SPEC.md`, `DEPENDENCY_MANAGEMENT_SPEC.md`, `DEPLOYMENT_SPEC.md`, `REGION_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `APPLICATION_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `DESKTOP_APP_ARCHITECTURE_SPEC.md`, `I18N_SPEC.md`
 
 This standard defines how applications select environment, deployment profile,
 runtime target, base URLs, SDK clients, token storage, and feature flags without
@@ -374,7 +374,9 @@ Rules:
   loopback origin, even when that origin currently matches the page.
 - `server` owns process bind, public URL, reverse-proxy trust, and service profile config. It must not own renderer-only build settings.
 - `desktop` owns native host, user config, local service lifecycle, and secure storage provider. It must not own remote business API contracts.
-- `tablet` owns iPadOS/Android tablet package identity and platform config references. It must not own phone-first H5 behavior or business SDK bypasses.
+- `tablet` owns iPadOS/Android tablet package identity and platform config references for PC-root tablet targets and pad roots. It must not own phone-first H5 behavior or business SDK bypasses.
+- In a pad root, `tablet.nativeHost` `MUST` be `tauri` and `tablet.platform` `MUST` match the shipped tablet target (`"ipad-os"` for `tablet-ipados`, `"android-tablet"` for `tablet-android`).
+- A pad root's installed tablet runtime config `MUST` resolve through `config/tablet/` and the Tauri platform config, while its renderer public config follows the browser public runtime contract. A pad root `MUST NOT` add server or container config.
 - `mobile` owns H5/Capacitor/Flutter/native Android/native iOS/native Harmony mobile package identity, platform config references, secure storage provider selection, and mobile host metadata. It must not own SDK package ownership, business route constants, auth tokens, refresh tokens, signing keys, or business authorization.
 - `miniProgram` owns mini program platform identity, app id references, platform config file references, and page/subpackage strategy. It must not own platform private keys, business API contracts, generated SDK ownership, or feature-local auth behavior.
 - `paths` resolves the canonical directories defined by `RUNTIME_DIRECTORY_SPEC.md`.
@@ -420,8 +422,8 @@ invent alternate deployment-mode values.
 | --- | --- | --- | --- | --- |
 | `browser` | web/H5 renderer | public runtime config and browser bootstrap | browser token storage adapter only; no private secrets | Web URL or static web package; may be `cloud` or documented standalone/offline package. |
 | `desktop` | PC desktop host | desktop user config and native host config | OS secure storage or approved user-private secrets | Signed desktop installer or app bundle; defaults to standalone. |
-| `tablet-ipados` | PC tablet host | PC renderer config plus iPadOS/Tauri host config | iPadOS secure storage or approved host adapter | IPA/TestFlight/App Store/private package for large-screen tablet behavior. |
-| `tablet-android` | PC tablet host | PC renderer config plus Android/Tauri host config | Android secure storage or approved host adapter | APK/AAB/Play/private package for large-screen tablet behavior. |
+| `tablet-ipados` | PC or pad tablet host | PC/pad renderer config plus iPadOS/Tauri host config | iPadOS secure storage or approved host adapter | IPA/TestFlight/App Store/private package for large-screen tablet behavior. |
+| `tablet-android` | PC or pad tablet host | PC/pad renderer config plus Android/Tauri host config | Android secure storage or approved host adapter | APK/AAB/Play/private package for large-screen tablet behavior. |
 | `capacitor-ios` | H5 mobile host | H5 browser config plus the Capacitor iOS host profile (`config/host/native/ios/`) | iOS Keychain through the Capacitor secure-storage adapter | IPA/TestFlight/App Store/private package. |
 | `capacitor-android` | H5 mobile host | H5 browser config plus the Capacitor Android host profile (`config/host/native/android/`) | Android Keystore through the Capacitor secure-storage adapter | APK/AAB/Play/private package. |
 | `flutter-ios` | Flutter mobile host | Flutter app config plus iOS host config | Flutter secure storage adapter backed by iOS facilities | IPA/TestFlight/App Store/private package. |

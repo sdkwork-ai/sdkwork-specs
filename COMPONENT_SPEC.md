@@ -1,8 +1,8 @@
 ﻿# Component Specs Standard
 
-- Version: 1.1
+- Version: 1.2
 - Scope: local `specs/` directories for apps, reusable packages, language modules, SDK families, services, host adapters, and componentized integration units under `apps/`
-- Related: `APPLICATION_LAYERED_ARCHITECTURE_SPEC.md`, `COMPOSABLE_ARCHITECTURE_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `AGENTS_SPEC.md`, `CODE_STYLE_SPEC.md`, `NAMING_SPEC.md`, `MODULE_SPEC.md`, `APPLICATION_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `WEB_BACKEND_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `BACKEND_UI_SPEC.md`, `SDK_SPEC.md`, `CONFIG_SPEC.md`, `DOCUMENTATION_SPEC.md`, `TEST_SPEC.md`, `GOVERNANCE_SPEC.md`
+- Related: `APPLICATION_LAYERED_ARCHITECTURE_SPEC.md`, `COMPOSABLE_ARCHITECTURE_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `AGENTS_SPEC.md`, `CODE_STYLE_SPEC.md`, `NAMING_SPEC.md`, `MODULE_SPEC.md`, `APPLICATION_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `WEB_BACKEND_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `BACKEND_UI_SPEC.md`, `SDK_SPEC.md`, `CONFIG_SPEC.md`, `DOCUMENTATION_SPEC.md`, `TEST_SPEC.md`, `GOVERNANCE_SPEC.md`
 
 This standard defines the local specification boundary for every authored SDKWork module. Global standards live in `sdkwork-specs/*_SPEC.md`; each module owns an independent local spec system under `<module-root>/specs/` that makes the module discoverable, maintainable, and safe to integrate without reading its internals first.
 
@@ -200,6 +200,10 @@ Architecture UI spec selection:
 | `apps/sdkwork-<application-code>-pc/packages/sdkwork-<application-code>-pc-<capability>` without `pc-console` or `pc-admin` | `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md` |
 | `apps/sdkwork-<application-code>-pc/packages/sdkwork-<application-code>-pc-console-*` | `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md` |
 | `apps/sdkwork-<application-code>-pc/packages/sdkwork-<application-code>-pc-admin-*` | `APP_PC_ARCHITECTURE_SPEC.md`, `BACKEND_UI_SPEC.md` |
+| `apps/sdkwork-<application-code>-pad/**` | `APP_PAD_ARCHITECTURE_SPEC.md` |
+| `apps/sdkwork-<application-code>-pad/packages/sdkwork-<application-code>-pad-<capability>` without `pad-console` or `pad-admin` | `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md` |
+| `apps/sdkwork-<application-code>-pad/packages/sdkwork-<application-code>-pad-console-*` | `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md` |
+| `apps/sdkwork-<application-code>-pad/packages/sdkwork-<application-code>-pad-admin-*` | `APP_PAD_ARCHITECTURE_SPEC.md`, `BACKEND_UI_SPEC.md` |
 | `packages/pc-react/**` | `APP_PC_REACT_UI_SPEC.md` (legacy migration-only; do not add new components) |
 | `apps/sdkwork-<application-code>-h5/**` | `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md` |
 | `apps/sdkwork-<application-code>-h5/packages/sdkwork-<application-code>-h5-*` | `APP_H5_ARCHITECTURE_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md` |
@@ -227,6 +231,9 @@ Rules:
 - A UI component manifest `MUST` include `UI_ARCHITECTURE_SPEC.md` and the matching architecture UI spec in `canonicalSpecs`.
 - PC user console component manifests `MUST` use `sdkwork-<application-code>-pc-console-<capability>` and must not declare internal admin ownership.
 - PC internal admin component manifests `MUST` use `sdkwork-<application-code>-pc-admin-<capability>` and must include `BACKEND_UI_SPEC.md`.
+- Pad user console component manifests `MUST` use `sdkwork-<application-code>-pad-console-<capability>` and must not declare internal admin ownership.
+- Pad internal admin component manifests `MUST` use `sdkwork-<application-code>-pad-admin-<capability>` and must include `BACKEND_UI_SPEC.md`.
+- Pad component manifests `MUST` declare `APP_PAD_ARCHITECTURE_SPEC.md` and the tablet adaptation contract; they `MUST NOT` declare a mobile framework root standard as their architecture.
 - H5 component manifests under app roots `MUST` use `sdkwork-<application-code>-h5-<capability>` or the reserved H5 mobile package roles from `APP_H5_ARCHITECTURE_SPEC.md`.
 - Flutter mobile component manifests under app roots `MUST` use lower snake case Dart package names such as `sdkwork_<application_code>_flutter_mobile_<capability>`.
 - Mini program component manifests under app roots `MUST` use SDKWork source packages such as `sdkwork-<application-code>-mp-<capability>` and include `APP_MINI_PROGRAM_UI_SPEC.md` when they own pages, components, services, state, or route projection inputs. They must not treat platform `pages` or `subpackages` as the source component boundary.

@@ -1,8 +1,8 @@
 # IAM Login Integration Standard
 
-- Version: 1.0
+- Version: 1.1
 - Scope: fast IAM login/session integration, `sdkwork-iam` auth modules, generated IAM app SDK wiring, route guards, logout behavior, Rust AppContext validation, Tauri/standalone/cloud runtime boundaries
-- Related: `IAM_SPEC.md`, `API_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `SDK_SPEC.md`, `FRONTEND_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `DESKTOP_APP_ARCHITECTURE_SPEC.md`, `SECURITY_SPEC.md`, `DEPLOYMENT_SPEC.md`, `TEST_SPEC.md`
+- Related: `IAM_SPEC.md`, `API_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `SDK_SPEC.md`, `FRONTEND_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `DESKTOP_APP_ARCHITECTURE_SPEC.md`, `SECURITY_SPEC.md`, `DEPLOYMENT_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines how SDKWork applications integrate IAM login and session validation without reimplementing auth flows in consuming applications.
 
@@ -31,7 +31,7 @@ Rules:
 - Applications `MUST` integrate IAM login through `sdkwork-iam` packages or approved wrappers.
 - Applications `MUST` perform login, registration, current-session validation, refresh, logout, OAuth, QR auth, password reset, runtime metadata, and current-user self-service through `@sdkwork/iam-app-sdk`; verification-code delivery and verification `MUST` go through the generated messaging app SDK surface or an appbase wrapper that delegates to an injected messaging client. Applications must not inject unrelated business SDK clients as login clients.
 - Applications `MUST` provide one global token manager per authenticated session context and pass the same instance to `@sdkwork/iam-app-sdk`, every application/dependency app SDK, explicit `backend-admin` `@sdkwork/iam-backend-sdk`, explicit `backend-admin` application/dependency backend SDKs, and approved composed wrappers backed by those SDKs.
-- Applications `MUST` use the approved high-level IAM auth runtime/factory for the selected architecture when available, for example `@sdkwork/auth-runtime-pc-react` `createSdkworkAppbasePcAuthRuntime(...)` for PC React. Application code supplies app identity, runtime config, SDK inventory clients, the global token manager, and session bridge hooks; appbase owns the low-level IAM adapter wiring.
+- Applications `MUST` use the approved high-level IAM auth runtime/factory for the selected architecture when available, for example `@sdkwork/auth-runtime-pc-react` `createSdkworkAppbasePcAuthRuntime(...)` for PC React. A pad root uses the same React factory with the tablet host secure-storage adapter. Application code supplies app identity, runtime config, SDK inventory clients, the global token manager, and session bridge hooks; appbase owns the low-level IAM adapter wiring.
 - Applications `MUST NOT` import `@sdkwork/iam-sdk-adapter`, call `createIamAppSdkAdapter(...)`, call `createIamBackendSdkAdapter(...)`, or call `createIamRuntime(...)` directly for appbase login integration when a high-level appbase runtime/factory exists. Those calls belong in `sdkwork-appbase` packages or approved appbase-owned wrappers only.
 - Applications `MUST NOT` create local `/auth/login`, `/auth/refresh`, `/auth/me`, `/app/v3/api/auth/*`, or user-center session endpoints when the capability is already owned by `sdkwork-iam`, `sdkwork-iam-app-api`, or `sdkwork-iam-app-sdk`.
 - Login/session APIs `MUST` live in app-api only. Open-api domains such as Craw Chat IM (`/im/v3/api`), backend-api, Tauri commands, and application-local Rust routes may validate credentials or session projections when their contract requires it, but must not own user-facing login creation.
@@ -294,7 +294,7 @@ Rules:
 - Login-eligible organization membership excludes sentinel `"0"` even when bootstrap data retains a root-organization row for directory seeding.
 - Switching login context after authentication is a current-session update flow. It `MUST` use `PATCH /app/v3/api/auth/sessions/current` with `loginScope` and/or `organizationId`, then replace token/context state atomically. Sending `organizationId = "0"` without `loginScope` `MUST` switch back to personal login.
 - Legacy `ORGANIZATION_SELECTION` challenge handling `SHOULD` migrate to `LOGIN_CONTEXT_SELECTION`. Compatibility aliases may remain until all consuming apps are updated.
-- PC (`@sdkwork/auth-pc-react`), H5 (`@sdkwork/iam-h5-auth`), and Flutter mobile (`sdkwork_iam_flutter_mobile_auth`) `MUST` consume the shared login-context helpers from `@sdkwork/iam-contracts` / `@sdkwork/iam-service` and `MUST NOT` fork organization id `"0"` handling locally.
+- PC (`@sdkwork/auth-pc-react`), pad (`@sdkwork/auth-pc-react` with tablet host secure storage), H5 (`@sdkwork/iam-h5-auth`), and Flutter mobile (`sdkwork_iam_flutter_mobile_auth`) `MUST` consume the shared login-context helpers from `@sdkwork/iam-contracts` / `@sdkwork/iam-service` and `MUST NOT` fork organization id `"0"` handling locally.
 
 ### 5.2 Authenticated Session Recovery Protocol
 

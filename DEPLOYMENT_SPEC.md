@@ -1,8 +1,8 @@
 # Deployment And Runtime Standard
 
-- Version: 1.1
+- Version: 1.2
 - Scope: standalone/cloud application deployment profiles, Java Spring, Rust backend, HTTP/RPC runtime bootstrap, frontend bootstrap, environment config
-- Related: `APPLICATION_SPEC.md`, `APP_MANIFEST_SPEC.md`, `CONFIG_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `ENVIRONMENT_SPEC.md`, `REGION_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `RELEASE_SPEC.md`, `API_SPEC.md`, `RPC_SPEC.md`, `RPC_FRAMEWORK_SPEC.md`, `DISCOVERY_SPEC.md`, `RPC_RESILIENCE_SPEC.md`, `RUST_RPC_SPEC.md`, `APP_RUNTIME_TOPOLOGY_SPEC.md`, `SDK_SPEC.md`, `IAM_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `SDKWORK_WEBSERVER_SPEC.md`
+- Related: `APPLICATION_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `CONFIG_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `ENVIRONMENT_SPEC.md`, `REGION_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `RELEASE_SPEC.md`, `API_SPEC.md`, `RPC_SPEC.md`, `RPC_FRAMEWORK_SPEC.md`, `DISCOVERY_SPEC.md`, `RPC_RESILIENCE_SPEC.md`, `RUST_RPC_SPEC.md`, `APP_RUNTIME_TOPOLOGY_SPEC.md`, `SDK_SPEC.md`, `IAM_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `SDKWORK_WEBSERVER_SPEC.md`
 
 SDKWork applications must deploy through one of two standardized application deployment profiles: `standalone` or `cloud`. Shared module APIs, route contracts, generated SDKs, IAM request context, and runtime bootstrap must remain the same across both profiles.
 
@@ -149,7 +149,7 @@ it is not a second enum.
 | --- | --- | --- | --- | --- |
 | Browser web | `browser` | `standalone`, `cloud`, or runtime-configurable for both | Public runtime config plus topology `browserDeliveries` from `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, and `APP_RUNTIME_TOPOLOGY_SPEC.md` | Standalone development uses a same-origin dev proxy; standalone production packages static assets into the application ingress; cloud uses a declared Web URL/static bundle with profile-specific rollout evidence. |
 | PC desktop | `desktop` | `standalone`, `cloud`, or runtime-configurable for both | Desktop/user runtime config plus platform host config | Signed installer or app bundle; standalone may supervise a local gateway, cloud must not. |
-| Large-screen tablet | `tablet-ipados`, `tablet-android` | `standalone`, `cloud`, or runtime-configurable for both | PC renderer config plus tablet host config | IPA/APK/AAB or platform package evidence; hosted tablet Web uses `browser`. |
+| Large-screen tablet | `tablet-ipados`, `tablet-android` | `standalone`, `cloud`, or runtime-configurable for both | PC or pad renderer config plus tablet host config | IPA/APK/AAB or platform package evidence; hosted tablet Web uses `browser`. A tablet-first pad root follows `APP_PAD_ARCHITECTURE_SPEC.md`; a PC product's tablet packages stay in the PC root. |
 | H5 and Capacitor mobile | `browser`, `capacitor-ios`, `capacitor-android` | `standalone`, `cloud`, or runtime-configurable for both | H5 public config plus optional Capacitor host config | H5 is a Web URL/static package; Capacitor produces IPA/APK/AAB. |
 | Flutter mobile | `flutter-ios`, `flutter-android` | `standalone`, `cloud`, or runtime-configurable for both | Flutter app config plus platform host config | IPA/APK/AAB or store-owned package with signing and store rollout evidence. |
 | Native mobile | `android-native`, `ios-native`, `harmony-native` | `standalone`, `cloud`, or runtime-configurable for both | Native app config plus platform host config | AAB/APK, IPA, Harmony package, app-store, or private distribution evidence. |

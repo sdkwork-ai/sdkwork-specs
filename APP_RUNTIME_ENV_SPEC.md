@@ -1,9 +1,9 @@
 # App Runtime Env Specification
 
 Status: normative. Authority over how EVERY SDKWork application surface —
-PC web, H5 web, admin web, desktop renderers, Flutter, mini-program, and
-native clients — resolves and materializes its SDK base URLs and runtime
-environment across the two deployment profiles (`standalone`, `cloud`) and the
+PC web, pad tablet renderers, H5 web, admin web, desktop renderers, Flutter,
+mini-program, and native clients — resolves and materializes its SDK base URLs
+and runtime environment across the two deployment profiles (`standalone`, `cloud`) and the
 five lifecycle environments (`development`, `test`, `staging`, `demo`,
 `production`). This is the umbrella standard; `BROWSER_RUNTIME_ENV_SPEC.md`
 remains the browser-surface annex (document shape, `SDKWORK_RUNTIME_ENV`

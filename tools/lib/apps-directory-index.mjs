@@ -18,6 +18,7 @@ const SURFACE_RULES = [
   { suffix: '-ios-mobile', role: 'ios-mobile', runnable: true, architecture: 'IOS_APP_MOBILE_ARCHITECTURE_SPEC.md' },
   { suffix: '-harmony-mobile', role: 'harmony-mobile', runnable: true, architecture: 'HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md' },
   { suffix: '-h5', role: 'h5', runnable: true, architecture: 'APP_H5_ARCHITECTURE_SPEC.md' },
+  { suffix: '-pad', role: 'pad', runnable: true, architecture: 'APP_PAD_ARCHITECTURE_SPEC.md' },
   { suffix: '-pc', role: 'pc', runnable: true, architecture: 'APP_PC_ARCHITECTURE_SPEC.md' },
   { suffix: '-backend-react-web', role: 'backend-react-web', runnable: true, architecture: 'BACKEND_UI_SPEC.md' },
 ];

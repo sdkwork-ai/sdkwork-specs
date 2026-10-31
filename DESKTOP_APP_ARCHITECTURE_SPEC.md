@@ -1,10 +1,10 @@
 # Desktop App Architecture Standard
 
-- Version: 1.1
+- Version: 1.2
 - Scope: PC desktop and large-screen tablet native applications, especially Tauri-, Electron-, and Capacitor-hosted web apps, desktop shells, iPadOS/Android tablet targets, native host adapters, local runtime integration, packaging, and release boundaries
-- Related: `APPLICATION_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `FRONTEND_SPEC.md`, `SDK_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `DEPLOYMENT_SPEC.md`, `SECURITY_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `TEST_SPEC.md`
+- Related: `APPLICATION_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `FRONTEND_SPEC.md`, `SDK_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `DEPLOYMENT_SPEC.md`, `SECURITY_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `TEST_SPEC.md`
 
-This standard defines the architecture boundary for SDKWork desktop and large-screen tablet native applications. It is intentionally product-neutral. It applies to Tauri, Electron, and Capacitor native shells, browser-installed desktop shells, tablet-native targets, and native wrappers that host a web UI.
+This standard defines the architecture boundary for SDKWork desktop and large-screen tablet native applications. It is intentionally product-neutral. It applies to Tauri, Electron, and Capacitor native shells, browser-installed desktop shells, tablet-native targets, and native wrappers that host a web UI. A tablet-first pad root uses the same Tauri host contract through `sdkwork-<application-code>-pad-tauri`, as defined by `APP_PAD_ARCHITECTURE_SPEC.md`.
 
 SDKWork PC roots support three desktop host profiles, all sharing one host-agnostic renderer. Each host profile owns exactly one host package:
 
@@ -14,7 +14,7 @@ SDKWork PC roots support three desktop host profiles, all sharing one host-agnos
 | Electron host | `"electron"` | `sdkwork-<application-code>-pc-electron` | Explicit selection |
 | Capacitor host | `"capacitor"` | `sdkwork-<application-code>-pc-capacitor` | Explicit selection |
 
-Host package names are architecture-explicit: the package segment names the native architecture, never a generic `desktop` token. The retired `sdkwork-<application-code>-pc-desktop` name is a migration-only alias for the Tauri host package; new packages `MUST NOT` use it.
+Host package names are architecture-explicit: the package segment names the native architecture, never a generic `desktop` token. The retired `sdkwork-<application-code>-pc-desktop` name is a migration-only alias for the Tauri host package; new packages `MUST NOT` use it. A tablet-first pad root uses the same Tauri host profile through `sdkwork-<application-code>-pad-tauri`; it does not add a fourth host profile.
 
 Every host `MUST` consume the same host-agnostic renderer, the same host adapter contract (section 5.5), and the same bridge protocol (section 5.6) so feature code never branches on the host identity. Host profiles are registered in section 5.
 
@@ -22,7 +22,7 @@ Desktop apps are app composition layers. They should be thin, predictable, and r
 
 Desktop SDK composition, appbase IAM runtime wiring, dependency SDK usage, and global TokenManager behavior follow `APP_SDK_INTEGRATION_SPEC.md`.
 
-For SDKWork PC applications, `APP_PC_ARCHITECTURE_SPEC.md` is the parent application-root standard. This file is the desktop/tablet native host detail standard for the `sdkwork-<application-code>-pc-tauri` (Tauri host), `sdkwork-<application-code>-pc-electron` (Electron host), and `sdkwork-<application-code>-pc-capacitor` (Capacitor host) packages and related native packaging behavior, including Windows, macOS, Linux, iPadOS, and Android tablet targets.
+For SDKWork PC applications, `APP_PC_ARCHITECTURE_SPEC.md` is the parent application-root standard. This file is the desktop/tablet native host detail standard for the `sdkwork-<application-code>-pc-tauri` (Tauri host), `sdkwork-<application-code>-pc-electron` (Electron host), and `sdkwork-<application-code>-pc-capacitor` (Capacitor host) packages and related native packaging behavior, including Windows, macOS, Linux, iPadOS, and Android tablet targets. A tablet-first pad root uses the same native host rules through `sdkwork-<application-code>-pad-tauri`, with `APP_PAD_ARCHITECTURE_SPEC.md` as the parent application-root standard.
 
 Capacitor ownership is split by client root, never shared: this standard and `APP_PC_ARCHITECTURE_SPEC.md` own the Capacitor **desktop** host of a PC root (`clientArchitecture = "capacitor"`, `runtimeTarget = "desktop"`), while `APP_H5_ARCHITECTURE_SPEC.md` owns the Capacitor **iOS/Android** host of an H5 root (`clientArchitecture = "capacitor"`, `runtimeTarget = "capacitor-ios" | "capacitor-android"`). A PC root `MUST NOT` own mobile Capacitor targets, and an H5 root `MUST NOT` own the desktop Capacitor host.
 
@@ -266,13 +266,15 @@ Tauri tablet targets are allowed for PC applications because they preserve the s
 
 Rules:
 
-- iPadOS and Android tablet targets `MUST` reuse the PC renderer, package taxonomy, SDK clients, appbase IAM runtime, and global TokenManager defined by `APP_PC_ARCHITECTURE_SPEC.md`.
+- iPadOS and Android tablet targets `MUST` reuse the PC renderer, package taxonomy, SDK clients, appbase IAM runtime, and global TokenManager defined by `APP_PC_ARCHITECTURE_SPEC.md`. A tablet-first pad root instead reuses the equivalent pad renderer and package taxonomy defined by `APP_PAD_ARCHITECTURE_SPEC.md`.
+- Tablet targets `MUST` apply the shared tablet adaptation contract in `APP_PAD_ARCHITECTURE_SPEC.md` section 5 and provide `specs/tablet-adaptation.spec.json`.
 - iPadOS target configuration `MUST` document bundle id, Apple team, provisioning profile, signing certificate, entitlements, minimum OS version, icons, launch assets, and distribution path.
 - Android tablet target configuration `MUST` document package name, min/target SDK, signing key handling, ABI targets, icons, adaptive icon assets, APK/AAB outputs, and distribution path.
 - Tablet target commands `SHOULD` be exposed as `pnpm dev:tablet-ipados`, `pnpm build:tablet-ipados`, `pnpm dev:tablet-android`, and `pnpm build:tablet-android`.
 - iOS/iPadOS builds require macOS with Apple tooling. Android tablet builds require Android tooling. CI pipelines `MUST` record which runner image satisfies each target.
 - Tablet UI `MUST` handle safe areas, orientation, split view or multi-window where supported, pointer/keyboard input, touch/stylus input, virtual keyboard, and foreground/background lifecycle transitions.
-- Tablet targets `MUST NOT` introduce phone-first navigation, mobile-only SDK wrappers, copied auth stores, or divergent route ownership inside the PC root.
+- Tablet targets `MUST NOT` introduce phone-first navigation, mobile-only SDK wrappers, copied auth stores, or divergent route ownership inside the PC root. A pad root follows the same prohibition inside the pad root.
+- A pad root ships exactly one `pad-tauri` host and does not add Electron or Capacitor. Tablet-first products that need a second desktop host use the PC root, not the pad root.
 
 ## 5.3 Electron Host Profile
 

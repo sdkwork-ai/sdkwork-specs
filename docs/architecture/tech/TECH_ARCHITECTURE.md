@@ -72,6 +72,7 @@ Inactive reserved directories may remain absent because this repository is a nar
 - [ADR-20260720 API Assembly And Gateway Hosting](../decisions/ADR-20260720-api-assembly-gateway-hosting.md)
 - [ADR-20260724 PostgreSQL Authority And SQLite Client-Local Storage](../decisions/ADR-20260724-postgresql-authority-sqlite-client-local.md)
 - [ADR-20260730 Repository Generated-State Boundary](../decisions/ADR-20260730-repository-generated-state-boundary.md)
+- [ADR-20261031 Pad Application Root Architecture](../decisions/ADR-20261031-pad-application-root-architecture.md)
 - Record future standards architecture changes under [../decisions/](../decisions/) as `ADR-*` documents.
 - Design shard: [TECH-desktop-host-profiles-design.md](TECH-desktop-host-profiles-design.md) — desktop host profile design detail (Tauri default, Electron, Capacitor), per-architecture host package separation, and the Capacitor desktop platform provider governance decision, supporting `DESKTOP_APP_ARCHITECTURE_SPEC.md`.
 - Design shard: [TECH-native-mobile-client-roots.md](TECH-native-mobile-client-roots.md) — iOS / Android / HarmonyOS native client root coverage, boundaries, and cross-spec touchpoint map supporting `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, and `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`.

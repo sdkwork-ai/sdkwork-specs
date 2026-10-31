@@ -67,6 +67,17 @@ Rules:
   malformed manifests per file and continue validating the remaining active
   application roots; local `_sdkwork-agents-local-archive-*` backups are not
   application authorities.
+- `check-tablet-adaptation.mjs` validates `specs/tablet-adaptation.spec.json`
+  for pad roots and PC roots with `tablet-ipados`/`tablet-android` targets
+  against `schemas/sdkwork.tablet-adaptation.spec.schema.v1.json`: application
+  code alignment, four window classes and ascending breakpoints, both
+  orientations, iPadOS/Android multitasking rules, input parity, secure-storage
+  capability, matrix coverage, and evidence directories. It also checks the pad
+  manifest `appType = APP_REACT`, `runtime.family = desktop`,
+  `runtime.framework = react-tauri`, `clientArchitectures = ["tauri"]`, and
+  tablet-only package targets, and rejects Electron/Capacitor tablet packages
+  in a PC root. Use `--root` for one repository or `--workspace` for all child
+  `sdkwork-*` repositories.
 - `check-deploy-standard.mjs` and `deployctl.mjs` validate v1 migration or v2
   deploy manifests. V2 adds typed deployment dimensions; side-effecting apply
   requires explicit profile/environment, immutable artifact digest, verified

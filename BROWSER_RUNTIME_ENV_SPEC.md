@@ -1,10 +1,11 @@
 # Browser Runtime Env Specification
 
 Status: normative. Browser-surface annex of `APP_RUNTIME_ENV_SPEC.md` (the
-umbrella runtime-env standard for every application surface — PC web, H5 web,
-admin web, desktop renderers, Flutter, mini-program). This annex owns how
-every SDKWork browser surface (PC web, H5 web, admin web, future SPA surfaces)
-publishes and consumes its runtime environment in development, and how
+umbrella runtime-env standard for every application surface — PC web, pad
+tablet renderers, H5 web, admin web, desktop renderers, Flutter,
+mini-program). This annex owns how every SDKWork browser surface (PC web, H5
+web, admin web, pad WebView renderer, future SPA surfaces) publishes and
+consumes its runtime environment in development, and how
 generated SDK clients resolve their API base URLs from it. Companion
 authorities: `APP_RUNTIME_ENV_SPEC.md` (four-quadrant lifecycle matrix,
 `browser-document` vs `transport` styles, shared Vite integration),

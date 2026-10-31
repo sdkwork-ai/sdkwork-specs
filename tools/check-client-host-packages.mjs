@@ -5,6 +5,7 @@
  *
  * Enforces the SDKWork client native-host package naming and ownership rules:
  *   - `APP_PC_ARCHITECTURE_SPEC.md` section 3 and section 11
+ *   - `APP_PAD_ARCHITECTURE_SPEC.md` section 4 and section 7
  *   - `APP_H5_ARCHITECTURE_SPEC.md` section 8
  *   - `DESKTOP_APP_ARCHITECTURE_SPEC.md` section 4
  *   - `NAMING_SPEC.md` section 3.1
@@ -19,6 +20,8 @@
  *   2. A PC root host `MUST` be `sdkwork-<code>-pc-<architecture>` with
  *      `<architecture>` in `tauri`, `electron`, `capacitor`. The retired alias
  *      `-pc-desktop` is reported as migration debt for the Tauri host.
+ *   2a. A pad root host `MUST` be exactly `sdkwork-<code>-pad-tauri`. Tablet-only
+ *      roots do not get Electron or Capacitor hosts.
  *   3. An H5 root host `MUST` be `sdkwork-<code>-h5-capacitor`. A root that
  *      ships no Capacitor platform `MUST NOT` carry an H5 host package.
  *   4. One host architecture has exactly one host package per client root.
@@ -51,6 +54,7 @@ import { parseArgs } from 'node:util';
 /** Client-root directory suffix -> canonical host package suffix pattern. */
 const ROOT_KINDS = [
   { kind: 'pc', test: /-pc$/u },
+  { kind: 'pad', test: /-pad$/u },
   { kind: 'h5', test: /-h5$/u },
   { kind: 'mini-program', test: /-mini-program$/u },
   { kind: 'android-mobile', test: /-android-mobile$/u },
@@ -62,6 +66,7 @@ const ROOT_KINDS = [
 /** Canonical host suffix per client-root kind. `null` means "this root owns no host". */
 const CANONICAL_HOST = {
   pc: /-pc-(?:tauri|electron|capacitor)$/u,
+  pad: /-pad-tauri$/u,
   h5: /-h5-capacitor$/u,
   'mini-program': /-mp-host$/u,
   'android-mobile': /-android-mobile-host$/u,
@@ -84,6 +89,7 @@ const RETIRED_ALIAS = {
  */
 const HOST_MANIFEST = {
   pc: { candidates: ['package.json'], label: 'package.json', native: false },
+  pad: { candidates: ['package.json'], label: 'package.json', native: false },
   h5: { candidates: ['package.json'], label: 'package.json', native: false },
   'mini-program': { candidates: ['package.json'], label: 'package.json', native: false },
   'harmony-mobile': { candidates: ['oh-package.json5'], label: 'oh-package.json5', native: true },
@@ -93,7 +99,7 @@ const HOST_MANIFEST = {
 };
 
 const HOST_TOKEN = /-(?:tauri|electron|capacitor|desktop|host)$/u;
-const GENERIC_HOST = /-(?:pc|h5)-host$/u;
+const GENERIC_HOST = /-(?:pc|pad|h5)-host$/u;
 const ARCHITECTURE_TOKEN = /-(tauri|electron|capacitor|desktop)$/u;
 
 const KEBAB_CASE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
@@ -220,12 +226,13 @@ export function checkClientHostPackages({ workspaceRoot = null, repoRoots = [] }
 
         // Rule 1: no generic `-pc-host` / `-h5-host`.
         if (GENERIC_HOST.test(pkg)) {
+          const generic = pkg.match(/-((?:pc|pad|h5))-host$/u)?.[1] ?? 'client';
           violations.push({
             repo: repoName,
             root: appRoot.name,
             package: pkg,
             severity: 'error',
-            message: `generic '${pkg.endsWith('-pc-host') ? '-pc-host' : '-h5-host'}' is non-canonical; name the native architecture explicitly (NAMING_SPEC.md section 3.1)`,
+            message: `generic '-${generic}-host' is non-canonical; name the native architecture explicitly (NAMING_SPEC.md section 3.1)`,
           });
         }
 

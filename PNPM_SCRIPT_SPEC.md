@@ -2,7 +2,7 @@
 
 - Version: 1.2
 - Scope: public `package.json#scripts` command names for SDKWork application repositories, application roots, app surface roots, and TypeScript/JavaScript packages, plus the pnpm runtime and dependency-install policy those commands run under
-- Related: `README.md`, `SOUL.md`, `SDKWORK_WORKSPACE_SPEC.md`, `NAMING_SPEC.md`, `APPLICATION_GATEWAY_SPEC.md`, `APP_RUNTIME_TOPOLOGY_SPEC.md`, `APP_RUNTIME_TOPOLOGY_NAMING.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `DEPLOYMENT_SPEC.md`, `RELEASE_SPEC.md`, `APP_MANIFEST_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `SDKWORK_DEPLOY_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `TEST_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`
+- Related: `README.md`, `SOUL.md`, `SDKWORK_WORKSPACE_SPEC.md`, `NAMING_SPEC.md`, `APPLICATION_GATEWAY_SPEC.md`, `APP_RUNTIME_TOPOLOGY_SPEC.md`, `APP_RUNTIME_TOPOLOGY_NAMING.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `DEPLOYMENT_SPEC.md`, `RELEASE_SPEC.md`, `APP_MANIFEST_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `SDKWORK_DEPLOY_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `TEST_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`
 
 This standard defines the public `pnpm` command surface for SDKWork. It prevents each application from inventing application-code-prefixed or locally ordered commands such as `drive:dev`, `cloudrouter:dev`, or `im:dev`.
 
@@ -559,8 +559,15 @@ Rules:
   fixed by the host: an H5 Capacitor root maps `ios` to `capacitor-ios` and
   `android` to `capacitor-android`; a Flutter root maps them to `flutter-ios`
   and `flutter-android`; a native mobile root maps `android` to
-  `android-native` and `ios` to `ios-native`; a PC root's tablet targets map
-  `ipados` to `tablet-ipados` and `android` to `tablet-android`.
+  `android-native` and `ios` to `ios-native`; a PC or pad root's tablet targets
+  map `ipados` to `tablet-ipados` and `android` to `tablet-android`.
+- A pad root `MUST` expose the action-first tablet commands
+  `dev:tablet-ipados`, `dev:tablet-android`, `build:tablet-ipados`, and
+  `build:tablet-android` for every target it ships, plus `test:tablet-adaptation` and the
+  production build variants. `test:tablet-adaptation` is a test-suite id, not a
+  runtime target. Its `pnpm dev` `MUST` start the declared default
+  tablet host instead of a browser renderer, and it `MUST NOT` expose browser,
+  desktop, server, or container development commands for the pad surface.
 - A root `MUST NOT` expose `mobile:*` when it owns more than one mobile host
   (for example both a Capacitor and a Flutter mobile host). Such a root uses
   action-first runtime-target names such as `dev:capacitor-ios` and

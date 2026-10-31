@@ -129,7 +129,7 @@ Rules:
 }
 
 export function bootstrapAppAssets({
-  root, appType, appKey, platforms, force = false,
+  root, appType, appKey, platforms, targetPlatforms, force = false,
 }) {
   const appRoot = path.resolve(root);
   if (!fs.existsSync(appRoot) || !fs.statSync(appRoot).isDirectory()) {
@@ -149,6 +149,13 @@ export function bootstrapAppAssets({
     : Array.isArray(manifest?.publish?.platforms) && manifest.publish.platforms.length > 0
       ? manifest.publish.platforms
       : DEFAULT_PLATFORMS[resolvedType] ?? [];
+  const declaredTargetPlatforms = Array.isArray(targetPlatforms)
+    ? targetPlatforms
+    : Array.isArray(manifest?.runtime?.targetPlatforms)
+      ? manifest.runtime.targetPlatforms
+      : Array.isArray(manifest?.targetPlatforms)
+        ? manifest.targetPlatforms
+        : [];
   const typeInfo = APP_TYPE_MEDIA[resolvedType];
   const assetsRoot = path.join(appRoot, 'assets');
   const report = { appRoot, appType: resolvedType, appKey: resolvedKey, platforms: declaredPlatforms, files: [] };
@@ -167,7 +174,7 @@ export function bootstrapAppAssets({
   ensureDirectory(path.join(assetsRoot, 'resources'));
 
   const locale = manifest?.media?.metadata?.defaultLocale ?? 'en-US';
-  const { tool, surfaces } = captureSurfacesForType(resolvedType, declaredPlatforms);
+  const { tool, surfaces } = captureSurfacesForType(resolvedType, declaredPlatforms, declaredTargetPlatforms);
   const captureConfig = {
     $schema: 'https://sdkwork.com/schemas/sdkwork.app-assets.capture.schema.v1.json',
     schemaVersion: 1,
@@ -177,7 +184,7 @@ export function bootstrapAppAssets({
     surfaces: surfaces.map((surface) => ({ ...surface, locales: [locale] })),
     capture: {
       tool: tool ?? 'render-pipeline',
-      command: 'node tools/capture-app-assets.mjs',
+      command: 'node scripts/capture-assets.mjs',
       outputRoot: '.sdkwork/tmp/assets-capture',
       locales: [locale],
       freezeAnimations: true,
@@ -267,6 +274,7 @@ function main() {
       'app-type': { type: 'string' },
       'app-key': { type: 'string' },
       platforms: { type: 'string' },
+      'target-platforms': { type: 'string' },
       force: { type: 'boolean', default: false },
       json: { type: 'boolean', default: false },
     },
@@ -274,11 +282,15 @@ function main() {
   const platforms = values.platforms
     ? values.platforms.split(',').map((entry) => entry.trim()).filter(Boolean)
     : undefined;
+  const targetPlatforms = values['target-platforms']
+    ? values['target-platforms'].split(',').map((entry) => entry.trim()).filter(Boolean)
+    : undefined;
   const report = bootstrapAppAssets({
     root: values.root,
     appType: values['app-type'],
     appKey: values['app-key'],
     platforms,
+    targetPlatforms,
     force: values.force,
   });
   if (values.json) {

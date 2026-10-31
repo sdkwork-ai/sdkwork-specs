@@ -58,6 +58,7 @@ Non-goals:
 - [REQ-2026-0719 Process-Shared Database Pools](../requirements/REQ-2026-0719-process-shared-database-pools.md)
 - [REQ-2026-0720 Unified Development, Release, And Deployment Profiles](../requirements/REQ-2026-0720-unified-development-release-profiles.md)
 - [REQ-2026-0724 PostgreSQL-First Database Contract](../requirements/REQ-2026-0724-postgresql-first-database-contract.md)
+- [REQ-2026-1031 Pad Application Root Architecture](../requirements/REQ-2026-1031-pad-application-root-architecture.md)
 - Add `REQ-*` records under [../requirements/](../requirements/) for future standards changes.
 
 ## 9. Open Questions

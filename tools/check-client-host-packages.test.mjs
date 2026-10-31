@@ -86,6 +86,7 @@ test('accepts every canonical host name', () => {
   const result = scan({
     'sdkwork-shop': {
       'sdkwork-shop-pc': ['sdkwork-shop-pc-tauri', 'sdkwork-shop-pc-electron', 'sdkwork-shop-pc-capacitor'],
+      'sdkwork-shop-pad': ['sdkwork-shop-pad-tauri'],
       'sdkwork-shop-h5': ['sdkwork-shop-h5-capacitor'],
       'sdkwork-shop-mini-program': ['sdkwork-shop-mp-host'],
       'sdkwork-shop-harmony-mobile': ['sdkwork-shop-harmony-mobile-host'],
@@ -108,6 +109,20 @@ test('rejects a generic -pc-host and a generic -h5-host', () => {
 
   const h5 = scan({ 'sdkwork-shop': { 'sdkwork-shop-h5': ['sdkwork-shop-h5-host'] } });
   assert.ok(messages(h5, 'error').some((m) => /generic '-h5-host' is non-canonical/u.test(m)));
+
+  const pad = scan({ 'sdkwork-shop': { 'sdkwork-shop-pad': ['sdkwork-shop-pad-host'] } });
+  assert.ok(messages(pad, 'error').some((m) => /generic '-pad-host' is non-canonical/u.test(m)));
+});
+
+test('requires a pad root to use exactly the pad-tauri host', () => {
+  const electron = scan({ 'sdkwork-shop': { 'sdkwork-shop-pad': ['sdkwork-shop-pad-electron'] } });
+  assert.ok(messages(electron, 'error').some((m) => /not canonical for a pad root/u.test(m)));
+
+  const capacitor = scan({ 'sdkwork-shop': { 'sdkwork-shop-pad': ['sdkwork-shop-pad-capacitor'] } });
+  assert.ok(messages(capacitor, 'error').some((m) => /not canonical for a pad root/u.test(m)));
+
+  const missingManifest = scan({ 'sdkwork-shop': { 'sdkwork-shop-pad': ['(sdkwork-shop-pad-tauri)'] } });
+  assert.ok(messages(missingManifest, 'error').some((m) => /has no package\.json/u.test(m)));
 });
 
 test('rejects a host package owned by a client root that defines no host', () => {

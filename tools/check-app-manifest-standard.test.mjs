@@ -173,6 +173,7 @@ test('workspace validation reports malformed manifests and continues checking va
 
 test('enforces store media dimensions and immutable container URLs', () => {
   const manifest = validManifest();
+  manifest.runtime.targetPlatforms = ['android'];
   manifest.publish.stores = [{ marketId: 'GOOGLE_PLAY' }];
   manifest.media.icons.platform = [{
     id: 'google-icon', type: 'ICON', storePlatform: 'GOOGLE_PLAY', width: 512, height: 512,

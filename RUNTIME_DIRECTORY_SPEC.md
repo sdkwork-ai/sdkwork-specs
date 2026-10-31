@@ -1,6 +1,6 @@
 # Runtime Directory And Infrastructure Configuration Standard
 
-- Version: 1.2
+- Version: 1.3
 - Scope: runtime directories, server install layout, desktop private files, development layout, release configuration files, database configuration, Redis configuration, secrets, logs, cache, temporary files, cross-OS path conventions
 - Related: `SDKWORK_WORKSPACE_SPEC.md`, `ENVIRONMENT_SPEC.md`, `DEPLOYMENT_SPEC.md`, `CONFIG_SPEC.md`, `APPLICATION_DEPLOY_LAYOUT_SPEC.md`, `DATABASE_SPEC.md`, `CACHE_SPEC.md`, `SECURITY_SPEC.md`, `OBSERVABILITY_SPEC.md`, `NGINX_SPEC.md`
 
@@ -268,7 +268,7 @@ clients.
 | Runtime target | Writable runtime location | Config rule | Persistence rule |
 | --- | --- | --- | --- |
 | `browser` | Browser storage only through approved auth/session adapters | Public runtime JSON or `/runtime-env.js`; no private process config | No database, Redis, secret files, or server paths. |
-| `tablet-ipados`, `tablet-android` | Platform app-private storage plus approved native host directories | PC renderer config plus tablet host config | Local SQLite/encrypted cache only when documented by the PC/tablet architecture. |
+| `tablet-ipados`, `tablet-android` | Platform app-private storage plus approved native host directories | PC or pad renderer config plus tablet host config | Local SQLite/encrypted cache only when documented by the PC/pad/tablet architecture. |
 | `capacitor-ios`, `capacitor-android` | Platform app-private storage through Capacitor adapters | H5 public config plus Capacitor host config | Secure storage adapter and local caches only; no committed tokens or signing secrets. |
 | `flutter-ios`, `flutter-android` | Platform app-private storage through Flutter adapters | Flutter app config plus host platform config | Secure storage adapter and local caches only. |
 | `android-native`, `ios-native`, `harmony-native` | Platform app-private storage | Native app config plus platform host config | Secure storage/keychain equivalents and local caches only. |

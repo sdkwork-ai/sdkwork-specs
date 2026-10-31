@@ -1,8 +1,8 @@
 # Naming Standard
 
-- Version: 2.0
+- Version: 2.1
 - Scope: domains, capabilities, repositories, applications, components, packages, SDK families, API authorities, route crates, database identifiers, files, and test names
-- Related: `APPLICATION_GATEWAY_SPEC.md`, `DOMAIN_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `APP_MANIFEST_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `DEPLOYMENT_SPEC.md`, `REGION_SPEC.md`, `CONFIG_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `COMPONENT_SPEC.md`, `MODULE_SPEC.md`, `API_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `DATABASE_SPEC.md`, `CODE_STYLE_SPEC.md`
+- Related: `APPLICATION_GATEWAY_SPEC.md`, `DOMAIN_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `APP_MANIFEST_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `DEPLOYMENT_SPEC.md`, `REGION_SPEC.md`, `CONFIG_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `COMPONENT_SPEC.md`, `MODULE_SPEC.md`, `API_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `DATABASE_SPEC.md`, `CODE_STYLE_SPEC.md`
 
 This standard is the naming entrypoint for SDKWork. It indexes naming rules that are also governed by more specific specs. If this file conflicts with a more specific root spec, the more specific spec wins and this file must be updated.
 
@@ -17,7 +17,7 @@ SDKWork names use a fixed identity lattice. Do not collapse these layers into on
 | L3 process name | process name | `<process-name>` | `cloudrouter` | application code |
 | L4 manifest key | `app.key` | (manifest field, not a path placeholder) | `commerce-pc` | application code alone |
 | L5 repository stem | SDKWork repository | `sdkwork-<application-code>` when they match | `sdkwork-drive` | guaranteed equal to L2 |
-| L6 client architecture | client-arch | `<client-arch>` | `pc`, `h5`, `flutter-mobile` | business capability or deployment profile |
+| L6 client architecture | client-arch | `<client-arch>` | `pc`, `pad`, `h5`, `flutter-mobile` | business capability or deployment profile |
 | L7 domain | domain | `<domain>` | `commerce`, `iam` | product name |
 | L8 capability | capability | `<capability>` | `cart`, `merchandise` | `product`, `common`, `manager` |
 | L9 API owner | owner code | `<owner-code>` | `sdkwork-shop` | SDK family name |
@@ -122,6 +122,7 @@ Rules:
 | --- | --- | --- |
 | SDKWork repository | `sdkwork-<application-code>` | `sdkwork-drive` |
 | PC app root | `apps/sdkwork-<application-code>-pc/` | `apps/sdkwork-shop-pc/` |
+| Pad/tablet app root | `apps/sdkwork-<application-code>-pad/` | `apps/sdkwork-shop-pad/` |
 | H5 app root | `apps/sdkwork-<application-code>-h5/` | `apps/sdkwork-shop-h5/` |
 | Flutter mobile app root | `apps/sdkwork-<application-code>-flutter-mobile/` | `apps/sdkwork-shop-flutter-mobile/` |
 | Mini program app root | `apps/sdkwork-<application-code>-mini-program/` | `apps/sdkwork-shop-mini-program/` |
@@ -132,6 +133,10 @@ Rules:
 | PC user console package | `sdkwork-<application-code>-pc-console-<capability>` | `sdkwork-shop-pc-console-order` |
 | PC internal admin package | `sdkwork-<application-code>-pc-admin-<capability>` | `sdkwork-shop-pc-admin-audit` |
 | PC desktop host package | `sdkwork-<application-code>-pc-<architecture>` | `sdkwork-shop-pc-tauri`, `sdkwork-shop-pc-electron`, `sdkwork-shop-pc-capacitor` |
+| Pad app package | `sdkwork-<application-code>-pad-<capability>` | `sdkwork-shop-pad-order` |
+| Pad user console package | `sdkwork-<application-code>-pad-console-<capability>` | `sdkwork-shop-pad-console-order` |
+| Pad internal admin package | `sdkwork-<application-code>-pad-admin-<capability>` | `sdkwork-shop-pad-admin-audit` |
+| Pad Tauri host package (one package for iPadOS and Android tablet targets) | `sdkwork-<application-code>-pad-tauri` | `sdkwork-shop-pad-tauri` |
 | H5 mobile app package | `sdkwork-<application-code>-h5-<capability>` | `sdkwork-shop-h5-order` |
 | H5 mobile user console package | `sdkwork-<application-code>-h5-console-<capability>` | `sdkwork-shop-h5-console-order` |
 | H5 mobile internal admin package | `sdkwork-<application-code>-h5-admin-<capability>` | `sdkwork-shop-h5-admin-audit` |
@@ -503,6 +508,7 @@ Examples:
 | Phone iOS app archive | `ios-universal-standalone-mobile-ipa` | `sdkwork-drive-ios-universal-standalone-mobile-ipa` |
 | Phone Harmony app package | `harmony-arm64-standalone-mobile-hap` | `sdkwork-drive-harmony-arm64-standalone-mobile-hap` |
 | Tablet iPadOS app archive | `ipados-universal-standalone-tablet-ipa` | `sdkwork-drive-ipados-universal-standalone-tablet-ipa` |
+| Tablet Android app bundle | `android-tablet-arm64-standalone-tablet-aab` | `sdkwork-drive-android-tablet-arm64-standalone-tablet-aab` |
 | Tablet Windows package | `windows-tablet-x64-standalone-tablet-msix` | `sdkwork-drive-windows-tablet-x64-standalone-tablet-msix` |
 | WeChat mini program package | `mp-weixin-universal-cloud-mini-program-mini-program-package` | `sdkwork-drive-mp-weixin-universal-cloud-mini-program-mini-program-package` |
 
@@ -512,6 +518,7 @@ Rules:
 
 - Client application root packages `MUST` include the architecture segment required by `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` and the matching root architecture standard.
 - PC packages use kebab-case names under `sdkwork-<application-code>-pc-*`, with `pc-console` reserved for user-facing console surfaces and `pc-admin` reserved for `backend-admin` company-internal admin surfaces.
+- Pad packages use kebab-case names under `sdkwork-<application-code>-pad-*`, with `pad-console` reserved for user-facing console surfaces and `pad-admin` reserved for `backend-admin` company-internal admin surfaces. A pad root has exactly one host package, `sdkwork-<application-code>-pad-tauri`; `-pad-electron`, `-pad-capacitor`, `-pad-host`, and `-pad-desktop` are forbidden.
 - PC desktop host packages `MUST` name the native architecture explicitly as `sdkwork-<application-code>-pc-<architecture>`, where `<architecture>` is `tauri`, `electron`, or `capacitor`. One host architecture `MUST` have exactly one host package. The retired `sdkwork-<application-code>-pc-desktop` name is a migration-only alias for the Tauri host package and `MUST NOT` be used for new packages or a second architecture.
 - Packages without `console` or `admin` are the default app/user-facing package family for the selected architecture.
 - Console packages insert the `console` role after the architecture segment and before the concrete capability. They are user-facing management console packages for customers, tenants, app owners, or app users managing their own resources, and they remain app-api/app SDK consumers unless a more specific approved contract says otherwise.
@@ -535,15 +542,16 @@ For packages under `apps/sdkwork-<application-code>-pc/packages/`, the npm `pack
 | `sdkwork-iam-pc-admin-oauth` | `@sdkwork/iam-pc-admin-oauth` |
 | `sdkwork-iam-pc-console-settings` | `@sdkwork/iam-pc-console-settings` |
 | `sdkwork-iam-pc-auth` | `@sdkwork/iam-pc-auth` |
+| `sdkwork-iam-pad-admin-oauth` | `@sdkwork/iam-pad-admin-oauth` |
 
 Rules:
 
 - Application-root packages `MUST` encode the surface role in the directory/npm name: default app (`pc-<capability>`), user console (`pc-console-<capability>`), or internal admin (`pc-admin-<capability>`).
-- `package.json#sdkwork.architecture` `MUST` be `pc-react` for app/console packages and `pc-admin` for `pc-admin-*` infrastructure and capability packages.
+- `package.json#sdkwork.architecture` `MUST` be `pc-react` for app/console packages and `pc-admin` for `pc-admin-*` infrastructure and capability packages. Pad app/console packages use `pad-react`; pad admin packages use `pad-admin`.
 - Appbase foundation PC React packages under `apps/sdkwork-appbase/packages/pc-react/foundation/` `MUST` use
   `sdkwork-<foundation>-pc-react`, where `<foundation>` is one of `shell`, `workspace`, `command`, `search`, or
   `appbase`. New foundation packages `MUST NOT` use `router` as the capability token.
-- `package.json#sdkwork.surface` `MUST` be `app` for default app packages, `console` for `pc-console-*`, and `backend-admin` for `pc-admin-*`.
+- `package.json#sdkwork.surface` `MUST` be `app` for default app packages, `console` for `pc-console-*` or `pad-console-*`, and `backend-admin` for `pc-admin-*` or `pad-admin-*`.
 - Forbidden npm names for new admin modules include `@sdkwork/<domain>-<capability>-pc-react`, `@sdkwork/<application-code>-admin-<capability>` without the `pc` segment, and any name that omits `pc-admin` while implementing `backend-admin` operator UI.
 - Legacy shared-library names such as `@sdkwork/auth-pc-react` remain valid only in appbase foundation trees, not as replacements for `sdkwork-<application-code>-pc-admin-*` inside application roots.
 

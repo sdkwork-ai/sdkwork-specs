@@ -1,8 +1,8 @@
 # Application Runtime Topology Standard
 
-- Version: 4.4
+- Version: 4.5
 - Scope: cross-application deployment entrypoints, multi-plane routing, multi-protocol surfaces, dev orchestration contracts, and client bootstrap URL authority
-- Related: `APPLICATION_GATEWAY_SPEC.md`, `NAMING_SPEC.md`, `APP_RUNTIME_TOPOLOGY_NAMING.md`, `APP_RUNTIME_TOPOLOGY_ARCHETYPES.md`, `DEPLOYMENT_SPEC.md`, `ENVIRONMENT_SPEC.md`, `CONFIG_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `../sdkwork-app-topology/README.md`
+- Related: `APPLICATION_GATEWAY_SPEC.md`, `NAMING_SPEC.md`, `APP_RUNTIME_TOPOLOGY_NAMING.md`, `APP_RUNTIME_TOPOLOGY_ARCHETYPES.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `DEPLOYMENT_SPEC.md`, `ENVIRONMENT_SPEC.md`, `CONFIG_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `../sdkwork-app-topology/README.md`
 
 This standard defines where clients, operators, devices, and SDKs connect for
 each SDKWork application. `DEPLOYMENT_SPEC.md` owns the application deployment
@@ -689,6 +689,11 @@ Device detection order (shared with `SDKWORK_DEPLOY_SPEC.md` §8):
    declared `h5`).
 4. Default mobile User-Agent regex.
 5. Default desktop → `pc-web`.
+
+Tablet device detection selects a browser renderer only. Native tablet delivery
+from a PC root (`tablet-ipados`, `tablet-android`) or a pad root is not a
+browser delivery surface; those targets follow `APP_PC_ARCHITECTURE_SPEC.md`
+section 8.1 or `APP_PAD_ARCHITECTURE_SPEC.md`.
 
 The adaptive client process keeps its `bindEnv` and `applicationRoot` (the
 delivery's `clientProcessId`); the orchestrator does not launch it as a
