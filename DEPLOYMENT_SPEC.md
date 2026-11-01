@@ -421,6 +421,11 @@ PORTAL_PUBLIC_BACKEND_API_BASE_URL=/backend/v3/api
 Rules:
 
 - `SDKWORK_CLOUDROUTER_CONFIG_FILE` overrides the canonical TOML path defined by `RUNTIME_DIRECTORY_SPEC.md`.
+- The canonical deployed runtime TOML path is `config.toml` inside the application
+  config directory: `/etc/sdkwork/router/config.toml` on Linux service hosts,
+  `%ProgramData%/sdkwork/router/config.toml` on Windows, and
+  `~/.sdkwork/router/config/config.toml` for a user-scope desktop runtime.
+  The legacy `cloudrouter.toml` file name stays readable during migration.
 - `SDKWORK_CLOUDROUTER_DEPLOYMENT_PROFILE` must be `standalone` for archive, service,
   single-container, and desktop releases, and `cloud` for cloud image/bundle
   releases.

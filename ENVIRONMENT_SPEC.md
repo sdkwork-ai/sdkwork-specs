@@ -2011,6 +2011,12 @@ Rules:
   `SDKWORK_CLOUDROUTER_DEPLOYMENT_PROFILE`, and `SDKWORK_CLOUDROUTER_RUNTIME_TARGET` must be
   resolved before database, Redis, or SDK base URL defaults are selected.
 - `SDKWORK_CLOUDROUTER_CONFIG_FILE` may point to any administrator-managed TOML file.
+- The canonical deployed runtime TOML path follows `RUNTIME_DIRECTORY_SPEC.md`
+  (`config.toml` inside the application config directory):
+  `/etc/sdkwork/router/config.toml` on Linux service hosts,
+  `%ProgramData%/sdkwork/router/config.toml` on Windows, and
+  `~/.sdkwork/router/config/config.toml` for a user-scope desktop runtime.
+  The legacy `cloudrouter.toml` file name stays readable during migration.
 - `SDKWORK_DATABASE_URL` overrides TOML database fields only as an explicit operator override.
 - `SDKWORK_DATABASE_MAX_CONNECTIONS` overrides `[database].max_connections` in TOML.
 - If a config file is missing, startup tooling should initialize the default TOML file before validation.
