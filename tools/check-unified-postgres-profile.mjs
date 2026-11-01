@@ -46,7 +46,7 @@ const SKIP_FILES = new Set([
 
 const SCAN_SUFFIXES = [
   '.env.example',
-  '.env.postgres.example',
+  'postgres.env.example',
   '.toml.example',
   '.yaml.example',
   '.yml.example',
@@ -136,7 +136,7 @@ function isCheckedInConfigFile(filePath) {
   if (SCAN_SUFFIXES.some((suffix) => base.endsWith(suffix))) {
     return true;
   }
-  if (base === '.env.postgres.example') {
+  if (base === 'postgres.env.example') {
     return true;
   }
   if (
@@ -372,7 +372,7 @@ function expectedConnectionIdentity(filePath) {
   }
   if (
     normalized.includes('development')
-    || ['.env.example', '.env.postgres.example'].includes(path.basename(filePath).toLowerCase())
+    || ['.env.example', 'postgres.env.example'].includes(path.basename(filePath).toLowerCase())
   ) {
     return {
       database: 'sdkwork_ai_dev',
@@ -573,7 +573,7 @@ export function inspectLine(line, filePath, { section } = {}) {
   if (schemaFallback) {
     const value = unquoteValue(schemaFallback[1]).toLowerCase();
     const requiresCanonicalLiteral = path.basename(filePath).toLowerCase()
-      === '.env.postgres.example';
+      === 'postgres.env.example';
     if (
       (requiresCanonicalLiteral && value !== 'false')
       || (!requiresCanonicalLiteral && !['0', 'false', 'no'].includes(value))
@@ -663,7 +663,7 @@ export function inspectLine(line, filePath, { section } = {}) {
   }
 
   if (/^SDKWORK_DATABASE_HOST=\[::1\]$/u.test(trimmed)) {
-    return 'non-canonical loopback host; use 127.0.0.1 per env.postgres.example';
+    return 'non-canonical loopback host; use 127.0.0.1 per postgres.env.example';
   }
 
   if (/^schema = "public"$/u.test(trimmed) && /production|\.production\./u.test(filePath)) {
@@ -717,7 +717,7 @@ const ALLOWED_WORKSPACE_ENV_KEYS = new Set([
 
 export function inspectPostgresExampleFile(filePath, content) {
   const issues = [];
-  if (path.basename(filePath) !== '.env.postgres.example') {
+  if (path.basename(filePath) !== 'postgres.env.example') {
     return issues;
   }
   const keys = new Set();
@@ -767,7 +767,7 @@ export function inspectPostgresExampleFile(filePath, content) {
 
 function inspectConfigFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf8');
-  if (path.basename(filePath) === '.env.postgres.example') {
+  if (path.basename(filePath) === 'postgres.env.example') {
     return inspectPostgresExampleFile(filePath, content);
   }
   const issues = [];
@@ -790,13 +790,13 @@ function inspectPostgresInitScripts(repoRoots) {
   const issues = [];
   for (const repoRoot of repoRoots) {
     const repoName = path.basename(repoRoot);
-    const envExample = path.join(repoRoot, '.env.postgres.example');
+    const envExample = path.join(repoRoot, 'postgres.env.example');
     if (!fs.existsSync(envExample)) {
       continue;
     }
     const packageJsonPath = path.join(repoRoot, 'package.json');
     if (!fs.existsSync(packageJsonPath)) {
-      issues.push(`${repoName}: has .env.postgres.example but no package.json`);
+      issues.push(`${repoName}: has postgres.env.example but no package.json`);
       continue;
     }
     const packageJsonSource = fs
@@ -870,7 +870,7 @@ function main(args = process.argv.slice(2)) {
     process.stderr.write('Canonical staging: sdkwork_ai_staging / SDKWORK_DATABASE_*\n');
     process.stderr.write('Canonical prod: sdkwork_ai_prod / SDKWORK_DATABASE_*\n');
     process.stderr.write('Production database config directory: /etc/sdkwork/database/ (ENVIRONMENT_SPEC section 7.3; macOS /Library/Application Support/sdkwork/database, Windows %ProgramData%\\sdkwork\\database)\n');
-    process.stderr.write('Templates: sdkwork-specs/templates/env.postgres.example and env.postgres.production.example\n');
+    process.stderr.write('Templates: sdkwork-specs/templates/postgres.env.example and postgres.production.env.example\n');
     process.exit(1);
   }
 

@@ -94,7 +94,7 @@ function environmentToken(value) {
 
 export function lifecycleEnvironmentForPath(filePath) {
   const base = path.basename(filePath).toLowerCase();
-  if (base === '.env.postgres' || base === '.env.postgres.example') {
+  if (base === 'postgres.env' || base === 'postgres.env.example') {
     return 'development';
   }
   return environmentToken(base)
@@ -137,6 +137,9 @@ function isProfileConfigFile(filePath) {
   const normalized = filePath.replaceAll('\\', '/').toLowerCase();
   const base = path.basename(filePath).toLowerCase();
   return base.startsWith('.env')
+    // Host-local database profiles are `config/host/postgres.env` and its
+    // checked-in example, so they no longer carry an `.env.` prefix.
+    || /^(?:postgres|sqlite)\.env(?:\.example)?$/u.test(base)
     || /\.(?:toml|yaml|yml)\.example$/u.test(base)
     || base.endsWith('.env')
     || normalized.includes('/etc/topology/')
@@ -313,7 +316,7 @@ function normalizeConfigIdentities(content, filePath) {
   }
   let updated = lines.join(eol);
   if (
-    path.basename(filePath).toLowerCase() === '.env.postgres.example'
+    path.basename(filePath).toLowerCase() === 'postgres.env.example'
     && /^\s*SDKWORK_DATABASE_SCHEMA\s*=/mu.test(updated)
   ) {
     if (/^\s*SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC\s*=/mu.test(updated)) {

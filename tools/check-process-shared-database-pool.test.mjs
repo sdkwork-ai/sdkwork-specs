@@ -16,7 +16,7 @@ function scaffold() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-process-pool-'));
   write(
     root,
-    '.env.postgres.example',
+    'postgres.env.example',
     'SDKWORK_DATABASE_NAME=sdkwork_ai_dev\nSDKWORK_DATABASE_SCHEMA=sdkwork_ai_dev\n',
   );
   write(
@@ -36,7 +36,7 @@ function scaffold() {
       schemaVersion: 1,
       kind: 'sdkwork.process-database-pool',
       profile: {
-        exampleFile: '.env.postgres.example',
+        exampleFile: 'postgres.env.example',
         database: 'sdkwork_ai_dev',
         schema: 'sdkwork_ai_dev',
       },

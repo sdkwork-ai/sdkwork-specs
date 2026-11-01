@@ -9,8 +9,8 @@ import {
   workspaceDatabaseEnvFromConfig,
 } from './postgres-config.mjs';
 
-export const POSTGRES_DEV_ENV_FILENAME = '.env.postgres';
-export const POSTGRES_DEV_ENV_EXAMPLE_FILENAME = '.env.postgres.example';
+export const POSTGRES_DEV_ENV_FILENAME = 'config/host/postgres.env';
+export const POSTGRES_DEV_ENV_EXAMPLE_FILENAME = 'config/host/postgres.env.example';
 
 const DATABASE_ENV_PREFIXES = ['SDKWORK_DATABASE_'];
 
@@ -49,6 +49,7 @@ export function ensurePostgresDevEnvFile(repoRoot, {
       `PostgreSQL dev env is missing (${envFilePath}) and no example file exists at ${examplePath}`,
     );
   }
+  fs.mkdirSync(path.dirname(envFilePath), { recursive: true });
   fs.copyFileSync(examplePath, envFilePath);
   stdout.write(
     `[sdkwork-postgres] created ${POSTGRES_DEV_ENV_FILENAME} from ${POSTGRES_DEV_ENV_EXAMPLE_FILENAME}; `

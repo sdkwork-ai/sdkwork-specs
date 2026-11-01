@@ -249,8 +249,10 @@ Rules:
 - Android and iOS builds may select different runtime-target values while
   consuming the same profile id. Flavor, device, simulator, architecture, and
   store channel remain separate build axes.
-- Ignored development/test bootstrap credentials may exist only in
-  `env/sdkwork.<profile-id>.bootstrap.local.json`; tracked dart-define JSON and
+- Ignored development/test bootstrap credentials may exist only in the
+  user-private credential bundle
+  `~/.sdkwork/<application-code>/credentials/<profile-id>.json`
+  (`ENVIRONMENT_SPEC.md` §5.1.7); tracked dart-define JSON and
   release artifacts contain no tokens or secrets.
 - `config/app/` and `config/host/` examples must be safe checked-in templates only.
 - iOS bundle id, Android package id, entitlements/permissions, push environment, app links, universal links, and signing reference names belong to host config or native platform config.

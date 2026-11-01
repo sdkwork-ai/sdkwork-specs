@@ -478,8 +478,8 @@ Rules:
   `/run/sdkwork/router` when those directories are needed.
 - User-private Cloud Router files must use `~/.sdkwork/router` or the Windows
   equivalent `%USERPROFILE%/.sdkwork/router`.
-- Development PostgreSQL examples must use `.env.postgres.example` for checked-in
-  local placeholders and `.env.postgres` for ignored developer overrides.
+- Development PostgreSQL examples must use `config/host/postgres.env.example` for checked-in
+  local placeholders and `config/host/postgres.env` for ignored developer overrides.
 - Historical desktop paths such as XDG or display-name based directories may
   be read as compatibility fallbacks during migration, but new writes must use
   the canonical SDKWork paths.
@@ -723,11 +723,11 @@ Rules:
 - **Development parity (dev environment).** A `development` container
   deployment `MUST` resolve the same physical host PostgreSQL instance and
   the identical workspace identity (database, schema, username, password —
-  `ENVIRONMENT_SPEC.md` §7.1) as the checked-in `.env.postgres` profile used
+  `ENVIRONMENT_SPEC.md` §7.1) as the checked-in `config/host/postgres.env` profile used
   by `pnpm dev`. Only the reachable host differs: `127.0.0.1` from host
   processes, `host.docker.internal` from containers. Regression guard: after
   packaging or installing, inspect the deployed container's resolved
-  `SDKWORK_DATABASE_*` / Redis env and assert equality with `.env.postgres`
+  `SDKWORK_DATABASE_*` / Redis env and assert equality with `config/host/postgres.env`
   on every field except host.
 - **Image tag provenance.** Env examples `MUST NOT` hardcode an image tag.
   The bundle deploy script resolves the tag from the bundle's `image.env`
@@ -772,7 +772,7 @@ Rules:
 - [ ] Provisioning script identities are derived from the env files and cover
       every declared lifecycle environment (including staging and demo).
 - [ ] The `development` container deployment resolves the identical workspace
-      database identity as `.env.postgres` (§7.1 `ENVIRONMENT_SPEC.md`) —
+      database identity as `config/host/postgres.env` (§7.1 `ENVIRONMENT_SPEC.md`) —
       same host instance, database, schema, username, password.
 - [ ] Env examples carry no hardcoded image tag; the bundle resolves the tag
       from its `image.env`.

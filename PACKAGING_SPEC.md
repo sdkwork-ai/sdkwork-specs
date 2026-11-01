@@ -81,8 +81,10 @@ format, at any path:
 
 ### 2.3 Secrets And Private State
 
-- Environment files with real or dev values (`.env`, `.env.local`,
-  `.env.release`, `.env.release.local`, `.env.development*`).
+- Environment files with real or dev values. A package `MUST NOT` ship `.env` or
+  any `.env.<deployment-profile>.<environment>` file, and the composed names
+  (`.env.local`, `.env.release`, `.env.release.local`, `.env.development*`) are
+  retired by `ENVIRONMENT_SPEC.md` §5.1.7 and `MUST NOT` exist at all.
 - Credentials: passwords, API keys, access/refresh tokens, private keys,
   signing keys, client secrets, cookie/session secrets, and their files.
 - Local configuration overrides, user-private runtime state, local test

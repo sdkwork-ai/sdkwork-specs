@@ -93,7 +93,7 @@ test('normalizes a legacy bare production database URL', () => {
 test('inserts and normalizes the canonical schema fallback switch', () => {
   const missing = migratePostgresProfileContent(
     'SDKWORK_DATABASE_SCHEMA=sdkwork_ai_dev\nSDKWORK_DATABASE_USERNAME=sdkwork_ai_dev\n',
-    'sdkwork-demo/.env.postgres.example',
+    'sdkwork-demo/postgres.env.example',
   );
   assert.match(
     missing.content,
@@ -102,7 +102,7 @@ test('inserts and normalizes the canonical schema fallback switch', () => {
 
   const enabled = migratePostgresProfileContent(
     'SDKWORK_DATABASE_SCHEMA=sdkwork_ai_dev\nSDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC=true # migration residue\n',
-    'sdkwork-demo/.env.postgres.example',
+    'sdkwork-demo/postgres.env.example',
   );
   assert.match(
     enabled.content,

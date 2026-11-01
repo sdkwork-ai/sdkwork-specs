@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 
 function parseArgs(argv) {
   const result = {
-    configPath: '.env.postgres',
+    configPath: 'config/host/postgres.env',
     dryRun: false,
     help: false,
     mode: 'init',
@@ -60,7 +60,7 @@ Workspace-standard PostgreSQL role/database/schema initialization (no psql requi
 
 Options:
   --mode <init|plan>     Default: init
-  --config <path>        Default: .env.postgres
+  --config <path>        Default: config/host/postgres.env
   --app-root <path>      Application root (default: cwd)
   --dry-run              Print plan only
   --help, -h

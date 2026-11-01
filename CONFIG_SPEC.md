@@ -722,12 +722,12 @@ Rules:
 - Server production config must come from process env, an administrator-managed runtime config file, deployment infrastructure, or a secret manager, not from a committed `.env.production`.
 - Test config must isolate database names or schemas, Redis key prefixes, log directories, cache directories, and temp directories from development and production. Server test database/schema names remain workspace-scoped, such as `sdkwork_ai_test` or `sdkwork_ai_test_<run_id>`; they must not be derived from an application code or module id.
 - Desktop installed runtime config must live in the SDKWork user private config directory and default declared client-local data to SQLite. Desktop/Tauri development service config is a separate server config profile and uses PostgreSQL.
-- `.env.postgres.example` is the checked-in local PostgreSQL template for apps
+- `config/host/postgres.env.example` is the checked-in local PostgreSQL template for apps
   that support PostgreSQL development. It must use the unified structured
   `SDKWORK_DATABASE_*` fields from `ENVIRONMENT_SPEC.md` section 7.1,
   plus structured `SDKWORK_DATABASE_ADMIN_*` fields when database
   initialization needs an admin connection.
-- `.env.postgres` is a host-local developer override and must be excluded from
+- `config/host/postgres.env` is a host-local developer override and must be excluded from
   source control.
 - Production config must come from deployment infrastructure or secret manager.
 - Config keys `SHOULD` be namespaced by capability, such as `SDKWORK_IAM_*`.
@@ -762,7 +762,7 @@ Rules:
 - [ ] Dev/test/staging/prod example files are checked in only as safe templates, and local overrides are ignored.
 - [ ] Browser public runtime config, desktop user config, H5/Capacitor config, Flutter config, mini program config, native Android config, native iOS config, native Harmony config, server config, container config, and Tauri platform config are separated.
 - [ ] Database env parsing maps `SDKWORK_DATABASE_ENGINE` and `SDKWORK_DATABASE_SSL_MODE` to typed config and rejects application-prefixed PostgreSQL identity fields, `DATABASE_PROVIDER`, and `DATABASE_SSLMODE`.
-- [ ] Apps with PostgreSQL development support provide `.env.postgres.example` and ignore `.env.postgres`.
+- [ ] Apps with PostgreSQL development support provide `config/host/postgres.env.example` and ignore `config/host/postgres.env`.
 - [ ] SDK clients are constructed in bootstrap from one common SDK base URL plus per-surface/per-SDK overrides, with separate effective open-api, app-api, and `backend-admin` backend-api URLs where those surfaces are consumed.
 - [ ] Browser-visible SDK base URLs and public runtime config preserve canonical
   API URIs; proxy/upstream selectors do not appear in client-visible API paths.

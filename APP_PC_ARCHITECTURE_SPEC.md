@@ -232,7 +232,7 @@ Rules:
   `VITE_SDKWORK_RUNTIME_TARGET=browser` before renderer SDK construction.
 - `dev` and `prod` are command/operator aliases only. Env file names and
   runtime config use canonical environment and profile-id values.
-- `.env.local`, `.env.<profile>.local`, `.env.postgres`, `.env.release.local`, and `config/*.local.toml` must be ignored.
+- No composed env name may exist: `.env.local`, `.env.<profile>.local`, and `.env.release.local` are retired (`ENVIRONMENT_SPEC.md` §5.1.7). `config/host/postgres.env` and `config/*.local.toml` must be ignored.
 - `pnpm dev` starts the browser renderer with browser public runtime config.
 - `pnpm dev:server` starts the backend service with the selected
   `config/server/<application-code>.<deployment-profile>.development.toml.example`
@@ -735,7 +735,7 @@ Required verification for PC application architecture changes:
 | SDK export boundary | Static scan proves `pc-core` exports app SDK/appbase app SDK wrappers and no backend SDK wrappers, while backend SDK/appbase backend SDK wrappers are exported only from `pc-admin-core` or another `backend-admin` boundary. |
 | IAM boundary | Tests prove appbase IAM runtime, global TokenManager, logout clearing, session restore, and route guards behave across app, console, and admin surfaces. |
 | Config profile boundary | Static and runtime tests prove `development/test/staging/demo/production`, profile aliases, deployment profile, build mode, and runtime target are separated; browser, desktop, server, container, and each host config family (Tauri, Electron, Capacitor) do not leak into each other. |
-| Environment file hygiene | Static scan proves checked-in files are safe examples only and ignored host-local files include `.env.local`, `.env.<profile>.local`, `.env.postgres`, `.env.release.local`, and `config/*.local.toml`. |
+| Environment file hygiene | Static scan proves checked-in files are safe examples only, that no composed env name (`.env.local`, `.env.<profile>.local`, `.env.release.local`) exists, and that host-local carriers `config/host/postgres.env` and `config/*.local.toml` are ignored. |
 | Root thinness | Static scan or code review proves root `src/` owns bootstrap/composition only, not business services or mock data. |
 | Desktop and tablet parity | When native targets exist, each shipped host's config, platform config files, host adapter, web fallback, and renderer reuse pass `DESKTOP_APP_ARCHITECTURE_SPEC.md`; iPadOS and Android tablet packaging pass the Tauri-only tablet rules and the `APP_PAD_ARCHITECTURE_SPEC.md` section 5 adaptation contract, including `specs/tablet-adaptation.spec.json`. |
 | Host package separation | Static scan proves each shipped desktop architecture has its own host package with its own adapter, config family, and native dependencies, and that no host package contains a second architecture's scaffold, dependencies, or config. |

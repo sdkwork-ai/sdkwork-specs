@@ -573,7 +573,7 @@ Rules:
 
 - Pad roots `MUST` provide safe example config for every runtime target and environment they support.
 - Tablet renderer env files `MUST` expose matching `VITE_SDKWORK_ENVIRONMENT`, `VITE_SDKWORK_DEPLOYMENT_PROFILE`, `VITE_SDKWORK_PROFILE_ID`, and `VITE_SDKWORK_RUNTIME_TARGET=tablet-ipados|tablet-android` before renderer SDK construction.
-- `.env.local`, `.env.<profile>.local`, `.env.postgres`, `.env.release.local`, and `config/*.local.toml` `MUST` be ignored.
+- No composed env name may exist: `.env.local`, `.env.<profile>.local`, and `.env.release.local` are retired (`ENVIRONMENT_SPEC.md` §5.1.7). `config/host/postgres.env` and `config/*.local.toml` `MUST` be ignored.
 - `pnpm test` `MUST` use an isolated test profile and must not share development or production database/schema, Redis prefix, logs, cache, runtime, or temporary directories.
 - Release builds `MUST` fail preflight when production profiles contain localhost endpoints, development secrets, test database names, writable developer directories, unresolved placeholders, or committed signing material.
 - Tablet config `MUST NOT` identify the remote gateway implementation. Standalone and cloud selection follows `CONFIG_SPEC.md` and `DEPLOYMENT_SPEC.md`.

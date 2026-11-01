@@ -108,14 +108,15 @@ Rules:
   and walks ancestors. Callers `MUST NOT` hand-write an artifact path: a wrong root fails
   silently. Only pass `repoRoot` when the artifact genuinely lives outside the app's ancestor
   chain.
-- The artifact file names the reader accepts are exactly:
-  `.env.<deployment-profile>.<lifecycle>.bootstrap.local`,
+- The reader accepts exactly two carriers: the user-private credential bundle
+  `~/.sdkwork/<application-code>/credentials/<profile-id>.json`
+  (`IAM_APPLICATION_BOOTSTRAP_SPEC.md` §5.4.1) and the legacy unscoped
+  `.sdkwork.local.env`. Composed env names
+  (`.env.<deployment-profile>.<lifecycle>.bootstrap.local`,
   `.env.standalone.<lifecycle>.bootstrap.local`,
-  `.env.<lifecycle>.bootstrap.local`, and the legacy unscoped
-  `.sdkwork.local.env`. A writer that emits any other name or location is
-  non-conforming. Writers `MUST` emit the environment-scoped
-  `.env.<deployment-profile>.<lifecycle>.bootstrap.local`; the remaining names
-  are compatibility readers only.
+  `.env.<lifecycle>.bootstrap.local`) are retired: a reader that finds one
+  `MUST` reject it with a diagnostic naming the bundle. Writers `MUST` emit the
+  bundle and `MUST NOT` create a repository env file.
 - Staging and production `MUST NOT` inject; the plugin's own gate refuses, and callers `MUST NOT`
   widen it (`allowTestInjection` is the only widening, and only for `test`).
 

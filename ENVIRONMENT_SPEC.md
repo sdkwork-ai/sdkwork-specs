@@ -419,7 +419,7 @@ Every application architecture separates these layers:
 | --- | --- | --- | --- |
 | Source authority | `<deployable-root>/etc/` | `sdkwork.deployment.config.json`, `topology/cloud.production.env` | Reviewed topology and safe values; one authority per deployment unit. |
 | Materialized application env | Application root | `.env.cloud.production`, `env/sdkwork.cloud.production.json`, `config/mini-program/runtime-env.cloud.production.json` | Deterministic derivative selected by profile id and runtime target. |
-| Host-local/private overlay | Ignored local file or secure store | `.env.cloud.development.local`, `sdkwork.cloud.development.bootstrap.local.json`, `project.private.config.json` | Secrets, developer overrides, platform credentials; never committed. |
+| Host-local/private | OS user-private store, secret manager, protected process env | `~/.sdkwork/<application-code>/credentials/<profile-id>.json`, `project.private.config.json`, mounted secret | Secrets, developer overrides, platform credentials; never committed and never a composed env file. |
 | Runtime/operator override | Process env, installed config, secret manager, CLI | `/etc/sdkwork/...`, mounted secret, one-shot flag | Explicit late override with validation and provenance. |
 
 `agent.app.config.json` declares application identity, supported runtimes, and
@@ -465,18 +465,18 @@ or unprefixed legacy application keys are migration aliases only.
 
 ### 5.1.3 Architecture File Matrix
 
-| Application architecture | Canonical tracked materialization | Local/private overlay | Runtime consumption |
+| Application architecture | Canonical tracked materialization | Private carrier (never a composed env file) | Runtime consumption |
 | --- | --- | --- | --- |
-| PC browser / Vite renderer | `.env.<profile-id>` | `.env.<profile-id>.local` or `.env.<profile-id>.bootstrap.local` | `vite --mode <profile-id>` and `import.meta.env.VITE_*` |
-| H5 / Vite / Capacitor renderer | `.env.<profile-id>` | `.env.<profile-id>.local` or `.env.<profile-id>.bootstrap.local` | Same Vite contract; Capacitor host metadata remains separate |
-| Flutter | `env/sdkwork.<profile-id>.json` | `env/sdkwork.<profile-id>.bootstrap.local.json` | `--dart-define-from-file=...` and `String.fromEnvironment` |
-| WeChat native mini program | `config/mini-program/runtime-env.<profile-id>.json` | `project.private.config.json` and an ignored bootstrap overlay when required | Build copies exactly one selected safe JSON document into the platform output |
-| uni-app multi-platform mini program | `.env.<profile-id>` | `.env.<profile-id>.local` | Vite/uni-app build mode; `UNI_PLATFORM` or an explicit target flag remains a separate axis |
+| PC browser / Vite renderer | `.env.<profile-id>` | `~/.sdkwork/<application-code>/credentials/<profile-id>.json` | `vite --mode <profile-id>` and `import.meta.env.VITE_*` |
+| H5 / Vite / Capacitor renderer | `.env.<profile-id>` | `~/.sdkwork/<application-code>/credentials/<profile-id>.json` | Same Vite contract; Capacitor host metadata remains separate |
+| Flutter | `env/sdkwork.<profile-id>.json` | `~/.sdkwork/<application-code>/credentials/<profile-id>.json` | `--dart-define-from-file=...` and `String.fromEnvironment` |
+| WeChat native mini program | `config/mini-program/runtime-env.<profile-id>.json` | `project.private.config.json` and the user-private credential bundle | Build copies exactly one selected safe JSON document into the platform output |
+| uni-app multi-platform mini program | `.env.<profile-id>` | `~/.sdkwork/<application-code>/credentials/<profile-id>.json` | Vite/uni-app build mode; `UNI_PLATFORM` or an explicit target flag remains a separate axis |
 | Native Android | `config/app/runtime-env.<profile-id>.json` | `local.properties`, ignored signing files, secure CI inputs | Build validates and packages one selected non-secret resource; host values remain Gradle/manifest config |
 | Native iOS | `config/app/runtime-env.<profile-id>.json` | user `.xcconfig`, keychain/signing profiles, secure CI inputs | Build validates and packages one selected non-secret resource; host values remain Xcode/plist config |
 | Native HarmonyOS | `config/app/runtime-env.<profile-id>.json` | ignored signing/profile files and secure CI inputs | hvigor projects one selected non-secret resource; host values remain JSON5/module config |
 | Desktop native host | `config/desktop/<application-code>.<profile-id>.toml.example` | installed user-private TOML and OS secure storage | Host bootstrap; renderer still follows the PC Vite row |
-| Node server | `.env.<profile-id>.example` or typed `etc/` JSON/TOML | `.env.<profile-id>.local`, installed config, secret manager | `SDKWORK_*` through process bootstrap |
+| Node server | typed `etc/<process>.<profile-id>.toml` | Installed config, secret manager, protected process env | `SDKWORK_*` through process bootstrap |
 | Spring Boot server | `application-<deployment-profile>-<environment>.yml.example` | external YAML, process env, secret manager | Spring profile is an adapter and must normalize to the canonical profile id |
 | Rust server/container | `etc/<process>.<profile-id>.toml` or a referenced topology env | installed/mounted TOML, process env, secret files | Typed bootstrap with lower snake case config keys |
 
@@ -654,9 +654,9 @@ Rules:
   `String.fromEnvironment(...)` or a typed wrapper.
 - Android emulator, iOS simulator, physical-device, LAN, and cloud origins are
   explicit source values. A materializer must not guess host-loopback aliases.
-- A live bootstrap token may exist only in the ignored
-  `sdkwork.<profile-id>.bootstrap.local.json` development/test overlay and must
-  never enter a release artifact.
+- A live bootstrap token may exist only in the user-private credential bundle of
+  §5.1.7 for the `development` and `test` profiles, and must never enter a
+  release artifact.
 
 ### 5.1.6 Mini Program Formats
 
@@ -714,24 +714,32 @@ platforms, not profile-id segments. One mini program root selects exactly one
 framework authority: native WeChat for `weixin-mini-program`, or uni-app for a
 declared multi-platform matrix. It must not keep both as competing source trees.
 
-### 5.1.7 Local Overrides, Secrets, And Migration
+### 5.1.7 Private Values And Migration
 
-Ignored files include, as applicable:
+Exactly one env-file shape exists per scope. Nothing composes onto it: no
+`.local`, no `.bootstrap.local`, no third token, no environment-only file.
 
 ```text
-.env.local
-.env.<profile-id>.local
-.env.<profile-id>.bootstrap.local
-env/sdkwork.<profile-id>.bootstrap.local.json
-etc/**/*.local.*
-etc/secrets/
-config/**/*.local.*
-project.private.config.json
-local.properties
-*.keystore
-*.jks
-*.p12
-*.mobileprovision
+.env                                      base layer, checked in
+.env.example                              the only checked-in template
+.env.<deployment-profile>.<environment>   the materialized per-scope file
+```
+
+`<deployment-profile>` is `standalone` or `cloud`. `<environment>` is
+`development`, `test`, `staging`, or `production`, where `production` is the
+online environment. The pair is the profile id of §5.1, so the Vite mode is that
+profile id verbatim: `vite build --mode cloud.production` loads
+`.env.cloud.production` and nothing else. A release build therefore uses the
+`production` environment and never a release-specific name.
+
+Private values never receive an env file of their own. Secrets, issued bootstrap
+credentials, and developer overrides live outside the dotenv namespace:
+
+```text
+~/.sdkwork/<application-code>/credentials/<profile-id>.json   issued credential bundle
+~/.sdkwork/iam-bootstrap/<environment>.json                   operator bootstrap profile
+etc/**/*.local.toml, config/**/*.local.json                   non-env local overrides
+process env, mounted secret files, secret manager             CI, containers, hosts
 ```
 
 Rules:
@@ -739,14 +747,24 @@ Rules:
 - Tracked materialized env files are safe, deterministic build/runtime inputs.
   They contain no live credential values, even when a key name is present as an
   empty documented placeholder.
-- Development/test bootstrap credentials come from the correct backend/app
-  login context and are written only to ignored bootstrap overlays.
+- A composed name such as `.env.<profile-id>.local`,
+  `.env.<profile-id>.bootstrap.local`, `.env.local`, `.env.postgres`,
+  `env/sdkwork.<profile-id>.bootstrap.local.json`, or `.env.release.local`
+  `MUST NOT` be introduced. A reader that still finds one `MUST` reject it with a
+  diagnostic naming the canonical file or store; silently honouring it is
+  forbidden, and no writer may dual-write the composed and canonical forms.
+- Bootstrap credentials are written only to the credential bundle of the
+  user-private store, never to a repository file, and are read only by
+  `resolve`-phase consumers (§6.1).
 - `staging` and `production` secrets come from secret managers, mounted secret
   files, protected process env, OS secure storage, or platform signing systems.
 - Legacy `.env.development`, `.env.production`, `runtime-env.production.json`,
   `sdkwork.prod.json`, and similar one-dimensional files must migrate to the
-  canonical two-dimensional name. Compatibility readers may warn during a
-  bounded migration but must not dual-write old and new authorities.
+  canonical two-dimensional name.
+- Host-local PostgreSQL profiles are not env files: they live at
+  `config/host/postgres.env` with the checked-in
+  `config/host/postgres.env.example` (§7.1). The `config/host/postgres.env` name is
+  retired because it collides with the Vite mode namespace.
 - Reference examples live under `templates/environment/`; application-specific
   values are materialized from that application's `etc/`, not copied back into
   the standards repository.
@@ -928,8 +946,9 @@ Bootstrap lifecycle policy:
 | `staging` | Secret manager, mounted secret, protected host env, or equivalent private runtime source | Reuse the provisioned token; fail closed when absent | Never embed in HTML, bundles, public env, or static runtime config. |
 | `production` | Secret manager, mounted secret, protected host env, or equivalent private runtime source | Reuse the provisioned token; fail closed when absent | Never embed in HTML, bundles, public env, or static runtime config. |
 
-Bootstrap tokens are cached per independent Git repository and per lifecycle environment at
-`.env.<deployment-profile>.<lifecycle>.bootstrap.local`. A token that is present and still valid
+Bootstrap tokens are cached per independent Git repository and per profile id at
+`~/.sdkwork/<application-code>/credentials/<profile-id>.json`, never in a
+repository env file. A token that is present and still valid
 MUST be reused unchanged: startup, build, test, check, verify, and clean MUST NOT re-register,
 re-provision, or re-sign it. Regeneration happens only when the cache is absent, expired,
 identity-incompatible with the selected manifest/environment, or explicitly requested with
@@ -993,9 +1012,9 @@ A source launch and a packaged deployment build `MUST` resolve the same deployme
 
 | Concern | Source launch | Packaged deployment build |
 | --- | --- | --- |
-| Deployment selection | Tracked `.env.<profile>.<lifecycle>` plus the gitignored overlay of the invoking checkout | The private release environment artifact of §6.1.1 |
-| Credential carrier | The environment-scoped overlay `.env.<profile>.<lifecycle>.bootstrap.local` | The same artifact, projected from that overlay at packaging time |
-| Precedence | Launching environment, overlay, tracked file, built-in defaults | Launching environment, artifact, built-in defaults |
+| Deployment selection | Tracked `.env.<profile>.<environment>` of the invoking checkout | The private release environment artifact of §6.1.1 |
+| Credential carrier | The user-private credential bundle `~/.sdkwork/<application-code>/credentials/<profile-id>.json` | The same artifact, projected from that bundle at packaging time |
+| Precedence | Launching environment, credential bundle, tracked file, built-in defaults | Launching environment, artifact, built-in defaults |
 | Missing credential | `development` may generate a disposable fixture; `test` only under its generation opt-in; `staging` and `production` fail closed | Packaging fails; the installed application reports the named diagnostic |
 | Write authority | A `resolve` command never writes | Packaging never writes |
 | Phase | `resolve` | `resolve`, then `resolve` again at launch |
@@ -1260,9 +1279,9 @@ it `MUST NOT` select SQLite for a backend service.
 
 ### 7.1 Unified Workspace PostgreSQL Profile
 
-All SDKWork applications in one workspace share one PostgreSQL connection identity per lifecycle environment and deployment profile. The canonical contract is owned by `sdkwork-specs/templates/env.postgres.example` and uses `SDKWORK_DATABASE_*` keys; workspace or deployment infrastructure materializes its values. In a workspace environment, every application service, embedded dependency module, gateway-owned route module, worker, bootstrap command, and migration command resolves the same endpoint, database name, schema, and credential identity for that environment. Application-specific alternatives such as `sdkwork_cloudrouter_dev`, `sdkwork_drive_dev`, `<application_code>_test_<run_id>`, `sdkwork_<application-code>_prod`, or per-module schemas are forbidden.
+All SDKWork applications in one workspace share one PostgreSQL connection identity per lifecycle environment and deployment profile. The canonical contract is owned by `sdkwork-specs/templates/host/postgres.env.example` and uses `SDKWORK_DATABASE_*` keys; workspace or deployment infrastructure materializes its values. In a workspace environment, every application service, embedded dependency module, gateway-owned route module, worker, bootstrap command, and migration command resolves the same endpoint, database name, schema, and credential identity for that environment. Application-specific alternatives such as `sdkwork_cloudrouter_dev`, `sdkwork_drive_dev`, `<application_code>_test_<run_id>`, `sdkwork_<application-code>_prod`, or per-module schemas are forbidden.
 
-Applications MUST NOT define per-app PostgreSQL database names, usernames, passwords, schemas, or URLs that differ from this profile in checked-in `.env.postgres.example`, topology profile env files, runtime TOML examples, release templates, CI templates, or operator documentation.
+Applications MUST NOT define per-app PostgreSQL database names, usernames, passwords, schemas, or URLs that differ from this profile in checked-in `config/host/postgres.env.example`, topology profile env files, runtime TOML examples, release templates, CI templates, or operator documentation.
 
 | Environment | Canonical keys | Database | Schema | Username | Password |
 | --- | --- | --- | --- | --- | --- |
@@ -1275,9 +1294,9 @@ Rules:
 
 - `SDKWORK_DATABASE_*` is the single source of truth for PostgreSQL connection identity across IAM, gateway-embedded routers, reusable dependency modules, application services, workers, CLI bootstrap, and test runners.
 - Per-app or per-module `SDKWORK_<APPLICATION_CODE>_DATABASE_*` keys are retired migration inputs, not runtime compatibility inputs. Checked-in config, runtime templates, dev runners, installers, application startup, and test harnesses `MUST` use only `SDKWORK_DATABASE_*` for database connection identity, pool sizing, lifecycle, seed, drift, and client-local SQLite database file settings. Runtime code `MUST` reject an old key with an actionable diagnostic instead of dual-reading it.
-- Every application repository MUST ship `.env.postgres.example` that contains only `SDKWORK_DATABASE_*` fields derived from `sdkwork-specs/templates/env.postgres.example`.
-- Container deployments in the `development` environment MUST resolve the same physical host PostgreSQL instance and the identical workspace identity (database, schema, username, password) as the checked-in `.env.postgres` profile; only the reachable host differs (`127.0.0.1` from host processes, `host.docker.internal` from containers). `DEPLOYMENT_SPEC.md` §6.1 owns the Docker external host-system dependency standard.
-- Developer overrides belong in ignored `.env.postgres` at the selected application root. A workspace-level launcher `MAY` materialize the same values into child process environments, but no application repository owns the global profile and no child may fork its identity.
+- Every application repository MUST ship `config/host/postgres.env.example` that contains only `SDKWORK_DATABASE_*` fields derived from `sdkwork-specs/templates/host/postgres.env.example`.
+- Container deployments in the `development` environment MUST resolve the same physical host PostgreSQL instance and the identical workspace identity (database, schema, username, password) as the checked-in `config/host/postgres.env` profile; only the reachable host differs (`127.0.0.1` from host processes, `host.docker.internal` from containers). `DEPLOYMENT_SPEC.md` §6.1 owns the Docker external host-system dependency standard.
+- Developer overrides belong in ignored `config/host/postgres.env` at the selected application root. A workspace-level launcher `MAY` materialize the same values into child process environments, but no application repository owns the global profile and no child may fork its identity.
 - Dev orchestration, topology loaders, IAM env helpers, and installers `MUST` resolve PostgreSQL exclusively through `SDKWORK_DATABASE_*`.
 - Topology contracts `MUST NOT` declare `database.appPrefix`, an application database namespace, or any rule that derives database keys, database names, or schema names from application lifecycle env prefixes. `topology.spec.json#envKeys` owns complete application lifecycle/connectivity key names only.
 - Rust services using `sdkwork-database-config` already fall back to `SDKWORK_DATABASE_*`; applications must not reintroduce separate default URLs.
@@ -1343,12 +1362,12 @@ Rules:
   may validate only the declared client-local SQLite module while any launched
   application API assembly or standalone gateway remains PostgreSQL-backed.
 - PostgreSQL secrets should use `password_file` or a platform secret; direct `password` is allowed only when the runtime config file is protected as a secret-bearing file.
-- Development PostgreSQL profiles must use a checked-in `.env.postgres.example`
-  file with local-only placeholder values and an ignored `.env.postgres`
+- Development PostgreSQL profiles must use a checked-in `config/host/postgres.env.example`
+  file with local-only placeholder values and an ignored `config/host/postgres.env`
   developer override.
-- `.env.postgres.example` must use the unified `SDKWORK_DATABASE_*` split
+- `config/host/postgres.env.example` must use the unified `SDKWORK_DATABASE_*` split
   fields from `§7.1 Unified Workspace PostgreSQL Profile` and
-  `sdkwork-specs/templates/env.postgres.example`. Per-app
+  `sdkwork-specs/templates/host/postgres.env.example`. Per-app
   `SDKWORK_<APPLICATION_CODE>_DATABASE_*` connection identity fields are not allowed in
   checked-in PostgreSQL templates.
 - If database initialization needs an admin connection, use
@@ -1358,10 +1377,10 @@ Rules:
 - `DATABASE_PROVIDER` and `DATABASE_SSLMODE` are not standard names. New apps
   must reject them rather than accepting aliases.
 
-Standard `.env.postgres.example` shape:
+Standard `config/host/postgres.env.example` shape:
 
 ```env
-# Copy from sdkwork-specs/templates/env.postgres.example
+# Copy from sdkwork-specs/templates/host/postgres.env.example
 SDKWORK_DATABASE_ENGINE=postgresql
 SDKWORK_DATABASE_HOST=127.0.0.1
 SDKWORK_DATABASE_PORT=5432
@@ -1382,12 +1401,12 @@ SDKWORK_DATABASE_ADMIN_SSL_MODE=disable
 
 PostgreSQL development bootstrap workflow:
 
-1. Copy or auto-materialize `.env.postgres` from `.env.postgres.example` at the application root (dev orchestration and `resolveIamDevEnv` do this automatically when the file is missing).
+1. Copy or auto-materialize `config/host/postgres.env` from `config/host/postgres.env.example` at the application root (dev orchestration and `resolveIamDevEnv` do this automatically when the file is missing).
 2. Run `pnpm db:postgres:init` to create the shared PostgreSQL role, database, and schema using `SDKWORK_DATABASE_ADMIN_*` (implemented by `sdkwork-specs/tools/postgres/postgres-db-cli.mjs`; no `psql` required).
 3. Run `pnpm db:init` or `pnpm db:migrate` to apply service-specific schema migrations through `sdkwork-database-cli`.
-4. Start `pnpm dev`; dev orchestration must load the same `.env.postgres` profile used by database commands. File values win over shell database env overrides.
+4. Start `pnpm dev`; dev orchestration must load the same `config/host/postgres.env` profile used by database commands. File values win over shell database env overrides.
 
-Applications with `.env.postgres.example` `MUST` expose `db:postgres:init` and `db:postgres:plan` at the repository root. `sdkwork-im` additionally exposes `db:postgres:migrate` for IM-specific bootstrap orchestration.
+Applications with `config/host/postgres.env.example` `MUST` expose `db:postgres:init` and `db:postgres:plan` at the repository root. `sdkwork-im` additionally exposes `db:postgres:migrate` for IM-specific bootstrap orchestration.
 
 - Desktop packages may create a declared client-local SQLite database automatically during first-run initialization.
 - Database URLs are private process/config values. They must never be exposed through `PORTAL_PUBLIC_*` or `VITE_*`.
@@ -1414,7 +1433,7 @@ Rules:
 Operational rules:
 
 - `SDKWORK_DATABASE_ENGINE` describes the server profile only. When `SDKWORK_DATABASE_SQLITE_URL` is present it `MUST NOT` veto client-local resolution; malformed engine values still fail closed.
-- `SDKWORK_DATABASE_SQLITE_URL` alone does not constitute a configured PostgreSQL profile. Profile loaders and `.env.postgres` materialization `MUST` still apply when only the SQLite URL is present, so server engines keep the workspace identity.
+- `SDKWORK_DATABASE_SQLITE_URL` alone does not constitute a configured PostgreSQL profile. Profile loaders and `config/host/postgres.env` materialization `MUST` still apply when only the SQLite URL is present, so server engines keep the workspace identity.
 - A module that is server-authoritative by architecture `MUST NOT` silently accept SQLite when the SQLite URL is present; its host resolves the server role and rejects a non-PostgreSQL pool with an actionable diagnostic.
 - Server/container deployments `MUST NOT` set `SDKWORK_DATABASE_SQLITE_URL` unless the package is a desktop/native client with an explicit local data boundary.
 - The SQLite file `MUST` live under the SDKWork user private data directory (`RUNTIME_DIRECTORY_SPEC.md`, e.g. `~/.sdkwork/<application-code>/data`), not beside the executable and not under server data directories.
@@ -1423,7 +1442,7 @@ Operational rules:
 
 ### 7.3 Workspace Database Configuration Directory
 
-Production and staging server/container deployments resolve the unified workspace PostgreSQL profile from one shared, operator-managed system directory. Development and test environments `MUST NOT` use this directory: development resolves `.env.postgres` at the selected application root (section 7.1), and test runners use ephemeral isolated state. This section is the canonical standard for that directory; `RUNTIME_DIRECTORY_SPEC.md` owns the host filesystem layout rows.
+Production and staging server/container deployments resolve the unified workspace PostgreSQL profile from one shared, operator-managed system directory. Development and test environments `MUST NOT` use this directory: development resolves `config/host/postgres.env` at the selected application root (section 7.1), and test runners use ephemeral isolated state. This section is the canonical standard for that directory; `RUNTIME_DIRECTORY_SPEC.md` owns the host filesystem layout rows.
 
 **Canonical OS directories** (selection follows the host operating system):
 
@@ -1979,7 +1998,7 @@ Rules:
 Rules:
 
 - Release packages must include `config/cloudrouter.toml.example`.
-- Release packages must not include `.env.release.local`.
+- Release packages must not include any composed env file: a release reads the tracked `.env.<deployment-profile>.production` and nothing else (`§5.1.7`).
 - Host-local env files may be generated during install initialization, but secrets must remain on the target host. Linux service packages should use `/etc/sdkwork/router/cloudrouter.env` for process overrides and `/etc/sdkwork/database/database.secret` for the workspace PostgreSQL password file.
 - Desktop SQLite files must live under the SDKWork user private data directory, not beside the executable.
 - Server mutable state belongs under the OS service data directory or a mounted volume.
@@ -2035,8 +2054,8 @@ PORTAL_PUBLIC_BACKEND_API_BASE_URL=/backend/v3/api
 PORTAL_PUBLIC_TOOL_API_ENABLED=false
 ```
 
-Cloud Router checks in `.env.postgres.example` with these local PostgreSQL
-fields. Developers may copy it to `.env.postgres`; that override is host-local
+Cloud Router checks in `config/host/postgres.env.example` with these local PostgreSQL
+fields. Developers may copy it to `config/host/postgres.env`; that override is host-local
 and excluded from source control. Startup scripts assemble the structured fields into
 `SDKWORK_DATABASE_URL` for Rust services only after validation.
 
@@ -2236,8 +2255,8 @@ Release env files are host-local artifacts.
 
 Rules:
 
-- Checked-in `.env.release.example` files are references only.
-- `.env.release.local` must be generated on the release host and must not be committed.
+- Release values are declared in the tracked `.env.<deployment-profile>.production`; there is no release-specific env name (`.env.release.example`, `.env.release.local`).
+- Secrets for a release come from the release host's secret manager, mounted secret file, or protected process env. They are never committed and never written to a `.env.*` file.
 - Release env writers must print safe summaries only and must not echo secrets.
 - Strict release preflight must validate required values before packaging.
 - A packaged desktop build declares its distribution class and follows §6.1.1: a `deployment` build carries the private release environment it projected from that deployment, a `public` build carries none, it is never checked in, and neither class may carry a bootstrap credential into a browser artifact.
@@ -2315,7 +2334,7 @@ Acceptance checklist:
 - [ ] Locale env/public runtime values contain only default/supported/active/fallback locale strategy, message-catalog manifest references, and version identifiers; translated messages remain in `I18N_SPEC.md` message-catalog fragments.
 - [ ] Database seed locale/version env values are private lifecycle settings and are not reused as frontend runtime locale or API request locale.
 - [ ] Server release defaults require PostgreSQL.
-- [ ] PostgreSQL development templates use `.env.postgres.example` with unified `SDKWORK_DATABASE_*` fields from `ENVIRONMENT_SPEC.md` §7.1 and `sdkwork-specs/templates/env.postgres.example`.
+- [ ] PostgreSQL development templates use `config/host/postgres.env.example` with unified `SDKWORK_DATABASE_*` fields from `ENVIRONMENT_SPEC.md` §7.1 and `sdkwork-specs/templates/host/postgres.env.example`.
 - [ ] Checked-in topology profiles and release env files do not define per-app PostgreSQL database names, usernames, passwords, or schemas that differ from the unified workspace profile.
 - [ ] PostgreSQL application and lifecycle profiles use a canonical-only search path and set `SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC=false`; any temporary `true` value has a dated, reviewed migration exception and collision regression test.
 - [ ] Workspace verification passes: `node ../sdkwork-specs/tools/check-unified-postgres-profile.mjs` from each application root (or once from workspace root).

@@ -15,7 +15,8 @@ import {
 const scopedDatabaseKey = (scope, field) => ['SDKWORK', scope, 'DATABASE', field].join('_');
 
 const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-postgres-tools-'));
-const envExample = path.join(fixtureRoot, '.env.postgres.example');
+const envExample = path.join(fixtureRoot, 'config/host/postgres.env.example');
+fs.mkdirSync(path.dirname(envExample), { recursive: true });
 fs.writeFileSync(envExample, `SDKWORK_DATABASE_ENGINE=postgresql
 SDKWORK_DATABASE_HOST=127.0.0.1
 SDKWORK_DATABASE_PORT=5432
@@ -34,7 +35,7 @@ SDKWORK_DATABASE_ADMIN_SSL_MODE=disable
 `);
 
 const envPath = ensurePostgresDevEnvFile(fixtureRoot, { stdout: { write() {} } });
-assert.equal(envPath, path.join(fixtureRoot, '.env.postgres'));
+assert.equal(envPath, path.join(fixtureRoot, 'config/host/postgres.env'));
 
 const config = parseWorkspacePostgresConfig({ configPath: envPath, repoRoot: fixtureRoot });
 assert.equal(config.database.database, 'sdkwork_ai_dev');

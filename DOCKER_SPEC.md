@@ -456,7 +456,7 @@ Rules:
 - [ ] Every compose service declares restart policy, healthcheck, and bounded
       log rotation; instances have unique node identities and ports.
 - [ ] Post-install verification passes the §6.1 regression checklist of
-      `DEPLOYMENT_SPEC.md` (env parity with `.env.postgres`, host service
+      `DEPLOYMENT_SPEC.md` (env parity with `config/host/postgres.env`, host service
       probes, `/healthz`/`/readyz` via the public domain).
 - [ ] Dev surfaces bind local IP + port; per-environment builds bind domains
       (standalone same-origin `/`, cloud `api-<suffix>.<base-domain>`).

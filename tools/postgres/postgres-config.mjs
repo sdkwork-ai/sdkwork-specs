@@ -239,7 +239,7 @@ export function validateAdminExecutionConfig(admin) {
 }
 
 export function parseWorkspacePostgresConfig({
-  configPath = '.env.postgres',
+  configPath = 'config/host/postgres.env',
   configText,
   repoRoot = process.cwd(),
 } = {}) {

@@ -14,7 +14,7 @@ import {
 const scopedDatabaseKey = (scope, field) => ['SDKWORK', scope, 'DATABASE', field].join('_');
 
 test('accepts the canonical shared development identity', () => {
-  const filePath = 'sdkwork-demo/.env.postgres.example';
+  const filePath = 'sdkwork-demo/postgres.env.example';
   assert.equal(inspectLine('SDKWORK_DATABASE_NAME=sdkwork_ai_dev', filePath), null);
   assert.equal(inspectLine('SDKWORK_DATABASE_SCHEMA=sdkwork_ai_dev', filePath), null);
   assert.equal(inspectLine('SDKWORK_DATABASE_USERNAME=sdkwork_ai_dev', filePath), null);
@@ -40,7 +40,7 @@ SDKWORK_DATABASE_ADMIN_SSL_MODE=disable
 `;
 
   assert.deepEqual(
-    inspectPostgresExampleFile('sdkwork-demo/.env.postgres.example', content),
+    inspectPostgresExampleFile('sdkwork-demo/postgres.env.example', content),
     [],
   );
 });
@@ -65,13 +65,13 @@ SDKWORK_DATABASE_ADMIN_SSL_MODE=disable
 `;
 
   assert.deepEqual(
-    inspectPostgresExampleFile('sdkwork-demo/.env.postgres.example', content),
+    inspectPostgresExampleFile('sdkwork-demo/postgres.env.example', content),
     [],
   );
 });
 
 test('rejects application-prefixed database identity keys', () => {
-  const filePath = 'sdkwork-demo/.env.postgres.example';
+  const filePath = 'sdkwork-demo/postgres.env.example';
   assert.match(
     inspectLine(`${scopedDatabaseKey('DEMO', 'NAME')}=sdkwork_ai_dev`, filePath),
     /retired application\/module-prefixed database key/u,
@@ -106,7 +106,7 @@ test('requires exact shared identities in every application development profile'
 });
 
 test('rejects application-specific development databases and schemas', () => {
-  const filePath = 'sdkwork-cloudrouter/.env.postgres.example';
+  const filePath = 'sdkwork-cloudrouter/postgres.env.example';
   assert.match(
     inspectLine('SDKWORK_DATABASE_NAME=sdkwork_cloudrouter_dev', filePath),
     /non-canonical/u,
@@ -133,7 +133,7 @@ test('rejects application-specific PostgreSQL URL targets', () => {
 });
 
 test('requires canonical-only schema fallback configuration', () => {
-  const examplePath = 'sdkwork-demo/.env.postgres.example';
+  const examplePath = 'sdkwork-demo/postgres.env.example';
   const topologyPath = 'sdkwork-demo/etc/topology/standalone.development.env';
   assert.equal(
     inspectLine('SDKWORK_DATABASE_SCHEMA_FALLBACK_PUBLIC=false', examplePath),
@@ -184,7 +184,7 @@ test('ignores deployment-time connection placeholders', () => {
 
 test('rejects retired cloud-scoped database keys', () => {
   assert.match(
-    inspectLine(`${scopedDatabaseKey('CLOUD', 'NAME')}=sdkwork_ai_dev`, 'sdkwork-demo/.env.postgres.example'),
+    inspectLine(`${scopedDatabaseKey('CLOUD', 'NAME')}=sdkwork_ai_dev`, 'sdkwork-demo/postgres.env.example'),
     /retired application\/module-prefixed database key/u,
   );
   assert.match(
@@ -197,7 +197,7 @@ test('rejects retired cloud-scoped database keys', () => {
   assert.match(
     inspectLine(
       `# ${scopedDatabaseKey('CLOUD', 'URL')}=postgresql://db.example.com/sdkwork_ai_dev`,
-      'sdkwork-demo/.env.postgres.example',
+      'sdkwork-demo/postgres.env.example',
     ),
     /retired application\/module-prefixed database key/u,
   );
@@ -238,7 +238,7 @@ test('enforces lifecycle identity for structured TOML fields', () => {
 });
 
 test('rejects retired generic aliases', () => {
-  const filePath = 'sdkwork-demo/.env.postgres.example';
+  const filePath = 'sdkwork-demo/postgres.env.example';
   assert.match(
     inspectLine('SDKWORK_DATABASE_SSLMODE=disable', filePath),
     /SDKWORK_DATABASE_SSL_MODE/u,
@@ -247,7 +247,7 @@ test('rejects retired generic aliases', () => {
 });
 
 test('workspace temporary pool governance keys remain canonical database keys', () => {
-  const filePath = 'sdkwork-demo/.env.postgres.example';
+  const filePath = 'sdkwork-demo/postgres.env.example';
   assert.equal(
     inspectLine('SDKWORK_DATABASE_TEMPORARY_ANY_POOL_EXCEPTION=true', filePath),
     null,

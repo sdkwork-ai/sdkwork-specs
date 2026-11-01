@@ -231,7 +231,7 @@ Start, build, test, check, verify, and clean commands that call protected app-ap
 Resolution order:
 
 1. Process env when the token is reusable: a signed JWT, or a local fixture JWT where the selected lifecycle permits one.
-2. The repository's environment-scoped private overlay: `.env.<deployment-profile>.<lifecycle>.bootstrap.local`, then the compatible spellings `.env.standalone.<lifecycle>.bootstrap.local` and `.env.<lifecycle>.bootstrap.local`.
+2. The user-private credential bundle: `~/.sdkwork/<application-code>/credentials/<profile-id>.json` (§5.4.1). No repository env file carries a token; a composed name such as `.env.<deployment-profile>.<lifecycle>.bootstrap.local` `MUST` be rejected with a diagnostic naming the bundle, never read.
 3. Legacy unscoped registration output `.sdkwork.local.env`, only when its token validates for the selected lifecycle and deployment identity.
 4. IAM application bootstrap through `@sdkwork/iam-application-bootstrap` `ensureRepoBootstrapAccessToken(...)` when bootstrap operator credentials exist.
 5. Credential-entry fixture generation through `@sdkwork/iam-credential-entry/node-bootstrap` for `development`, or an isolated `test` runner with the explicit test-generation opt-in and a loopback gateway.
@@ -246,14 +246,14 @@ Each independent Git repository owns its bootstrap access token. A multi-surface
 
 | Concern | Rule |
 | --- | --- |
-| Canonical path | `<manifest-root>/.env.<deployment-profile>.<lifecycle>.bootstrap.local`, for example `.env.standalone.development.bootstrap.local` or `.env.cloud.test.bootstrap.local` |
-| Compatible read spellings | `.env.standalone.<lifecycle>.bootstrap.local` and `.env.<lifecycle>.bootstrap.local` |
-| Legacy read-only spelling | `.sdkwork.local.env` is an unscoped registration output. It `MUST` be read last and `MUST NOT` be used as the reusable cache when an environment-scoped artifact exists. |
-| Content | One `SDKWORK_ACCESS_TOKEN=<JWT>` assignment plus non-secret metadata comments: `sdkwork-bootstrap-environment`, `sdkwork-bootstrap-deployment-profile`, `sdkwork-bootstrap-backend`, `sdkwork-bootstrap-app-id`, `sdkwork-bootstrap-issued-at`, `sdkwork-bootstrap-expires-at`, `sdkwork-bootstrap-source` |
-| Git | The artifact `MUST` be gitignored and `MUST NOT` appear in a commit, package, browser bundle, HTML, `/runtime-env.js`, or public runtime config |
+| Canonical path | The user-private store, never the repository: `~/.sdkwork/<application-code>/credentials/<profile-id>.json`, for example `~/.sdkwork/birdcoder/credentials/standalone.development.json` or `~/.sdkwork/birdcoder/credentials/cloud.test.json` |
+| Composed env names | Forbidden. `.env.<deployment-profile>.<lifecycle>.bootstrap.local`, `.env.standalone.<lifecycle>.bootstrap.local`, `.env.<lifecycle>.bootstrap.local`, and every other composed `.env.*` spelling `MUST NOT` be written, and a reader that finds one `MUST` reject it naming the bundle (`ENVIRONMENT_SPEC.md` §5.1.7). |
+| Legacy read-only spelling | `.sdkwork.local.env` is an unscoped registration output. It `MUST` be read last and `MUST NOT` be used as the reusable cache when a bundle exists. |
+| Content | A JSON object with `accessToken` and the non-secret metadata keys `environment`, `deploymentProfile`, `backend`, `appId`, `issuedAt`, `expiresAt`, `source` |
+| Git | Outside every checkout by construction; `MUST NOT` appear in a commit, package, browser bundle, HTML, `/runtime-env.js`, or public runtime config |
 | File mode | POSIX writers `MUST` create the file with owner-only permissions (`0600`) |
-| Write discipline | Writers `MUST` write a temporary file in the same directory and rename it over the target. Readers `MUST` never observe a partially written token. |
-| Scope | Exactly one active token per manifest root (repository root or `apps/<surface>` application root), deployment profile, lifecycle environment, backend origin, and manifest `backend.appId` |
+| Write discipline | Writers `MUST` write a temporary file in the same directory and rename it over the target. Readers `MUST` never observe a partially written bundle. |
+| Scope | Exactly one active token per manifest root (repository root or `apps/<surface>` application root), profile id, backend origin, and manifest `backend.appId` |
 
 An application repository that resolves `SDKWORK_ACCESS_TOKEN` from any other path or from a workspace-level shared file is non-conforming. Existing repositories `MUST` migrate the token into the canonical path on the next write; readers `MAY` accept the compatible spellings during the migration window.
 

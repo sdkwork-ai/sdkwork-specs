@@ -300,12 +300,12 @@ Repository-local conventions:
 
 | Purpose | Path or file |
 | --- | --- |
-| Checked-in dev example | `.env.example`, `.env.development.example`, or app-specific equivalent |
-| Developer override | `.env.local` or `.env.<profile>.local` |
-| PostgreSQL dev example | `.env.postgres.example` |
-| PostgreSQL developer override | `.env.postgres` or typed dev config file excluded from source control |
-| SQLite dev example | `.env.sqlite.example` when an app needs one |
-| SQLite developer override | `.env.sqlite` or typed dev config file excluded from source control |
+| Checked-in dev example | `.env.example` (the only env template name; per-scope files are `.env.<deployment-profile>.<environment>`) |
+| Developer override | The user-private credential bundle or a typed dev config file excluded from source control — never a composed `.env.*` name |
+| PostgreSQL dev example | `config/host/postgres.env.example` |
+| PostgreSQL developer override | `config/host/postgres.env` or typed dev config file excluded from source control |
+| SQLite dev example | `config/host/sqlite.env.example` when an app needs one |
+| SQLite developer override | `config/host/sqlite.env` or typed dev config file excluded from source control |
 | Cargo build output | Repository Cargo `target/`; an isolated build uses `target/sdkwork/<purpose>/` only when executable locking, toolchain separation, or concurrent-build evidence requires it |
 | JavaScript tool cache | The tool-native directory, such as `node_modules/.vite/<surface-id>/` or `node_modules/.cache/<tool>/` |
 | Other framework output | The framework-native ignored directory, such as Flutter `.dart_tool/` or Gradle `build/` |
@@ -324,7 +324,7 @@ Rules:
   declared client-local default and may be exposed only through explicit
   client-local SQLite commands or desktop runtime config; they cannot select
   SQLite for the backend service.
-- Release defaults must not be inferred from `.env.local`.
+- Release defaults must not be inferred from a composed `.env.*` name; a release reads `.env.<deployment-profile>.production`.
 - Checked-in examples must never contain real passwords, tenant tokens, API
   keys, or production hostnames.
 - Dev PostgreSQL and Redis credentials must be documented as local-only.
@@ -530,7 +530,7 @@ Rules:
   user private data directory, such as `~/.sdkwork/router/data/router.sqlite`,
   unless an app-specific migration plan temporarily reads an older location.
 - Desktop package local user data must stay on SQLite by default even when the
-  repository's integrated development command uses `.env.postgres.example` and
+  repository's integrated development command uses `config/host/postgres.env.example` and
   PostgreSQL. The PostgreSQL dev profile exercises backend service behavior for
   `pnpm dev`, `pnpm dev:browser`, `pnpm dev:desktop`, or `pnpm dev:server`; it
   is not the desktop data persistence default. Desktop host runner commands
@@ -590,7 +590,7 @@ Recommended env override mapping:
 Standard PostgreSQL development example shape:
 
 ```env
-# Unified workspace profile. See ENVIRONMENT_SPEC.md §7.1 and sdkwork-specs/templates/env.postgres.example
+# Unified workspace profile. See ENVIRONMENT_SPEC.md §7.1 and sdkwork-specs/templates/host/postgres.env.example
 SDKWORK_DATABASE_ENGINE=postgresql
 SDKWORK_DATABASE_HOST=127.0.0.1
 SDKWORK_DATABASE_PORT=5432
@@ -611,8 +611,8 @@ SDKWORK_DATABASE_ADMIN_SSL_MODE=disable
 
 Rules:
 
-- `.env.postgres.example` is checked in and contains local-only placeholders using `SDKWORK_DATABASE_*` only.
-- `.env.postgres` is a developer override and must be ignored by source
+- `config/host/postgres.env.example` is checked in and contains local-only placeholders using `SDKWORK_DATABASE_*` only.
+- `config/host/postgres.env` is a developer override and must be ignored by source
   control.
 - `DATABASE_PROVIDER` and `DATABASE_SSLMODE` are not standard names. New apps
   must reject them rather than silently treating them as aliases.
@@ -785,7 +785,7 @@ Rules:
 - [ ] Linux logs are under `/var/log/sdkwork/<application-code>`.
 - [ ] User private files are under `~/.sdkwork/<application-code>` or the documented Windows equivalent `%USERPROFILE%\.sdkwork\<application-code>`.
 - [ ] Development config is separated from release config.
-- [ ] PostgreSQL development config uses checked-in `.env.postgres.example`, ignored `.env.postgres`, `SDKWORK_DATABASE_ENGINE=postgresql`, and `SDKWORK_DATABASE_SSL_MODE`.
+- [ ] PostgreSQL development config uses checked-in `config/host/postgres.env.example`, ignored `config/host/postgres.env`, `SDKWORK_DATABASE_ENGINE=postgresql`, and `SDKWORK_DATABASE_SSL_MODE`.
 - [ ] Production/staging database config resolves from the workspace database configuration directory (`/etc/sdkwork/database` on Linux, `%ProgramData%\sdkwork\database` on Windows, `/Library/Application Support/sdkwork/database` on macOS); per-application `database.secret` paths are migration fallbacks only and cross-application references are absent.
 - [ ] Production database templates use `password_file` referencing the shared directory (or `/run/secrets/`) and contain no inline or `DEPLOY_INJECT` passwords.
 - [ ] Standalone server/container and cloud production config defaults to PostgreSQL through structured `[database]` fields.

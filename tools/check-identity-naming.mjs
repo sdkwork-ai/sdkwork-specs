@@ -383,7 +383,7 @@ function scanStandards(root) {
     if (!SCAN_EXTENSIONS.has(ext)) return false;
     const rel = relative(root, file);
     if (ALLOW_PATH_PARTS.has(path.basename(file))) return false;
-    if (rel.includes('templates/env.postgres')) return false;
+    if (rel.includes('templates/host/postgres')) return false;
     return ext === '.md' || rel.includes('tools/');
   });
   const issues = [];

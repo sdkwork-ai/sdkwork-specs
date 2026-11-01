@@ -241,7 +241,7 @@ Rules:
 - `development`, `test`, `staging`, `demo`, and `production` examples are required for server/container targets; browser and host targets should provide the same set unless the target is explicitly dev-only.
 - `dev` and `prod` are command/operator aliases only. Env file names and
   runtime config use canonical environment and profile-id values.
-- `.env.local`, `.env.<profile>.local`, `.env.postgres`, `.env.release.local`, `config/*.local.*`, native signing files, and platform credential files must be ignored.
+- No composed env name may exist: `.env.local`, `.env.<profile>.local`, and `.env.release.local` are retired and must not be read or written (`ENVIRONMENT_SPEC.md` §5.1.7). Ignored host-local carriers are `config/host/postgres.env`, `config/*.local.*`, native signing files, and platform credential files.
 - `pnpm dev` delegates to `dev:standalone`; `dev:browser:standalone` and
   `dev:browser:cloud` are the explicit H5 browser profile commands.
 - `pnpm test` uses an isolated test profile and must not share development or production database/schema, Redis prefix, logs, cache, runtime, or temp directories.
