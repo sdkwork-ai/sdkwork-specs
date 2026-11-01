@@ -1,3 +1,5 @@
+// env-naming:allow-file — the fixture asserts a retired spelling is rewritten
+
 import assert from 'node:assert/strict';
 import test from 'node:test';
 

@@ -1,3 +1,5 @@
+// env-naming:allow-file — the fixtures assert retired spellings are rejected from packages
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

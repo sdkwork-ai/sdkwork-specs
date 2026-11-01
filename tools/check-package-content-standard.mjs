@@ -27,11 +27,18 @@ const FORBIDDEN_NAMES = new Set([
   '.idea', '.vscode', '.editorconfig', '.prettierrc', '.prettierrc.json',
   '.prettierrc.js', 'coverage',
 ]);
-const FORBIDDEN_ENV_FILES = new Set([
-  '.env', '.env.local', '.env.release', '.env.release.local',
-  '.env.development', '.env.development.local', '.env.development.*',
-  '.env.production', '.env.production.local', '.env.test', '.env.test.local',
-]);
+/**
+ * Materialized dotenv files never ship inside a release package.
+ *
+ * `ENVIRONMENT_SPEC.md` section 5.1.7 allows four dotenv shapes in a working
+ * tree; a package may carry only the `*.example` template, so the rule is a
+ * shape test rather than a list of retired spellings to keep in sync.
+ * @param leaf - file basename.
+ * @returns whether the name is a dotenv file.
+ */
+function isForbiddenEnvFile(leaf) {
+  return leaf === '.env' || leaf.startsWith('.env.');
+}
 const FORBIDDEN_EXTENSIONS = new Set(['.sqlite', '.db', '.pdb']);
 const SECRET_PATH_PATTERN = /(?:^|\/)(?:secrets?|credentials?|\.env[\w.-]*|\.pem|\.key|\.p12|\.pfx)(?:\/|$)/iu;
 const PACKAGE_MANIFEST_NAMES = new Set(['install-manifest.json', 'container-image.json', 'package.manifest.json']);
@@ -63,10 +70,10 @@ function isForbiddenRelative(relative) {
     if (FORBIDDEN_NAMES.has(segments[index])) return true;
   }
   const leaf = segments[segments.length - 1] ?? '';
-  // Template files (`.env.release.example`, `*.example`) carry no secret
-  // values and are allowed as declared packaging entries.
+  // Template files (`*.example`) carry no secret values and are allowed as
+  // declared packaging entries.
   if (leaf.endsWith('.example')) return false;
-  if (FORBIDDEN_ENV_FILES.has(leaf)) return true;
+  if (isForbiddenEnvFile(leaf)) return true;
   if (FORBIDDEN_EXTENSIONS.has(path.extname(leaf).toLowerCase())) return true;
   if (SECRET_PATH_PATTERN.test(relative)) return true;
   return false;

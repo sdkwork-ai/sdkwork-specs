@@ -45,6 +45,8 @@ export const SKIP_DIRS = new Set([
   'venv',
   '.runtime',
   '.storages',
+  '.tmp',
+  '.sdkwork',
   'tmp',
   'tmp-build',
 ]);

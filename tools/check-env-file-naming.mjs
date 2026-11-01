@@ -31,6 +31,8 @@
  *
  * Exit codes: 0 clean, 1 violations, 2 usage error.
  */
+// env-naming:allow-file — the checker names every retired spelling in the doc block it enforces
+
 
 import path from 'node:path';
 import process from 'node:process';

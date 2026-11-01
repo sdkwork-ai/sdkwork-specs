@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// env-naming:allow-file — the migration map names the retired spellings it rewrites
+
 
 /**
  * Migrates repository env files to the naming contract of
