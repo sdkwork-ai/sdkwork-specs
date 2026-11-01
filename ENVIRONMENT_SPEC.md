@@ -907,6 +907,18 @@ Credential sources:
 | Interactive session | Appbase IAM login/registration/refresh/current-session response | Same appbase IAM response | Replaces bootstrap credentials in TokenManager, session store, and context store. |
 | Browser/renderer | TokenManager session storage after login | TokenManager session storage after login | `MUST NOT` read live tokens from `VITE_*`, `PORTAL_PUBLIC_*`, or public runtime config. |
 
+Credential consumer phases:
+
+Every command that resolves SDKWork runtime configuration runs in exactly one phase below. A repository `MUST` document which phase each lifecycle command runs in, and an implementation `MUST NOT` cross phases implicitly: a `resolve` command that provisions, signs, generates, or rewrites a credential is non-conforming, and it is the defect class that turns a reusable cached token into a per-build regeneration or an unauthenticated artifact.
+
+| Phase | Commands | Credential artifact writes | Rule |
+| --- | --- | --- | --- |
+| `resolve` | `dev`, `start`, `serve`, `build`, `package`, `dist`, `test`, `check`, `verify`, `clean`, and every packaged application launch | Forbidden | Reads the selected scope's cached artifact, or an explicit token in the launching environment, and fails closed when neither yields a reusable credential. `MUST NOT` register, provision, enable, sign, generate a fixture, or rewrite the artifact. |
+| `provision` | An explicit lifecycle command (`env:token:ensure`, or the framework's `prepare-lifecycle-access-token`) | Allowed for the selected scope only | The only entry point that may create a first credential or replace an absent one. |
+| `refresh` | The same explicit command with `--refresh` (or `refresh: true`) | Allowed for the selected scope only | The only entry point that may replace a credential that is still reusable. |
+
+A `resolve` command that finds no reusable credential `MUST` fail closed with a diagnostic naming the selected lifecycle, the artifact path it inspected, and the explicit `provision` command that repairs it. Falling back to a credential-less launch is permitted only for an interactive application surface that is allowed to start unauthenticated, and that fallback `MUST NOT` be reported as success by a build or packaging command.
+
 Bootstrap lifecycle policy:
 
 | Environment | Private bootstrap source | Missing-token behavior | Browser artifact rule |
@@ -951,6 +963,50 @@ Rules:
 - Test fixtures may contain fake token strings only when the file is clearly test-only, excluded from production bundles, and covered by static scans that prevent reuse in release config.
 - Runtime env, tracked `.env.example`, bootstrap overlays, runtime TOML, and public runtime config `MUST NOT` define fixed IAM identity scope through `SDKWORK_IAM_BOOTSTRAP_*`, `SDKWORK_IAM_LOCAL_*`, `SDKWORK_USER_CENTER_BOOTSTRAP_*`, runtime `SDKWORK_APP_ID`, `VITE_SDKWORK_APP_ID`, or equivalent tenant/organization/user/owner bootstrap variables. Current tenant, organization, user, session, and app scope `MUST` come from dual-token JWT claims after login according to `IAM_LOGIN_INTEGRATION_SPEC.md`.
 - Release and CI tooling `MAY` use `SDKWORK_APP_ID` only as build or workflow metadata. That variable `MUST NOT` be read by live IAM runtime, TokenManager, or protected SDK client scope resolution.
+
+#### 6.1.1 Packaged Desktop Release Environment And Distribution Classes
+
+A packaged desktop application runs outside any source checkout, so it cannot re-resolve the packaging host's environment-scoped bootstrap artifact: only the built-in deployment defaults apply, and no bootstrap credential exists. A packaged build therefore `MUST` declare its distribution class, and the class decides whether the build carries a private release environment file that its native host applies before resolving the SDKWork deployment.
+
+| Distribution class | Declaration | Release environment artifact | Credential |
+| --- | --- | --- | --- |
+| `deployment` | The packaging command's default for a locally built or internally distributed artifact | `MUST` carry it, produced from the packaging host's resolved deployment for the pinned lifecycle | One revocable bootstrap `SDKWORK_ACCESS_TOKEN` for that deployment |
+| `public` | Explicitly declared by the public release lane | `MUST NOT` carry it | None; the installed application falls back to interactive IAM login |
+
+Rules:
+
+- A `deployment` build `MUST` fail before the platform packaging step when the artifact is absent, when it carries no reuse-valid `SDKWORK_ACCESS_TOKEN`, or when its deployment selection contradicts the pinned lifecycle. Producing an installable artifact that cannot authenticate is forbidden: the defect otherwise surfaces only when a user submits a credentials form, arbitrarily far from its cause.
+- A `public` build `MUST` prove the artifact is absent before packaging, and `MUST` stay byte-identical whether or not the packaging host holds a credential.
+- The artifact `MUST` be a private runtime source of the installed application (or a protected host location the deployment installs). It `MUST NOT` be a browser artifact, tracked `.env` file, public runtime config, or tracked environment template.
+- It `MUST` contain only the deployment selection (`SDKWORK_ENVIRONMENT`, `SDKWORK_PROFILE_ID`, and their deployment-profile peers), the SDKWork surface URLs, the registration claims the bootstrap artifact materializes, and `SDKWORK_ACCESS_TOKEN`. Operator bootstrap credentials (`SDKWORK_IAM_BOOTSTRAP_*`), database URLs, model or provider API keys, and `VITE_*` / `PORTAL_PUBLIC_*` values are forbidden.
+- Producing the artifact is a `resolve`-phase projection (§6.1.2): packaging `MUST NOT` register, provision, enable, sign, or generate the credential it embeds. A missing or unusable credential is a packaging failure with an actionable diagnostic naming the explicit `provision` command; a build `MUST NOT` repair it silently.
+- The launching host environment `MUST` outrank the artifact: a name the environment already declares wins, so an operator can redirect or replace the baked deployment without rebuilding.
+- The installed host `MUST` apply the artifact before it resolves the deployment and before it materializes or reuses a bootstrap token, so `IAM_APPLICATION_BOOTSTRAP_SPEC.md` §5.4 reuse still decides whether the credential is usable.
+- The installed host `MUST` report a named diagnostic when a `deployment` artifact is missing, unreadable, or yields no reusable credential, and that diagnostic `MUST` name the artifact path, the resolved lifecycle, the redeploy remedy, and the explicit provisioning command. A `public` build `MAY` fall back to interactive login silently; a `deployment` build `MUST NOT`, because its artifact claimed to carry a credential and its credentials forms cannot dispatch without one.
+- An artifact carrying `SDKWORK_ACCESS_TOKEN` `MUST` ship only to the deployment it was built for. Staging and production artifacts `MUST` come from a private bootstrap source — an operator-provisioned token or that deployment's IAM application-bootstrap provisioning — and never from fixture generation.
+- The packaging host `MUST` reuse its own environment-scoped bootstrap artifact for the same lifecycle. A host that pins the lifecycle `MUST` drop an inherited deployment selection first, so another application's exported deployment cannot decide the tier.
+- An application repository `MUST` expose exactly one explicit command that provisions the selected lifecycle's bootstrap artifact, and `MUST` document it as the only supported way to create or replace a packaged credential. This repository (SDKWork BirdCoder) provides `pnpm env:token:ensure --environment <lifecycle>`, with `--refresh` for replacement.
+
+#### 6.1.2 Local And Release Parity
+
+A source launch and a packaged deployment build `MUST` resolve the same deployment and the same credential from the same contract, differing only in the carrier of the result. Divergence between the two is the defect class that yields a working development shell beside a packaged application that cannot authenticate.
+
+| Concern | Source launch | Packaged deployment build |
+| --- | --- | --- |
+| Deployment selection | Tracked `.env.<profile>.<lifecycle>` plus the gitignored overlay of the invoking checkout | The private release environment artifact of §6.1.1 |
+| Credential carrier | The environment-scoped overlay `.env.<profile>.<lifecycle>.bootstrap.local` | The same artifact, projected from that overlay at packaging time |
+| Precedence | Launching environment, overlay, tracked file, built-in defaults | Launching environment, artifact, built-in defaults |
+| Missing credential | `development` may generate a disposable fixture; `test` only under its generation opt-in; `staging` and `production` fail closed | Packaging fails; the installed application reports the named diagnostic |
+| Write authority | A `resolve` command never writes | Packaging never writes |
+| Phase | `resolve` | `resolve`, then `resolve` again at launch |
+
+Rules:
+
+- Both carriers `MUST` be produced by the same resolver and carry the same allowlisted key set, so a key that reaches a source launch also reaches the packaged application. A repository `MUST NOT` maintain a second, packaging-only list of projected names.
+- Packaging `MUST` project the resolved values verbatim. It `MUST NOT` re-derive, normalize, or re-sign them, and the projected credential `MUST` remain byte-identical to the one the resolver returned, so token expiry, rotation, and revocation behave identically in both carriers.
+- Building or packaging `MUST NOT` modify the source launch's overlay. The only writes in the whole flow belong to `provision` and `refresh` (§6.1), invoked deliberately by an operator or an owning CI lane.
+- A repository `MUST` make the parity observable: packaging `MUST` print one non-secret summary naming the lifecycle, the artifact path, the projected key names, and the credential outcome (`reused`, `provisioned`, `unavailable`), and `MUST NOT` print credential values.
+- A repository with a packaged desktop target `MUST` gate the parity in its automated checks: one case for a `deployment` build holding a reusable credential (projects it, fails on nothing), one for a `deployment` build without one (fails with the provisioning hint), and one for a `public` build (proves no artifact and no credential).
 
 ### 6.2 Standalone Same-Origin Versus Cloud Independent API Base URLs
 
@@ -1790,6 +1846,9 @@ Required behavior:
 - Support a config file in the SDKWork user private config directory.
 - Keep secrets in OS secure storage when possible.
 - Allow `SDKWORK_DATABASE_URL` to override the local database for diagnostics and managed operator deployments.
+- Declare the packaging distribution class and satisfy §6.1.1: a `deployment` build carries the private release environment projected from the packaging host's resolved deployment, and a `public` build carries none.
+- Apply the packaged release environment before resolving the SDKWork deployment, and reuse its credential under §5.4 semantics instead of minting another one.
+- Fail fast with the §6.1.1 diagnostic when a `deployment` artifact is missing or holds no reusable credential, rather than starting an application whose credentials forms cannot dispatch.
 
 Example desktop config:
 
@@ -2181,6 +2240,8 @@ Rules:
 - `.env.release.local` must be generated on the release host and must not be committed.
 - Release env writers must print safe summaries only and must not echo secrets.
 - Strict release preflight must validate required values before packaging.
+- A packaged desktop build declares its distribution class and follows §6.1.1: a `deployment` build carries the private release environment it projected from that deployment, a `public` build carries none, it is never checked in, and neither class may carry a bootstrap credential into a browser artifact.
+- A packaging command that produces an installed application `MUST` be classified as either a `deployment` projection or a `public` release, and neither class may leave the classification implicit.
 - Optional public overrides, such as `PORTAL_PUBLIC_OPEN_API_BASE_URL`, may be omitted when they inherit a required base URL.
 
 Minimum release host contract for `sdkwork-cloudrouter`:
@@ -2261,6 +2322,10 @@ Acceptance checklist:
 - [ ] Legacy database env aliases such as `DATABASE_PROVIDER` and `DATABASE_SSLMODE` are rejected for new apps.
 - [ ] Database lifecycle env keys follow `DATABASE_FRAMEWORK_SPEC.md` when the repository owns a `database/` module.
 - [ ] Desktop install defaults to SQLite in the SDKWork user private data directory.
+- [ ] A packaged desktop build proves its §6.1.1 distribution class before packaging completes: a `deployment` build carries the release environment with the allowlist respected, host-environment precedence proven, and a reuse-valid staging/production bootstrap credential; a `public` build proves the artifact is absent and the artifact bytes are credential-independent.
+- [ ] A `deployment` build whose credential cannot be resolved fails packaging with a diagnostic naming the lifecycle, the artifact path, and the explicit `provision` command, instead of shipping an installable artifact that cannot authenticate.
+- [ ] Packaging creates no credential and rewrites no reusable one: the §6.1 consumer-phase table lists every lifecycle command, and `build`, `package`, `test`, `check`, `verify`, and `clean` run in the `resolve` phase.
+- [ ] The packaged artifact and the source launch resolve through §6.1.2 parity: the same resolver, the same allowlisted key set, and a projected credential byte-identical to the cached one.
 - [ ] Desktop installed config, desktop-started server dev config, browser public runtime config, H5/Capacitor config, Flutter config, mini program config, container config, and Tauri platform config are separate files or clearly separate sections.
 - [ ] Test config isolates database/schema, Redis key prefix, logs, cache, runtime, and temp directories without introducing per-application or per-module PostgreSQL identities.
 - [ ] Runtime config file path can be specified explicitly.

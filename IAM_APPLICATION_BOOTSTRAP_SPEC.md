@@ -303,6 +303,20 @@ On regeneration the resolver `MUST` use the same repository, deployment profile,
 - Diagnostics `MUST` name the repository, lifecycle, artifact path, and outcome (`reused`, `generated`, `provisioned`, `unavailable`, `refresh`), and `MUST NOT` include token values.
 - The lifecycle checker `check-bootstrap-access-token-lifecycle-standard.mjs` is the machine gate for this section. It `MUST` fail a repository that has credential-entry surfaces but no lifecycle owner, that generates a token on every start without reuse, or that writes a non-conforming artifact path.
 
+#### 5.4.5 Packaging Projection
+
+A packaging command is a `resolve` consumer (`ENVIRONMENT_SPEC.md` §6.1). It projects the resolved credential into a private artifact the installed application reads; it never mints one.
+
+Rules:
+
+- Packaging `MUST NOT` register, provision, enable, sign, generate a fixture, refresh, or rewrite a credential while a reusable token exists, and `MUST NOT` create one when none does. A packaging lane that provisions is non-conforming: it makes the build depend on network state and hidden operator credentials, and it regenerates a value the cache already settled.
+- The projected credential `MUST` be byte-identical to the value the resolver returned. Projection copies; it never normalizes, re-signs, or re-encodes.
+- An absent or non-reusable credential `MUST` fail the packaging command with a diagnostic naming the repository, lifecycle, artifact path, and the explicit `provision` command (`env:token:ensure --environment <lifecycle>`, `--refresh` to replace). It `MUST NOT` warn and continue.
+- The projection target `MUST` be a private runtime source of the installed application per `ENVIRONMENT_SPEC.md` §6.1.1, and it `MUST NOT` be the reusable cache itself: the cache stays the source launch's artifact, and the projection is a separate copy that ships.
+- Diagnostics `MUST` follow the §5.4.4 shape — repository, lifecycle, artifact path, outcome — and `MUST NOT` include the token value.
+- Verification `MUST` cover the three packaging cases: a reusable credential projects unchanged, a missing credential fails with the provisioning hint, and a `public` release produces no artifact at all.
+
+
 Canonical owners:
 
 | Owner | Role |
