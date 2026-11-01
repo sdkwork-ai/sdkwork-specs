@@ -716,8 +716,14 @@ declared multi-platform matrix. It must not keep both as competing source trees.
 
 ### 5.1.7 Private Values And Migration
 
-Exactly one env-file shape exists per scope. Nothing composes onto it: no
-`.local`, no `.bootstrap.local`, no third token, no environment-only file.
+Exactly one env-file shape exists per scope, and the list below is closed.
+
+| File | Role | Checked in |
+| --- | --- | --- |
+| `.env` | base layer shared by every scope of the root | yes |
+| `.env.example` | template for the base layer | yes |
+| `.env.<deployment-profile>.<environment>` | the materialized per-scope file | yes, when the scope exists |
+| `.env.<deployment-profile>.<environment>.example` | template for one scope | yes, when the scope is generated |
 
 ```text
 .env                                             base layer, checked in
@@ -725,6 +731,11 @@ Exactly one env-file shape exists per scope. Nothing composes onto it: no
 .env.<deployment-profile>.<environment>          the materialized per-scope file
 .env.<deployment-profile>.<environment>.example  template for one scope
 ```
+
+Nothing composes onto either shape: no `.local`, no `.bootstrap.local`, no third
+token, no environment-only file, no platform token. A name outside the list has
+no meaning, so no reader may honour one; `tools/check-env-file-naming.mjs`
+fails the workspace when one exists.
 
 A materialized per-scope file is a safe build/runtime input, so a repository may
 check it in; a scope that must be generated keeps only its `.example` template.
@@ -739,8 +750,20 @@ that profile id verbatim: `vite build --mode cloud.production` loads
 device, or tenant axis `MUST NOT` become a third name segment; it stays a build
 flag (`--runtime-target`, `UNI_PLATFORM`) applied on top of the two-segment mode.
 
-Private values never receive an env file of their own. Secrets, issued bootstrap
-credentials, and developer overrides live outside the dotenv namespace:
+Private values never receive an env file of their own. Every kind of value has
+exactly one home, and a value that has no row here has no file:
+
+| Value | Home |
+| --- | --- |
+| shared build/runtime input | `.env` |
+| per-scope build/runtime input | `.env.<deployment-profile>.<environment>` |
+| per-scope topology source that materializes that file | `etc/topology/<deployment-profile>.<environment>.env` |
+| issued bootstrap access token | `~/.sdkwork/<application-code>/credentials/<profile-id>.json` |
+| operator IAM bootstrap identity | `~/.sdkwork/iam-bootstrap/<environment>.json` |
+| host database profile | `config/host/postgres.env(.example)` (§7.1) |
+| desktop packaging host settings | `apps/<surface>/packaging/<platform>.env(.example)` |
+| non-env local override | `etc/**/*.local.toml`, `config/**/*.local.json` |
+| `staging`/`production` secret | secret manager, mounted secret file, protected process env, OS secure storage, platform signing |
 
 ```text
 ~/.sdkwork/<application-code>/credentials/<profile-id>.json   issued credential bundle
@@ -760,6 +783,9 @@ Rules:
   `MUST NOT` be introduced. A reader that still finds one `MUST` reject it with a
   diagnostic naming the canonical file or store; silently honouring it is
   forbidden, and no writer may dual-write the composed and canonical forms.
+- A scope file is written once and edited in place. A developer who needs a
+  different value for one machine changes that scope or a non-env local
+  override; they `MUST NOT` add a second env file on top of it.
 - Bootstrap credentials are written only to the credential bundle of the
   user-private store, never to a repository file, and are read only by
   `resolve`-phase consumers (§6.1).
@@ -770,16 +796,9 @@ Rules:
   canonical two-dimensional name.
 - Host and packaging configuration is not a Vite env file and `MUST NOT` use the
   `.env.*` prefix, because that namespace is reserved for `<profile>.<environment>`
-  modes. These files have exactly one location each:
-
-  ```text
-  config/host/postgres.env(.example)              host PostgreSQL profile (§7.1)
-  apps/<surface>/packaging/<platform>.env(.example)   desktop packaging host settings
-  ```
-
-  The retired spellings `.env.postgres`, `.env.sqlite`, `.env.windows`,
+  modes. The retired spellings `.env.postgres`, `.env.sqlite`, `.env.windows`,
   `.env.macos`, and `.env.linux` `MUST` be rejected with a diagnostic naming the
-  canonical file.
+  `config/host/` or `packaging/` file from the table above.
 - Reference examples live under `templates/environment/`; application-specific
   values are materialized from that application's `etc/`, not copied back into
   the standards repository.
