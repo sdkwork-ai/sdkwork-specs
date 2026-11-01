@@ -6,7 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 APP_ROOT="${APP_ROOT:-${WORKSPACE_ROOT}/sdkwork-cloudrouter}"
-ENV_FILE="${ENV_FILE:-${APP_ROOT}/.env.postgres}"
+ENV_FILE="${ENV_FILE:-${APP_ROOT}/config/host/postgres.env}"
 
 PGHOST="${PGHOST:-127.0.0.1}"
 PGPORT="${PGPORT:-5432}"

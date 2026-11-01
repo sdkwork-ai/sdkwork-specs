@@ -1,16 +1,17 @@
 
-# SDKWork local environment and runtime config overrides
+# SDKWork local environment and runtime config overrides.
+# Canonical shapes only (ENVIRONMENT_SPEC.md 5.1.7): `.env`, `.env.example`, and
+# `.env.<deployment-profile>.<environment>`. Private values live in the user
+# credential bundle, never in a repository file.
 .env
 .env.*
 !.env.example
 !.env.*.example
-.env.local
-.env.development.local
-.env.test.local
-.env.staging.local
-.env.production.local
-.env.postgres
-.env.release.local
+# Host and packaging configuration is not a Vite env file; the `.example`
+# templates are checked in and the materialized files are not.
+config/host/postgres.env
+config/host/sqlite.env
+apps/*/packaging/*.env
 config/*.local.toml
 
 # Dependencies
@@ -41,7 +42,6 @@ tools/.gateway-alignment-report.json
 target/
 /target/
 **/target/
-!.env.postgres.example
 dist/
 **/dist/
 coverage/
@@ -67,10 +67,6 @@ Thumbs.db
 
 
 # SDKWork local-only and generated artifacts
-.env
-.env.*
-!.env.example
-!.env.*.example
 **/build/
 *.log
 .DS_Store
@@ -85,7 +81,6 @@ tools/postgres/tmp-*.cjs
 **/public/runtime-env.json
 
 # SDKWork baseline ignore patterns (auto-appended)
-**/*.bootstrap.local.json
 etc/**/*.local.*
 /etc/secrets/
 

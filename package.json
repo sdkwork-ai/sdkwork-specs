@@ -7,6 +7,9 @@
   "scripts": {
     "stop": "node ../sdkwork-specs/tools/stop-sdkwork-workspace-processes.mjs --workspace .",
     "check:app-iam-integration": "node tools/audit-app-iam-integration.mjs --workspace .. --strict",
+    "check:env-file-naming": "node tools/check-env-file-naming.mjs --workspace",
+    "migrate:env-file-naming": "node tools/migrate-env-file-naming.mjs --workspace",
+    "test:env-file-naming": "node --test tools/check-env-file-naming.test.mjs",
     "check:auth-session-retention": "node tools/check-auth-session-retention.mjs --workspace ..",
     "test:postgres-tools": "node tools/postgres/postgres-tools.contract.test.mjs",
     "test:app-runtime-env": "node --test tools/app-base-url.test.mjs tools/browser-runtime-env.test.mjs tools/browser-runtime-env-vite.test.mjs tools/browser-cloud-api-base.test.mjs tools/check-app-runtime-env-workspace.test.mjs",

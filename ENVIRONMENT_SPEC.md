@@ -720,17 +720,24 @@ Exactly one env-file shape exists per scope. Nothing composes onto it: no
 `.local`, no `.bootstrap.local`, no third token, no environment-only file.
 
 ```text
-.env                                      base layer, checked in
-.env.example                              the only checked-in template
-.env.<deployment-profile>.<environment>   the materialized per-scope file
+.env                                             base layer, checked in
+.env.example                                     template for the base layer
+.env.<deployment-profile>.<environment>          the materialized per-scope file
+.env.<deployment-profile>.<environment>.example  template for one scope
 ```
 
+A materialized per-scope file is a safe build/runtime input, so a repository may
+check it in; a scope that must be generated keeps only its `.example` template.
+No other suffix may be composed onto either shape.
+
 `<deployment-profile>` is `standalone` or `cloud`. `<environment>` is
-`development`, `test`, `staging`, or `production`, where `production` is the
-online environment. The pair is the profile id of §5.1, so the Vite mode is that
-profile id verbatim: `vite build --mode cloud.production` loads
+`development`, `test`, `staging`, `demo`, or `production`, where `production` is
+the online environment. The pair is the profile id of §5.1, so the Vite mode is
+that profile id verbatim: `vite build --mode cloud.production` loads
 `.env.cloud.production` and nothing else. A release build therefore uses the
-`production` environment and never a release-specific name.
+`production` environment and never a release-specific name. A target, platform,
+device, or tenant axis `MUST NOT` become a third name segment; it stays a build
+flag (`--runtime-target`, `UNI_PLATFORM`) applied on top of the two-segment mode.
 
 Private values never receive an env file of their own. Secrets, issued bootstrap
 credentials, and developer overrides live outside the dotenv namespace:
@@ -761,10 +768,18 @@ Rules:
 - Legacy `.env.development`, `.env.production`, `runtime-env.production.json`,
   `sdkwork.prod.json`, and similar one-dimensional files must migrate to the
   canonical two-dimensional name.
-- Host-local PostgreSQL profiles are not env files: they live at
-  `config/host/postgres.env` with the checked-in
-  `config/host/postgres.env.example` (§7.1). The `config/host/postgres.env` name is
-  retired because it collides with the Vite mode namespace.
+- Host and packaging configuration is not a Vite env file and `MUST NOT` use the
+  `.env.*` prefix, because that namespace is reserved for `<profile>.<environment>`
+  modes. These files have exactly one location each:
+
+  ```text
+  config/host/postgres.env(.example)              host PostgreSQL profile (§7.1)
+  apps/<surface>/packaging/<platform>.env(.example)   desktop packaging host settings
+  ```
+
+  The retired spellings `.env.postgres`, `.env.sqlite`, `.env.windows`,
+  `.env.macos`, and `.env.linux` `MUST` be rejected with a diagnostic naming the
+  canonical file.
 - Reference examples live under `templates/environment/`; application-specific
   values are materialized from that application's `etc/`, not copied back into
   the standards repository.

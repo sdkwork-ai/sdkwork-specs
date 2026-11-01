@@ -10,7 +10,8 @@
 # Installers copy this template to the host directory; operators replace
 # host/schema values and place the password in database.secret (0600).
 # Development and test must NOT use this directory (development resolves
-# .env.postgres at the application root; test uses ephemeral isolated state).
+# config/host/postgres.env at the application root; test uses ephemeral
+# isolated state).
 
 [database]
 engine = "postgresql"
