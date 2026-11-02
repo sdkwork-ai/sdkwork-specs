@@ -907,7 +907,7 @@ Every operation has exactly one canonical authentication profile. The profile is
 | Token | Header | Purpose |
 | --- | --- | --- |
 | `auth_token` | `Authorization: Bearer` | Principal identity, session identity, tenant, organization, login scope, authentication strength, token expiry |
-| `access_token` | `Access-Token` | Principal identity, session identity, tenant, organization, login scope, app, environment, deployment profile, runtime target, data scope, permission scope |
+| `access_token` | `Access-Token` | Principal identity, session identity, tenant, organization, login scope, app, environment, deployment mode, optional deployment profile/runtime target, data scope, permission scope |
 
 Rules:
 
@@ -936,7 +936,7 @@ interactive login.
 
 Rules:
 
-- `SDKWORK_ACCESS_TOKEN` `MUST` contain a signed SDKWork `access_token` whose claims carry the ambient request context: at minimum `tenant_id`, `organization_id`, `app_id`, `environment`, `deployment_profile`, `runtime_target`, and applicable scope metadata.
+- `SDKWORK_ACCESS_TOKEN` `MUST` contain a signed SDKWork `access_token` whose claims carry the ambient request context: at minimum `tenant_id`, `organization_id`, `app_id`, `environment`, and deployment mode (`deployment_mode`). Deployment profile and runtime target `MAY` be signed as additional fixed runtime facts but `MUST NOT` be required by consumers.
 - A bootstrap access token obeys the access-token scope rules of section 10.4: a tenant-level bootstrap token resolves organization scope `0`, and an organization-level bootstrap token resolves the organization id from its claim.
 - `auth_token`, `refresh_token`, and API keys `MUST NOT` be configured through environment variables. They are obtained only from sdkwork-iam login, refresh, and current-session flows.
 - Bootstrap env credentials seed the global TokenManager or service-context credential provider only. They `MUST NOT` be copied into browser public runtime config, URLs, logs, UI, or feature state.
@@ -1203,10 +1203,12 @@ Rules:
   global lookup index or key-id prefix mapping `MUST` resolve the owning tenant first. The
   server `MUST NOT` scan tenant tables, probe tenants until one matches, or accept a caller
   tenant to choose the store or the row.
-- Raw API key and OAuth bearer values `MUST` be stored hashed with an approved memory-hard
-  password hash (or an approved equivalent) and compared in constant time. The raw value
-  `MUST NOT` be persisted, logged, returned, or embedded in error text. Key id, key prefix,
-  and safe last-used metadata are the only displayable facts.
+- Raw API key and OAuth bearer values `MUST` be stored hashed and compared in constant time.
+  A machine-generated key with at least 128 bits of CSPRNG entropy `MAY` use an approved fast
+  cryptographic hash such as SHA-256; a human-chosen or low-entropy secret `MUST` use a
+  memory-hard password hash. The raw value `MUST NOT` be persisted, logged, returned, or
+  embedded in error text. Key id, key prefix, and safe last-used metadata are the only
+  displayable facts.
 - Record lifecycle `MUST` fail closed: missing, malformed, expired, revoked, disabled, wrong
   app/environment/deployment profile, or a non-active tenant returns `40101`, `40103`, or
   `40303`, and `MUST NOT` degrade to anonymous, to another record, or to a broader scope.

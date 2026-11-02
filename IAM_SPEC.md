@@ -321,7 +321,7 @@ Required common claims:
 | `organization_id` | Active organization id, or `0`/absent for tenant-level sessions. The value selects tenant-level or organization-level access-token scope and the organization scope bound by queries and database initialization (`API_SPEC.md` section 10.4). |
 | `login_scope` | `TENANT` when organization id is `0`/absent; `ORGANIZATION` when organization id is present and non-zero. |
 | `app_id` | Application audience. |
-| `environment`, `deployment_profile`, and `runtime_target` | Runtime audience and deployment context. |
+| `environment`, `deployment_mode` | Runtime audience and deployment mode (`saas`, `local`, `private`). `deployment_profile` and `runtime_target` `MAY` be signed as additional fixed runtime facts, but parsers `MUST NOT` require them and must resolve them from runtime config when absent. |
 | `iat`, `exp`, `iss`, `aud` | Standard issuance, expiry, issuer, and audience controls. |
 
 Rules:
@@ -350,8 +350,9 @@ Rules:
 Application roots that call protected app-api or backend-api surfaces `MUST`
 document `SDKWORK_ACCESS_TOKEN` in private env templates. The value `MUST`
 be a signed `access_token` whose claims define ambient `tenant_id`,
-`organization_id`, `app_id`, environment, deployment profile, runtime target,
-and scope metadata.
+`organization_id`, `app_id`, environment, deployment mode, and scope metadata.
+A bootstrap issuer `MAY` also sign deployment profile and runtime target when it
+can prove them; consumers `MUST NOT` require those optional claims.
 
 Rules:
 
@@ -391,9 +392,9 @@ table, a tenant-local table, and a remote lookup service.
 | `name` | text | `NOT NULL`; human-readable label. |
 | `subject_type` | text | `NOT NULL`; `user` or `service_account`. |
 | `subject_id` | `int64` | `NOT NULL`; bound user or service-account principal. |
-| `lookup_id` | text | `NOT NULL`; non-secret global lookup handle; unique per environment. |
+| `lookup_id` | text | `NULL`; optional non-secret lookup handle. A unique key `id` embedded in the raw key, or a unique `key_hash` index, satisfies the lookup contract when a separate handle is not stored. |
 | `key_prefix` | text | `NOT NULL`; non-secret display prefix. |
-| `key_hash` | text | `NOT NULL`; approved memory-hard hash of the secret. |
+| `key_hash` | text | `NOT NULL`; approved hash of the secret (see rules). |
 | `status` | text | `NOT NULL`; `active`, `disabled`, or `revoked`. |
 | `expires_at` | instant | `NULL`; absolute expiry. |
 | `revoked_at` | instant | `NULL`; revocation instant. |
@@ -410,11 +411,15 @@ Rules:
   request, a joint table, or an environment default.
 - `organization_id` `MUST` be `NOT NULL` with the platform sentinel default and `MUST`
   reference an organization in the same tenant; `0` is always valid.
-- `lookup_id` `MUST` be unique per environment and indexed so a presented key resolves to
-  exactly one row in one lookup. The tenant is read from the matched row, never from the raw
-  key's visible prefix or a caller-supplied tenant.
-- `key_hash` `MUST` use an approved memory-hard password hash (or a governed equivalent) and
-  constant-time comparison. The raw secret `MUST NOT` be stored, logged, or returned.
+- A presented key `MUST` resolve to exactly one row in one indexed lookup through a globally
+  unique non-secret handle: a stored `lookup_id`, the key `id` embedded in the raw key, or a
+  unique `key_hash` index. The tenant is read from the matched row, never from the raw key's
+  visible prefix or a caller-supplied tenant.
+- `key_hash` `MUST` use an approved memory-hard password hash for a user-chosen secret. A
+  machine-generated API key with at least 128 bits of CSPRNG entropy `MAY` use an approved
+  fast cryptographic hash such as SHA-256 with constant-time comparison; a fast hash of a
+  low-entropy or human-chosen secret is forbidden. The raw secret `MUST NOT` be stored,
+  logged, or returned.
 - `status` transitions `MUST` be explicit: `active` to `disabled` or `revoked`, and
   `revoked` is terminal. An expired (`expires_at`) or tenant-inactive row is treated as
   unusable even when `status = active`.
@@ -428,10 +433,10 @@ Rules:
   (`DATABASE_SPEC.md` section 13).
 - The row `MUST` be read only through `ApiKeyLookupService` / `IamApiKeyLookupService`.
   Business handlers, repositories, and frontends `MUST NOT` query the table directly.
-- Rotation `MUST` create a new `lookup_id` and secret, or replace `key_hash`, with a
+- Rotation `MUST` create a new lookup handle and secret, or replace `key_hash`, with a
   documented overlap window; the previous secret `MUST` be revoked at the end of it. Rotation
   `MUST NOT` silently change `tenant_id` or `organization_id`.
-- Lookup caches `MUST` key on `tenant_id` plus `lookup_id` or `id`, `MUST` be bounded, and
+- Lookup caches `MUST` key on `tenant_id` plus the lookup handle, `MUST` be bounded, and
   `MUST` be invalidated on rotation, revocation, scope change, and tenant lifecycle change.
 - Deletion `MUST` be logical. Physical purge of revoked keys follows `PRIVACY_SPEC.md`
   retention and `DATABASE_SPEC.md` lifecycle rules.
