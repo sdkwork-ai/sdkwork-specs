@@ -479,6 +479,9 @@ Rules:
 Rules:
 
 - App RPC uses the same dual-token model as SDKWork HTTP SDKs.
+- For RPC calls authenticated with an SDKWork app/backend token, the access-token scope contract applies unchanged: `login_scope` `TENANT` with organization `0`/absent is tenant-level, organization `ORGANIZATION` with a non-zero id is organization-level, and every organization-scoped SQL operation and database seed binds the resolved scope (`API_SPEC.md` sections 10.4 and 10.6, `DATABASE_SPEC.md` section 16).
+- Machine callers authenticated with an API key or service token resolve tenant and organization from the validated credential record, not from request metadata (`IAM_SPEC.md` section 5.3.1). A typed internal orchestration context is trusted only when the caller is an authenticated service identity and the context is signed or server-resolved.
+- RPC tenant lifecycle gating is identical to HTTP: a non-active tenant fails closed with `40303` for token-authenticated, API-key-authenticated, and service-authenticated calls.
 - Backend RPC uses backend/operator identity, service identity, or a documented internal token model.
 - Internal RPC SHOULD use mTLS for service identity in production and private deployments.
 - Method authorization MUST be enforced at the service/runtime boundary, not only in client SDKs.

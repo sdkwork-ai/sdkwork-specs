@@ -136,6 +136,7 @@ Rules:
 - Positive numeric parsing is required for `tenant_id` and `user_id`; `organization_id` `MUST` parse as `>= 0`, with `0` meaning tenant-level scope.
 - The resolver `MUST` classify access-token scope as tenant-level (`login_scope = TENANT`, organization `0`/absent) or organization-level (`login_scope = ORGANIZATION`, non-zero) and reject contradictory claims before producing a principal (`API_SPEC.md` section 10.4).
 - `TenantAppContext` and the SQL mapper `MUST` project `organization_id = 0` for a tenant-level access token and the extracted claim value for an organization-level access token. A repository `MUST NOT` substitute a default, first, or environment-configured organization for either scope.
+- API-key and OAuth resolvers `MUST` project the same `TenantAppContext` scope from their validated credential record: a record `organization_id = 0` maps to tenant-level `0`, and a non-zero record maps to that organization (`API_SPEC.md` section 10.5). The record scope `MUST NOT` be widened by a user-scope provider or replaced from a request field.
 - Mapping failure on an authenticated principal `MUST` return HTTP `422` with business code `42201`, not HTTP `500` or internal code `5001`.
 - Legacy `TrustedRequestSubject` bridges `MAY` exist only for migration and `MUST` use the same numeric parse rules.
 - Handlers `MUST NOT` read client-supplied tenant/user selector headers or parameters to establish ambient SQL subject scope.
@@ -228,6 +229,7 @@ Protected open-api routes `MUST` declare one of these route-level auth modes:
 Rules:
 
 - Credential scheme detection for open-api `MUST` be header-driven. When `Access-Token` is present, the request `MUST NOT` be classified as open-api OAuth bearer; app-api/backend-api dual-token rules take precedence on those surfaces.
+- `api-key` and `oauth` resolution `MUST` read `tenant_id` and `organization_id` only from the validated server-side record, and `MUST` fail closed on a non-active tenant, expired/revoked/disabled record, or app/environment mismatch (`API_SPEC.md` section 10.5, `IAM_SPEC.md` section 5.3.1).
 - `OpenApiFlexible` default preference when both `X-Api-Key` and OAuth bearer are present is API key first. Applications `MAY` override `OpenApiCredentialSchemeDetector` through framework runtime assembly.
 - `ApiKeyOrDualToken` accepts exactly one complete branch. `X-API-Key` by itself selects API-key resolution. `Authorization` plus `Access-Token` selects dual-token resolution. API key mixed with either token, either token without its pair, and missing credentials `MUST` fail in the credential-contamination/presence guard before resolver or handler execution.
 - Open-api credential modes and app-api/backend-api dual-token mode `MUST` be mutually exclusive for one request.
@@ -504,6 +506,7 @@ Detailed test requirements: `TEST_SPEC.md` section 2.3.1.
 - [ ] Business adapters implement framework traits; no parallel HTTP context framework in appbase or application repositories.
 - [ ] Java controllers, when present, preserve equivalent typed context, interceptor semantics, route metadata, and problem-detail behavior.
 - [ ] Protected open-api routes declare `api-key`, `oauth`, `open-api-flexible`, or `api-key-or-dual-token` auth mode and resolve credentials through framework extension traits, not handler-local header parsing.
+- [ ] API-key and OAuth resolvers project tenant and organization scope from the validated record (`0` or non-zero), reject non-active tenants and expired/revoked records, and never re-scope the credential from a user-scope provider or request field.
 - [ ] The executable router, bound manifest, served OpenAPI, and SDK authority use one selected-profile route inventory with no missing or extra operation.
 - [ ] One framework layer owns CORS, authentication, authorization, tenant isolation, problem mapping, and response identity for every mounted API route.
 - [ ] `HttpRouteManifest` natively owns or shares runtime-composed inventories; assembly and gateway code contains no leaked manifest allocation.

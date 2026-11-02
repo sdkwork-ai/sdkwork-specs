@@ -917,7 +917,7 @@ Rules:
 - An access token is either tenant-level or organization-level, and that scope governs organization-bound queries, cache and audit keys, and database initialization as defined in section 10.4.
 - Business requests `MUST NOT` trust tenant, organization, role, or user IDs supplied only by body/query parameters when they conflict with token context.
 - Current-tenant selection `MUST NOT` be modeled as a client-supplied OpenAPI parameter or request field. Protected app-api, backend-api, and open-api contracts `MUST NOT` declare `tenant_id`, `tenantId`, `tenant`, `tenant-id`, `X-Tenant-Id`, or equivalent tenant selectors in path, query, header, cookie, or client-writable request body solely to choose the authenticated tenant.
-- Protected open-api callers get tenant context from the validated API key record, validated OAuth bearer token/session lookup, or validated matching auth/access token claims when the declared profile includes that branch.
+- Protected open-api callers get tenant and organization context from the validated API key record, validated OAuth bearer token/session lookup, or validated matching auth/access token claims when the declared profile includes that branch. The record is authoritative and is resolved per section 10.5; no request field may supplement or override it.
 - API paths `MUST NOT` use `/tenants/{tenantId}/...` to scope ordinary current-tenant business resources. Use context-relative resources such as `/orders`, `/files`, or `/iam/organizations`, then enforce tenant and data scope from `WebRequestContext`.
 - Explicit tenant administration or cross-tenant platform operations may address a tenant as the managed resource only when the operation is `backend-admin` or platform scoped, declares a platform/cross-tenant permission, and verifies explicit authorization. Such identifiers must be target/resource identifiers, not ambient request context selectors, and they `MUST NOT` weaken the ban on generated `tenant_id` or `tenantId` current-context inputs.
 - If a request path contains a tenant or organization resource identifier, the server `MUST` verify it matches or is authorized by token claims.
@@ -1089,9 +1089,9 @@ operation is public and `MUST NOT` require or forward either credential. There i
 state: an operation is either explicitly public or it presents the credential of one
 declared non-public profile.
 `internal-api` keeps its `ingress-token` profile per `INTERNAL_API_SPEC.md` section 4 and
-is out of scope unless a route is explicitly declared `dual-token`. Open-api tenancy is
-resolved by the declared open-api credential profile (section 10, `IAM_SPEC.md` section
-5.3, and `IAM_SPEC.md` section 5.4), not by this section.
+is out of scope unless a route is explicitly declared `dual-token`. Open-api tenant and
+organization scope are resolved from the declared credential record in section 10.5; once
+resolved, the organization-scope binding rules in this section apply unchanged.
 
 The access token carries exactly one organization scope. That scope is the sole ambient
 authority for organization isolation; no request parameter, header, body field, cached
@@ -1165,6 +1165,115 @@ organization-level WHERE tenant_id = :tenant_id AND organization_id = :organizat
 seed / init        INSERT ... (tenant_id, organization_id) VALUES (:tenant_id, 0)   -- tenant-level
                    INSERT ... (tenant_id, organization_id) VALUES (:tenant_id, :organization_id) -- organization-level
 ```
+
+### 10.5 Open-api Tenant Context From Credential Records
+
+Open-api has no mandatory user session. Its tenant and organization scope are therefore
+properties of the validated server-side credential record selected by the route profile,
+never of the request. The record is the tenant authority: path, query, headers, cookies,
+request body, SDK call options, and client context must not select or override the tenant.
+
+| Open-api profile | Tenant and organization authority | Standard record |
+| --- | --- | --- |
+| `api-key` | Validated API key record | `iam_api_key`, or a tenant-local API key table under the same logical contract (`IAM_SPEC.md` section 5.3.1) |
+| `oauth` | Validated OAuth token/session record | `iam_session` / OAuth grant, or an application-owned token store behind `OAuthTokenLookupService` |
+| `open-api-flexible` | Record selected by `OpenApiCredentialSchemeDetector` | The selected profile's record |
+| `api-key-or-dual-token` (API-key branch) | Validated API key record | As `api-key` |
+| `api-key-or-dual-token` (dual-token branch) | Verified access-token claims | Section 10.4 |
+
+Rules:
+
+- A protected open-api operation `MUST` resolve exactly one credential record before
+  business logic runs. The record `MUST` supply `tenant_id`, `organization_id` (`0` for
+  tenant-level), `app_id`, subject identity, lifecycle state, expiry/revocation state, and
+  the key or token id.
+- The record's `organization_id` is the resolved organization scope and obeys section 10.4
+  unchanged: `0` is tenant-level and binds every organization-scoped operation to the
+  sentinel; a non-zero value is organization-level and binds that organization. An
+  organization that is not bound to the record's tenant `MUST` fail with `40304`.
+- The record's `tenant_id` is the only tenant authority. A request that supplies a tenant or
+  organization selector, or a credential whose record tenant differs from a resource tenant,
+  `MUST` fail with `40303` / `40304`. The server `MUST NOT` merge, default, or infer a tenant.
+- API key credentials `MUST` be looked up by an indexed, globally unique key id or lookup
+  handle before tenant-local routing. Where keys live in tenant-local tables or databases, a
+  global lookup index or key-id prefix mapping `MUST` resolve the owning tenant first. The
+  server `MUST NOT` scan tenant tables, probe tenants until one matches, or accept a caller
+  tenant to choose the store or the row.
+- Raw API key and OAuth bearer values `MUST` be stored hashed with an approved memory-hard
+  password hash (or an approved equivalent) and compared in constant time. The raw value
+  `MUST NOT` be persisted, logged, returned, or embedded in error text. Key id, key prefix,
+  and safe last-used metadata are the only displayable facts.
+- Record lifecycle `MUST` fail closed: missing, malformed, expired, revoked, disabled, wrong
+  app/environment/deployment profile, or a non-active tenant returns `40101`, `40103`, or
+  `40303`, and `MUST NOT` degrade to anonymous, to another record, or to a broader scope.
+- The record's authorization scope is authoritative for that credential. It `MUST` be
+  resolved server-side, `MUST NOT` be widened by re-enriching from the subject's user scope,
+  and `MUST NOT` be read from the raw key, a claim string, or a request header
+  (`WEB_FRAMEWORK_SPEC.md` section 5.3).
+- Lookup caching `MUST` be bounded, keyed by `tenant_id` plus key or token id, and
+  invalidated on rotation, revocation, tenant suspension, or scope change. A cached entry
+  `MUST NOT` outlive the record's revocation guarantee.
+- Rotation `MUST` issue a new key id and secret, or rotate the stored hash, with an explicit
+  overlap window; the previous secret is revoked at the end of that window. A rotated key
+  keeps its tenant and organization scope unless the rotation operation changes it explicitly
+  and records an audit fact.
+- Audit, metrics, rate-limit, cache, and object-storage keys for open-api `MUST` include the
+  resolved `tenant_id` and organization scope. Rate limits `MUST` be enforced per credential
+  and per tenant, including for rejected keys, without exposing whether a key exists.
+- The `api-key` and `oauth` profiles `MUST NOT` require or accept `Access-Token`; the
+  `api-key-or-dual-token` profile selects exactly one branch before resolution
+  (`WEB_FRAMEWORK_SPEC.md` section 6.1).
+- Validation `MUST` prove the resolved record scope reaches `WebRequestContext` exactly once:
+  tenant, organization scope, `api_key_id` when applicable, app, and the server-resolved
+  authorization scope.
+
+### 10.6 Tenant Isolation Matrix And Invariants
+
+Every protected profile resolves tenant scope from exactly one authority. The matrix is
+normative and `MUST` stay complete when a new auth profile is added.
+
+| Profile | Tenant authority | Organization authority |
+| --- | --- | --- |
+| `dual-token` (app-api/backend-api) | Verified `access_token.tenant_id` | Access-token scope: `0` or the claim value (section 10.4) |
+| `credential-entry-bootstrap` | Verified bootstrap access token | Bootstrap access-token scope |
+| `api-key` (open-api) | Validated API key record | Record `organization_id` (`0` or non-zero) |
+| `oauth` (open-api) | Validated token/session record | Record/session organization (`0` or non-zero) |
+| `open-api-flexible` | Selected credential record | Selected record |
+| `api-key-or-dual-token` | Selected branch | Selected branch |
+| `ingress-token` / `agent-token` | Validated internal credential | Internal credential or typed request-context projection |
+| `anonymous` | None | None |
+
+Invariants:
+
+- `tenant_id` `MUST` be bound on every tenant-scoped operation, table, query, cache key,
+  queue partition, object-storage prefix, search index, audit row, and database seed. A
+  tenant-level access token means organization scope `0`; it never means "tenant scope none".
+- A missing, unresolved, ambiguous, or contradictory tenant authority `MUST` fail closed with
+  `40101`, `40103`, or `40303`. The server `MUST NOT` fall back to a default tenant, the first
+  tenant, a deployment-wide tenant, a demo tenant, or a client-provided value.
+- A resolved tenant `MUST NOT` be combined with a resource owned by another tenant. A
+  cross-tenant operation is an explicit platform or admin operation with a platform
+  permission, a bounded typed contract, and an audit record; it `MUST NOT` be reachable from
+  an ordinary user or credential query path.
+- An `anonymous` operation `MUST NOT` read or write tenant-scoped data. A public operation
+  that needs tenant context is misclassified and `MUST` use the credential profile that
+  proves that tenant.
+- Tenant lifecycle `MUST` gate every credential: a suspended, disabled, or terminated tenant
+  rejects login, refresh, token validation, API key use, OAuth bearer use, and protected
+  requests with `40303` until it is reactivated. Suspension `MUST NOT` be implemented by
+  deleting the tenant or its credential rows.
+- Physical isolation is a deployment property (`DEPLOYMENT_SPEC.md` `tenancyModel` and
+  `isolationModel`), not an application-code branch. Shared schema with `tenant_id` is the
+  default; dedicated schema or database is an approved deployment isolation model.
+  Application code, SQL contracts, cache, and SDK behavior `MUST` be identical under both.
+- Tenant isolation `MUST NOT` depend on a post-query filter, UI hint, feature flag, global
+  request state, or an optional payload field (`DATABASE_SPEC.md` section 16).
+- Database initialization, migration seed, and tenant provisioning `MUST` run inside exactly
+  one resolved tenant and organization scope and `MUST NOT` write rows for an unprovisioned
+  tenant.
+- Tests `MUST` cover the matrix row for every profile the service exposes, including a
+  cross-tenant credential, a suspended tenant, a revoked/expired record, and an
+  organization-scope mismatch.
 
 ## 11. Standard IAM API
 
@@ -2509,6 +2618,9 @@ An API is standard only when this checklist passes:
 - [ ] Access-token scope is classified as tenant-level (`login_scope: TENANT`, `organization_id` `0`/absent) or organization-level (`login_scope: ORGANIZATION`, non-zero organization); contradictory claims fail with `40103`.
 - [ ] Tenant-level requests bind `organization_id = 0` for every query, cache/audit key, and database initialization or seed; organization-level requests bind the extracted organization id and never mix both scopes in one ordinary result set.
 - [ ] Protected open-api operations require the exact security vector declared by `auth.mode`: `ApiKey`, `OAuthBearer`, either API-key/OAuth alternative, or either API-key/combined-dual-token alternative.
+- [ ] Every protected open-api profile resolves tenant and organization scope from exactly one validated server-side credential record; no path/query/body/header/SDK option selects or overrides them.
+- [ ] `iam_api_key` or a tenant-local equivalent persists `tenant_id`, `organization_id` (`0` or non-zero), hashed secret, global lookup handle, lifecycle state, and app/environment binding per `IAM_SPEC.md` section 5.3.1.
+- [ ] The tenant isolation matrix covers every exposed auth profile, and cross-tenant, suspended-tenant, revoked-record, and organization-scope mismatch cases are tested.
 - [ ] Auth/session creation operations do not use inbound tokens or context headers to choose tenant, organization, or user.
 - [ ] Dual-token protected operations validate matching tenant, organization, login scope, user, session, app, and token type claims.
 - [ ] Token validation uses tenant-bound signing keys or an equivalent server-side tenant-bound token lookup.

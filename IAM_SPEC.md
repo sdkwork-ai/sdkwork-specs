@@ -141,6 +141,9 @@ Rules:
 - `iam_session` `MUST` store token hashes, context fields, sharding fields, data scope, permission scope, expiry, revocation, and audit timestamps.
 - Application registration, tenant application provisioning, enablement, and bootstrap access credential issuance `MUST` follow `IAM_APPLICATION_BOOTSTRAP_SPEC.md`. Do not introduce `plus_*`, `studio_*`, or a separate IAM deployment table for this flow.
 - Tenant token signing material `MUST` be tenant-bound. Implementations may store encrypted HMAC secrets, tenant key references, or asymmetric key metadata in `iam_tenant_signing_key`, but every active signing key `MUST` resolve to exactly one tenant and key id (`kid`).
+- `iam_tenant` `MUST` carry a lifecycle status (`active`, `suspended`, `disabled`, `terminated`, or an equivalent registered set). Login, token validation, refresh, API key lookup, OAuth bearer lookup, and every protected request `MUST` reject a non-active tenant with `40303`; suspension `MUST NOT` be implemented by deleting the tenant, its memberships, or its credential rows, so reactivation and audit remain possible.
+- Tenant deactivation is a logical lifecycle change. It `MUST NOT` silently reassign users, organizations, API keys, sessions, or data to another tenant; retention and deletion follow `PRIVACY_SPEC.md`.
+- Tenant-scoped credential records `MUST` persist `tenant_id` even when they live in a tenant-local table or database, so backup, merge, export, and cross-store operations cannot lose tenant provenance.
 
 ## 4. AppContext And ShardingContext
 
@@ -364,12 +367,74 @@ Open-api and machine-to-machine flows use API keys when the API contract declare
 Rules:
 
 - API key mode `MUST` resolve an API key record before protected business logic runs.
-- The API key record `MUST` supply `api_key_id`, `tenant_id`, `organization_id` when applicable, `user_id` or service-account subject, `app_id`, environment/deployment constraints, data scope, permission scope, status, expiry, and revocation state.
-- Raw API key values `MUST` be stored hashed or encrypted according to the deployment security profile. Logs and audit records must use key id and safe key prefix only.
+- The API key record `MUST` supply `api_key_id`, `tenant_id`, `organization_id` (`0` for tenant-level), `user_id` or service-account subject, `app_id`, environment/deployment constraints, server-resolved data and permission scope, status, expiry, and revocation state.
+- Raw API key values `MUST` be stored as an approved memory-hard password hash (or a governed equivalent), never in plaintext. Logs and audit records may use only the key id, safe key prefix, and last-used metadata.
 - `ApiKeyParser` and `ApiKeyLookupService` or equivalent interfaces are required extension points. They allow different products to keep API keys in different IAM tables, tenant-local tables, encrypted secret stores, caches, or remote IAM services.
 - API key lookup `MUST` validate tenant binding, organization binding, app audience, permission scope, expiry, revocation, and allowed source before returning `AppRequestPrincipal`.
+- API key lookup `MUST` also validate the owning tenant's lifecycle status and fail closed with `40303` when the tenant is not active.
 - API key mode and dual-token mode `MUST` be mutually exclusive for a single request.
 - Standard IAM adapter lookup uses `iam_api_key.key_hash` through `IamApiKeyLookupService`. Production profiles `MUST NOT` trust inline claim strings in the raw API key value alone.
+
+### 5.3.1 Standard API Key Record
+
+`iam_api_key` is the open-api tenant authority when the route declares `api-key` or
+`open-api-flexible` selects the API key scheme. It is a `tenant_entity` per
+`DATABASE_SPEC.md` section 5, and the logical row contract is identical for an IAM-owned
+table, a tenant-local table, and a remote lookup service.
+
+| Column | Logical type | Requirement |
+| --- | --- | --- |
+| `id` | `int64` | Key id; primary key; stable, non-secret audit and display identity. |
+| `tenant_id` | `int64` | `NOT NULL`; owning tenant; the only tenant authority for the credential. |
+| `organization_id` | `int64` | `NOT NULL DEFAULT 0`; `0` = tenant-level, non-zero = organization-level. |
+| `app_id` | text | `NOT NULL`; application audience the key is bound to. |
+| `name` | text | `NOT NULL`; human-readable label. |
+| `subject_type` | text | `NOT NULL`; `user` or `service_account`. |
+| `subject_id` | `int64` | `NOT NULL`; bound user or service-account principal. |
+| `lookup_id` | text | `NOT NULL`; non-secret global lookup handle; unique per environment. |
+| `key_prefix` | text | `NOT NULL`; non-secret display prefix. |
+| `key_hash` | text | `NOT NULL`; approved memory-hard hash of the secret. |
+| `status` | text | `NOT NULL`; `active`, `disabled`, or `revoked`. |
+| `expires_at` | instant | `NULL`; absolute expiry. |
+| `revoked_at` | instant | `NULL`; revocation instant. |
+| `last_used_at` | instant | `NULL`; observability only; never an authorization fact. |
+| `environment` | text | `NOT NULL`; lifecycle environment binding. |
+| `deployment_profile` | text | `NULL`; optional deployment-profile restriction. |
+| `allowed_source` | text | `NULL`; optional origin/CIDR allow-list reference. |
+| `version` | `int64` | Optimistic concurrency. |
+| audit fields | per `DATABASE_SPEC.md` section 6.5 | `created_at`, `created_by`, `updated_at`, `updated_by`, `deleted_at`, `deleted_by`. |
+
+Rules:
+
+- `tenant_id` and `organization_id` `MUST` be persisted columns, never derived from a
+  request, a joint table, or an environment default.
+- `organization_id` `MUST` be `NOT NULL` with the platform sentinel default and `MUST`
+  reference an organization in the same tenant; `0` is always valid.
+- `lookup_id` `MUST` be unique per environment and indexed so a presented key resolves to
+  exactly one row in one lookup. The tenant is read from the matched row, never from the raw
+  key's visible prefix or a caller-supplied tenant.
+- `key_hash` `MUST` use an approved memory-hard password hash (or a governed equivalent) and
+  constant-time comparison. The raw secret `MUST NOT` be stored, logged, or returned.
+- `status` transitions `MUST` be explicit: `active` to `disabled` or `revoked`, and
+  `revoked` is terminal. An expired (`expires_at`) or tenant-inactive row is treated as
+  unusable even when `status = active`.
+- Tenant-local API key tables `MUST` preserve the same logical columns, `tenant_id`
+  provenance, and lookup semantics. They `MUST` participate in a global lookup index or
+  key-id routing map so the owning tenant is known before the tenant-local store is opened.
+- A key's authorization scope `MUST` be resolved server-side for its subject and key id. A
+  per-key attenuation `MAY` be stored in normalized key-scoped grant rows and `MUST NOT`
+  exceed the subject's scope. A permission tree, role list, or policy blob `MUST NOT` be
+  stored in the raw key or in a JSON column as the only permission storage
+  (`DATABASE_SPEC.md` section 13).
+- The row `MUST` be read only through `ApiKeyLookupService` / `IamApiKeyLookupService`.
+  Business handlers, repositories, and frontends `MUST NOT` query the table directly.
+- Rotation `MUST` create a new `lookup_id` and secret, or replace `key_hash`, with a
+  documented overlap window; the previous secret `MUST` be revoked at the end of it. Rotation
+  `MUST NOT` silently change `tenant_id` or `organization_id`.
+- Lookup caches `MUST` key on `tenant_id` plus `lookup_id` or `id`, `MUST` be bounded, and
+  `MUST` be invalidated on rotation, revocation, scope change, and tenant lifecycle change.
+- Deletion `MUST` be logical. Physical purge of revoked keys follows `PRIVACY_SPEC.md`
+  retention and `DATABASE_SPEC.md` lifecycle rules.
 
 ## 5.4 OAuth Bearer Context Resolution (Open-api)
 
@@ -382,6 +447,8 @@ Rules:
 - Raw bearer token values `MUST` be stored hashed when persisted. Logs and audit records must use token/session ids and safe prefixes only.
 - `OAuthBearerParser` and `OAuthTokenLookupService` are required framework extension points. Implementations `MAY` live in `sdkwork-iam-web-adapter` (`IamOAuthTokenLookupService`) or application-owned adapters.
 - OAuth bearer lookup `MUST` validate tenant binding, app audience, permission scope, expiry, revocation, and signing-key tenant binding before returning `WebRequestPrincipal` / `AppContext`.
+- The validated OAuth token or session record `MUST` supply `tenant_id` and `organization_id` with the same scope semantics as an access token: `0` is tenant-level and a non-zero value is organization-level (`API_SPEC.md` section 10.5). Organization scope `MUST NOT` be inferred from the bearer value, a claim string, or a request field.
+- OAuth bearer lookup `MUST` validate the owning tenant's lifecycle status and fail closed with `40303` when the tenant is not active.
 - OAuth bearer mode and dual-token mode `MUST` be mutually exclusive for a single request. Open-api OAuth bearer requests `MUST NOT` carry `Access-Token`.
 - Production and production-like profiles `MUST NOT` trust inline OAuth claim strings in the bearer token value alone.
 
@@ -578,6 +645,9 @@ Rules:
 - [ ] New IAM `tenant_id` and `user_id` values are positive numeric snowflake strings that map to SQL `BIGINT` subject scope per `SUBJECT_ID_SPEC.md`; legacy opaque `iamu_` / `iamt_` ids are repaired or migrated.
 - [ ] Token signing and validation use tenant-bound signing keys with key id and tenant binding checks.
 - [ ] API key operations resolve a server-side API key record and never trust raw key claims alone in production.
+- [ ] The `iam_api_key` record (or tenant-local equivalent) persists `tenant_id`, `organization_id` (`0` or non-zero), `app_id`, subject, hashed secret, global lookup handle, `status`, expiry, and revocation, and resolves tenant scope in one indexed lookup without scanning tenants (§5.3.1).
+- [ ] API key and OAuth record organization scope follows the access-token scope contract: `0` is tenant-level and a non-zero value is organization-level, and neither is inferred from a request field (`API_SPEC.md` section 10.5).
+- [ ] Tenant lifecycle status gates login, refresh, token validation, API key use, OAuth bearer use, and protected requests; a non-active tenant fails with `40303` without deleting its rows.
 - [ ] OAuth bearer open-api operations resolve a server-side token/session record and never trust raw bearer claim strings alone in production.
 - [ ] Open-api IAM ingress uses `IamOpenApiWebRequestContextResolver` with route-manifest auth modes instead of handler-local credential parsing.
 - [ ] Application bootstrap uses `@sdkwork/iam-application-bootstrap` and backend resources `iam.applications.register`, `iam.tenantApplications.*`, and `iam.accessCredentials.create`.
