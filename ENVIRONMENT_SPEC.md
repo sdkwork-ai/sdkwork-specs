@@ -427,6 +427,18 @@ release capabilities. It does not own concrete URLs, ports, environment maps, or
 per-profile env values. `SOURCE_CONFIG_SPEC.md` owns source materialization and
 precedence.
 
+A materialized application env is the only per-profile input a framework reads:
+the build loads it directly (`vite build --mode <profile-id>`, Flutter
+`--dart-define-from-file`, the mini-program build copying its one selected JSON)
+and no runtime projection of topology values into a page, process, or global may
+stand in for it. The standard tool (`tools/materialize-client-env.mjs`)
+regenerates it, and the repository checks it in.
+
+A container reads the same authority rather than a second copy: Compose mounts
+`<deployable-root>/etc/topology/<deployment-profile>.<environment>.env` through
+`env_file`, and a deploy descriptor names that file in its topology override. A
+container `MUST NOT` define a parallel `.env` file for the same deployment.
+
 ### 5.1.2 Required Identity Keys
 
 Every materialized profile exposes the equivalent of these values in the
@@ -750,15 +762,17 @@ that profile id verbatim: `vite build --mode cloud.production` loads
 device, or tenant axis `MUST NOT` become a third name segment; it stays a build
 flag (`--runtime-target`, `UNI_PLATFORM`) applied on top of the two-segment mode.
 
-Private values never receive an env file of their own. Every kind of value has
-exactly one home, and a value that has no row here has no file:
+Private values never receive an env file of their own, except the packaged
+application bootstrap token described in the rules below. Every kind of value
+has exactly one home, and a value that has no row here has no file:
 
 | Value | Home |
 | --- | --- |
 | shared build/runtime input | `.env` |
 | per-scope build/runtime input | `.env.<deployment-profile>.<environment>` |
 | per-scope topology source that materializes that file | `etc/topology/<deployment-profile>.<environment>.env` |
-| issued bootstrap access token | `~/.sdkwork/<application-code>/credentials/<profile-id>.json` |
+| issued bootstrap access token (runtime and CLI use) | `~/.sdkwork/<application-code>/credentials/<profile-id>.json` |
+| packaged application bootstrap access token | the owning application root's `.env.<deployment-profile>.<environment>` (see rules) |
 | operator IAM bootstrap identity | `~/.sdkwork/iam-bootstrap/<environment>.json` |
 | host database profile | `config/host/postgres.env(.example)` (§7.1) |
 | desktop packaging host settings | `apps/<surface>/packaging/<platform>.env(.example)` |
@@ -775,8 +789,16 @@ process env, mounted secret files, secret manager             CI, containers, ho
 Rules:
 
 - Tracked materialized env files are safe, deterministic build/runtime inputs.
-  They contain no live credential values, even when a key name is present as an
-  empty documented placeholder.
+  They contain no live credential values, except the packaged application
+  bootstrap token described in the next rule.
+- An application whose release lane packages a non-interactive credential `MAY`
+  carry `SDKWORK_ACCESS_TOKEN` in its own materialized per-scope file. The value
+  is that deployment's revocable bootstrap token, the file is checked in and
+  reviewed like any other change, and rotation is revoke + edit + commit + a
+  rebuilt artifact. The value `MUST NOT` appear in `VITE_*`, `PORTAL_PUBLIC_*`,
+  or any other browser-visible document, and no other private value may join it.
+  A repository that packages no credential keeps the token only in
+  `~/.sdkwork/<application-code>/credentials/<profile-id>.json`.
 - A composed name such as `.env.<profile-id>.local`,
   `.env.<profile-id>.bootstrap.local`, `.env.local`, `.env.postgres`,
   `env/sdkwork.<profile-id>.bootstrap.local.json`, or `.env.release.local`
@@ -1040,6 +1062,18 @@ Rules:
 - The packaging host `MUST` reuse its own environment-scoped bootstrap artifact for the same lifecycle. A host that pins the lifecycle `MUST` drop an inherited deployment selection first, so another application's exported deployment cannot decide the tier.
 - An application repository `MUST` expose exactly one explicit command that provisions the selected lifecycle's bootstrap artifact, and `MUST` document it as the only supported way to create or replace a packaged credential. This repository (SDKWork BirdCoder) provides `pnpm env:token:ensure --environment <lifecycle>`, with `--refresh` for replacement.
 
+A packaged client `MAY` replace the runtime artifact with build-time baking: the
+framework's normal load of the checked-in `.env.<profile-id>` (or its Flutter /
+mini-program JSON) is the carrier, the built page or bundle holds the deployment
+selection, the surface URLs, and `SDKWORK_ACCESS_TOKEN`, and the installed host
+applies nothing at launch. The bake is still a `deployment` build under every
+rule above: the materialized file is the artifact, the allowlist of §5.1.7
+applies, a `public` build still carries no credential, and the build `MUST NOT`
+also generate a second runtime artifact for the same value. A repository that
+adopts baking selects the profile at build time (`--mode <profile-id>` or the
+framework equivalent), so moving an installed application to another deployment
+means installing the matching build.
+
 #### 6.1.2 Local And Release Parity
 
 A source launch and a packaged deployment build `MUST` resolve the same deployment and the same credential from the same contract, differing only in the carrier of the result. Divergence between the two is the defect class that yields a working development shell beside a packaged application that cannot authenticate.
@@ -1052,6 +1086,10 @@ A source launch and a packaged deployment build `MUST` resolve the same deployme
 | Missing credential | `development` may generate a disposable fixture; `test` only under its generation opt-in; `staging` and `production` fail closed | Packaging fails; the installed application reports the named diagnostic |
 | Write authority | A `resolve` command never writes | Packaging never writes |
 | Phase | `resolve` | `resolve`, then `resolve` again at launch |
+
+A build-time-baked client replaces the artifact carrier with its checked-in
+materialized file: the same deployment selection, the same credential rules, and
+the same fail-closed expectation apply, and no launch-time resolution remains.
 
 Rules:
 
