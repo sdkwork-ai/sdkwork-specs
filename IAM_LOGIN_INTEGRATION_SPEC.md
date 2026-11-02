@@ -211,7 +211,7 @@ SDKWork protected app-api and backend-api operations use a dual-token model. Pro
 | Token | Transport | Purpose |
 | --- | --- | --- |
 | `authToken` | `Authorization: Bearer <auth_token>` | principal identity, session identity, tenant, organization, login scope, auth strength, expiry |
-| `accessToken` | `Access-Token: <JWT access_token>` | principal identity, session identity, tenant, organization, login scope, app, environment, deployment profile, runtime target, data scope, permission scope |
+| `accessToken` | `Access-Token: <JWT access_token>` | principal identity, session identity, tenant, organization, login scope, app, environment, deployment mode, optional deployment profile/runtime target; authorization scope is resolved server-side from the session, never signed |
 | `refreshToken` | app-auth refresh operation only | refresh/rotation; never used for normal business APIs |
 
 Rules:
@@ -504,7 +504,7 @@ rg -n "/app/v3/api/auth|/api/.*/auth|user-center/session" services crates
 - [ ] Credential-entry OpenAPI operations use `security: [{ AccessToken: [] }]`, `x-sdkwork-auth-mode: credential-entry-bootstrap`, and `x-sdkwork-forbid-credential-headers: true`; generated SDKs fail before dispatch when bootstrap is missing, and backends reject every non-profile credential/context header.
 - [ ] Multi-organization login uses the appbase organization-selection continuation protocol and does not commit normal session state until final dual tokens are returned.
 - [ ] Runtime env, tracked `.env.example`, bootstrap overlays, and public runtime config do not inject fixed tenant, organization, user, owner, or session scope through `SDKWORK_IAM_BOOTSTRAP_*`, runtime `SDKWORK_APP_ID`, `VITE_SDKWORK_APP_ID`, or equivalent bootstrap variables.
-- [ ] Both tokens and persisted AppContext agree on tenant, organization, login scope, user, session, app, environment, deployment profile, and runtime target.
+- [ ] Both tokens and persisted AppContext agree on tenant, organization, login scope, user, session, app, environment, and deployment mode; deployment profile and runtime target agree when they are signed.
 - [ ] Reusable auth packages use `commitSession(session, options?)`, never `persistSession`, and controller logout clears local authenticated state in a `finally` path.
 - [ ] Runtime/bootstrap builds an SDK inventory and passes every downstream authenticated application/dependency app-api/backend-api client and approved composed wrapper through `clients.sdkClients` or the language-equivalent token-manager-aware SDK list.
 - [ ] Current user profile reads use `appbaseApp.iam.users.current.retrieve()` and missing self-service methods are fixed in appbase app-api/OpenAPI/generator inputs instead of application-local fallbacks.
