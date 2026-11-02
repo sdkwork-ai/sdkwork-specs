@@ -32,6 +32,7 @@ Rules:
 - The primary family `MUST` provide outline and filled variants for every navigation and toggle glyph the product ships, or document the fill fallback used for a missing pair.
 - Outline artwork `SHOULD` use a 24 x 24 grid, 2 px stroke, at least 2 px internal padding, and consistent round caps, joins, and corner radii across the family.
 - The filled variant `MUST` share the outline variant's silhouette, optical bounds, and visual center of mass. A filled icon that is visibly larger, shifted, or shaped differently from its outline counterpart is a review failure.
+- A filled asset whose rendered glyph is pixel-identical to its outline asset is not a filled variant, even when the icon font exposes a distinct codepoint. Icon-set review and tests `MUST` compare the rendered shapes, not only the asset or codepoint ids.
 - A platform-native symbol family `MAY` be used where the platform owns the chrome (iOS tab bars, Android navigation bars, HarmonyOS system symbols). The selected-filled/unselected-outline semantics in section 3 still apply.
 - The following are forbidden as product UI icons: emoji, text characters and ligature stand-ins, raster screenshots, CSS-drawn approximations of a glyph, and mixed stroke and filled families inside one navigation set.
 - Brand and third-party product marks `MAY` use supplied official artwork and are exempt from the fill pairing rule, but they `MUST NOT` stand in for a navigation state pair and `MUST NOT` be recolored beyond the monochrome treatment the brand allows.
@@ -232,6 +233,7 @@ Verification evidence for an icon change `MUST` include:
 - a metadata test proving every stateful navigation entry declares both `outline` and `filled`, and failing when only one id is present;
 - an accessibility test proving icon-only names, decorative hiding, and programmatic selected/current state;
 - a light-mode and dark-mode render for both variants, or a visual regression snapshot covering them;
+- a rendered-shape comparison proving the selected filled glyph differs from the outline glyph in pixels, not only in codepoint or asset id;
 - a platform test proving mini program/uni-app `iconPath` and `selectedIconPath` both exist and native mobile tab/rail items use the platform selected slot;
 - a static scan or review proving no color-only, stroke-thickening, scaling, or filter-based fill substitute was introduced.
 
