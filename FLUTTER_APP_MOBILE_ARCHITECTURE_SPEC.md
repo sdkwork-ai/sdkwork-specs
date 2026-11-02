@@ -259,6 +259,32 @@ Rules:
 - Host config must not contain signing private keys, auth tokens, refresh tokens, API keys, database credentials, private service endpoints, SDK ownership, or business route constants.
 - `agent.app.config.json` must include App Store/Google Play/private distribution metadata, icons, screenshots, package ids, checksums where applicable, signing metadata references, SBOM/provenance, and release notes.
 
+### 9.1 HTTPS Trust And Self-Signed Development Certificates
+
+A Flutter mobile root `MUST` be able to reach an HTTPS app-api edge that serves a development
+self-signed certificate, without weakening release, staging, or store builds.
+
+Rules:
+
+- Root `lib/bootstrap/sdkwork_tls_trust.dart` and `test/bootstrap/sdkwork_tls_trust_test.dart` `MUST`
+  be the spec-owned template copies from `sdkwork-specs/templates/flutter/` and `MUST` stay
+  byte-identical. Implementation rules live in `DART_CODE_SPEC.md` section 15; environment keys in
+  `ENVIRONMENT_SPEC.md` section 5.1.8.
+- Root `lib/main.dart` `MUST` install the layer as its first statement so that Flutter SDK clients
+  constructed by `bootstrap/`, `flutter-mobile-core`, and every capability package inherit it. A
+  `[sdkwork-tls] ...` startup line `MUST` be observable in `flutter run` and `adb logcat`.
+- Hand-rolled transports in `lib/bootstrap/` (`HttpClient`, `http.Client`, dio adapters) `MUST` be
+  created after the install call and `MUST NOT` carry their own certificate policy.
+- The self-signed path is a development/test capability. Release and store artifacts stay `strict`
+  and `MUST NOT` ship an allowlist that accepts untrusted certificates.
+- When a local edge is reached from an Android emulator or iOS simulator, the port mapping is
+  explicit (`adb reverse tcp:<port> tcp:<port>` or an equivalent forward) and the base URL keeps the
+  host name that appears in the certificate subject/SAN, so SNI and hostname validation stay
+  meaningful.
+- Verification: `node <sdkwork-specs>/tools/check-flutter-tls-trust.mjs --workspace <workspace>`
+  proves the vendored files are current and the layer is installed from `main()`; the vendored test
+  proves release strictness and host scoping.
+
 ## 10. Standard Commands
 
 Flutter mobile roots should provide equivalents for:
@@ -324,6 +350,7 @@ Required verification for Flutter mobile architecture changes:
 | Route alignment | Tests or static checks prove Flutter route ids align with cross-client route identity. |
 | UI states | Widget tests cover loading, success, empty, validation-error, permission-denied, offline/unavailable, and unknown-error states for representative screens. |
 | Release preflight | Checks validate iOS/Android package metadata, icons, screenshots, signing references, checksums/SBOM/provenance, and secret absence. |
+| HTTPS trust | `check-flutter-tls-trust.mjs` proves the vendored trust layer matches the template, is installed from `main()` before the binding, and that no application code overrides certificate validation. |
 
 Acceptance checklist:
 
@@ -334,4 +361,6 @@ Acceptance checklist:
 - [ ] Platform behavior uses typed adapters.
 - [ ] Route ids align with other client architectures where workflows match.
 - [ ] Config, manifest, and release metadata are separated and secret-free.
+- [ ] Root installs the vendored HTTPS trust layer from `main()`; release builds stay strict and
+      the self-signed development path is host-scoped and logged.
 - [ ] Flutter analyze/test/build or package equivalents pass for touched packages.

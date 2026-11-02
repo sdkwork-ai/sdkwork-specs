@@ -825,6 +825,47 @@ Rules:
   values are materialized from that application's `etc/`, not copied back into
   the standards repository.
 
+### 5.1.8 TLS Trust Keys
+
+Flutter and Dart VM clients read the HTTPS trust policy from four platform-wide
+`SDKWORK_TLS_*` keys. They are supplied through
+`--dart-define-from-file` (or `--dart-define`) and may be overridden by the
+process environment on desktop and in tests. Absent keys mean "no extra CA,
+strict in release, scoped self-signed trust in debug".
+
+| Key | Class | When | Meaning |
+| --- | --- | --- | --- |
+| `SDKWORK_TLS_TRUST_MODE` | private | MAY | `strict` or `insecure-dev`. Release builds always resolve to `strict`, whatever the value. |
+| `SDKWORK_TLS_TRUST_HOSTS` | private | SHOULD in development | Comma-separated host allowlist for untrusted certificates; exact host or `*.suffix`. Empty under `insecure-dev` means any host and is logged as a warning. |
+| `SDKWORK_TLS_TRUST_CA_PEM` | private | MAY | Inline PEM bundle added to the trusted roots for every build mode. |
+| `SDKWORK_TLS_TRUST_CA_FILE` | private | MAY | Filesystem path to a PEM CA bundle; used when `SDKWORK_TLS_TRUST_CA_PEM` is empty. |
+
+Example development file fragment:
+
+```json
+{
+  "SDKWORK_TLS_TRUST_MODE": "insecure-dev",
+  "SDKWORK_TLS_TRUST_HOSTS": "api-dev.sdkwork.com,*.local.sdkwork.test"
+}
+```
+
+Rules:
+
+- These keys are private runtime inputs. They `MUST NOT` be projected through
+  `VITE_*`, `PORTAL_PUBLIC_*`, or any browser-visible document
+  (`SECURITY_SPEC.md` section 6.2).
+- A materialized per-scope file for `production` `MUST NOT` carry
+  `SDKWORK_TLS_TRUST_MODE=insecure-dev` or a host allowlist that would accept an
+  untrusted certificate; a release build ignores such a value and records a
+  warning.
+- `SDKWORK_TLS_TRUST_CA_FILE` points outside the repository (user profile or
+  secret mount). A private key `MUST NOT` be referenced by these keys; the client
+  only needs the certificate chain.
+- The trust layer implementation and its installation point are fixed by
+  `DART_CODE_SPEC.md` section 15 and `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`
+  section 9.1; verification is
+  `node <sdkwork-specs>/tools/check-flutter-tls-trust.mjs --workspace <workspace>`.
+
 ## 5.2 Desktop, Server, Container, And Browser Config Profiles
 
 Runtime target profiles must remain separate even when they are launched from

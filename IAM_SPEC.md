@@ -215,6 +215,11 @@ Login context distinguishes **who the user is** (persistent `iam_user`) from **h
 | Personal login | `TENANT` | `0` or absent | User-private and tenant-level data for the authenticated user |
 | Organization login | `ORGANIZATION` | non-zero organization id | Organization-scoped business and directory data for the selected organization |
 
+The chosen login context fixes the session's access-token scope: personal login issues a
+tenant-level access token and organization login issues an organization-level access token.
+Protected app-api/backend-api organization context projection, organization-bound queries,
+cache and audit scope, and database initialization follow `API_SPEC.md` section 10.4.
+
 Rules:
 
 - Login/session-creation requests `MUST NOT` require or trust inbound credentials or SDKWork context-projection headers to choose tenant, organization, user, data scope, or permission scope. Implementations `SHOULD` reject credential/context headers on login creation endpoints unless an explicit reauthentication or continuation endpoint documents them.
@@ -310,7 +315,7 @@ Required common claims:
 | `sub` or `user_id` | Authenticated IAM user id. |
 | `sid` or `session_id` | IAM session id. |
 | `tenant_id` | Active tenant id resolved by login or validated session continuation. |
-| `organization_id` | Active organization id, or `0`/absent for tenant-level sessions. |
+| `organization_id` | Active organization id, or `0`/absent for tenant-level sessions. The value selects tenant-level or organization-level access-token scope and the organization scope bound by queries and database initialization (`API_SPEC.md` section 10.4). |
 | `login_scope` | `TENANT` when organization id is `0`/absent; `ORGANIZATION` when organization id is present and non-zero. |
 | `app_id` | Application audience. |
 | `environment`, `deployment_profile`, and `runtime_target` | Runtime audience and deployment context. |

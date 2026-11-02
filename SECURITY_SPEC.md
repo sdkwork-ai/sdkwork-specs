@@ -55,6 +55,7 @@ Rules:
 - If a token's verified `tenant_id`, key tenant binding, session tenant binding, or request context tenant disagree, the request `MUST` fail closed.
 - Both `authToken` and `accessToken` `MUST` include `tenant_id`, `organization_id`, `login_scope`, `user_id`, and `session_id` claims or resolve those values through a trusted server-side token/session lookup.
 - `login_scope` and `organization_id` `MUST` be internally consistent: personal sessions use `login_scope = TENANT` with `organization_id = 0` or absent; organization sessions use `login_scope = ORGANIZATION` with a non-zero organization id.
+- The access token is either tenant-level (`login_scope = TENANT`, organization scope `0`) or organization-level (`login_scope = ORGANIZATION`, organization scope from the claim). Tenant-level query and database-initialization isolation use `organization_id = 0`; organization-level isolation uses the extracted organization id, per `API_SPEC.md` section 10.4.
 - Backend API requests `MUST` accept both organization sessions and personal tenant sessions (`login_scope = TENANT` with `organization_id = 0` or absent). Authorization `MUST` continue to require an authenticated principal and per-route permission checks (or an equivalent host-level admin boundary) before handler logic runs; a personal tenant session alone `MUST NOT` grant backend API access.
 - Tenant signing material `MUST` be encrypted or managed by an approved secret manager/KMS, rotated, revocable, and excluded from logs, generated SDK output, public runtime config, and frontend bundles.
 
@@ -69,6 +70,7 @@ Rules:
 - Service/use-case code `MUST` enforce business authorization before repository access returns tenant-owned data. Router middleware and UI permission hints are not sufficient.
 - Repositories `MUST` receive tenant, organization, owner, and data-scope inputs from typed context or explicit service parameters; they `MUST NOT` infer authorization from global request state.
 - Ordinary repository access to organization-scoped data `MUST` fail closed unless both tenant and organization scope are present in trusted typed context and bound by the database operation according to `DATABASE_SPEC.md` section 16.
+- The access-token organization scope is mandatory authorization input: a tenant-level token authorizes only operations whose resolved organization scope is `0`, and an organization-level token authorizes the extracted organization. An operation, target resource, or repository predicate that requires a different organization scope than the resolved one `MUST` fail with `40304` (`API_SPEC.md` section 10.4).
 - Cross-organization system operations are privileged security surfaces. They `MUST` use an explicit service/worker capability or administrative authorization, a fixed bounded operation contract, least-privilege credentials, and an audit record or security-grade operational event that identifies the operation, caller identity, scope, outcome, and trace id.
 - Comments, markers, feature flags, route hiding, and background execution do not authorize cross-organization access. Unknown or undeclared operations `MUST` fail closed before database access.
 
@@ -168,6 +170,28 @@ Rules:
 - Generated SDK output `.sdkwork/sdkwork-generator-*.json` files are valid only below generated SDK
   output and are not repository workspace secrets or skills.
 
+## 6.2 TLS Trust And Self-Signed Development Certificates
+
+Development edges commonly serve a self-signed certificate. Clients `MUST` be able to reach them
+without weakening production TLS.
+
+Rules:
+
+- Release, staging, and store artifacts `MUST` validate the full certificate chain. Unconditional
+  `badCertificateCallback`, trust-all `HttpOverrides`, hostname-verification bypass flags, and a
+  development CA shipped inside a release artifact are `FORBIDDEN`.
+- A self-signed development path is a scoped capability, not a global switch: it is host-allowlisted
+  (`SDKWORK_TLS_TRUST_HOSTS`), active only for non-release builds, installed once at process start,
+  and implemented by the spec-owned layer in `DART_CODE_SPEC.md` section 15.
+- Every acceptance of an untrusted certificate `MUST` be logged with the target host, port,
+  certificate subject, and issuer. Logs `MUST NOT` include tokens, cookies, or request bodies.
+- Prefer a configured private CA (`SDKWORK_TLS_TRUST_CA_PEM` / `SDKWORK_TLS_TRUST_CA_FILE`) over
+  host-scoped acceptance: it preserves normal chain validation for every other host.
+- Trust configuration is private runtime config (`ENVIRONMENT_SPEC.md` section 5.1.8). Neither the
+  allowlist nor a CA bundle `MUST NOT` be exposed through `VITE_*` or other browser-visible config.
+- Private keys and the development certificate itself `MUST` stay outside the repository
+  (`SDKWORK_WORKSPACE_SPEC.md`; section 6.1 above); only the trust layer source is committed.
+
 ## 7. Acceptance Checklist
 
 - [ ] OpenAPI security declarations are explicit.
@@ -193,4 +217,6 @@ Rules:
 - [ ] Rate limits exist for auth-sensitive paths.
 - [ ] CORS, cross-site request protection, request size, method guard, SQL injection guard, secure response headers, audit, and logging are configured through framework interceptors.
 - [ ] Logs redact sensitive data.
+- [ ] Release artifacts keep full TLS chain validation; any self-signed development trust is
+      host-scoped, non-release only, installed from `main()`, and logged with host/subject/issuer.
 - [ ] Source-controlled `.sdkwork/` contains no secrets, runtime data, generated SDK transport output, or user-private files.

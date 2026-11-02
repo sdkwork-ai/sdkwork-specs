@@ -914,6 +914,7 @@ Rules:
 - Tenant isolation data `MUST` be resolvable from verified token claims or a server-side token lookup.
 - `auth_token` and `access_token` `MUST` both carry matching `tenant_id`, `organization_id`, `login_scope`, `user_id`/`sub`, and `session_id`/`sid` claims.
 - `login_scope` `MUST` be `TENANT` when `organization_id` is absent or `0`, and `ORGANIZATION` when `organization_id` is present and non-zero. Contradictory token claims are invalid.
+- An access token is either tenant-level or organization-level, and that scope governs organization-bound queries, cache and audit keys, and database initialization as defined in section 10.4.
 - Business requests `MUST NOT` trust tenant, organization, role, or user IDs supplied only by body/query parameters when they conflict with token context.
 - Current-tenant selection `MUST NOT` be modeled as a client-supplied OpenAPI parameter or request field. Protected app-api, backend-api, and open-api contracts `MUST NOT` declare `tenant_id`, `tenantId`, `tenant`, `tenant-id`, `X-Tenant-Id`, or equivalent tenant selectors in path, query, header, cookie, or client-writable request body solely to choose the authenticated tenant.
 - Protected open-api callers get tenant context from the validated API key record, validated OAuth bearer token/session lookup, or validated matching auth/access token claims when the declared profile includes that branch.
@@ -936,6 +937,7 @@ interactive login.
 Rules:
 
 - `SDKWORK_ACCESS_TOKEN` `MUST` contain a signed SDKWork `access_token` whose claims carry the ambient request context: at minimum `tenant_id`, `organization_id`, `app_id`, `environment`, `deployment_profile`, `runtime_target`, and applicable scope metadata.
+- A bootstrap access token obeys the access-token scope rules of section 10.4: a tenant-level bootstrap token resolves organization scope `0`, and an organization-level bootstrap token resolves the organization id from its claim.
 - `auth_token`, `refresh_token`, and API keys `MUST NOT` be configured through environment variables. They are obtained only from sdkwork-iam login, refresh, and current-session flows.
 - Bootstrap env credentials seed the global TokenManager or service-context credential provider only. They `MUST NOT` be copied into browser public runtime config, URLs, logs, UI, or feature state.
 - Login, registration, refresh, current-session bootstrap, and organization-selection completion `MUST` replace bootstrap credentials with IAM-issued session tokens.
@@ -959,6 +961,10 @@ Rules:
   "exp": 1760003600
 }
 ```
+
+An organization-level access token uses the same envelope with
+`login_scope: "ORGANIZATION"` and a positive non-zero `organization_id`; every other claim
+is unchanged. The two variants are the access-token scopes defined in section 10.4.
 
 ### 10.2 SDKWork Request Context Framework
 
@@ -1004,6 +1010,7 @@ API surface and resolver standard:
 Rules:
 
 - `WebRequestContext` `MUST` be resolved once at the framework boundary and injected as a typed request extension or equivalent runtime context.
+- `WebRequestContext.tenancy.organization_id` `MUST` be the access-token scope resolved by section 10.4: the sentinel `0` for a tenant-level token and the extracted organization id for an organization-level token.
 - Business handlers `MUST` consume the typed context. They `MUST NOT` reparse auth tokens, access tokens, API keys, or tenant/user fields from raw headers.
 - `WebRequestContextResolver`, `ApiKeyLookupService`, `OAuthTokenLookupService`, `OpenApiCredentialSchemeDetector`, `AuthorizationPolicy`, `TenantIsolationPolicy`, and `DomainContextInjector` are standard framework extension points. appbase and application repositories implement them; they `MUST NOT` expose a parallel HTTP context framework.
 - The default parser may support standalone development claim formats, but
@@ -1070,6 +1077,90 @@ Rules:
 - CORS, method guard, cross-site request protection, request size limits, and SQL injection request guards `SHOULD` run before credential parsing to reduce attack surface.
 - The SQL injection guard is a request-layer heuristic only. All database access `MUST` still use bind parameters, typed repositories, input validation, and server-side authorization.
 - Error responses produced by the chain `MUST` use `application/problem+json` and include the server-owned request id when available.
+
+### 10.4 Access Token Scope And Organization Isolation
+
+`app-api` and `backend-api` are the dual-token surfaces. Every non-public operation on
+those surfaces carries `Access-Token: <JWT access_token>`. The `dual-token` profile also
+requires `Authorization: Bearer <JWT auth_token>`; the `credential-entry-bootstrap`,
+`refresh-token`, and explicitly governed internal/agent profiles carry only the credential
+their profile declares. A `security: []` operation is public and `MUST NOT` require,
+accept, or forward either credential. There is no third state: an operation is either
+explicitly public or it presents an access token through one declared non-public profile.
+`internal-api` keeps its `ingress-token` profile per `INTERNAL_API_SPEC.md` section 4 and
+is out of scope unless a route is explicitly declared `dual-token`. Open-api tenancy is
+resolved by the declared open-api credential profile (section 10, `IAM_SPEC.md` section
+5.3, and `IAM_SPEC.md` section 5.4), not by this section.
+
+The access token carries exactly one organization scope. That scope is the sole ambient
+authority for organization isolation; no request parameter, header, body field, cached
+client state, or environment default may refine or override it. SDKWork SaaS deployments
+serve many tenants and organizations from one runtime, so organization scope is a
+request-scoped fact and never a deployment, process, tenant-wide, or datasource-level
+default.
+
+| Access token scope | `login_scope` | `organization_id` claim | Resolved organization scope |
+| --- | --- | --- | --- |
+| Tenant-level | `TENANT` | absent or `0` | platform sentinel `0` |
+| Organization-level | `ORGANIZATION` | positive non-zero snowflake id | the `organization_id` claim value |
+
+Rules:
+
+- Scope classification `MUST` be derived only from the verified `login_scope` and
+  `organization_id` claims of the access token, or from an equivalent trusted server-side
+  session lookup. A missing `login_scope`, a `TENANT` token with a non-zero organization, or
+  an `ORGANIZATION` token with `0` or an absent organization `MUST` fail with `40103` before
+  authentication completes.
+- The resolved organization scope `MUST` be projected once into
+  `WebRequestContext.tenancy.organization_id` as SQL `BIGINT` per `SUBJECT_ID_SPEC.md` and
+  `WEB_FRAMEWORK_SPEC.md` section 5.1: `0` for a tenant-level access token, the claim value
+  for an organization-level access token.
+- A tenant-level access token is tenant-scoped isolation, not an unscoped admin credential.
+  Every downstream read, write, uniqueness check, join, aggregate, cache key, queue
+  partition, object-storage prefix, audit record, and database initialization or seed that
+  carries organization scope `MUST` use `organization_id = 0`. It `MUST NOT` widen to "all
+  organizations", fall back to a default or first organization, match non-zero organization
+  rows implicitly, or treat a missing predicate as "every organization".
+- An organization-level access token is organization-scoped isolation. Those same downstream
+  layers `MUST` use the organization id extracted from the token, and the token's
+  `tenant_id` remains the outer boundary. An organization id that is not bound to the
+  verified tenant and session membership `MUST` fail with `40304`; a tenant mismatch `MUST`
+  fail with `40303`.
+- Joins, CTEs, subqueries, batch paths, background workers, and replays `MUST NOT` weaken
+  either scope. Ordinary business operations `MUST NOT` return tenant-level (`0`) and
+  organization-level (non-zero) rows in one result set; a contract that intentionally
+  combines them is an explicit typed cross-scope operation and follows `SECURITY_SPEC.md`
+  section 2 and `DATABASE_SPEC.md` section 16.
+- Database initialization, migration seed, tenant provisioning, and local or development
+  database reset `MUST` derive `organization_id` from the resolved scope by the same rule:
+  tenant-level initialization writes the sentinel `0`, organization-level initialization
+  writes the extracted organization id. Seed and bootstrap code `MUST NOT` invent an
+  organization id from environment variables, a single-organization heuristic, a first-row
+  lookup, or a column default other than the sentinel required by
+  `DATABASE_FRAMEWORK_SPEC.md` section 6.2.1.
+- A path, query, header, or body organization value is a target resource identifier only.
+  It `MUST` be authorized against the resolved scope and `MUST NOT` change the access-token
+  scope; a mismatch fails with `40304`.
+- A login-context switch or refresh rotates both tokens and replaces the resolved
+  organization scope. A pre-switch access token `MUST NOT` be reused for the new scope, and
+  cached scope `MUST` be treated as stale per `IAM_SPEC.md` section 5.1.2.
+- Cache, idempotency, rate-limit, and audit keys `MUST` include `tenant_id` and the resolved
+  organization scope, so keys cannot collide between the two scopes.
+- Standard error mapping: missing access token `40101`; malformed or contradictory scope
+  claims `40103`; tenant mismatch `40303`; organization mismatch or unbound organization
+  `40304`; insufficient permission or scope `40301` / `40302`.
+- Verification `MUST` exercise the same protected operation with both scopes and prove the
+  bound SQL predicate, the cache/audit scope, and the seed or initialization value, and that
+  a tenant-level request never reads or writes non-zero organization rows.
+
+Scope binding example:
+
+```text
+tenant-level       WHERE tenant_id = :tenant_id AND organization_id = 0
+organization-level WHERE tenant_id = :tenant_id AND organization_id = :organization_id
+seed / init        INSERT ... (tenant_id, organization_id) VALUES (:tenant_id, 0)   -- tenant-level
+                   INSERT ... (tenant_id, organization_id) VALUES (:tenant_id, :organization_id) -- organization-level
+```
 
 ## 11. Standard IAM API
 
@@ -2410,6 +2501,9 @@ An API is standard only when this checklist passes:
 - [ ] Public SDK-generated operations that must not send stored credentials set `x-sdkwork-auth-mode: anonymous`.
 - [ ] Credential-entry operations require only `AccessToken`, set `x-sdkwork-auth-mode: credential-entry-bootstrap` and `x-sdkwork-forbid-credential-headers: true`, and runtime code rejects every non-profile credential/context header.
 - [ ] Protected app-api and backend-api operations require both `AuthToken` and `AccessToken`.
+- [ ] Every non-public app-api/backend-api operation carries `Access-Token`; public operations carry neither credential, and no operation is left in an undeclared in-between state.
+- [ ] Access-token scope is classified as tenant-level (`login_scope: TENANT`, `organization_id` `0`/absent) or organization-level (`login_scope: ORGANIZATION`, non-zero organization); contradictory claims fail with `40103`.
+- [ ] Tenant-level requests bind `organization_id = 0` for every query, cache/audit key, and database initialization or seed; organization-level requests bind the extracted organization id and never mix both scopes in one ordinary result set.
 - [ ] Protected open-api operations require the exact security vector declared by `auth.mode`: `ApiKey`, `OAuthBearer`, either API-key/OAuth alternative, or either API-key/combined-dual-token alternative.
 - [ ] Auth/session creation operations do not use inbound tokens or context headers to choose tenant, organization, or user.
 - [ ] Dual-token protected operations validate matching tenant, organization, login scope, user, session, app, and token type claims.

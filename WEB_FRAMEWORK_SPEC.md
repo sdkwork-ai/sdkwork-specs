@@ -134,6 +134,8 @@ Handlers and repositories that persist SQL `BIGINT` `tenant_id`, `organization_i
 Rules:
 
 - Positive numeric parsing is required for `tenant_id` and `user_id`; `organization_id` `MUST` parse as `>= 0`, with `0` meaning tenant-level scope.
+- The resolver `MUST` classify access-token scope as tenant-level (`login_scope = TENANT`, organization `0`/absent) or organization-level (`login_scope = ORGANIZATION`, non-zero) and reject contradictory claims before producing a principal (`API_SPEC.md` section 10.4).
+- `TenantAppContext` and the SQL mapper `MUST` project `organization_id = 0` for a tenant-level access token and the extracted claim value for an organization-level access token. A repository `MUST NOT` substitute a default, first, or environment-configured organization for either scope.
 - Mapping failure on an authenticated principal `MUST` return HTTP `422` with business code `42201`, not HTTP `500` or internal code `5001`.
 - Legacy `TrustedRequestSubject` bridges `MAY` exist only for migration and `MUST` use the same numeric parse rules.
 - Handlers `MUST NOT` read client-supplied tenant/user selector headers or parameters to establish ambient SQL subject scope.
@@ -230,6 +232,7 @@ Rules:
 - `ApiKeyOrDualToken` accepts exactly one complete branch. `X-API-Key` by itself selects API-key resolution. `Authorization` plus `Access-Token` selects dual-token resolution. API key mixed with either token, either token without its pair, and missing credentials `MUST` fail in the credential-contamination/presence guard before resolver or handler execution.
 - Open-api credential modes and app-api/backend-api dual-token mode `MUST` be mutually exclusive for one request.
 - Dual-token resolution on app-api/backend-api surfaces `MUST` require both `Authorization: Bearer <JWT auth_token>` and `Access-Token: <JWT access_token>` when the route declares `dual-token` mode and the client runtime has both credentials available.
+- Every non-public app-api/backend-api route profile carries `Access-Token`; tenant-level and organization-level access tokens resolve organization scope `0` and the extracted claim value respectively per section 5.1 and `API_SPEC.md` section 10.4.
 - Credential-entry bootstrap routes `MUST` require `Access-Token: <JWT access_token>` and resolve tenant/app isolation from that token while rejecting `Authorization` and every other non-profile credential.
 - Anonymous routes require no credential and receive `principal: None`. Refresh-token routes use only their declared refresh proof; they derive tenant/session context from the validated proof and `MUST NOT` require or inherit `Access-Token` or `Authorization`.
 - `auth_token` and `access_token` header values `MUST` use JWT compact serialization. Semicolon claim-string tokens and raw JSON claim blobs `MUST` be rejected by framework parsers and production resolvers.

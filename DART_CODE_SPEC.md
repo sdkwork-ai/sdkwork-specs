@@ -240,8 +240,46 @@ Forbidden:
 - Blocking the UI thread with synchronous heavy work.
 - Hardcoded user-facing strings in reusable packages instead of i18n.
 - Hand-editing generated Dart SDK output; importing another package's `src/`.
+- `HttpOverrides.global = ...` or `badCertificateCallback = ... true` in application, feature, or
+  service code; trust policy belongs to the vendored layer (`DART_CODE_SPEC.md` section 15).
 
-## 15. Verification
+## 15. HTTPS Trust And Self-Signed Certificates
+
+Every Dart VM or Flutter application that performs HTTPS `MUST` install the SDKWork trust layer
+before the first HTTP client exists. Development edges frequently serve a self-signed certificate;
+supporting it `MUST NOT` weaken release behavior.
+
+Rules:
+
+- The canonical implementation is `templates/flutter/sdkwork_tls_trust.dart`. Every application
+  root vendors it byte-identical at `lib/bootstrap/sdkwork_tls_trust.dart` and vendors
+  `templates/flutter/sdkwork_tls_trust_test.dart` at `test/bootstrap/sdkwork_tls_trust_test.dart`.
+  A vendored copy `MUST NOT` be edited in place: change the template, then run
+  `node <sdkwork-specs>/tools/check-flutter-tls-trust.mjs --workspace <workspace> --fix`.
+- `main()` `MUST` call `SdkworkTlsTrust.installForApp()` as its first statement — before
+  `WidgetsFlutterBinding.ensureInitialized()`, before any generated SDK client is constructed, and
+  before `runApp`.
+- The layer installs through `dart:io` `HttpOverrides.global`, so it covers a hand-rolled
+  `HttpClient`, `package:http` (`IOClient`), `package:dio`, and generated Dart SDK clients.
+  Application, feature, and service code `MUST NOT` assign `HttpOverrides.global` or
+  `badCertificateCallback`; `check-flutter-tls-trust.mjs` rejects both outside the vendored template.
+- Two trust modes exist: `strict` and `insecure-dev`. A release build
+  (`bool.fromEnvironment('dart.vm.product')`) is always `strict`: `insecure-dev` is coerced with a
+  recorded warning and an untrusted certificate `MUST NOT` be accepted there.
+- Self-signed acceptance `MUST` be host-scoped by `SDKWORK_TLS_TRUST_HOSTS` (exact host or
+  `*.suffix`), and every acceptance `MUST` be logged with host, subject, and issuer. An empty
+  allowlist under `insecure-dev` means "any host" and is announced as a startup warning; a build
+  shared with other people `SHOULD` set the allowlist explicitly.
+- A private or self-signed CA `SHOULD` be supplied through `SDKWORK_TLS_TRUST_CA_PEM` or
+  `SDKWORK_TLS_TRUST_CA_FILE` instead of host-scoped acceptance: adding the CA to the
+  `SecurityContext` keeps ordinary chain validation for every other host and is allowed in release.
+- Trust diagnostics `MUST` be visible in `flutter run` stdout and `adb logcat`. The template emits
+  `[sdkwork-tls]` lines and owns the only `avoid_print` suppression in the file.
+- The vendored test `MUST` stay green. It locks release-mode strictness, mode parsing, host
+  matching, and installation. New trust behavior is added to the template and its test first.
+- Environment keys are defined by `ENVIRONMENT_SPEC.md` section 5.1.8.
+
+## 16. Verification
 
 Rules:
 
@@ -252,10 +290,12 @@ Rules:
 - Run `node ../sdkwork-specs/tools/check-application-layering.mjs --root .` when Dart/Flutter
   service, SDK injection, or runtime/bootstrap boundaries are touched in an application
   repository.
+- Run `node <sdkwork-specs>/tools/check-flutter-tls-trust.mjs --workspace <workspace>` whenever a
+  Flutter entrypoint, bootstrap transport, or trust template changes.
 - Generated Dart SDK changes are verified through the generator pipeline, not by hand-editing
   output.
 
-## 16. Acceptance Checklist
+## 17. Acceptance Checklist
 
 - [ ] Package uses sound null safety; `dart analyze`/`flutter analyze` clean; `dart format`
       applied.
@@ -266,3 +306,5 @@ Rules:
 - [ ] Public API is documented and semver-clean; `@Deprecated` where applicable.
 - [ ] Tests cover loading/empty/error/permission-denied/success for changed surfaces.
 - [ ] `pubspec.lock` committed with dependency edits (per repository policy).
+- [ ] HTTPS clients run behind the vendored trust layer, installed from `main()`, and
+      `check-flutter-tls-trust.mjs` passes (`DART_CODE_SPEC.md` section 15).
