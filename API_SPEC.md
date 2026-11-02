@@ -1081,12 +1081,13 @@ Rules:
 ### 10.4 Access Token Scope And Organization Isolation
 
 `app-api` and `backend-api` are the dual-token surfaces. Every non-public operation on
-those surfaces carries `Access-Token: <JWT access_token>`. The `dual-token` profile also
-requires `Authorization: Bearer <JWT auth_token>`; the `credential-entry-bootstrap`,
-`refresh-token`, and explicitly governed internal/agent profiles carry only the credential
-their profile declares. A `security: []` operation is public and `MUST NOT` require,
-accept, or forward either credential. There is no third state: an operation is either
-explicitly public or it presents an access token through one declared non-public profile.
+those surfaces carries `Access-Token: <JWT access_token>`, except `refresh-token` and an
+explicitly governed internal/agent route profile, which carry only their declared
+credential. The `dual-token` profile also requires `Authorization: Bearer <JWT auth_token>`;
+`credential-entry-bootstrap` carries only the bootstrap access token. A `security: []`
+operation is public and `MUST NOT` require or forward either credential. There is no third
+state: an operation is either explicitly public or it presents the credential of one
+declared non-public profile.
 `internal-api` keeps its `ingress-token` profile per `INTERNAL_API_SPEC.md` section 4 and
 is out of scope unless a route is explicitly declared `dual-token`. Open-api tenancy is
 resolved by the declared open-api credential profile (section 10, `IAM_SPEC.md` section
@@ -1146,6 +1147,9 @@ Rules:
   cached scope `MUST` be treated as stale per `IAM_SPEC.md` section 5.1.2.
 - Cache, idempotency, rate-limit, and audit keys `MUST` include `tenant_id` and the resolved
   organization scope, so keys cannot collide between the two scopes.
+- An operation that by contract reads or writes a specific non-zero organization's data
+  `MUST` reject a tenant-level access token with `40304` instead of degrading to tenant-level
+  data or selecting an organization implicitly.
 - Standard error mapping: missing access token `40101`; malformed or contradictory scope
   claims `40103`; tenant mismatch `40303`; organization mismatch or unbound organization
   `40304`; insufficient permission or scope `40301` / `40302`.
@@ -2501,7 +2505,7 @@ An API is standard only when this checklist passes:
 - [ ] Public SDK-generated operations that must not send stored credentials set `x-sdkwork-auth-mode: anonymous`.
 - [ ] Credential-entry operations require only `AccessToken`, set `x-sdkwork-auth-mode: credential-entry-bootstrap` and `x-sdkwork-forbid-credential-headers: true`, and runtime code rejects every non-profile credential/context header.
 - [ ] Protected app-api and backend-api operations require both `AuthToken` and `AccessToken`.
-- [ ] Every non-public app-api/backend-api operation carries `Access-Token`; public operations carry neither credential, and no operation is left in an undeclared in-between state.
+- [ ] Every non-public app-api/backend-api operation carries `Access-Token`, except `refresh-token` and explicitly governed internal/agent profiles; public operations require and forward neither credential, and no operation is left in an undeclared in-between state.
 - [ ] Access-token scope is classified as tenant-level (`login_scope: TENANT`, `organization_id` `0`/absent) or organization-level (`login_scope: ORGANIZATION`, non-zero organization); contradictory claims fail with `40103`.
 - [ ] Tenant-level requests bind `organization_id = 0` for every query, cache/audit key, and database initialization or seed; organization-level requests bind the extracted organization id and never mix both scopes in one ordinary result set.
 - [ ] Protected open-api operations require the exact security vector declared by `auth.mode`: `ApiKey`, `OAuthBearer`, either API-key/OAuth alternative, or either API-key/combined-dual-token alternative.
