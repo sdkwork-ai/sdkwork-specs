@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "id": "sdkwork-github-workflow-model/v1",
+  "version": "1.2.0",
+  "description": "Normative, machine-readable model of GITHUB_WORKFLOW_SPEC. The specification prose, the validator, the generator starters, and the documentation table all derive from this model; a drift between them is a conformance failure, not an editorial issue.",
+  "conformance": {
+    "statuses": [
+      { "id": "conformant", "meaning": "Every applicable rule passes; no register entry." },
+      { "id": "conditional", "meaning": "A registered exception with an owner, an issue, and an expiry date covers each remaining deviation." },
+      { "id": "non-conformant", "meaning": "An unregistered deviation, or an expired/incomplete exception." }
+    ],
+    "exceptionPolicy": {
+      "requiredFields": ["repository", "reason", "ownerAction", "owner", "issue", "expiresAt"],
+      "maxAgeDays": 90,
+      "onExpiry": "non-conformant",
+      "note": "An exception is debt with a due date, never a permanent waiver."
+    },
+    "profiles": [
+      { "id": "core", "rules": ["roles", "entrypoints", "pins", "lanes"], "appliesTo": "every repository" },
+      { "id": "packaging", "rules": ["targets", "mode-matrix", "toolchains"], "appliesTo": "application role" },
+      { "id": "release", "rules": ["supply-chain", "evidence"], "appliesTo": "repositories that publish artifacts" },
+      { "id": "practices", "rules": ["agents-entrypoints"], "appliesTo": "every repository" }
+    ]
+  },
+  "roles": {
+    "application": { "entrypoints": ["package.yml", "verify.yml"], "targets": "required" },
+    "ci-only": { "entrypoints": ["verify.yml"], "targets": "none" },
+    "fork-upstream": { "entrypoints": [], "targets": "none", "note": "Upstream owns the CI graph; fork-added jobs still follow lane and pin rules." },
+    "third-party": { "entrypoints": [], "targets": "none", "note": "Vendored external project; upstream owns packaging and CI." },
+    "framework": { "entrypoints": [], "targets": "none", "note": "Publishes the reusable workflows themselves." }
+  },
+  "entrypoints": {
+    "package.yml": {
+      "reusable": "sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml",
+      "requiredInputs": ["config_path"],
+      "pinnedRef": true
+    },
+    "verify.yml": {
+      "reusable": "sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-ci.yml",
+      "requiredInputs": ["config_path"],
+      "allowedInputs": ["config_path", "scripts", "install_command", "os_matrix", "framework_ref", "dependency_refs_json", "timeout_minutes"],
+      "forbiddenContent": ["runs-on:", "steps:", "strategy:", "matrix:", "actions/checkout@", "pnpm/action-setup@", "actions/setup-node@", "run:"],
+      "pinnedRef": true
+    }
+  },
+  "runtimeTargets": [
+    { "id": "browser", "platforms": ["web", "h5", "h5-weixin"], "formats": ["web", "web-url", "static", "zip", "tar.gz"], "runnerPrefixes": ["ubuntu-", "macos-", "windows-"], "toolchains": [], "profile": "browser" },
+    { "id": "desktop", "platforms": ["windows", "macos", "linux", "windows-tablet"], "formats": ["msi", "msix", "exe", "dmg", "pkg", "appimage", "deb", "rpm", "snap", "flatpak", "zip", "tar.gz"], "runnerPrefixes": ["windows-", "macos-", "ubuntu-"], "toolchains": [], "profile": "desktop" },
+    { "id": "tablet-ipados", "platforms": ["ipados"], "formats": ["ipa", "zip"], "runnerPrefixes": ["macos-"], "toolchains": ["xcode"], "profile": "tablet" },
+    { "id": "tablet-android", "platforms": ["android-tablet"], "formats": ["aab", "apk", "zip"], "runnerPrefixes": ["ubuntu-", "macos-", "windows-"], "toolchains": ["java", "android"], "profile": "tablet" },
+    { "id": "capacitor-ios", "platforms": ["ios"], "formats": ["ipa", "zip"], "runnerPrefixes": ["macos-"], "toolchains": ["xcode"], "profile": "mobile" },
+    { "id": "capacitor-android", "platforms": ["android"], "formats": ["aab", "apk", "zip"], "runnerPrefixes": ["ubuntu-", "macos-", "windows-"], "toolchains": ["java", "android"], "profile": "mobile" },
+    { "id": "flutter-ios", "platforms": ["ios"], "formats": ["ipa", "zip"], "runnerPrefixes": ["macos-"], "toolchains": ["flutter", "xcode"], "profile": "mobile" },
+    { "id": "flutter-android", "platforms": ["android"], "formats": ["aab", "apk", "zip"], "runnerPrefixes": ["ubuntu-", "macos-", "windows-"], "toolchains": ["flutter", "java", "android"], "profile": "mobile" },
+    { "id": "android-native", "platforms": ["android"], "formats": ["aab", "apk", "zip"], "runnerPrefixes": ["ubuntu-", "macos-", "windows-"], "toolchains": ["java", "android"], "profile": "mobile" },
+    { "id": "ios-native", "platforms": ["ios"], "formats": ["ipa", "zip"], "runnerPrefixes": ["macos-"], "toolchains": ["xcode"], "profile": "mobile" },
+    { "id": "harmony-native", "platforms": ["harmony"], "formats": ["hap", "harmony-app", "zip"], "runnerPrefixes": ["windows-", "macos-"], "toolchains": [], "profile": "mobile", "note": "DevEco Studio and the HarmonyOS SDK are licensed downloads prepared through ci.setup or a self-hosted runner." },
+    { "id": "mini-program", "platforms": ["mp-weixin", "mp-alipay", "mp-baidu", "mp-toutiao", "mp-lark", "mp-qq", "mp-kuaishou", "mp-jd", "mp-360", "mp-dingtalk", "mp-ali"], "formats": ["mini-program-package", "zip"], "runnerPrefixes": ["ubuntu-", "macos-", "windows-"], "toolchains": [], "profile": "mini-program" },
+    { "id": "server", "platforms": ["linux", "windows", "macos"], "formats": ["tar.gz", "zip", "deb", "rpm", "msi", "msix", "pkg", "exe", "docker", "oci", "jar", "war", "other"], "runnerPrefixes": ["ubuntu-", "windows-", "macos-"], "toolchains": [], "profile": "server" },
+    { "id": "container", "platforms": ["container", "linux"], "formats": ["docker", "oci", "helm", "tar.gz"], "runnerPrefixes": ["ubuntu-"], "toolchains": [], "profile": "container" },
+    { "id": "test-runner", "platforms": ["test"], "formats": ["zip", "tar.gz", "other"], "runnerPrefixes": ["ubuntu-", "windows-", "macos-"], "toolchains": [], "profile": "test" }
+  ],
+  "clientArchitectures": {
+    "known": {
+      "pc-web": ["browser"],
+      "h5": ["browser"],
+      "capacitor": ["desktop", "capacitor-ios", "capacitor-android"],
+      "tauri": ["desktop", "tablet-ipados", "tablet-android"],
+      "electron": ["desktop"],
+      "flutter": ["flutter-ios", "flutter-android"],
+      "android-native": ["android-native", "tablet-android"],
+      "ios-native": ["ios-native", "tablet-ipados"],
+      "harmony-native": ["harmony-native"],
+      "mini-program": ["mini-program"]
+    },
+    "tokenPattern": "^[a-z0-9][a-z0-9-]*$",
+    "note": "Known frameworks pin the runtime target they host; an unknown token is declarable and its tooling belongs to the lifecycle hook or ci.setup."
+  },
+  "laneAttribution": {
+    "rule": "A job that fans out through a static matrix must name its lane from a matrix value.",
+    "dynamicMatrix": "A planner-provided matrix is named by the planner that builds its entries."
+  },
+  "pins": {
+    "rule": "Every remote action and reusable workflow reference names a version or a commit SHA.",
+    "sanctionedMovingRefs": ["pull_request_target workflows", "default-branch push workflows"],
+    "note": "Definitions-from-base is the only moving reference a repository may keep, because the policy check must run from the trusted branch."
+  }
+}

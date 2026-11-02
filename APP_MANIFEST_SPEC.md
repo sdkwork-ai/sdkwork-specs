@@ -77,7 +77,8 @@ When the application is independently deployable, the same root `MUST` contain s
   "release": {},
   "security": {},
   "devApp": {},
-  "metadata": {}
+  "metadata": {},
+  "oauth": {}
 }
 ```
 
@@ -85,6 +86,9 @@ Required sections are `app`, `backend`, `runtime`, `media`, `publish`, `artifact
 Legacy manifests may retain an `environments` object. New manifests governed by
 `SOURCE_CONFIG_SPEC.md` omit it and MUST set
 `metadata.deploymentConfig` to `etc/sdkwork.deployment.config.json`.
+
+`oauth` is optional and declares the SDKWork OAuth relying-party registration
+that the IAM embedded bootstrap applies (section 14.1).
 
 ## 4. Identity
 
@@ -662,6 +666,44 @@ Recommended external standards:
 | SBOM | CycloneDX or SPDX |
 | Provenance | SLSA or in-toto |
 | Artifact signing | platform signing, Sigstore, GPG, Authenticode, Apple notarization |
+
+### 14.1 OAuth Relying-Party Registration (`oauth`)
+
+An application that signs its users in through SDKWork IAM (`client_id` sent to
+`/iam/v3/oauth/authorize`) may declare that registration in the manifest so the
+IAM embedded bootstrap creates it with the tenant application instead of
+requiring a manual admin step:
+
+```json
+{
+  "oauth": {
+    "relyingParty": {
+      "enabled": true,
+      "clientId": "birdcoder",
+      "redirectUris": ["birdcoder://auth/callback"],
+      "allowedScopes": ["openid", "profile", "email", "offline_access"],
+      "confidential": false
+    }
+  }
+}
+```
+
+Rules:
+
+- `clientId` is optional and defaults to the tenant application `app_id`. It MUST
+  be unique across tenant applications so `/iam/v3/oauth/authorize` resolves it
+  without a tenant hint.
+- `redirectUris` MUST be absolute and fragment-free. Loopback `http://127.0.0.1/…`
+  entries match any port (RFC 8252); wildcard hosts are rejected.
+- `allowedScopes` MUST be a subset of the standard SDKWork scopes and MUST
+  include `openid`.
+- `confidential: true` requires either `clientSecret` (hashed with Argon2id by
+  the server) or a precomputed `clientSecretHash`. A manifest SHOULD NOT carry a
+  secret; register confidential clients through the IAM admin surface instead.
+- Applying the declaration is policy-controlled: `SDKWORK_IAM_OAUTH_AUTO_REGISTRATION`
+  (`enabled` / `disabled`) decides, development and test lifecycles default to
+  enabled, and every other lifecycle fails closed. A deployment that leaves the
+  policy disabled MUST register the client through IAM backend-api admin.
 
 ## 15. Validation
 

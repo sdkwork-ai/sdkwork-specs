@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { execFileSync } from 'node:child_process';
 
 const REQUIRED_AGENT_SECTIONS = [
   'SDKWORK Soul',
@@ -47,6 +48,42 @@ const FORBIDDEN_PACKAGE_WORKFLOW_NAMES = new Set([
   'package-release.yml',
   'package-release.yaml',
 ]);
+
+// Reusable workflow entrypoints. Every application repository calls exactly these
+// two framework workflows; a repository never re-implements their jobs.
+const FRAMEWORK_REPOSITORY = 'sdkwork-ai/sdkwork-github-workflow';
+const REUSABLE_PACKAGE_WORKFLOW = 'sdkwork-package.yml';
+const REUSABLE_CI_WORKFLOW = 'sdkwork-ci.yml';
+// Rust-only repositories have no package scripts, so their verification
+// entrypoint calls the framework's Rust workflow instead. Both are thin callers
+// of the same framework and the same `config_path` contract.
+const REUSABLE_CI_RUST_WORKFLOW = 'sdkwork-ci-rust.yml';
+// `v1`, `v1.2.3`, or a 40-character commit SHA. Branch names and moving aliases
+// are rejected: a pipeline must name the framework revision it ran.
+const PINNED_REF_PATTERN = /^(?:v?\d+(?:\.\d+){0,2}(?:[-+][A-Za-z0-9.-]+)?|[0-9a-f]{40})$/iu;
+// Toolchain selectors are channels, not action versions: `dtolnay/rust-toolchain`
+// installs whichever Rust release the repository pins in `rust-toolchain.toml`
+// or its `toolchain:` input, so `@stable`, `@beta`, and `@nightly` are the
+// action's intended refs. Every other action must name a version or commit.
+const TOOLCHAIN_CHANNEL_REFERENCES = new Set([
+  'dtolnay/rust-toolchain@stable',
+  'dtolnay/rust-toolchain@beta',
+  'dtolnay/rust-toolchain@nightly',
+]);
+// Repository roles that decide which entrypoints the standard requires.
+const WORKFLOW_ROLES = new Set(['application', 'ci-only', 'fork-upstream', 'third-party', 'framework']);
+// Verification entrypoint inputs the framework's `sdkwork-ci.yml` declares. A
+// caller selects filters here instead of adding local steps.
+const VERIFICATION_INPUTS = new Set([
+  'config_path',
+  'scripts',
+  'install_command',
+  'os_matrix',
+  'framework_ref',
+  'dependency_refs_json',
+  'timeout_minutes',
+]);
+const VERIFICATION_LOCAL_STEP_PATTERN = /runs-on\s*:|\bsteps\s*:|\bstrategy\s*:|\bmatrix\s*:|actions\/checkout@|pnpm\/action-setup@|actions\/setup-node@|^\s{6,}run\s*:/imu;
 const DEPLOYMENT_PROFILES = new Set(['standalone', 'cloud']);
 const RUNTIME_TARGETS = new Set([
   'browser',
@@ -85,9 +122,18 @@ const PACKAGE_PROFILES = new Set([
 
 function usage() {
   return [
-    'Usage: node tools/check-agent-workflow-standard.mjs --root <repo>',
+    'Usage:',
+    '  node tools/check-agent-workflow-standard.mjs --root <repo> [--entrypoints]',
+    '  node tools/check-agent-workflow-standard.mjs --workspace-root <parent> [--report] [--json]',
     '',
-    'Validates SDKWork AGENTS.md and GitHub packaging workflow entrypoints.',
+    'Validates SDKWork AGENTS.md and the reusable GitHub workflow entrypoints:',
+    '  package.yml      thin sdkwork-package.yml caller, pinned framework ref',
+    '  verify.yml       thin sdkwork-ci.yml caller, pinned framework ref',
+    '  references       every action and reusable workflow pinned to a version or SHA',
+    '  matrix jobs      each lane named from its matrix entry',
+    '',
+    '--entrypoints  require verify.yml even when the repository declares no package contract.',
+    '--report       audit mode: print every violation and exit 0 (workspace audits use this).',
   ].join('\n');
 }
 
@@ -365,7 +411,7 @@ function validatePackageWorkflow(root) {
     );
     if (!reusableMatch) {
       issues.push(`${packageLabel} must call the SDKWork reusable package workflow`);
-    } else if (!/^[0-9a-f]{40}$/iu.test(reusableMatch[1]) && !/^v?\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/u.test(reusableMatch[1])) {
+    } else if (!PINNED_REF_PATTERN.test(reusableMatch[1])) {
       issues.push(`${packageLabel} must use a pinned sdkwork-github-workflow ref, not "${reusableMatch[1]}"`);
     }
     if (!/config_path:\s*agent\.workflow\.json/u.test(workflowText)) {
@@ -483,16 +529,322 @@ function validatePackageWorkflow(root) {
     }
   }
 
-  if (issues.length > 0) {
-    fail('GitHub packaging workflow is not compliant', issues);
+  return issues;
+}
+
+/**
+ * Resolve the repository's role in the workflow system.
+ *
+ * `agent.workflow.json` owns the declaration; the framework repository is
+ * detected structurally because it publishes the reusable workflows themselves.
+ * @param {string} root - Repository root.
+ * @returns {string} Declared or detected role.
+ */
+function readWorkflowRole(root) {
+  const configPath = path.join(root, 'agent.workflow.json');
+  if (fs.existsSync(configPath)) {
+    const config = readJson(configPath);
+    if (typeof config.workflowRole === 'string' && config.workflowRole.trim() !== '') {
+      return config.workflowRole.trim();
+    }
+    // A configuration that declares no package target has nothing to package:
+    // its only workflow contract is the verification entrypoint.
+    if (!Array.isArray(config.targets) || config.targets.length === 0) {
+      return 'ci-only';
+    }
+  }
+  const workflowsDir = path.join(root, '.github', 'workflows');
+  const publishesFramework = fs.existsSync(path.join(workflowsDir, REUSABLE_PACKAGE_WORKFLOW))
+    || fs.existsSync(path.join(workflowsDir, REUSABLE_CI_WORKFLOW));
+  if (publishesFramework) return 'framework';
+  // A library family that declares no package contract only owns verification;
+  // the packaging contract stays with the applications that consume it.
+  const kind = repositoryKind(root);
+  const hasPackageContract = fs.existsSync(path.join(root, 'agent.workflow.json'))
+    || fs.existsSync(path.join(workflowsDir, 'package.yml'));
+  if (!hasPackageContract && (kind === 'foundation-dependency' || kind === 'shared-package-family')) {
+    return 'ci-only';
+  }
+  return 'application';
+}
+
+/**
+ * Return the `with:` input names one reusable workflow call passes.
+ * @param {string} text - Workflow YAML.
+ * @returns {Set<string>} Declared input names.
+ */
+function reusableInputNames(text) {
+  const names = new Set();
+  const block = /^ {6}with:\s*$\n((?: {8,}.*\n)+)/mu.exec(text);
+  if (!block) return names;
+  for (const line of block[1].split(/\r?\n/u)) {
+    const name = /^ {8}([A-Za-z0-9_-]+):/u.exec(line)?.[1];
+    if (name) names.add(name);
+  }
+  return names;
+}
+
+/**
+ * Split a workflow's `jobs:` mapping into per-job text blocks.
+ * @param {string} text - Workflow YAML.
+ * @returns {Array<{ id: string, text: string }>} Job id and body, in file order.
+ */
+function jobBlocks(text) {
+  const lines = text.split(/\r?\n/u);
+  const jobsIndex = lines.findIndex((line) => /^jobs:\s*$/u.test(line));
+  if (jobsIndex < 0) return [];
+  const blocks = [];
+  let current = null;
+  for (let index = jobsIndex + 1; index < lines.length; index += 1) {
+    const jobMatch = /^ {2}([A-Za-z0-9_-]+):\s*$/u.exec(lines[index]);
+    if (jobMatch) {
+      current = { id: jobMatch[1], text: '' };
+      blocks.push(current);
+      continue;
+    }
+    if (current) current.text += `${lines[index]}\n`;
+  }
+  return blocks;
+}
+
+/**
+ * Validate one repository's verification entrypoint.
+ *
+ * The verification entrypoint is the second half of the same contract the
+ * packaging entrypoint follows: triggers and a gate list only, with runner
+ * setup, dependency checkout, toolchain versions, and install owned by the
+ * reusable workflow and `agent.workflow.json`.
+ * @param {string} root - Repository root.
+ * @returns {string[]} Violations.
+ */
+function validateVerificationWorkflow(root) {
+  const issues = [];
+  const verifyPath = path.join(root, '.github', 'workflows', 'verify.yml');
+  const label = '.github/workflows/verify.yml';
+  if (!fs.existsSync(verifyPath)) {
+    return [`${label} must exist as the thin verification workflow entrypoint`];
+  }
+  const text = readText(verifyPath);
+  const call = new RegExp(
+    `uses:\\s*${FRAMEWORK_REPOSITORY.replaceAll('/', '\\/')}\\/\\.github\\/workflows\\/(${REUSABLE_CI_WORKFLOW}|${REUSABLE_CI_RUST_WORKFLOW})@([^\\s]+)`,
+    'u',
+  ).exec(text);
+  if (!call) {
+    issues.push(`${label} must call ${FRAMEWORK_REPOSITORY}/.github/workflows/${REUSABLE_CI_WORKFLOW} (or ${REUSABLE_CI_RUST_WORKFLOW} for a Rust-only repository)`);
+  } else if (!PINNED_REF_PATTERN.test(call[2])) {
+    issues.push(`${label} must use a pinned ${call[1]} ref, not "${call[2]}"`);
+  }
+  if (!/config_path:\s*agent\.workflow\.json/u.test(text)) {
+    issues.push(`${label} must pass config_path: agent.workflow.json`);
+  }
+  if (VERIFICATION_LOCAL_STEP_PATTERN.test(text)) {
+    issues.push(`${label} must stay thin: runner setup, install, and gate commands belong to the reusable workflow`);
+  }
+  for (const inputName of reusableInputNames(text)) {
+    if (!VERIFICATION_INPUTS.has(inputName)) {
+      issues.push(`${label} passes unknown verification input ${inputName}`);
+    }
+  }
+  return issues;
+}
+
+/**
+ * Require every remote action and reusable workflow reference to name a pinned
+ * revision, so a pipeline cannot change under an unrelated push.
+ * @param {string} root - Repository root.
+ * @param {string[]} workflowFiles - Workflow files to scan.
+ * @returns {string[]} Violations.
+ */
+function validatePinnedReferences(root, workflowFiles) {
+  const issues = [];
+  for (const workflowPath of workflowFiles) {
+    const label = relative(root, workflowPath);
+    const text = readText(workflowPath);
+    // Definitions-from-base is the one sanctioned moving ref: a
+    // `pull_request_target` workflow must run its checks from the trusted
+    // default branch, not from the pull request head. Every other moving ref
+    // makes the pipeline's behavior depend on someone else's next commit.
+    const definitionsFromBase = /^\s{0,4}pull_request_target:/mu.test(text);
+    for (const match of text.matchAll(/uses:\s*([^\s#]+)/gu)) {
+      const reference = match[1];
+      if (reference.startsWith('./') || reference.startsWith('docker://')) continue;
+      if (TOOLCHAIN_CHANNEL_REFERENCES.has(reference)) continue;
+      const at = reference.lastIndexOf('@');
+      if (at < 0) {
+        issues.push(`${label} references ${reference} without a pinned revision`);
+        continue;
+      }
+      const revision = reference.slice(at + 1);
+      if (!PINNED_REF_PATTERN.test(revision) && !definitionsFromBase) {
+        issues.push(`${label} references ${reference} with a moving revision; pin a version or commit SHA`);
+      }
+    }
+  }
+  return issues;
+}
+
+/**
+ * Require matrix fan-out to be attributable: a job whose failure is reported by
+ * matrix index alone cannot be identified, retried, or reasoned about.
+ * @param {string} root - Repository root.
+ * @param {string[]} workflowFiles - Workflow files to scan.
+ * @returns {string[]} Violations.
+ */
+function validateLaneAttribution(root, workflowFiles) {
+  const issues = [];
+  for (const workflowPath of workflowFiles) {
+    const label = relative(root, workflowPath);
+    for (const job of jobBlocks(readText(workflowPath))) {
+      if (!/^\s+matrix:/mu.test(job.text)) continue;
+      // A planner-provided matrix (`matrix: ${{ ... }}`) is named by the planner
+      // that builds its entries; a static matrix has no such owner.
+      if (/^\s+matrix:\s*\$\{\{/mu.test(job.text)) continue;
+      if (!/^\s+name:.*matrix\./mu.test(job.text)) {
+        issues.push(`${label} job "${job.id}" fans out through a matrix without naming the lane from it`);
+      }
+    }
+  }
+  return issues;
+}
+
+/**
+ * Validate the whole workflow contract of one repository for its declared role.
+ * @param {string} root - Repository root.
+ * @param {{ entrypoints?: boolean }} [options] - Whether the reusable-entrypoint contract applies without a package contract.
+ * @returns {{ role: string, roleIssue: string|null, package: string[], verification: string[], pins: string[], lanes: string[] }} Repository result.
+ */
+function validateRepositoryWorkflows(root, options = {}) {
+  const role = readWorkflowRole(root);
+  const workflowFiles = getWorkflowFiles(root);
+  const entrypoints = options.entrypoints === true;
+  const kind = repositoryKind(root);
+  const hasPackageContract = fs.existsSync(path.join(root, 'agent.workflow.json'))
+    || fs.existsSync(path.join(root, '.github', 'workflows', 'package.yml'));
+
+  const result = { role, roleIssue: null, package: [], verification: [], pins: [], lanes: [] };
+  if (!WORKFLOW_ROLES.has(role)) {
+    result.roleIssue = `agent.workflow.json workflowRole "${role}" must be one of ${[...WORKFLOW_ROLES].join(', ')}`;
+  }
+  if (kind === 'standards') {
+    result.pins = validatePinnedReferences(root, workflowFiles);
+    return result;
+  }
+  if (role === 'framework' || role === 'fork-upstream' || role === 'third-party') {
+    // The framework owns the reusable workflows, and a fork mirrors an upstream
+    // project's job graph — including its action pins, which this repository
+    // does not own. Fork-added workflows are reviewed against §2.2 instead.
+    if (role === 'framework') {
+      result.pins = validatePinnedReferences(root, workflowFiles);
+    }
+    return result;
   }
 
-  return { workflowCount: workflowFiles.length };
+  for (const workflowPath of workflowFiles) {
+    if (FORBIDDEN_PACKAGE_WORKFLOW_NAMES.has(path.basename(workflowPath))) {
+      result.package.push(`${relative(root, workflowPath)} copied packaging workflow is forbidden; use .github/workflows/package.yml`);
+    }
+  }
+  if (role === 'application') {
+    result.package.push(...validatePackageWorkflow(root));
+  }
+  result.pins = validatePinnedReferences(root, workflowFiles);
+  result.lanes = validateLaneAttribution(root, workflowFiles);
+  if (role === 'ci-only' || entrypoints || hasPackageContract) {
+    result.verification = validateVerificationWorkflow(root);
+  }
+  return result;
+}
+
+/**
+ * Validate one repository's application configuration with the framework planner.
+ *
+ * The planner is the authority for `agent.workflow.json`; the audit only records
+ * whether the repository can package at all, so an aligned workflow over a
+ * placeholder configuration is never reported as release-ready.
+ * @param {string} root - Repository root.
+ * @returns {{ valid: boolean, issues: number, firstIssue: string|null } | null} Result, or null when the repository declares no config or the framework is absent.
+ */
+function validateApplicationConfig(root) {
+  const configPath = path.join(root, 'agent.workflow.json');
+  if (!fs.existsSync(configPath)) return null;
+  const planner = path.resolve(import.meta.dirname, '..', '..', 'sdkwork-github-workflow', 'scripts', 'agent-workflow.mjs');
+  if (!fs.existsSync(planner)) return null;
+  try {
+    execFileSync(process.execPath, [planner, 'validate', '--config', configPath], { stdio: 'pipe' });
+    return { valid: true, issues: 0, firstIssue: null };
+  } catch (error) {
+    const text = `${error.stdout ?? ''}${error.stderr ?? ''}`;
+    const issues = text.split(/\r?\n/u)
+      .filter((line) => /\] {3}/u.test(line))
+      .map((line) => line.replace(/^.*?\] {3}/u, '').trim());
+    // The first issue is the one the owner acts on; later issues usually cascade
+    // from a missing or placeholder declaration.
+    return { valid: false, issues: issues.length, firstIssue: issues[0] ?? null };
+  }
+}
+
+/** Fields an exception register entry must carry before it can defer anything. */
+const REQUIRED_EXCEPTION_FIELDS = ['reason', 'ownerAction', 'owner', 'issue', 'expiresAt'];
+
+/**
+ * Remaining days before an exception expires; negative when overdue.
+ * @param {{ expiresAt?: unknown }} entry - Register entry.
+ * @param {number} now - Current epoch milliseconds.
+ * @returns {number|null} Days left, or null when the date is not a valid ISO date.
+ */
+function exceptionDaysLeft(entry, now) {
+  const expiresAt = typeof entry.expiresAt === 'string' ? Date.parse(`${entry.expiresAt}T23:59:59Z`) : Number.NaN;
+  if (Number.isNaN(expiresAt)) return null;
+  return Math.ceil((expiresAt - now) / 86_400_000);
+}
+
+/**
+ * Validate one register entry. An exception is debt with a due date: it may defer
+ * findings only while it is complete and unexpired.
+ * @param {object} entry - Register entry.
+ * @param {number} now - Current epoch milliseconds.
+ * @returns {string[]} Violations that count against conformance.
+ */
+function validateExceptionEntry(entry, now) {
+  const issues = [];
+  for (const field of REQUIRED_EXCEPTION_FIELDS) {
+    if (typeof entry?.[field] !== 'string' || entry[field].trim() === '') {
+      issues.push(`exception register entry ${entry?.issue ?? entry?.repository} is missing ${field}`);
+    }
+  }
+  const daysLeft = exceptionDaysLeft(entry, now);
+  if (daysLeft === null) {
+    issues.push(`exception register entry ${entry.issue} has an invalid expiresAt (expected YYYY-MM-DD)`);
+  } else if (daysLeft < 0) {
+    issues.push(`exception register entry ${entry.issue} expired ${Math.abs(daysLeft)} day(s) ago; clear the debt or re-justify the entry`);
+  }
+  return issues;
+}
+
+/**
+ * Flatten one repository result into the issues a report or gate prints.
+ * @param {{ roleIssue: string|null, package: string[], verification: string[], pins: string[], lanes: string[] }} result - Repository result.
+ * @returns {string[]} Violations in report order.
+ */
+function reportRepository(result) {
+  return [
+    ...(result.roleIssue === null ? [] : [result.roleIssue]),
+    ...result.package,
+    ...result.verification,
+    ...result.pins,
+    ...result.lanes,
+  ];
 }
 
 const parsed = parseArgs({
   options: {
     root: { type: 'string' },
+    'workspace-root': { type: 'string' },
+    entrypoints: { type: 'boolean', default: false },
+    'workflows-only': { type: 'boolean', default: false },
+    exceptions: { type: 'string' },
+    report: { type: 'boolean', default: false },
+    json: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h' },
   },
   allowPositionals: false,
@@ -503,33 +855,132 @@ if (parsed.values.help) {
   process.exit(0);
 }
 
+if (parsed.values['workspace-root']) {
+  const workspaceRoot = path.resolve(parsed.values['workspace-root']);
+  const exceptionPath = parsed.values.exceptions === undefined
+    ? path.join(import.meta.dirname, 'github-workflow-exceptions.json')
+    : path.resolve(parsed.values.exceptions);
+  const exceptions = fs.existsSync(exceptionPath)
+    ? new Map((readJson(exceptionPath).exceptions ?? []).map((entry) => [entry.repository, entry]))
+    : new Map();
+  const repositories = fs
+    .readdirSync(workspaceRoot, { withFileTypes: true })
+    .filter((entry) =>
+      entry.isDirectory()
+      && !entry.name.startsWith('.')
+      && (fs.existsSync(path.join(workspaceRoot, entry.name, '.github', 'workflows'))
+        || fs.existsSync(path.join(workspaceRoot, entry.name, 'agent.workflow.json'))))
+    .map((entry) => entry.name)
+    .sort();
+
+  const audit = [];
+  const now = Date.now();
+  for (const repository of repositories) {
+    let result;
+    try {
+      result = validateRepositoryWorkflows(path.join(workspaceRoot, repository), { entrypoints: true });
+    } catch (error) {
+      audit.push({ repository, role: 'unknown', issues: [error instanceof Error ? error.message : String(error)] });
+      continue;
+    }
+    const issues = reportRepository(result);
+    const exception = exceptions.get(repository);
+    const debt = exception === undefined ? [] : validateExceptionEntry(exception, now);
+    // Planner validity is a packaging requirement. A fork, a vendored third-party
+    // project, and the framework itself do not package through the framework, so
+    // their configuration documents provenance rather than a pipeline.
+    const configApplicable = !['fork-upstream', 'third-party', 'framework'].includes(result.role);
+    audit.push({
+      repository,
+      role: result.role,
+      // Workflow alignment is only half of release readiness: the application's
+      // `agent.workflow.json` must also pass the framework planner, or its own
+      // package run fails before any lane starts.
+      config: configApplicable ? validateApplicationConfig(path.join(workspaceRoot, repository)) : null,
+      // A registered exception keeps its findings visible; it must not hide a new
+      // violation in a repository that has no entry. An expired or incomplete
+      // entry is itself a violation, so the register can only defer debt.
+      exception: exception === undefined ? undefined : {
+        reason: exception.reason,
+        ownerAction: exception.ownerAction,
+        owner: exception.owner,
+        issue: exception.issue,
+        expiresAt: exception.expiresAt,
+        daysLeft: exceptionDaysLeft(exception, now),
+        debt,
+      },
+      issues: exception === undefined ? issues : debt,
+      trackedIssues: exception === undefined ? [] : issues,
+    });
+  }
+
+  if (parsed.values.json) {
+    console.log(JSON.stringify({ repositories: audit }, null, 2));
+  } else {
+    for (const entry of audit) {
+      const status = entry.issues.length > 0 ? 'FAIL' : entry.exception === undefined ? 'ok  ' : 'EXC ';
+      console.log(`${status} ${entry.repository.padEnd(26)} ${entry.role}`);
+      for (const issue of entry.issues) console.log(`     - ${issue}`);
+      if (entry.exception !== undefined) {
+        const days = entry.exception.daysLeft === null ? 'invalid date' : `${entry.exception.daysLeft} day(s) left`
+        console.log(`     tracked ${entry.exception.issue} · owner ${entry.exception.owner} · expires ${entry.exception.expiresAt} (${days})`);
+        console.log(`     tracked: ${entry.exception.reason}`);
+        console.log(`     owner action: ${entry.exception.ownerAction}`);
+        for (const issue of entry.trackedIssues) console.log(`     - (tracked) ${issue}`);
+      }
+      if (entry.config !== null && !entry.config.valid) {
+        console.log(`     config: ${entry.config.issues} planner issue(s); first: ${entry.config.firstIssue}`);
+      }
+    }
+    const failing = audit.filter((entry) => entry.issues.length > 0).length;
+    const tracked = audit.filter((entry) => entry.exception !== undefined && entry.exception.debt.length === 0).length;
+    const expired = audit.filter((entry) => entry.exception !== undefined && entry.exception.debt.length > 0).length;
+    const aligned = audit.length - failing - tracked - expired;
+    const configs = audit.filter((entry) => entry.config !== null);
+    const configsValid = configs.filter((entry) => entry.config.valid).length;
+    const soonest = audit
+      .filter((entry) => entry.exception !== undefined && Number.isFinite(entry.exception.daysLeft))
+      .map((entry) => entry.exception.daysLeft)
+      .sort((left, right) => left - right)[0];
+    console.log(`\n${aligned}/${audit.length} repositories aligned; ${tracked} tracked exception(s); ${expired} expired/incomplete exception(s); ${failing} need alignment`);
+    if (soonest !== undefined) console.log(`earliest exception expiry: ${soonest} day(s)`);
+    console.log(`${configsValid}/${configs.length} application configurations pass planner validation`);
+    // Group the invalid configurations by their first planner error so the debt
+    // is triaged in one place instead of per repository.
+    const classes = new Map();
+    for (const entry of configs.filter((candidate) => !candidate.config.valid)) {
+      const first = entry.config.firstIssue ?? 'unknown';
+      const label = /targets must be an array|targets must contain at least/u.test(first) ? 'placeholder targets'
+        : /\.id must be|packageId/u.test(first) ? 'non-canonical package id'
+          : /runtimeTarget|platform must be one of|cannot produce|is not a .* artifact/u.test(first) ? 'mode/platform mismatch'
+            : /not supported/u.test(first) ? 'legacy field'
+              : /must be a string|must be an array|must be an object/u.test(first) ? 'wrong value type'
+                : /requires lifecycle/u.test(first) ? 'missing lifecycle phase'
+                  : 'other';
+      classes.set(label, (classes.get(label) ?? 0) + 1);
+    }
+    if (classes.size > 0) {
+      const summary = [...classes].sort((left, right) => right[1] - left[1])
+        .map(([label, count]) => `${count} ${label}`).join('; ');
+      console.log(`config debt: ${summary}`);
+    }
+  }
+  const failing = audit.filter((entry) => entry.issues.length > 0).length;
+  process.exit(parsed.values.report || failing === 0 ? 0 : 1);
+}
+
 const root = path.resolve(parsed.values.root || process.cwd());
 
-const agentResult = validateAgents(root);
-const kind = repositoryKind(root);
-const workflowFiles = getWorkflowFiles(root);
-const hasPackageContract =
-  fs.existsSync(path.join(root, 'agent.workflow.json')) ||
-  fs.existsSync(path.join(root, '.github', 'workflows', 'package.yml'));
-const requiresPackageContract = kind === 'application' || hasPackageContract;
-let workflowResult;
-if (kind === 'standards' || !requiresPackageContract) {
-  const copiedWorkflows = workflowFiles.filter((workflowPath) =>
-    FORBIDDEN_COPIED_WORKFLOW_NAMES.has(path.basename(workflowPath)),
-  );
-  if (copiedWorkflows.length > 0) {
-    fail(
-      'GitHub packaging workflow is not compliant',
-      copiedWorkflows.map((workflowPath) =>
-        `${relative(root, workflowPath)} copied packaging workflow is forbidden; use .github/workflows/package.yml`,
-      ),
-    );
-  }
-  workflowResult = { workflowCount: workflowFiles.length };
-} else {
-  workflowResult = validatePackageWorkflow(root);
+const agentResult = parsed.values['workflows-only']
+  ? { agentRootCount: 0, shimCount: 0 }
+  : validateAgents(root);
+const result = validateRepositoryWorkflows(root, { entrypoints: parsed.values.entrypoints });
+const issues = reportRepository(result);
+
+if (issues.length > 0) {
+  fail('GitHub workflow contract is not aligned', issues);
 }
 
 console.log(
-  `agent and workflow standard ok: ${root} (${agentResult.agentRootCount} AGENTS roots, ${agentResult.shimCount} shims, ${workflowResult.workflowCount} workflow files scanned)`,
+  `agent and workflow standard ok: ${root} (${agentResult.agentRootCount} AGENTS roots, ${agentResult.shimCount} shims, role ${result.role})`,
 );

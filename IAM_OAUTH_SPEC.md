@@ -117,6 +117,7 @@ Each relying party `MUST` declare OAuth metadata under `runtimeConfig.oauth.rely
   "oauth": {
     "relyingParty": {
       "enabled": true,
+      "clientId": "forum",
       "redirectUris": [
         "https://forum.example.com/auth/oauth/callback"
       ],
@@ -134,8 +135,9 @@ Each relying party `MUST` declare OAuth metadata under `runtimeConfig.oauth.rely
 
 Rules:
 
-- `client_id` `MUST` equal the tenant application's runtime `app_id`.
-- Redirect URIs `MUST` exactly match registered values unless an explicit wildcard host policy is configured.
+- `clientId` `MUST` equal the registration's OAuth client identifier. It is optional and defaults to the tenant application's runtime `app_id`; a deployment whose brand-level client id differs from the runtime app id (`birdcoder` for `sdkwork-birdcoder`) declares the brand id here.
+- A declared `clientId` `MUST` be unique across tenant applications, and when it is declared the tenant application's `app_id` is no longer accepted as this registration's client id.
+- Redirect URIs `MUST` exactly match registered values unless an explicit wildcard host policy is configured. Loopback redirects follow RFC 8252 and may omit the port.
 - Disabled or non-enabled tenant applications `MUST NOT` authorize or issue tokens.
 - SDKWork applications consuming SDKWork OAuth `MUST` use the same integration model as external providers with `provider_code = "sdkwork"`.
 
@@ -204,6 +206,7 @@ Rules:
 - [ ] App-api OAuth login uses provider adapters and account-binding policy enforcement.
 - [ ] Open-api exposes discovery, authorize, token, userinfo, revoke, and introspect endpoints for SDKWork OAuth provider mode.
 - [ ] Relying-party registration uses `iam_tenant_application.runtimeConfig.oauth.relyingParty`.
+- [ ] Relying-party registration is validated on the write path (client id, redirect URIs, scopes, hashed secret) and applied by the application bootstrap when the auto-registration policy allows it.
 - [ ] Authorization completion after IAM login uses app-api dual-token protection.
 - [ ] Runtime metadata drives login method selection across PC, H5, Flutter, mini program, and native surfaces.
 - [ ] Contract tests cover provider login, account linking, authorization code + PKCE, token exchange, userinfo scope filtering, revocation, and missing/invalid client configuration.

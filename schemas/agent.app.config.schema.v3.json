@@ -86,9 +86,53 @@
     },
     "security": { "type": "object" },
     "devApp": { "type": "object" },
-    "metadata": { "type": "object" }
+    "metadata": { "type": "object" },
+    "oauth": {
+      "description": "SDKWork IAM OAuth relying-party registration declared by the application and applied by the IAM embedded bootstrap when the auto-registration policy allows it for the lifecycle.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "relyingParty": { "$ref": "#/$defs/oauthRelyingPartyRegistration" }
+      }
+    }
   },
   "$defs": {
+    "oauthRelyingPartyRegistration": {
+      "type": "object",
+      "required": ["redirectUris", "allowedScopes"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "clientId": {
+          "description": "OAuth client_id. Defaults to the tenant application app_id; a brand-level id may be declared instead.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+        },
+        "redirectUris": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 2048 }
+        },
+        "allowedScopes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "contains": { "const": "openid" },
+          "items": { "enum": ["openid", "profile", "email", "phone", "tenant", "organization", "offline_access"] }
+        },
+        "confidential": { "type": "boolean" },
+        "clientSecret": {
+          "description": "Plaintext secret supplied to the IAM registration path; the server hashes it with Argon2id before storage.",
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 256
+        },
+        "clientSecretHash": { "type": "string", "minLength": 1 }
+      }
+    },
     "package": {
       "type": "object",
       "required": ["id", "name", "sourceType", "packageFormat", "platform", "architecture", "profileBinding", "runtimeTarget"],

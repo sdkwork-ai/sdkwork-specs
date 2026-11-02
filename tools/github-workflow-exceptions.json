@@ -1,0 +1,77 @@
+{
+  "$comment": "Tracked GitHub workflow exceptions. Every entry names the concrete reason, the owner action that removes it, its owner, its register id, and an expiry date. An entry past its expiry is a conformance failure, not a waiver: the audit reports it as non-conformant until the debt is cleared or the entry is re-justified and re-dated.",
+  "exceptions": [
+    {
+      "repository": "sdkwork-cloudrouter",
+      "reason": "verify.yml runs Rust, SBOM, and repository-shape gates that are not package scripts; package.yml is aligned.",
+      "ownerAction": "Move those gates into the `verify` script (or ci.rust.commands / ci.setup) and re-run the aligner.",
+      "owner": "sdkwork-cloudrouter",
+      "issue": "WF-002",
+      "expiresAt": "2027-01-31"
+    },
+    {
+      "repository": "sdkwork-drive",
+      "reason": "verify.yml runs cargo check/test and a release-readiness script outside the package scripts; package.yml is aligned.",
+      "ownerAction": "Fold the cargo and readiness gates into `verify`, then render verify.yml with `scripts: verify` or declare ci.rust.commands.",
+      "owner": "sdkwork-drive",
+      "issue": "WF-003",
+      "expiresAt": "2027-01-31"
+    },
+    {
+      "repository": "sdkwork-dsh-bot",
+      "reason": "No agent.workflow.json: the repository publishes npm packages through bespoke release workflows and has not declared a packaging contract.",
+      "ownerAction": "Declare `agent.workflow.json` (or `workflowRole: ci-only` with a declared package contract) and migrate verify.yml.",
+      "owner": "sdkwork-dsh-bot",
+      "issue": "WF-004",
+      "expiresAt": "2027-01-31"
+    },
+    {
+      "repository": "sdkwork-knowledgebase",
+      "reason": "verify.yml runs cargo audit/fmt/clippy, pnpm audit, a PowerShell gate, database gates, and Playwright e2e; package.yml is aligned.",
+      "ownerAction": "Move the gates into `verify` or the Rust profile; the database and e2e legs need explicit services.",
+      "owner": "sdkwork-knowledgebase",
+      "issue": "WF-005",
+      "expiresAt": "2027-01-31"
+    },
+    {
+      "repository": "sdkwork-memory",
+      "reason": "verify.yml adds a PostgreSQL contract test that needs a database service the reusable verification workflow does not provision; package.yml is aligned.",
+      "ownerAction": "Declare the service in the framework CI contract (or keep the leg in `verify` with a documented service).",
+      "owner": "sdkwork-memory",
+      "issue": "WF-006",
+      "expiresAt": "2027-01-31"
+    },
+    {
+      "repository": "sdkwork-web-framework",
+      "reason": "verify.yml runs `./scripts/verify.sh` (and its PowerShell twin) instead of a package script; package.yml is aligned.",
+      "ownerAction": "Add a `verify` script that runs the shell gate, then render verify.yml with `scripts: verify`.",
+      "owner": "sdkwork-web-framework",
+      "issue": "WF-009",
+      "expiresAt": "2027-01-31"
+    },
+    {
+      "repository": "sdkwork-codebox",
+      "reason": "release.yml is a bespoke Tauri release pipeline (multi-OS build, signing, latest.json assembly) that copies packaging/release framework logic.",
+      "ownerAction": "Move the build, signing, and update-metadata steps into agent.workflow.json lifecycle phases and replace release.yml with the framework package caller.",
+      "owner": "sdkwork-codebox",
+      "issue": "WF-010",
+      "expiresAt": "2027-01-31"
+    },
+    {
+      "repository": "sdkwork-terminal",
+      "reason": "release-reusable.yml copies packaging/release framework logic for the Rust CLI release assets.",
+      "ownerAction": "Declare the targets and release steps in agent.workflow.json, then replace the local release workflow with the framework package caller.",
+      "owner": "sdkwork-terminal",
+      "issue": "WF-011",
+      "expiresAt": "2027-01-31"
+    },
+    {
+      "repository": "sdkwork-agentstudio",
+      "reason": "release-reusable.yml is a bespoke desktop release pipeline that copies packaging/release framework logic.",
+      "ownerAction": "Move the build, signing, and update-metadata steps into agent.workflow.json lifecycle phases and replace release-reusable.yml with the framework package caller.",
+      "owner": "sdkwork-agentstudio",
+      "issue": "WF-013",
+      "expiresAt": "2027-01-31"
+    }
+  ]
+}

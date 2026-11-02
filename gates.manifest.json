@@ -241,6 +241,36 @@
       "tier": "guardrail",
       "baseline": 0,
       "note": "REPOSITORY_BASELINE_SPEC.md section 2 ('A repository MUST NOT track compiler emit that sits beside its source') and section 5's forbidden-tracked clause, executed fleet-wide. These are the only two of audit-repository-baseline.mjs's twelve checks that describe repository CONTENT rather than L1 scaffolding, and they were structurally fail-open before this entry existed: both run only when named through --only, and all four runnable command lines the specs hand out pass --only branch-main (AGENTS.md, REPOSITORY_BASELINE_SPEC.md section 1, README.md, tools/sync-agent-main-branch-standard.mjs, which writes that narrowed line into every repository's AGENTS.md). The spec body asks for the whole audit and always did - section 5 'Run node tools/audit-repository-baseline.mjs --root <repo> before claiming repository baseline completion', section 6 'audit-repository-baseline.mjs passes for the repository root' - but no pipeline ran it, so 16 repositories accumulated 3017 tracked emit files (2026-09-23) with every gate green. WHY A WRAPPER RATHER THAN A MANIFEST ENTRY ON THE AUDIT ITSELF: this tier judges a gate by countItems(output) > baseline, and the audit prints only 'PASS <name> ([...])' / 'FAIL <name> ([...])' lines, none of which any of the four countItems readings recognise - registering the audit directly scores 0 items for a RED repository, which would have re-created the same fail-open one layer up. The wrapper reports 'violations : N' (N = failed checks, i.e. failing repository x failing check) and keeps the audit's own output contract untouched so the quoted command lines still parse. It is fail-closed in four directions: a non-directory workspace, a workspace with no sdkwork-* checkout, a --root that is not a git repository, and a child audit that returns fewer than two verdicts all exit 2 instead of reporting zero. MEASURED 2026-09-23: 100 repositories scanned, 0 violations, baseline 0. The two checks each had exactly one offender at the start of that round - sdkwork-notes (tracked-compiler-emit: sdkwork-notes-pc-react/scripts/shared-sdk-mode.d.ts, emitted from shared-sdk-mode.ts because tsconfig include reaches scripts/ and the fleet ignore block only covers src/ and composed/) and sdkwork-knowledgebase (forbidden-tracked: 14 files under sdks/sdkwork-knowledgebase-rpc-sdk/sdkwork-knowledgebase-rpc-sdk-typescript/dist/, the complete output of tsc -p tsconfig.json at outDir ./dist, a directory the root .gitignore already ignored because ignore never applies to tracked files) - both untracked, both working-tree copies preserved, both verified green afterwards. KNOWN SCOPE LIMITS, DELIBERATELY NOT WIDENED HERE because widening them changes REPOSITORY_BASELINE_SPEC.md section 2 and the gate together: (1) the tracked-compiler-emit extension family is *.js, *.js.map, *.d.ts and *.d.ts.map only, so a transpiled .mjs beside its .ts source and a double-suffixed foo.mjs.d.ts both escape - sdkwork-notes carries exactly that pair live; (2) the fleet ignore block's negation list (vite-env.d.ts, global.d.ts, shims.d.ts) is an enumeration and cannot be complete, since .gitignore cannot express 'ignore this only when a same-stem .ts sibling exists' - sdkwork-notes owns src/theme/sdkworkUiTheme.d.ts, a genuine declare module ambient that is absent from the list. A repository whose tsconfig include reaches outside src/ and composed/ must add its own ignore lines; the gate, not the ignore file, is the authority."
+    },
+    {
+      "id": "check:agent-workflow-standard",
+      "tool": "check-agent-workflow-standard.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--workspace-root",
+        "{workspace}"
+      ],
+      "tier": "guardrail",
+      "baseline": 0,
+      "note": "GITHUB_WORKFLOW_SPEC.md section 10: thin package/verify entrypoints, pinned refs, lane naming, and the tracked-exception register. Exits 0 while every deviation is registered in tools/github-workflow-exceptions.json."
+    },
+    {
+      "id": "check:github-workflow-model",
+      "tool": "gen-github-workflow-model-doc.mjs",
+      "scope": "fixed",
+      "argv": [],
+      "tier": "guardrail",
+      "baseline": 0,
+      "note": "GITHUB_WORKFLOW_SPEC.md section 12: the runtime-target matrix is generated from specs/github-workflow/model.json and must match the framework planner. Fails on prose drift, model drift, or framework drift."
+    },
+    {
+      "id": "check:github-workflow-conformance",
+      "tool": "test-github-workflow-standard.mjs",
+      "scope": "fixed",
+      "argv": [],
+      "tier": "guardrail",
+      "baseline": 0,
+      "note": "GITHUB_WORKFLOW_SPEC.md section 12: executable conformance fixtures for the entrypoint, pin, lane, and role rules. A rule change without a fixture update fails here."
     }
   ]
 }

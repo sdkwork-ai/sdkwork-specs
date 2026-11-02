@@ -1,7 +1,7 @@
 # GitHub Workflow Standard
 
-- Version: 1.0
-- Scope: SDKWork application GitHub Actions packaging, release workflow integration, artifact publication, deployment workflow integration, supply-chain policy execution, and the reusable `sdkwork-github-workflow` framework
+- Version: 1.1
+- Scope: SDKWork application GitHub Actions packaging, verification, release workflow integration, artifact publication, deployment workflow integration, supply-chain policy execution, and the reusable `sdkwork-github-workflow` framework
 - Related: `SOUL.md`, `AGENTS_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `CODE_STYLE_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`, `APP_MANIFEST_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `DEPENDENCY_MANAGEMENT_SPEC.md`, `COMPOSABLE_ARCHITECTURE_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `APP_PERMISSION_COMPOSITION_SPEC.md`, `DEPLOYMENT_SPEC.md`, `RELEASE_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `QUALITY_GATE_SPEC.md`, `SECURITY_SPEC.md`, `DOCUMENTATION_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines how SDKWork applications integrate with GitHub Actions for packaging and deployment. The goal is one reusable framework and one application-side contract, not copied release YAML in every application repository.
@@ -15,9 +15,11 @@ Rules:
 - The canonical reusable workflow framework is the `sdkwork-github-workflow` repository.
 - Application repositories own `agent.workflow.json`.
 - Application repositories own one thin `.github/workflows/package.yml` entrypoint that calls `sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@<ref>`.
+- Application repositories own one thin `.github/workflows/verify.yml` entrypoint that calls `sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-ci.yml@<ref>`.
 - Application-specific build, package, validation, signing, SBOM, deploy, and publish commands live in lifecycle steps inside `agent.workflow.json`.
 - Framework-level behavior lives in reusable workflows, composite actions, and tested planner code in `sdkwork-github-workflow`.
 - Application repositories `MUST NOT` copy large framework workflow bodies, dependency checkout scripts, matrix planners, release upload logic, or attestation logic into local workflow YAML.
+- Application repositories `MUST NOT` repeat runner setup, dependency checkout, toolchain versions, package-manager install commands, or verification gate commands in a local workflow; those belong to the reusable verification workflow.
 
 The standard integration shape is:
 
@@ -27,13 +29,35 @@ The standard integration shape is:
   .github/
     workflows/
       package.yml
+      verify.yml
 ```
+
+### 1.1 Repository roles
+
+A repository declares its role in `agent.workflow.json` with `workflowRole`; the role decides which entrypoints this standard requires.
+
+| `workflowRole` | Owner | Required entrypoints | Local job bodies |
+|---|---|---|---|
+| `application` (default) | Application or library that packages releases | `package.yml`, `verify.yml` | Forbidden beyond triggers and the reusable call |
+| `ci-only` | Library family that verifies but does not package | `verify.yml` | Forbidden beyond triggers and the reusable call |
+| `fork-upstream` | Fork of an external project whose upstream owns the CI graph | None; fork-owned additions still obey §2.2 | Allowed for upstream-owned files |
+| `third-party` | Vendored external project whose upstream owns packaging and CI (for example a published npm toolkit) | None; it declares `targets: []` | Allowed for upstream-owned files |
+| `framework` | `sdkwork-github-workflow` itself | Owns the reusable workflows | Owns all job bodies |
+
+`ci-only` is also derived for a `foundation-dependency` or `shared-package-family` repository that declares no packaging contract. A repository that publishes `sdkwork-package.yml` or `sdkwork-ci.yml` is the framework and needs no declaration.
+
+A `fork-upstream` repository does not own its upstream files' action pins: the fork keeps them current by merging the upstream branch, and review covers fork-added workflows against this standard. The `pull_request_target` and default-branch-`push` patterns those repositories use to run policy checks from the trusted branch are the only sanctioned moving refs.
+
 
 ## 2. Application Entrypoint
 
 Rules:
 
 - `.github/workflows/package.yml` `MUST` be a thin reusable workflow call.
+- Both entrypoints `MUST` be rendered from `agent.workflow.json` by the framework
+  renderer (`scripts/render-app-workflows.mjs`); a hand-maintained entrypoint is
+  a drift source, and the renderer keeps the pinned framework ref, the declared
+  dependency ref inputs, and the dispatch inputs in sync with the configuration.
 - The workflow `uses:` target `MUST` point to `sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@<pinned-ref>`.
 - The workflow `MUST` pass `config_path: agent.workflow.json` unless the configuration file has an explicitly documented alternate location.
 - The workflow `SHOULD` support these standard triggers:
@@ -49,6 +73,53 @@ Rules:
   dependency checkout, changelog, attestation, and deployment packaging logic
   belongs in the reusable framework plus `agent.workflow.json`.
 
+### 2.1 Verification Entrypoint
+
+Rules:
+
+- `.github/workflows/verify.yml` `MUST` be a thin reusable workflow call to
+  `sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-ci.yml@<pinned-ref>`.
+- The entrypoint `MUST` pass `config_path: agent.workflow.json`; the reusable
+  workflow reads toolchain versions, dependency checkouts, and install policy
+  from that configuration.
+- The entrypoint `MUST` pass the gate as `scripts`, a comma-separated list of
+  package-manager script names. It `MUST NOT` inline `run:` gate commands,
+  `runs-on:`, `steps:`, `strategy:`, `actions/checkout`, `pnpm/action-setup`,
+  or `actions/setup-node`.
+- Environment preparation the standard toolchains do not cover (a native
+  package manager, a service bootstrap, a repository-local tool) `MUST` be
+  declared in `ci.setup` and `MUST NOT` appear as workflow steps.
+- The entrypoint `SHOULD` run on `push` to the default branch, `pull_request`,
+  and `workflow_dispatch`. Repositories that need another runner enroll it
+  through `os_matrix` instead of adding a second workflow file.
+- The verification entrypoint owns the same gates a release must pass: a gate
+  that runs only during packaging, or only on pull requests, is a defect.
+- Repositories with gates that are not expressible as one package-manager
+  script `MUST` move those gates into that script or into
+  `agent.workflow.json` lifecycle steps; they `MUST NOT` keep a bespoke
+  multi-job verification workflow.
+
+### 2.2 Lane Attribution And Fan-Out
+
+Matrix fan-out is where a pipeline stops being diagnosable: a failure that is
+reported by matrix index alone cannot be identified, retried, or reasoned
+about, and a re-run repeats every lane.
+
+Rules:
+
+- Every job that fans out through `strategy.matrix` `MUST` name the lane from
+  its matrix entry, such as `name: Package ${{ matrix.packageId }}` or
+  `name: Verify ${{ matrix.os }}`.
+- A run `MUST` let a maintainer re-execute one lane without re-running the
+  others. Dynamic fan-out (a planner-generated matrix) satisfies this through
+  named lanes plus GitHub's failed-job re-run; static fan-out `MUST` use one
+  job per target, optionally calling a reusable per-target workflow, as
+  `sdkwork-birdcoder2` does for its six Desktop packaging targets.
+- An application repository `MUST NOT` declare its own packaging matrix; the
+  framework plans and names package lanes from `agent.workflow.json`.
+- Lane jobs `MUST NOT` share writable state; every lane owns its output
+  directory and artifact name.
+
 ## 3. Configuration Contract
 
 `agent.workflow.json` is the application packaging contract consumed by `sdkwork-github-workflow`.
@@ -63,16 +134,31 @@ Required top-level fields:
 Supported top-level optional fields:
 
 - `$schema`
+- `workflowRole`
 - `dependencies`
 - `verificationDependencies`
 - `toolchains`
 - `lifecycle`
+- `ci`
 - `security`
 - `publish`
 - `deployments`
 
 Rules:
 
+- `workflowRole`, when present, `MUST` be `application`, `ci-only`,
+  `fork-upstream`, or `third-party`, and decides which entrypoints §1.1
+  requires. Omitted means `application`.
+- `targets` `MUST` be non-empty for every packaging role. A `ci-only` or
+  `third-party` repository declares none, because it produces no SDKWork
+  package.
+- `ci.setup`, when present, is the only place for environment preparation the
+  standard toolchains cannot provide (a native package manager, a service
+  bootstrap). Each step uses the lifecycle step schema (`name`, `run`, optional
+  `shell`, `workingDirectory`, `env`) and `MUST NOT` declare `uses`; the
+  reusable verification workflow executes the steps in order before the gate
+  scripts. A repository `MUST NOT` reintroduce such preparation as local
+  workflow steps.
 - Unknown top-level and nested fields `MUST` fail validation. The planner and JSON Schema must stay aligned.
 - `schemaVersion` `MUST` match the framework schema version supported by the target framework ref.
 - `$schema`, when present in application config examples or generated output, `MUST` be explicitly allowed by both JSON Schema and planner validation.
@@ -168,7 +254,44 @@ Rules:
 
 ## 5. Targets And Matrix Planning
 
-### 5.0 Shared Framework Boundary
+### 5.0 Package mode support matrix
+
+Every runtime target in `CONFIG_SPEC.md` is one application mode with one packaging contract. The framework owns that contract as a table
+(`sdkwork-github-workflow/scripts/agent-workflow.mjs` `PACKAGE_MODE_REQUIREMENTS`, mirrored by
+`scripts/package-mode-starters.mjs` for scaffolding): a target declaration is validated against its row, and `init-app --runtime-targets <csv>` scaffolds the canonical target, format, runner, and toolchains for the mode. Adding an application mode means extending these tables, never adding a workflow.
+
+<!-- BEGIN GENERATED: runtime-target-matrix -->
+
+| Runtime target | Host platform | Formats | Runner | Toolchains |
+|---|---|---|---|---|
+| `browser` | `web`, `h5`, `h5-weixin` | `web`, `web-url`, `static`, `zip`, `tar.gz` | ubuntu-* / macos-* / windows-* | — |
+| `desktop` | `windows`, `macos`, `linux`, `windows-tablet` | `msi`, `msix`, `exe`, `dmg`, `pkg`, `appimage`, `deb`, `rpm`, `snap`, `flatpak`, `zip`, `tar.gz` | windows-* / macos-* / ubuntu-* | — |
+| `tablet-ipados` | `ipados` | `ipa`, `zip` | macos-* | `xcode` |
+| `tablet-android` | `android-tablet` | `aab`, `apk`, `zip` | ubuntu-* / macos-* / windows-* | `java`, `android` |
+| `capacitor-ios` | `ios` | `ipa`, `zip` | macos-* | `xcode` |
+| `capacitor-android` | `android` | `aab`, `apk`, `zip` | ubuntu-* / macos-* / windows-* | `java`, `android` |
+| `flutter-ios` | `ios` | `ipa`, `zip` | macos-* | `flutter`, `xcode` |
+| `flutter-android` | `android` | `aab`, `apk`, `zip` | ubuntu-* / macos-* / windows-* | `flutter`, `java`, `android` |
+| `android-native` | `android` | `aab`, `apk`, `zip` | ubuntu-* / macos-* / windows-* | `java`, `android` |
+| `ios-native` | `ios` | `ipa`, `zip` | macos-* | `xcode` |
+| `harmony-native` | `harmony` | `hap`, `harmony-app`, `zip` | windows-* / macos-* | — |
+| `mini-program` | `mp-weixin`, `mp-alipay`, `mp-baidu`, `mp-toutiao`, `mp-lark`, `mp-qq`, `mp-kuaishou`, `mp-jd`, `mp-360`, `mp-dingtalk`, `mp-ali` | `mini-program-package`, `zip` | ubuntu-* / macos-* / windows-* | — |
+| `server` | `linux`, `windows`, `macos` | `tar.gz`, `zip`, `deb`, `rpm`, `msi`, `msix`, `pkg`, `exe`, `docker`, `oci`, `jar`, `war`, `other` | ubuntu-* / windows-* / macos-* | — |
+| `container` | `container`, `linux` | `docker`, `oci`, `helm`, `tar.gz` | ubuntu-* | — |
+| `test-runner` | `test` | `zip`, `tar.gz`, `other` | ubuntu-* / windows-* / macos-* | — |
+
+<!-- END GENERATED: runtime-target-matrix -->dows/macos |
+
+Rules:
+
+- `targets[].platform`, `targets[].formats`, and `targets[].runner` `MUST` agree with the row for the declared `runtimeTarget`; a declaration that contradicts it fails planning instead of failing on a runner.
+- `harmony-native` `MUST` use the `hap` or `harmony-app` format (matching `APP_MANIFEST_SPEC.md` `HAP` / `HARMONY_APP`); `other` is not a fallback for a plain Harmony artifact.
+- The HarmonyOS SDK, DevEco Studio, and signing profile are licensed downloads: the repository prepares them through `ci.setup` or a self-hosted runner, and the mode row therefore names no public toolchain action.
+- `clientArchitecture` is a declarative framework token (`capacitor`, `flutter`, `tauri`, `electron`, `android-native`, `ios-native`, `harmony-native`, `mini-program`, `uniapp`, `unity`, `react-native`, `ionic`). A token the framework does not know is allowed and its tooling is owned by the lifecycle hook; known tokens additionally pin the runtime target they may host (for example `capacitor` with `desktop`/`capacitor-ios`/`capacitor-android`).
+- The toolchains a mode needs (`flutter`, `java`+`android`, `xcode`) are declared in `toolchains` or installed by `ci.setup`; the framework cannot inspect a self-hosted runner, so this is a reviewed declaration rather than a hard validation.
+- Every mobile, tablet, desktop, mini program, server, container, and test mode `MUST` be scaffoldable by `init-app --runtime-targets`, and the starter `MUST` validate with the planner.
+
+### 5.1 Shared Framework Boundary
 
 `sdkwork-github-workflow` is the single workflow planner and reusable GitHub
 Actions implementation for application release matrices. It is composed with
@@ -468,6 +591,16 @@ Rules:
 - The framework setup-toolchains action `MUST` consume every supported toolchain output from the planner, including language versions and boolean mobile/native toggles.
 - Repository validation for shell injection rules `MUST` inspect only YAML literal `run` script blocks by YAML block boundaries or a parser, not by greedy text matching that includes later `env:`, `with:`, `if:`, or reusable workflow metadata.
 - The framework `MUST` run `npm test` and `npm run validate` before reporting a framework change complete.
+- The framework `MUST` publish the verification workflow
+  (`.github/workflows/sdkwork-ci.yml`) beside the packaging workflow, composed
+  only from its own planner and composite actions.
+- The framework `MUST` keep `templates/app-verify.workflow.yml` as the single
+  source of truth for the verification entrypoint, and the generator `MUST`
+  render it unchanged for a new application.
+- The framework `MUST` pin every action revision it consumes. A moving tag
+  (`@main`, `@master`, `@latest`) is a defect in a release pipeline.
+- The framework `MUST` name every matrix lane from its matrix entry, so a
+  failure identifies the target instead of the matrix index.
 
 ## 10. Verification
 
@@ -507,12 +640,38 @@ Application repositories may call the canonical entrypoint validator with:
 
 ```text
 node ../sdkwork-specs/tools/check-agent-workflow-standard.mjs --root .
+node ../sdkwork-specs/tools/check-agent-workflow-standard.mjs --root . --entrypoints
+node ../sdkwork-specs/tools/check-agent-workflow-standard.mjs --workspace-root .. --report
 node ../sdkwork-specs/tools/check-app-manifest-deployment-standard.mjs --root . --strict-release-targets
 ```
 
-The validator checks the thin packaging workflow, pinned reusable workflow ref,
-`agent.workflow.json` target metadata, absence of copied release workflow
-bodies, and the repository/application `AGENTS.md` dynamic loading contract.
+The validator checks the thin packaging and verification workflows, pinned
+reusable workflow refs, `agent.workflow.json` target metadata, absence of
+copied release workflow bodies, pinned action revisions, matrix lane naming,
+and the repository/application `AGENTS.md` dynamic loading contract.
+`--entrypoints` also requires `verify.yml` in a repository that declares no
+package contract, and `--workspace-root` audits every sibling repository in
+one pass for an ecosystem alignment report.
+
+### 10.1 Tracked exceptions
+
+A repository whose remaining deviation needs a semantic decision — a toolchain
+the reusable verification workflow does not own, a database service, a Rust-only
+gate list, or a packaging contract that does not exist yet — is listed in
+`tools/github-workflow-exceptions.json` with a concrete `reason` and the
+`ownerAction` that removes it. The workspace audit prints those findings as
+tracked exceptions and fails only on unregistered repositories, so the register
+cannot hide a new violation and a new repository cannot opt itself out. An entry
+MUST be deleted in the same change that removes its cause.
+
+Application configuration debt is a second, separate dimension: a repository can
+have a thin, aligned workflow while its `agent.workflow.json` still declares
+placeholder targets (`targets: {}`), legacy keys, or non-canonical package ids.
+Such a configuration fails `agent-workflow.mjs validate` and therefore its own
+package run, so it is reported per repository instead of being counted as
+release-ready. The workflow audit is not a substitute for configuring the
+application: a repository is release-ready only when the workflow audit and the
+planner validation both pass.
 
 Framework verification `MUST` check:
 
@@ -539,12 +698,27 @@ Framework verification `MUST` check:
 - Aggregate Release tests prove per-target GitHub Release upload is disabled, the aggregate publish job downloads workflow artifacts, `lifecycle.publish` receives aggregate release context, Release notes are rendered by the framework, and upload uses `publish.aggregateUploadGlobs`.
 - Deploy jobs pass deployment context explicitly to lifecycle execution.
 - Repository validation checks `AGENTS.md`, compatibility shims, `.sdkwork/` files, workflow YAML, actions, schema, examples, and generator output.
+- The verification workflow sets up no toolchain of its own: it calls
+  `validate-config`, `checkout-dependencies`, and `setup-toolchains`, then runs
+  the caller's declared scripts, and it passes workflow inputs to shell steps
+  through environment variables.
+- The generator emits both entrypoints, and repository validation rejects a
+  generated entrypoint that differs from its checked-in template.
+- The verification workflow runs the same lockfile-frozen install the packaging
+  workflow runs, so a green verification cannot hide an install defect.
+- The verification workflow executes `ci.setup` through the planner
+  (`agent-workflow.mjs ci-setup`) and starts no other repository-supplied
+  command before the gate scripts.
 
 ## 11. Acceptance Checklist
 
 - [ ] Application has `agent.workflow.json`.
 - [ ] Application has a thin `.github/workflows/package.yml` reusable workflow call.
+- [ ] Application has a thin `.github/workflows/verify.yml` reusable workflow call, or declares `workflowRole: ci-only` / `fork-upstream` / `framework`.
 - [ ] Application workflow uses a pinned framework ref.
+- [ ] Every action and reusable workflow reference is pinned to a version or commit SHA.
+- [ ] Every matrix lane names itself from its matrix entry, and one lane can be re-run without repeating the others.
+- [ ] Both entrypoints are rendered by `sdkwork-github-workflow/scripts/render-app-workflows.mjs`, not hand-maintained.
 - [ ] Config validates against the framework planner and schema.
 - [ ] Package targets cover the required deployment profiles, runtime targets, package profiles, platforms, architectures, formats, runners, and output globs.
 - [ ] Lifecycle steps use safe paths, supported shells, string env values, and `run` commands only.
@@ -556,3 +730,73 @@ Framework verification `MUST` check:
 - [ ] Aggregate Release publication is declared when final manifest/readiness/changelog aggregation is required, and finalization logic lives in `lifecycle.publish` instead of copied local workflow YAML.
 - [ ] Deployment jobs use GitHub Environments when deployments are configured.
 - [ ] Framework changes pass `npm test` and `npm run validate`.
+
+## 12. Governance
+
+This standard is a maintained product with one normative model, an executable
+conformance suite, and debt that expires.
+
+### 12.1 One normative model
+
+`specs/github-workflow/model.json` is the single source of truth for the role
+vocabulary, the entrypoint contract, the runtime-target matrix, the client
+architecture pairings, the lane rule, and the pin rule. The specification
+publishes the matrix inside the `runtime-target-matrix` generated block, and the
+framework planner (`PACKAGE_MODE_REQUIREMENTS`) must match the model. Run:
+
+```text
+node tools/gen-github-workflow-model-doc.mjs          # check specification + framework against the model
+node tools/gen-github-workflow-model-doc.mjs --write  # regenerate the specification block from the model
+```
+
+Drift in any of the three is a conformance failure, not an editorial issue.
+Changing a rule means changing the model first, then the framework, then
+regenerating the specification.
+
+### 12.2 Executable conformance suite
+
+`tools/test-github-workflow-standard.mjs` is the suite: each case builds a
+minimal repository and asserts the validator's verdict for a rule (thin
+entrypoints, bespoke workflow, unpinned reference, unnamed matrix lane, fork
+role, model agreement). A rule without a fixture is not enforced, and a rule
+change that breaks a fixture must update the fixture in the same change.
+
+### 12.3 Debt with a due date
+
+An exception in `tools/github-workflow-exceptions.json` `MUST` carry `reason`,
+`ownerAction`, `owner`, `issue`, and `expiresAt`. The audit reports
+`tracked`, `expired/incomplete`, and `need alignment` as separate counts:
+
+- an unexpired, complete entry defers its findings and stays visible in the
+  report;
+- an expired or incomplete entry is itself a conformance failure;
+- the audit prints the earliest expiry so the debt cannot age silently.
+
+The register is the only way to defer a rule; prose exceptions, comments, or
+repository-local "special case" notes have no effect.
+
+### 12.4 Change process
+
+A normative change follows the decision register
+(`decisions/2026-11-02-github-workflow-decision-register.md`) and ships as one
+unit: model update, framework implementation, regenerated specification block,
+updated fixtures, migration command (codemod or `align-github-workflows.mjs`),
+and a deprecation window for any rule that invalidates existing repositories.
+Breaking a rule without a migration path is not a change to the standard; it is
+a new standard.
+
+### 12.5 Fitness functions
+
+The standard stays honest by measuring itself, not only the repositories:
+
+| Function | Target |
+|---|---|
+| Conformance rate by profile | core ≥ 95%, packaging ≥ 90% |
+| Exception age | ≤ 45 days mean; zero entries past `expiresAt` |
+| Golden path | `init-app` to first green run < 10 minutes |
+| Validator false positives | < 2% of sampled findings |
+| Drift incidents | 0 (model ↔ specification ↔ framework) |
+
+The workspace audit prints the conformance rate and the configuration-debt
+classification; the model gate and the conformance suite cover drift and rule
+coverage. Together they are the release gate for the workflow standard itself.

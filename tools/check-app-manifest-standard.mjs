@@ -10,7 +10,7 @@ import { validateAppManifestDeployment } from './check-app-manifest-deployment-s
 const TOP_LEVEL_FIELDS = new Set([
   '$schema', 'schemaVersion', 'kind', 'app', 'backend', 'runtime', 'media',
   'publish', 'environments', 'artifacts', 'release', 'security', 'devApp',
-  'metadata',
+  'metadata', 'oauth',
 ]);
 const REQUIRED_SECTIONS = [
   'app', 'backend', 'runtime', 'media', 'publish', 'artifacts',
