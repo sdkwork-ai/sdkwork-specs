@@ -1191,6 +1191,10 @@ Rules:
   unchanged: `0` is tenant-level and binds every organization-scoped operation to the
   sentinel; a non-zero value is organization-level and binds that organization. An
   organization that is not bound to the record's tenant `MUST` fail with `40304`.
+- An API key or OAuth record carries no `login_scope` claim. Its scope is classified from
+  `organization_id` alone: `0`/absent is tenant-level and a non-zero id is organization-level.
+  `login_scope` remains an access-token claim and `MUST NOT` be required on a credential
+  record.
 - The record's `tenant_id` is the only tenant authority. A request that supplies a tenant or
   organization selector, or a credential whose record tenant differs from a resource tenant,
   `MUST` fail with `40303` / `40304`. The server `MUST NOT` merge, default, or infer a tenant.
@@ -1236,11 +1240,13 @@ normative and `MUST` stay complete when a new auth profile is added.
 | --- | --- | --- |
 | `dual-token` (app-api/backend-api) | Verified `access_token.tenant_id` | Access-token scope: `0` or the claim value (section 10.4) |
 | `credential-entry-bootstrap` | Verified bootstrap access token | Bootstrap access-token scope |
+| `refresh-token` | Validated refresh proof / refresh session | Refresh session context, never a client-supplied tenant |
 | `api-key` (open-api) | Validated API key record | Record `organization_id` (`0` or non-zero) |
 | `oauth` (open-api) | Validated token/session record | Record/session organization (`0` or non-zero) |
 | `open-api-flexible` | Selected credential record | Selected record |
 | `api-key-or-dual-token` | Selected branch | Selected branch |
 | `ingress-token` / `agent-token` | Validated internal credential | Internal credential or typed request-context projection |
+| `compatibility` | Approved external-protocol adapter | The declared compatibility contract; never an implicit default tenant |
 | `anonymous` | None | None |
 
 Invariants:
