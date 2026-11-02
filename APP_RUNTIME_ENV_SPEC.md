@@ -95,6 +95,13 @@ Materialization formats per family are owned by
 `tools/materialize-client-env.mjs` (vite dotenv, flutter JSON, mini-program
 JSON); `tools/build-browser-client.mjs` owns the browser runtime document.
 
+A materialized file is loaded directly by its framework at build time — the Vite
+mode, Flutter's `--dart-define-from-file`, or the mini-program build copying its
+one selected JSON — and a runtime projection of the same values into a page or
+process `MUST NOT` substitute for it. A container reads the source topology file
+through `env_file` rather than a second copy of the deployment (`ENVIRONMENT_SPEC`
+§5.1.1).
+
 ## 4. `resolveBaseUrl` — one name, two layers
 
 - **Runtime (in the client):** `resolveBaseUrl` /
