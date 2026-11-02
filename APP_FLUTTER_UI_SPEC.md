@@ -1,8 +1,8 @@
 ﻿# App Flutter UI Standard
 
-- Version: 1.2
+- Version: 1.3
 - Scope: app/user-facing and Flutter user-console packages, Flutter mobile app packages, generated app SDK integration, platform adapters
-- Related: `API_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `COMPONENT_SPEC.md`, `CONFIG_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `NAMING_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
+- Related: `API_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `COMPONENT_SPEC.md`, `CONFIG_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `ICON_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `NAMING_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines how SDKWork app-side and Flutter user-console UI is packaged and integrated. In application roots it is applied after `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`; in shared package families it remains the detailed Flutter package standard. Flutter UI packages are app/user-facing or user-console packages and consume app-api through generated Flutter/Dart app SDK clients or approved appbase Flutter wrappers. They must not consume `backend-admin` UI packages or backend SDKs for user-facing workflows. Cross-architecture SDK composition and appbase IAM token wiring follow `APP_SDK_INTEGRATION_SPEC.md`.
 
@@ -147,7 +147,7 @@ Rules:
 - QR scan, OAuth redirect, verification-code, and password reset flows must handle app lifecycle transitions.
 - Theme usage must come from the app design system or package-injected theme extensions. Domain packages must not redefine global themes.
 - Screen bodies `MUST` be full-bleed: the page-level scroll body `MUST NOT` apply horizontal `EdgeInsets` padding, and card/section surfaces `MUST` span the full window width with zero horizontal margin, so media, banners, and list tiles run edge-to-edge. Layout rhythm comes from vertical spacing and surface contrast, not page gutters. Text-dense blocks `MAY` keep a small documented content inset inside their own surface (for example `ListTile.contentPadding`), but a shared horizontal page-gutter wrapper on every screen is forbidden. Horizontal page padding is a review failure.
-- A bottom tab bar `MUST` distinguish the selected tab with a filled icon and unselected tabs with an outline (unfilled) icon of the same glyph, and `MUST NOT` convey selection by color alone. When the icon set has no dedicated filled/outline pair, the selected state `MUST` fill the same glyph (for example `fill="currentColor"` on a stroke-based icon set). When the platform exposes a native selected-icon slot, it `MUST` be used (such as mini program `iconPath`/`selectedIconPath` or Flutter `NavigationDestination(icon:/selectedIcon:)`). Icon pairs `SHOULD` ship in both light and dark tab-bar themes or use a theme-aware tint.
+- A bottom tab bar `MUST` distinguish the selected tab with a filled icon and every unselected tab with an outline (unfilled) icon of the same glyph, and `MUST NOT` convey selection by color alone. Flutter destinations `MUST` pass the outline icon to `icon` and the filled icon to `selectedIcon` on `NavigationDestination` and `NavigationRailDestination`; a single-variant tab bar, or fill faked by opacity or color, is a review failure. This is the Flutter application of `ICON_SPEC.md` section 3.2.
 - A bottom tab bar `MUST` render only on tab-root routes. Secondary screens — stack pushes, detail, creation, and settings surfaces — `MUST NOT` render the bottom tab bar or reserve its space. Tab-bar visibility `MUST` be decided once per route at composition or shell-layout time from the surface's declared tab roots (route table or native tabBar manifest), never inside individual screens with per-screen conditionals; on platforms with a native tab bar the platform mechanism is the equivalent guarantee, and the declared tab roots remain the cross-surface source of which routes show the tab bar.
 
 ## 6. Security
@@ -169,6 +169,7 @@ Required coverage for new Flutter capabilities:
 - widget test for representative loading, success, empty, validation-error, and failure states;
 - platform adapter contract test for camera, QR, secure storage, deep link, or push behavior when used;
 - route/deep-link test when adding navigation;
+- tab-bar icon state widget test proving `selectedIcon` renders the filled variant and every unselected destination renders the outline variant of the same glyph, including light and dark themes (`ICON_SPEC.md` section 3.2);
 - i18n directory/static scan proving authored fragments stay under `lib/src/i18n/<locale>/<domain>/<capability>/` and generated `lib/l10n/**` files are not hand-authored feature copy;
 - `flutter analyze` or package-equivalent static check.
 

@@ -1,8 +1,8 @@
 # Backend UI Package Standard
 
-- Version: 1.0
+- Version: 1.1
 - Scope: backend/admin React console, backend UI workspace packages, domain pages, backend SDK integration, menu and route composition
-- Related: `API_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
+- Related: `API_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `ICON_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines how SDKWork backend/admin UI is packaged and integrated. Backend UI is the UI implementation of the `backend-admin` surface. `backend-admin` means admin-only backend UI/API/SDK use for internal company staff, operators, support, auditors, platform administrators, and trusted backend services acting for those admin workflows. It must be independent from app/user-facing UI packages, must use backend API and backend SDK contracts, and must be split by business domain instead of being placed into one large package.
 
@@ -229,6 +229,7 @@ Rules:
 - Backend UI should be dense, flat, operational, and optimized for repeated administrative work.
 - Backend UI `MUST` use shared backend UI primitives or the host design system for tables, forms, drawers, dialogs, filters, tabs, and command buttons.
 - Domain packages `MUST NOT` redefine global theme tokens, global layout, global reset CSS, or application shell navigation styles.
+- The operator sidebar and any admin navigation rail `MUST` follow `ICON_SPEC.md` section 3.3: the active destination renders the filled icon variant, every inactive destination renders the outline variant of the same glyph, and a group header fills only when it contains the active route. Selection `MUST NOT` rely on color alone; the active row `SHOULD` also carry a selected surface or indicator.
 - `@sdkwork/react-backend-ui` primitives `MUST` be visually neutral and domain-agnostic.
 - Business components may contain domain labels and domain-specific formatting, but must not contain transport or authorization logic.
 
@@ -251,6 +252,7 @@ Required coverage for new backend UI capabilities:
 - service/repository test using a fake backend SDK client;
 - page or hook test for loading, empty, permission-denied, validation-error, and failure states where relevant;
 - route/menu registration test when adding a new package route;
+- operator sidebar icon state test proving the active destination renders the filled variant and every inactive destination renders the outline variant of the same glyph, including light and dark themes (`ICON_SPEC.md` section 3.3);
 - i18n directory/static scan proving operator-facing fragments stay under `src/i18n/<locale>/<domain>/<capability>/` and no backend-wide locale monolith is authored;
 - SDK compliance scan proving no raw HTTP fallback was introduced;
 - typecheck for the changed package.

@@ -1,6 +1,6 @@
 # Test And Verification Standard
 
-- Version: 1.6
+- Version: 1.7
 - Scope: contract tests, SDK/RPC generation tests, backend tests, frontend tests, parity tests, security tests
 - Related: all specs
 
@@ -1117,6 +1117,7 @@ Rules:
 - Host adapter tests `MUST` prove feature UI and view models do not call platform APIs directly for host capabilities.
 - State clearing tests `MUST` prove logout, refresh failure, account switch, and tenant switch clear token storage, context state, sensitive package state, caches, and realtime/session bridges.
 - UI state tests `SHOULD` cover loading, empty, validation-error, permission-denied, offline/unavailable, and unknown-error states for representative screens/pages.
+- Navigation icon tests `MUST` prove native bottom-tab and rail destinations render the filled variant when selected and the outline variant of the same glyph when unselected, in light and dark themes, per `ICON_SPEC.md` section 3.
 
 ## 2.4.10 uni-app Architecture Tests
 
@@ -1552,6 +1553,11 @@ Rules:
 - Static frontend/service scans MUST fail when upload services accept or send `appId`, tenant, organization, actor/user, operator, or equivalent ambient identity as upload-call inputs or client-writable request fields. App identity and ambient attribution must come from the verified authenticated runtime and `WebRequestContext`; feature services supply only app-resource, scene/source, upload-profile, target, retention, and selected-content business intent.
 - Static Rust scans MUST fail when server-side upload paths for SDKWork-owned files create app-local upload tables, generate provider object keys, call S3/OSS/MinIO/local filesystem provider SDKs directly, or call Drive App API HTTP routes instead of `DriveUploaderService` or an approved Drive server-side uploader facade.
 - App, user-console, and internal-admin packages for PC React, H5 mobile React, Flutter, mini program, Android native, iOS native, Harmony native, and standalone backend/admin React packages `MUST` run the package placement and SDK boundary checks required by `UI_ARCHITECTURE_SPEC.md`, their root architecture standard, and their detailed UI/package spec.
+- Navigation icon state tests `MUST` prove that a selected tab-bar, sidebar, navigation-rail, drawer, or toggle destination renders the filled variant and that every unselected destination renders the outline variant of the same glyph, per `ICON_SPEC.md` section 3. A test that asserts only color, class, opacity, stroke width, or icon presence fails.
+- Navigation icon metadata tests `MUST` fail when a stateful navigation entry declares only one icon, when the outline and filled ids resolve to different glyphs, or when a custom tab bar or shell bypasses the paired metadata.
+- Icon accessibility tests `MUST` prove icon-only controls have accessible names, decorative icons are hidden from assistive technology, and selected/current state is exposed programmatically (`aria-selected`, `aria-current`, or the native selected trait).
+- Icon theme tests `MUST` prove both variants render in light and dark themes and that each variant meets the non-text contrast threshold in `ICON_SPEC.md` section 7 against its immediate surface.
+- Platform tab icon tests `MUST` prove mini program and uni-app `iconPath`/`selectedIconPath` (or a custom tab bar equivalent) both exist for every tab, and that native mobile tab/rail items use the platform selected-icon slot when one exists.
 - Architecture SDK checks `MUST` verify TypeScript SDKs stay in React and mini program packages, Dart/Flutter SDKs stay in Flutter packages, Kotlin/Java SDKs stay in Android native packages, Swift SDKs stay in iOS native packages, ArkTS/TypeScript Harmony SDKs stay in Harmony native packages, Rust SDKs or Rust service clients stay in Rust/native runtime code, and no package imports another architecture's UI/runtime wrapper to bypass a missing SDK method.
 - Public runtime env checks `MUST` fail if `/runtime-env.js`, `/runtime-env.json`, `PORTAL_PUBLIC_*`, `VITE_*`, `PUBLIC_*`, or `NEXT_PUBLIC_*` exposes secrets, database URLs, Redis URLs, tokens, signing keys, private service endpoints, or backend-only credentials.
 - Browser bootstrap tests `MUST` prove public runtime config loads before generated SDK clients are constructed, that open-api, app-api, and backend-api base URLs remain independent, and that standalone values are same-origin paths or resolve to `window.location.origin`.

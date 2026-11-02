@@ -13,6 +13,7 @@
       "../sdkwork-promotion/apps/sdkwork-promotion-common/packages/*",
       "../sdkwork-promotion/sdks/sdkwork-promotion-app-sdk/sdkwork-promotion-app-sdk-typescript",
       "../sdkwork-promotion/sdks/sdkwork-promotion-backend-sdk/sdkwork-promotion-backend-sdk-typescript",
+      "../sdkwork-partner/sdks/sdkwork-partner-app-sdk/sdkwork-partner-app-sdk-typescript",
       "../sdkwork-payment/apps/sdkwork-payment-common/packages/*",
       "../sdkwork-payment/sdks/sdkwork-payment-app-sdk/sdkwork-payment-app-sdk-typescript",
       "../sdkwork-im/sdks/sdkwork-im-app-sdk/sdkwork-im-app-sdk-typescript",

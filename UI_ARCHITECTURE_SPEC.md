@@ -1,8 +1,8 @@
 ﻿# UI Architecture Selection Standard
 
-- Version: 1.1
+- Version: 1.2
 - Scope: UI architecture selection, package-family ownership, app/backend surface separation, SDK boundary verification
-- Related: `FRONTEND_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `UNIAPP_APP_ARCHITECTURE_SPEC.md`, `UNITY_APP_ARCHITECTURE_SPEC.md`, `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `BACKEND_UI_SPEC.md`, `SDK_SPEC.md`, `API_SPEC.md`, `TEST_SPEC.md`
+- Related: `FRONTEND_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `UNIAPP_APP_ARCHITECTURE_SPEC.md`, `UNITY_APP_ARCHITECTURE_SPEC.md`, `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `BACKEND_UI_SPEC.md`, `ICON_SPEC.md`, `SDK_SPEC.md`, `API_SPEC.md`, `TEST_SPEC.md`
 
 This standard is the required entrypoint for UI package placement. It decides which architecture-specific UI standard owns the work. It does not replace the detailed UI standards; it prevents package drift before files are created.
 
@@ -135,6 +135,7 @@ Rules:
 - Unity app optimizes for scene/address navigation, frame budgets, asset/addressables governance, gamepad/touch/pointer input profiles, and platform store or mini-game delivery constraints.
 - Static web optimizes for progressive enhancement (content visible without JavaScript), SEO/canonical/sitemap correctness, CSP-compatible markup, cache-friendly asset paths, and locale-prefixed static delivery.
 - Backend/admin React optimizes for dense, flat, operational workflows with tables, filters, drawers, dialogs, tabs, and repeated administrative actions.
+- Every navigation surface `MUST` follow `ICON_SPEC.md` for icon roles, family, and the selected-filled/unselected-outline state pair: mobile bottom tab bars, PC/pad/admin sidebars, navigation rails, drawers, and stateful toggles. Selection `MUST NOT` be conveyed by color alone, and an architecture `MUST NOT` keep a divergent local icon rule.
 - Shared visual tokens may be common, but package-local global themes, reset CSS, and shell layout overrides are forbidden in domain packages.
 
 ## 5. Required Verification
@@ -148,6 +149,7 @@ Every touched UI package `MUST` prove the selected architecture boundary.
 | No bypass | Static scan proves no raw HTTP, manual token/API key headers, backend/app cross-surface calls, open-api token-manager misuse, or generated SDK edits were introduced. |
 | Domain split | Backend/admin business code is not placed in `@sdkwork/react-backend-ui`, `@sdkwork/react-backend-core`, or any catch-all package. |
 | UI states | Tests cover loading, empty, validation-error, permission-denied, unavailable, and unknown-error states where applicable. |
+| Icon state pairing | Navigation and toggle destinations render the filled variant when selected and the outline variant when unselected per `ICON_SPEC.md`; tests or visual evidence cover both states in light and dark themes. |
 | Tablet adaptation | Pad packages prove the window-class, multitasking, input parity, safe-area, accessibility, and performance coverage required by `APP_PAD_ARCHITECTURE_SPEC.md` sections 5 and 13. |
 | i18n | User-facing or operator-facing copy lives in package-local i18n fragments or configured message catalogs that follow `I18N_SPEC.md`; app/root/package locale monoliths are rejected unless generated from fragments. |
 
@@ -167,4 +169,5 @@ Every touched UI package `MUST` prove the selected architecture boundary.
 - [ ] No catch-all business package was introduced.
 - [ ] No raw HTTP, manual auth/API key header, DTO fork, open-api token-manager misuse, or generated SDK edit was introduced.
 - [ ] i18n resources are package-local fragments with thin aggregators, not authored app/root/package locale monoliths.
+- [ ] Navigation and toggle icons follow `ICON_SPEC.md`: selected filled, unselected outline of the same glyph, in every tab bar, sidebar, and navigation rail.
 - [ ] Tests or scans prove package placement, SDK boundary, and representative UI states.

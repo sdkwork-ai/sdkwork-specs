@@ -1,8 +1,8 @@
 # H5 Application Architecture Standard
 
-- Version: 1.2
+- Version: 1.3
 - Scope: SDKWork phone-first H5 application roots, mobile browser applications, WeChat-H5 style browser runtimes, embedded WebView mobile runtimes, and multi-platform mobile app packaging (iOS and Android) through one Capacitor host that reuses the same H5 renderer
-- Related: `SDKWORK_WORKSPACE_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `GOVERNANCE_SPEC.md`, `TEST_SPEC.md`
+- Related: `SDKWORK_WORKSPACE_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `ICON_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `GOVERNANCE_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines the application-root architecture for SDKWork H5 applications. H5 is the canonical phone-first mobile web runtime. Capacitor is one optional native host that packages the H5 renderer as installable iOS and Android applications; it is not a separate application architecture. H5 browser mode, WeChat-H5 mode, embedded WebView mode, Capacitor iOS mode, and Capacitor Android mode reuse one mobile renderer, one route contribution model, one generated TypeScript app SDK composition layer, one appbase IAM runtime, and one package taxonomy.
 
@@ -698,6 +698,7 @@ Rules:
 - OAuth, QR login, password reset, verification-code, push permission, payment, and deep-link flows must survive background/foreground transitions where the host supports them.
 - Text must fit compact containers without viewport-scaled font hacks or overlap.
 - Touch targets must be reachable and have stable dimensions. Bottom navigation, sheets, and sticky actions must respect safe areas and virtual keyboard behavior.
+- Bottom tab bar icons `MUST` follow `ICON_SPEC.md` section 3.2: the selected tab renders the filled icon variant, every unselected tab renders the outline variant of the same glyph, and selection is not conveyed by color alone. The H5 shell `MUST` render the pair from route metadata; a single-variant tab bar is a review failure.
 - Offline behavior is allowed for view/cache state by default. Mutating offline queues require explicit service design, conflict handling, idempotency keys, and tests.
 - H5 pages must not rely on hover-only controls, desktop-only keyboard shortcuts, desktop pointer precision, or wide tables as the only interaction path.
 
@@ -708,7 +709,7 @@ Rules:
 - App routes belong to `h5-shell` and app capability route contributions.
 - Console routes belong to `h5-console-shell` and `h5-console-*` route contributions.
 - Admin routes belong to `h5-admin-shell` and approved `h5-admin-*` route contributions.
-- Route metadata may declare title, icon, route id, required permission hint, layout group, mobile presentation, and lazy import. It `MUST NOT` declare API path constants.
+- Route metadata may declare title, route id, icon metadata, required permission hint, layout group, mobile presentation, and lazy import. A route that appears as a bottom-tab destination `MUST` declare the paired `icon` variants per `ICON_SPEC.md` section 5. Route metadata `MUST NOT` declare API path constants.
 - App, console, and admin route prefixes `SHOULD` be distinct when they coexist in one root, for example `/app`, `/console`, and `/admin`.
 - Physical mobile paths may be shorter than PC paths, but route ids `MUST` align through `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`.
 - Deep links resolve to route ids first, then navigation adapters map the route id to stack/tab/modal/sheet presentation.

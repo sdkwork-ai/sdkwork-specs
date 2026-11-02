@@ -1,8 +1,8 @@
 # SDKWork App Assets Standard v1
 
-- Version: 1.2
+- Version: 1.3
 - Scope: application asset root, media roles, per-`appType` media matrix, creation-time screenshot capture, cover and preview composition, store submission media profiles, SDKWork appstore projection, validation
-- Related: `APP_MANIFEST_SPEC.md`, `MEDIA_RESOURCE_SPEC.md`, `DRIVE_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `UNIAPP_APP_ARCHITECTURE_SPEC.md`, `UNITY_APP_ARCHITECTURE_SPEC.md`, `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`, `PRIVACY_SPEC.md`, `SECURITY_SPEC.md`, `I18N_SPEC.md`, `NAMING_SPEC.md`, `TEST_SPEC.md`
+- Related: `APP_MANIFEST_SPEC.md`, `MEDIA_RESOURCE_SPEC.md`, `DRIVE_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `UNIAPP_APP_ARCHITECTURE_SPEC.md`, `UNITY_APP_ARCHITECTURE_SPEC.md`, `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`, `ICON_SPEC.md`, `PRIVACY_SPEC.md`, `SECURITY_SPEC.md`, `I18N_SPEC.md`, `NAMING_SPEC.md`, `TEST_SPEC.md`
 
 Every registered application owns one governed asset root. Product media is not an afterthought of a release script and it is not a set of loose files next to a build output: it is versioned source that is reviewed together with the code that renders it, captured from a reproducible application state, validated against the delivery channel, and only then published to Drive and projected into the SDKWork appstore.
 
@@ -61,6 +61,7 @@ Purpose is not free text and must fit the role: `ICON` uses `PRIMARY` or `STORE_
 
 Rules:
 
+- The `ICON` role is application identity media only. Product UI icons — tab-bar, sidebar, navigation-rail, toolbar, toggle, and status glyphs — are not application assets and follow `ICON_SPEC.md`.
 - `media.icons.primary` `MUST` be `type = ICON` and `purpose = PRIMARY`. It projects to `platform_app.iconUrl`.
 - Exactly one enabled `COVER` per locale and theme is required for a catalog-ready application. Store-specific graphics do not replace the cover.
 - A `SCREENSHOT` `MUST` show the actual application. A marketing banner, a gradient placeholder, a mock device shell without application UI, or a hand-drawn illustration is not a screenshot; use `PREVIEW_IMAGE` instead and label it honestly.

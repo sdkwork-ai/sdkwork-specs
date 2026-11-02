@@ -1,8 +1,8 @@
 # App PC React UI Standard
 
-- Version: 1.1
+- Version: 1.2
 - Scope: app/user-facing PC React packages, PC browser/desktop/tablet renderer UI packages, pad React tablet packages, appbase PC modules, service-to-app-SDK integration
-- Related: `API_SPEC.md`, `APPLICATION_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `COMPONENT_SPEC.md`, `DESKTOP_APP_ARCHITECTURE_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
+- Related: `API_SPEC.md`, `APPLICATION_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `COMPONENT_SPEC.md`, `DESKTOP_APP_ARCHITECTURE_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `ICON_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines how SDKWork app-side PC React UI is packaged and integrated. PC React app UI is user-facing product UI. It must be independent from `backend-admin` UI packages and must consume app API capabilities through the generated app SDK or approved appbase wrappers.
 
@@ -163,6 +163,7 @@ Rules:
 - Feature pages `MUST` provide loading, empty, validation-error, permission-denied, unavailable, and unknown-error states.
 - Text must fit responsive PC and tablet widths without overlap.
 - Icon-only controls `MUST` have accessible names and tooltips when the icon is not universally obvious.
+- PC, pad, and user-console sidebar or navigation-rail destinations `MUST` follow `ICON_SPEC.md` section 3.3: the active destination renders the filled icon variant, every inactive destination renders the outline variant of the same glyph, and a group header fills only when it contains the active route. The active row `SHOULD` also carry a selected surface or indicator; selection `MUST NOT` rely on color alone, and hover or rail collapse `MUST NOT` change which icon is filled.
 - App PC UI `MUST` use the app design system and tokens instead of redefining global themes per package.
 - Tablet-enabled PC UI `MUST` handle safe areas, orientation changes, virtual keyboard overlap, touch/stylus input, pointer input, hardware keyboard shortcuts, split view or multi-window where supported, and platform back/close affordances.
 - Tablet-enabled PC UI `MUST NOT` replace the large-screen workflow with phone-first navigation. Phone-first H5 belongs to `APP_H5_ARCHITECTURE_SPEC.md` and `APP_MOBILE_REACT_UI_SPEC.md`.
@@ -185,6 +186,7 @@ Required coverage for new App PC React capabilities:
 - service test with a fake generated app SDK client;
 - UI/page test for the main success and failure states;
 - route contribution test when adding app shell routes;
+- sidebar/navigation-rail icon state test proving the active destination renders the filled variant and every inactive destination renders the outline variant of the same glyph, including light and dark themes (`ICON_SPEC.md` section 3.3);
 - i18n directory/static scan and fallback test for user-facing text when new copy is added;
 - typecheck for the changed package.
 

@@ -1,8 +1,8 @@
 # uni-app Cross-Platform App Architecture Standard
 
-- Version: 1.0
+- Version: 1.1
 - Scope: SDKWork uni-app application roots, Vue 3/Vite package taxonomy, one-source projection across H5, WeChat/Alipay/DingTalk/Lark/other mini program, and App (Android/iOS) targets, generated TypeScript app SDK integration, `uni.*` host adapters, conditional compilation boundaries, and cross-client route alignment
-- Related: `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APPLICATION_SPEC.md`, `NAMING_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `FRONTEND_CODE_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `APP_MANIFEST_SPEC.md`, `I18N_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `TEST_SPEC.md`
+- Related: `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APPLICATION_SPEC.md`, `NAMING_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `ICON_SPEC.md`, `FRONTEND_CODE_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `APP_MANIFEST_SPEC.md`, `I18N_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines the application-root architecture for SDKWork uni-app clients. A uni-app root is one Vue 3 + Vite source tree that projects to multiple delivery targets: H5 (`H5`), mini programs (`MP_WEIXIN`, `MP_ALIPAY`, `MP_DINGTALK`, `MP_LARK`, and other `MP_*` profiles), and native App packages (`APP_ANDROID`, `APP_IOS` through uni-app App packaging).
 
@@ -257,6 +257,7 @@ export interface UniappRoutePlacement {
 ```
 
 - `pages.json` pages, `subPackages`, and tabBar entries are generated or assembled from route contributions where tooling exists.
+- Every generated tabBar entry `MUST` declare both `iconPath` and `selectedIconPath`: the selected tab uses the filled icon and every unselected tab uses the outline icon of the same glyph per `ICON_SPEC.md` section 3.2. A custom tab bar on any target `MUST` consume the same pair. A target build that resolves only one variant fails verification.
 - Route metadata must not declare API URLs or SDK methods.
 - uni-app UI is touch-first, safe-area-aware, rpx-based, and package-size-conscious. It must not import desktop-only components, browser DOM-only helpers on mini program targets, or Node-only libraries.
 

@@ -1,8 +1,8 @@
 # App Client Architecture Alignment Standard
 
-- Version: 1.1
+- Version: 1.2
 - Scope: cross-client application architecture alignment for SDKWork PC, pad/tablet, H5/mobile React, Flutter, mini program, uni-app, Unity, static web (pure HTML), native Android, native iOS, native HarmonyOS, backend/admin UI, and future client roots
-- Related: `COMPOSABLE_ARCHITECTURE_SPEC.md`, `APPLICATION_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `UNIAPP_APP_ARCHITECTURE_SPEC.md`, `UNITY_APP_ARCHITECTURE_SPEC.md`, `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `BACKEND_UI_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `I18N_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
+- Related: `COMPOSABLE_ARCHITECTURE_SPEC.md`, `APPLICATION_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `UNIAPP_APP_ARCHITECTURE_SPEC.md`, `UNITY_APP_ARCHITECTURE_SPEC.md`, `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `ICON_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `BACKEND_UI_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `I18N_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines the common client architecture contract that keeps SDKWork application roots readable, composable, and aligned across PC, pad/tablet, H5/Capacitor, Flutter, mini program, native Android, native iOS, native HarmonyOS, and future client surfaces. Cross-stack layer roles, component ports, and package composition closure follow `COMPOSABLE_ARCHITECTURE_SPEC.md`.
 
@@ -343,6 +343,7 @@ export interface SdkworkUiRouteContribution {
   screen: string;
   path?: string;
   titleKey: string;
+  icon?: { outline: string; filled: string };
   auth: "public" | "required";
   permissionHint?: string;
   params?: Array<{ name: string; required: boolean }>;
@@ -365,6 +366,7 @@ export interface SdkworkUiRouteContribution {
 Rules:
 
 - Route `id`, `surface`, `domain`, `capability`, `screen`, `titleKey`, and `permissionHint` should be consistent across PC, pad, H5, Flutter, mini program, uni-app, Unity, static web, Android, iOS, and Harmony implementations of the same product workflow.
+- A route contribution that appears as a tab-bar, sidebar, navigation-rail, drawer, or toggle destination `MUST` declare the paired `icon` variants (`outline` and `filled`) per `ICON_SPEC.md` section 5. A single icon id is not a valid stateful navigation declaration.
 - The `pad` presentation hint describes tablet composition intent (`split`, `inspector`, `sheet`, or `popover`) and does not encode a physical breakpoint. The pad shell maps it to the current window class.
 - Physical paths may differ by platform. For example, PC may use `/app/orders/:orderId`, H5 may use `/orders/:orderId`, Flutter may use a named route, mini program may use a subpackage page path, Android may use a navigation destination, iOS may use a navigation route, and Harmony may use a page path.
 - Route metadata `MUST NOT` declare HTTP API paths, SDK methods, raw URL constants, or transport details.

@@ -1,6 +1,6 @@
 # AGENTS.md Standard
 
-- Version: 1.4
+- Version: 1.5
 - Scope: repository, application, and component-level `AGENTS.md` files used by SDKWork agents and AI-assisted development tools, plus tool compatibility shims such as `CLAUDE.md`, `GEMINI.md`, and `CODEX.md`
 - Related: `SOUL.md`, `SDKWORK_WORKSPACE_SPEC.md`, `APP_MANIFEST_SPEC.md`, `COMPONENT_SPEC.md`, `DOCUMENTATION_SPEC.md`, `GOVERNANCE_SPEC.md`, `CODE_STYLE_SPEC.md`, `DESTRUCTIVE_OPERATION_SPEC.md`, `ROLLBACK_RESTRICTION_SPEC.md`, `NAMING_SPEC.md`, `TEST_SPEC.md`
 
@@ -145,6 +145,7 @@ Existing managed blocks include `SDKWORK-NAMING-STANDARD` (Rust naming and depen
 | TypeScript/Node code | `TYPESCRIPT_CODE_SPEC.md` |
 | Dart/Flutter code | `DART_CODE_SPEC.md`, plus `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md` and `APP_FLUTTER_UI_SPEC.md` when Flutter packages or app roots are touched |
 | Frontend/UI code | `COMPOSABLE_ARCHITECTURE_SPEC.md` when reusable package boundaries or SDK composition are touched, `FRONTEND_CODE_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, and exactly one detailed UI architecture spec |
+| UI iconography, tab-bar icon, sidebar/navigation-rail icon, or icon-set change | `ICON_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `THEME_DARKMODE_SPEC.md`, `FRONTEND_CODE_SPEC.md`, `FRONTEND_SPEC.md`, and the matching detailed UI architecture spec |
 | API changes | `API_SPEC.md`, `PAGINATION_SPEC.md` when list/search pagination is touched, `WEB_FRAMEWORK_SPEC.md` when Rust HTTP runtime is touched, `WEB_BACKEND_SPEC.md`, `SDK_SPEC.md`, `TEST_SPEC.md` |
 | User-facing copy, locale negotiation, or i18n resources | `I18N_SPEC.md`, `FRONTEND_SPEC.md` for client copy, `WEB_FRAMEWORK_SPEC.md` for framework locale context, `SDK_SPEC.md` for SDK locale propagation, `API_SPEC.md` for problem-detail localization metadata, `TEST_SPEC.md` and `tools/check-i18n-standard.mjs` for layout, duplicate-key, missing-key, fallback, and retired-header validation |
 | Rust HTTP route crates / gateways / migration-only API servers | `COMPOSABLE_ARCHITECTURE_SPEC.md`, `API_SPEC.md`, `SUBJECT_ID_SPEC.md` when SQL subject scope is involved, `WEB_FRAMEWORK_SPEC.md`, `WEB_BACKEND_SPEC.md`, `RUST_CODE_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md` |

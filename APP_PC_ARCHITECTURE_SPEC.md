@@ -1,8 +1,8 @@
 # PC Application Architecture Standard
 
-- Version: 1.1
+- Version: 1.2
 - Scope: SDKWork PC application roots that support PC browser web, desktop, and large-screen tablet native packaging, including app modules, user-facing console modules, internal admin modules, shared renderer packages, one host package per desktop architecture (Tauri, Electron, Capacitor), and iPadOS/Android tablet runtime/package targets
-- Related: `SDKWORK_WORKSPACE_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `APPLICATION_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `DESKTOP_APP_ARCHITECTURE_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `BACKEND_UI_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
+- Related: `SDKWORK_WORKSPACE_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `APPLICATION_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `DESKTOP_APP_ARCHITECTURE_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `ICON_SPEC.md`, `BACKEND_UI_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines the application-root architecture for SDKWork PC applications. A PC application is one application root that can run as a browser web application and, when required, as a desktop or large-screen tablet native application through one or more per-architecture native host packages.
 
@@ -629,7 +629,7 @@ Rules:
 - App routes belong to `pc-shell` and app capability route contributions.
 - Console routes belong to `pc-console-shell` and `pc-console-*` route contributions.
 - Admin routes belong to `pc-admin-shell` and `pc-admin-*` route contributions.
-- Route metadata may declare title, icon, route id, required permission hint, layout group, and lazy import. It `MUST NOT` declare API path constants.
+- Route metadata may declare title, route id, icon metadata, required permission hint, layout group, and lazy import. A route that appears as a sidebar or navigation-rail destination `MUST` declare the paired `icon` variants per `ICON_SPEC.md` section 5. Route metadata `MUST NOT` declare API path constants.
 - App, console, and admin route prefixes `SHOULD` be distinct in the browser router when they coexist in one root, for example `/app`, `/console`, and `/admin`.
 - Admin route guards `MUST` enforce internal staff/operator permissions and audit-sensitive transitions.
 - Console route guards `MUST` enforce customer/tenant/app-owner permissions and must not grant internal staff permissions by route naming alone.

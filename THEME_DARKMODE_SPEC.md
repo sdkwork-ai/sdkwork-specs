@@ -1,8 +1,9 @@
 # Theme and Dark Mode Standard
 
-- Version: 2.0
+- Version: 2.1
 - Scope: All SDKWork user-facing surfaces across every client architecture — Web PC (React), H5 (mobile web), Flutter mobile/console, mini programs, desktop compositions, and every host-embedded SDKWork plugin — covering design tokens, light/dark color modes, brand theme-color switching, and integration flexibility
-- Related: `TAILWIND_CSS_INTEGRATION_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `COMPONENT_SPEC.md`, `FRONTEND_CODE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `I18N_SPEC.md`, `TEST_SPEC.md`
+- Related: `TAILWIND_CSS_INTEGRATION_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `ICON_SPEC.md`, `COMPONENT_SPEC.md`, `FRONTEND_CODE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `I18N_SPEC.md`, `TEST_SPEC.md`
+- Changelog v2.1: add required icon semantic tokens (`--sdk-color-icon-*`) and the icon-theme rule for `ICON_SPEC.md`.
 - Changelog v2.0: §10 brand-switching exposure for every surface (embedded optional channel, standalone provider API); §11 cross-platform token single source and platform generators; §12 module alignment drill; §9 allowlist policy expanded to registered theme-owner modules (`hostAppearanceBridge`, `ThemeManager`, `startupAppearance`); F11/F12 added.
 
 This standard defines the canonical SDKWork theme system: a three-layer design-token architecture, a single color-mode contract that every platform maps onto its native primitives, a brand theme-color switching system with an 11-step tonal ramp, and the integration contract that keeps host-embedded surfaces adaptive without fighting the host. Reference implementation: `sdkwork-ui` (`theme/sdkwork-theme.ts`, `theme/theme-provider.tsx`, `theme/shell-bridge-provider.tsx`, `styles/sdkwork-ui.css`). Reference host composition: the BirdCoder harness theme runtime.
@@ -41,7 +42,13 @@ Every UI library and application surface `MUST` provide these semantic roles; ad
 | Text | `--sdk-color-text-primary`, `--sdk-color-text-secondary`, `--sdk-color-text-muted`, `--sdk-color-text-inverse` |
 | Border | `--sdk-color-border-subtle`, `--sdk-color-border-default`, `--sdk-color-border-strong`, `--sdk-color-border-focus` |
 | State | `--sdk-color-state-success`, `--sdk-color-state-warning`, `--sdk-color-state-danger`, `--sdk-color-state-info` |
+| Icon | `--sdk-color-icon-primary`, `--sdk-color-icon-secondary`, `--sdk-color-icon-selected`, `--sdk-color-icon-disabled`, `--sdk-color-icon-on-brand`, `--sdk-color-icon-danger` |
 | Shape/elevation (mode-agnostic) | `--sdk-radius-*`, `--sdk-shadow-*` |
+
+Rules:
+
+- Icon tokens `MUST` be declared in both light and dark mode. Navigation, toolbar, and status icons `MUST` resolve their color through these tokens; a component `MUST NOT` hardcode icon hex values or swap state by opacity (`ICON_SPEC.md` section 7).
+- `--sdk-color-icon-selected` is the selected navigation/on-state token. Selected and unselected icons `MUST` each meet the non-text contrast threshold against their immediate surface; selection remains conveyed by the filled glyph, not by color alone.
 
 ### 2.2 Dual-mode declaration shape
 

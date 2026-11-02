@@ -1,8 +1,8 @@
 ﻿# App iOS Native UI Standard
 
-- Version: 1.0
+- Version: 1.1
 - Scope: app/user-facing and iOS user-console native packages, SwiftUI or UIKit UI, generated Swift app SDK integration, iOS host adapters, mobile interaction, and package-local state
-- Related: `API_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `COMPONENT_SPEC.md`, `CONFIG_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `NAMING_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
+- Related: `API_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `COMPONENT_SPEC.md`, `CONFIG_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `ICON_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `NAMING_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines how SDKWork app-side and iOS user-console native UI is packaged and integrated. In application roots it is applied after `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`; in shared package families it remains the detailed iOS native package standard. iOS UI packages are app/user-facing or user-console packages and consume app-api through generated Swift app SDK clients or approved appbase iOS wrappers. They must not consume `backend-admin` UI packages or backend SDKs for user-facing workflows.
 
@@ -135,6 +135,7 @@ Rules:
 - Forms must support keyboard avoidance, autofill hints where appropriate, accessible labels, and duplicate-submit protection.
 - QR scan, OAuth redirect, verification-code, push permission, and password reset flows must handle foreground/background transitions.
 - Theme usage must come from the app design system or package-injected theme adapters. Domain packages must not redefine global themes.
+- Tab bar and sidebar destinations `MUST` render the selected destination with the filled icon variant and every unselected destination with the outline variant of the same glyph, and `MUST NOT` convey selection by color alone. UIKit `MUST` use `UITabBarItem.selectedImage` where available; SwiftUI `MUST` drive the SF Symbol variant (for example `house` / `house.fill`) from selection, using a custom tab bar when the native tab item cannot express both images. This is the iOS application of `ICON_SPEC.md` section 3.
 
 ## 6. Security
 
@@ -157,6 +158,7 @@ Required coverage for new iOS capabilities:
 | SDK boundary | Static scan proves generated SDK clients or approved wrappers are used and no raw HTTP, manual auth headers, or generated SDK edits were introduced. |
 | Service/view model | Unit tests use fake generated app SDK clients and fake host adapters. |
 | UI states | SwiftUI/UIKit tests or documented fixtures cover loading, empty, validation-error, permission-denied, unavailable, and unknown-error states. |
+| Navigation icons | UI tests or documented fixtures prove the selected tab or sidebar destination renders the filled variant, every unselected destination renders the outline variant of the same glyph, and both are legible in light and dark themes (`ICON_SPEC.md` section 3). |
 | I18n layout | Static scan proves authored fragments stay under `I18n/<locale>/<domain>/<capability>/` and `.lproj/Localizable.strings` files are generated or thin platform projections only. |
 | IAM clearing | Tests prove secure storage, token manager, context store, caches, and sensitive state clear on logout, refresh failure, tenant switch, and account switch. |
 | Host boundary | Static scan proves feature UI does not call iOS platform APIs directly for host capabilities. |

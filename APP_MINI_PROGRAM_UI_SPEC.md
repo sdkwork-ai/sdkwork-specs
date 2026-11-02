@@ -1,8 +1,8 @@
 ﻿# App Mini Program UI Standard
 
-- Version: 1.2
+- Version: 1.3
 - Scope: app/user-facing and mini program user-console UI packages, source pages/components, route projection inputs, generated app SDK integration, mini program host adapters, and package-size-aware interaction rules
-- Related: `API_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `COMPONENT_SPEC.md`, `CONFIG_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `NAMING_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`
+- Related: `API_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `COMPONENT_SPEC.md`, `CONFIG_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `ICON_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `NAMING_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`
 
 This standard defines how SDKWork app-side and mini program user-console UI is packaged and integrated. In application roots it is applied after `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`; in shared package families it remains the detailed mini program package standard. Mini program UI packages are user-facing or user-console packages and consume app-api through generated TypeScript app SDK clients or approved appbase mini program wrappers. They must not consume `backend-admin` UI packages or backend SDKs for user-facing workflows.
 
@@ -211,7 +211,7 @@ Rules:
 - Text must fit compact containers without overlap or viewport-scaled font hacks.
 - Package-size budgets must be considered before adding large dependencies, media, or cross-platform compatibility layers.
 - Page surfaces `MUST` be full-bleed: page containers and the `page-*` wrappers `MUST NOT` apply horizontal padding, and card/section surfaces `MUST` use zero horizontal margin so blocks, media, banners, and list rows span the full screen width edge-to-edge. Layout rhythm comes from vertical spacing and surface background contrast, not page gutters. Text-dense blocks `MAY` keep a small documented content inset inside their own surface for readability, but re-adding a page-level gutter through a shared inner `view` wrapper on every block is forbidden. Horizontal page padding is a review failure.
-- A bottom tab bar `MUST` distinguish the selected tab with a filled icon and unselected tabs with an outline (unfilled) icon of the same glyph, and `MUST NOT` convey selection by color alone. When the icon set has no dedicated filled/outline pair, the selected state `MUST` fill the same glyph (for example `fill="currentColor"` on a stroke-based icon set). When the platform exposes a native selected-icon slot, it `MUST` be used (such as mini program `iconPath`/`selectedIconPath` or Flutter `NavigationDestination(icon:/selectedIcon:)`). Icon pairs `SHOULD` ship in both light and dark tab-bar themes or use a theme-aware tint.
+- A bottom tab bar `MUST` distinguish the selected tab with a filled icon and every unselected tab with an outline (unfilled) icon of the same glyph, and `MUST NOT` convey selection by color alone. Native tab bars `MUST` declare both `iconPath` and `selectedIconPath` for every tab; a custom tab bar `MUST` render the same pair. Both assets are monochrome and theme-neutral, or the surface ships theme-specific assets through a custom tab bar. This is the mini program application of `ICON_SPEC.md` section 3.2.
 - A bottom tab bar `MUST` render only on tab-root routes. Secondary screens — stack pushes, detail, creation, and settings surfaces — `MUST NOT` render the bottom tab bar or reserve its space. Tab-bar visibility `MUST` be decided once per route at composition or shell-layout time from the surface's declared tab roots (route table or native tabBar manifest), never inside individual screens with per-screen conditionals; on platforms with a native tab bar the platform mechanism is the equivalent guarantee, and the declared tab roots remain the cross-surface source of which routes show the tab bar.
 
 ## 8. Security
@@ -232,6 +232,7 @@ Required coverage for new mini program UI capabilities:
 | --- | --- |
 | Package boundary | Static scan proves packages follow `sdkwork-<application-code>-mp-*` or approved shared mini program package names and do not deep-import another package's private source. |
 | Route projection | Tests prove route contributions generate or assemble platform pages/subpackages deterministically. |
+| Tab-bar icons | Tests or build validation prove every tab declares both `iconPath` and `selectedIconPath` (or a custom tab bar renders both), the selected tab uses the filled glyph, unselected tabs use the outline glyph, and both remain legible in light and dark themes (`ICON_SPEC.md` section 3.2). |
 | SDK boundary | Static scan proves generated SDK clients or approved wrappers are used and no raw request APIs, manual auth headers, or generated SDK edits were introduced. |
 | IAM clearing | Tests prove platform storage, token manager, context store, caches, and sensitive state clear on logout, refresh failure, tenant switch, and account switch. |
 | Host boundary | Static scan proves feature pages/components do not call platform globals directly. |

@@ -13,6 +13,7 @@ import { validateRustBackendComposition } from './lib/rust-backend-composition.m
 import { validateApiAssemblyIntegrationClosure } from './lib/api-assembly-integration-closure.mjs';
 import { validateI18nStandard } from './check-i18n-standard.mjs';
 import { validateApplicationLayering } from './check-application-layering.mjs';
+import { validateFlutterTlsTrust } from './check-flutter-tls-trust.mjs';
 import { specsRoot } from './lib/workspace-registry.mjs';
 import { validateWorkspaceMemberProtocol } from './lib/workspace-member-protocol.mjs';
 import { validateWorkspaceLayout } from './lib/workspace-layout.mjs';
@@ -138,6 +139,7 @@ function main() {
     issues.push(...classifyRouteRegistry(args.root).map((issue) => `${issue.kind}: ${issue.detail}`));
     issues.push(...validateComponentPortBindings(args.root));
     issues.push(...validateApplicationLayering(args.root));
+    issues.push(...validateFlutterTlsTrust(args.root));
     issues.push(...validateFrontendComposition(args.root));
     issues.push(...validateRustBackendComposition(args.root));
     issues.push(...validateApiAssemblyIntegrationClosure(args.root));

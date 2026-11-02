@@ -158,6 +158,36 @@ function repairApp(appRoot, templates) {
   return repairs;
 }
 
+/**
+ * Repository-level entrypoint used by `verify-repo.mjs`.
+ *
+ * Returns human-readable issues; an empty array means every Flutter app root in
+ * the repository vendors and installs the trust layer correctly. Repositories
+ * without Flutter app roots pass trivially.
+ *
+ * @param {string} root repository root
+ * @returns {string[]}
+ */
+export function validateFlutterTlsTrust(root) {
+  const workspace = path.resolve(root);
+  const apps = discoverApps(workspace);
+  if (apps.length === 0) return [];
+  const templates = { lib: readTemplate(TEMPLATE_LIB), test: readTemplate(TEMPLATE_TEST) };
+  const issues = [];
+  for (const app of apps) {
+    const result = checkApp(app, templates);
+    const label = path.relative(workspace, app);
+    for (const problem of result.problems) {
+      const detail = problem.detail ? ` - ${problem.detail}` : '';
+      issues.push(`${label}: ${problem.code} (${problem.file})${detail}`);
+    }
+  }
+  for (const finding of auditApplicationOverrides(workspace, apps)) {
+    issues.push(`${finding.file}: ${finding.code}`);
+  }
+  return issues;
+}
+
 function main() {
   const { values } = parseArgs({
     options: {
@@ -233,4 +263,6 @@ function main() {
   return results.some((result) => result.status === 'fail') ? 1 : 0;
 }
 
-process.exit(main());
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.exit(main());
+}

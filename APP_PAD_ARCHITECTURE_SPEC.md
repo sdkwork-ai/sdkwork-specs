@@ -1,8 +1,8 @@
 # Pad Application Architecture Standard
 
-- Version: 1.0
+- Version: 1.1
 - Scope: SDKWork pad/tablet application roots for iPadOS and Android tablets, including the PC-aligned React renderer, tablet host package, app/console/admin package taxonomy, tablet adaptation contract, SDK/IAM boundary, config, release, and verification
-- Related: `SDKWORK_WORKSPACE_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `DESKTOP_APP_ARCHITECTURE_SPEC.md`, `APPLICATION_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `FRONTEND_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_MANIFEST_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `NAMING_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `DEPLOYMENT_SPEC.md`, `SECURITY_SPEC.md`, `APP_ASSETS_SPEC.md`, `TAILWIND_CSS_INTEGRATION_SPEC.md`, `THEME_DARKMODE_SPEC.md`, `I18N_SPEC.md`, `COMPONENT_SPEC.md`, `MODULE_SPEC.md`, `TEST_SPEC.md`
+- Related: `SDKWORK_WORKSPACE_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `DESKTOP_APP_ARCHITECTURE_SPEC.md`, `APPLICATION_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `ICON_SPEC.md`, `FRONTEND_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_MANIFEST_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `NAMING_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `DEPLOYMENT_SPEC.md`, `SECURITY_SPEC.md`, `APP_ASSETS_SPEC.md`, `TAILWIND_CSS_INTEGRATION_SPEC.md`, `THEME_DARKMODE_SPEC.md`, `I18N_SPEC.md`, `COMPONENT_SPEC.md`, `MODULE_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines the architecture for SDKWork pad applications. A pad application is a tablet-first, large-screen client root that delivers native iPadOS and Android tablet packages. Its application architecture is aligned with `APP_PC_ARCHITECTURE_SPEC.md`: the same thin bootstrap, package roles, app/console/admin separation, generated-SDK boundary, appbase IAM runtime, global TokenManager, host adapter boundary, route identity, and config discipline. The difference is the product target and the mandatory tablet adaptation contract in section 5.
 
@@ -320,6 +320,7 @@ Rules:
 Rules:
 
 - `medium` and wider `MUST` use a tablet navigation pattern: navigation rail, sidebar, split view, or a combination. A bottom tab bar stretched across a tablet `MUST NOT` be the primary navigation.
+- A tablet navigation rail or sidebar `MUST` follow `ICON_SPEC.md` section 3.3: the active destination renders the filled icon variant, every inactive destination renders the outline variant of the same glyph, and a group header fills only when it contains the active destination. Selection `MUST NOT` rely on color alone, and the rail `MUST` preserve the pair when it expands or collapses.
 - `expanded` `MUST` support master-detail or list-detail composition for collection workflows. Selecting an item `MUST NOT` replace the collection with a full-screen detail page when a split layout is available.
 - `large` `SHOULD` support a third pane or inspector for properties, activity, preview, or contextual actions.
 - `compact` `MAY` collapse to a single column with a drawer, sheet, or stack navigation. It `MUST NOT` reuse a phone-only shell that breaks tablet layout when the window grows.
@@ -758,6 +759,7 @@ Required verification for pad application architecture changes:
 | Input parity | Tests prove touch, pointer, trackpad, hardware keyboard, focus order, context menus, virtual keyboard insets, and touch equivalents for pointer-only actions. |
 | Safe areas | Tests or screenshots prove all four insets, home indicator, status bar, camera cutout, multitasking controls, Android edge-to-edge, and gesture exclusion zones. |
 | Accessibility | Tests or audit evidence prove labels/roles, screen-reader order, keyboard-only operation, large text reflow, reduced motion, contrast, and captions. |
+| Navigation icons | Tests or screenshots prove the active rail/sidebar destination renders the filled icon variant, every inactive destination renders the outline variant of the same glyph, and both remain legible in light and dark themes (`ICON_SPEC.md` section 3.3). |
 | Performance | Evidence proves virtualization for long collections, rendered-size media, resize without full reload, startup/first-paint budget, and memory behavior with multiple windows. |
 | Adaptation contract | App tests validate `specs/tablet-adaptation.spec.json` against `schemas/sdkwork.tablet-adaptation.spec.schema.v1.json`, declared host capabilities, and evidence paths; `node <sdkwork-specs>/tools/check-tablet-adaptation.mjs --root .` passes and fails when a declared target, class, orientation, or applicable multitasking mode has no coverage. |
 | Manifest/config boundary | `node <sdkwork-specs>/tools/check-tablet-adaptation.mjs --root .` proves pad `appType = APP_REACT`, `runtime.family = desktop`, `runtime.framework = react-tauri`, `clientArchitectures = ["tauri"]`, tablet-only package targets, and corresponding `targetPlatforms`/`publish.platforms`; tests prove deployment profile, environment, public/private separation, and test isolation. |
@@ -775,6 +777,7 @@ Acceptance checklist:
 - [ ] Appbase IAM runtime, one global TokenManager, secure storage, logout clearing, and multi-window session sharing are verified.
 - [ ] `specs/tablet-adaptation.spec.json` exists, covers all four window classes, both orientations, every shipped target, and every claimed multitasking mode, points at real evidence, and passes `tools/check-tablet-adaptation.mjs`.
 - [ ] Tablet layout covers navigation rail/sidebar, master-detail, resizable panes, orientation, resize, split view, Stage Manager/freeform, safe areas, virtual keyboard, pointer, trackpad, keyboard, and optional stylus.
+- [ ] Navigation rail/sidebar icons follow `ICON_SPEC.md`: active destination filled, inactive destinations outline, selection not conveyed by color alone.
 - [ ] Touch targets, accessibility, text scaling, reduced motion, and contrast meet the platform baseline.
 - [ ] No phone-first navigation, hover-only action, full-screen-only assumption, fixed device-width layout, or WebView wrapper was introduced.
 - [ ] Tablet screenshots, store metadata, signing references, artifact names, and release evidence are complete and honest.

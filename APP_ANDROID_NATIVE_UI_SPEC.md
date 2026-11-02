@@ -1,8 +1,8 @@
 ﻿# App Android Native UI Standard
 
-- Version: 1.0
+- Version: 1.1
 - Scope: app/user-facing and Android user-console native packages, Jetpack Compose or Android View UI, generated Kotlin/Java app SDK integration, Android host adapters, mobile interaction, and package-local state
-- Related: `API_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `COMPONENT_SPEC.md`, `CONFIG_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `NAMING_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
+- Related: `API_SPEC.md`, `APPLICATION_SPEC.md`, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `COMPONENT_SPEC.md`, `CONFIG_SPEC.md`, `DOMAIN_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `ICON_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `I18N_SPEC.md`, `MODULE_SPEC.md`, `NAMING_SPEC.md`, `SDK_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
 This standard defines how SDKWork app-side and Android user-console native UI is packaged and integrated. In application roots it is applied after `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`; in shared package families it remains the detailed Android native package standard. Android UI packages are app/user-facing or user-console packages and consume app-api through generated Kotlin/Java app SDK clients or approved appbase Android wrappers. They must not consume `backend-admin` UI packages or backend SDKs for user-facing workflows.
 
@@ -144,6 +144,7 @@ Rules:
 - Forms must support keyboard avoidance, autofill hints where appropriate, accessible labels, and duplicate-submit protection.
 - QR scan, OAuth redirect, verification-code, push permission, and password reset flows must handle activity/process lifecycle transitions.
 - Theme usage must come from the app design system or package-injected theme adapters. Domain packages must not redefine global themes.
+- Bottom navigation and navigation rail destinations `MUST` render the selected destination with the filled icon variant and every unselected destination with the outline variant of the same glyph, and `MUST NOT` convey selection by color alone. Compose `NavigationBarItem` and `NavigationRailItem` `MUST` select `Icons.Filled.*` when selected and `Icons.Outlined.*` otherwise; legacy Views `MUST` use a selected-state drawable with the filled vector. This is the Android application of `ICON_SPEC.md` section 3.
 
 ## 6. Security
 
@@ -166,6 +167,7 @@ Required coverage for new Android capabilities:
 | SDK boundary | Static scan proves generated SDK clients or approved wrappers are used and no raw HTTP, manual auth headers, or generated SDK edits were introduced. |
 | Service/view model | Unit tests use fake generated app SDK clients and fake host adapters. |
 | UI states | Compose/UI tests or documented fixtures cover loading, empty, validation-error, permission-denied, unavailable, and unknown-error states. |
+| Navigation icons | Compose/UI tests prove the selected bottom-navigation or rail destination renders the filled variant, every unselected destination renders the outline variant of the same glyph, and both are legible in light and dark themes (`ICON_SPEC.md` section 3). |
 | I18n layout | Static scan proves authored fragments stay under `src/main/i18n/<locale>/<domain>/<capability>/` and `res/values*/strings.xml` is generated or thin platform projection only. |
 | IAM clearing | Tests prove secure storage, token manager, context store, caches, and sensitive state clear on logout, refresh failure, tenant switch, and account switch. |
 | Host boundary | Static scan proves feature UI does not call Android platform APIs directly for host capabilities. |
