@@ -730,6 +730,30 @@ CI, schema linters, migration tools, or repository audits `SHOULD` implement the
 | DB097 | MUST | Balance and quota columns using a finer internal unit than the displayed unit declare the scale relationship (for example `1 point = 1e6 micro`). |
 | DB098 | MUST | A money or unit column's stored unit agrees with the unit surfaced by `API_SPEC.md` section 13.2; the two layers never disagree. |
 | DB099 | MUST | Stored money and unit values are exact; rounding happens only at the display boundary, never on write. |
+| DB100 | MUST | Every table that carries `organization_id` is classified in its module contract as either **organization-scoped** (rows partitioned by organization) or **tenant-global** (rows partitioned by tenant, with `organization_id` as owner or attribution metadata). The presence of the column alone does not make a table organization-scoped. |
+| DB101 | MUST | Every read or mutation of a tenant-global table binds `tenant_id`. When `organization_id` affects visibility or ownership, the same statement MUST also apply the declared owner/visibility gate; it MUST NOT silently widen to the whole tenant. |
+| DB102 | MUST | Every read or mutation of an organization-scoped table binds both `tenant_id` and `organization_id`. The `0` sentinel means tenant-global rows and is admitted only where the module contract explicitly declares that visibility rule (`organization_id = :org OR organization_id = '0'`); otherwise it is excluded. |
+
+### 26.1 Organization Scope Classification
+
+Carrying `organization_id` is not proof that a table is organization-scoped. A
+**tenant-global** table partitions rows by `tenant_id`, and uses
+`organization_id` as an owner or attribution column: the deployment ledger
+(`deploy_app.owner_type = ORGANIZATION`), website resources with
+`resource_scope = TENANT`, and marketplace catalogs that publish across a whole
+tenant are examples. Their access rules are owner gates (`actor_id`,
+`owner_type`, `resource_scope`), and adding a bare `organization_id` predicate
+would hide tenant-wide rows or break tenant administrators.
+
+An **organization-scoped** table partitions rows by organization; IAM directory
+tables, account balances, order and payment attempts, forum moderation, course
+enrollments, CMS entries, and appstore user-store rows are examples. They MUST
+bind both predicates (DB102).
+
+The classification is declared in the module contract, reviewed with the DDL,
+and consumed by the SQL regression scanner. A table whose classification is
+missing is treated as organization-scoped until the owner declares otherwise;
+silence never widens access.
 
 ## 27. Design Review Checklist
 
