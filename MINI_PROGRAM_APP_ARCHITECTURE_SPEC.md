@@ -309,9 +309,7 @@ Rules:
 - uni-app env files `MUST` use `.env.<profile-id>` and `VITE_SDKWORK_*` keys.
   `mp-weixin`, `mp-alipay`, `mp-dingtalk`, and other uni-app `-p` values are
   target platforms, not environment or deployment-profile values.
-- Mini program builds do not contain access tokens, platform secrets, private
-  upload keys, database URLs, Redis URLs, or signing credentials. WeChat IDE
-  developer settings stay in ignored `project.private.config.json`.
+- Mini program builds `MUST` carry the selected profile's public application access token `SDKWORK_ACCESS_TOKEN` from `config/mini-program/runtime-env.<profile-id>.json` (`APP_ACCESS_TOKEN_SPEC.md`). They `MUST NOT` contain session access tokens, auth tokens, refresh tokens, platform secrets, private upload keys, database URLs, Redis URLs, or signing credentials. WeChat IDE developer settings stay in ignored `project.private.config.json`.
 - `config/host/` owns platform app ids, platform profiles, permission references, upload environment, platform package settings, and signing/reference metadata.
 - Host config must not contain platform private keys, auth tokens, refresh tokens, API keys, database credentials, private endpoints, business API constants, or SDK package ownership.
 - `agent.app.config.json` should set `runtime.family = "mini-program"` and a specific `runtime.framework` such as `weixin-mini-program` or `multi-mini-program`.

@@ -226,21 +226,28 @@ Rules:
 
 ### 5.3 Lifecycle Access Token Ensure
 
-Start, build, test, check, verify, and clean commands that call protected app-api or backend-api surfaces `MUST` resolve `SDKWORK_ACCESS_TOKEN` before spawning child processes.
+Start, build, test, check, verify, and clean commands that call protected app-api or backend-api surfaces `MUST` resolve `SDKWORK_ACCESS_TOKEN` before spawning child processes. The public application access token defined by `APP_ACCESS_TOKEN_SPEC.md` is the primary source and is committed in every per-scope env file; a missing or mismatched public token fails the command. Private operator bootstrap credentials are a fallback for CLI/development tooling only.
 
 Resolution order:
 
-1. Process env when the token is reusable: a signed JWT, or a local fixture JWT where the selected lifecycle permits one.
-2. The user-private credential bundle: `~/.sdkwork/<application-code>/credentials/<profile-id>.json` (§5.4.1). No repository env file carries a token; a composed name such as `.env.<deployment-profile>.<lifecycle>.bootstrap.local` `MUST` be rejected with a diagnostic naming the bundle, never read.
-3. Legacy unscoped registration output `.sdkwork.local.env`, only when its token validates for the selected lifecycle and deployment identity.
-4. IAM application bootstrap through `@sdkwork/iam-application-bootstrap` `ensureRepoBootstrapAccessToken(...)` when bootstrap operator credentials exist.
-5. Credential-entry fixture generation through `@sdkwork/iam-credential-entry/node-bootstrap` for `development`, or an isolated `test` runner with the explicit test-generation opt-in and a loopback gateway.
+1. The selected profile's committed per-scope env file `SDKWORK_ACCESS_TOKEN` (public application access token; primary).
+2. Process env when the token is reusable: a signed operator credential, or a local fixture JWT where the selected lifecycle permits one.
+3. The user-private credential bundle: `~/.sdkwork/<application-code>/credentials/<profile-id>.json` (§5.4.1). No repository env file carries a private operator token; a composed name such as `.env.<deployment-profile>.<lifecycle>.bootstrap.local` `MUST` be rejected with a diagnostic naming the bundle, never read.
+4. Legacy unscoped registration output `.sdkwork.local.env`, only when its token validates for the selected lifecycle and deployment identity.
+5. IAM application bootstrap through `@sdkwork/iam-application-bootstrap` `ensureRepoBootstrapAccessToken(...)` when bootstrap operator credentials exist.
+6. Credential-entry fixture generation through `@sdkwork/iam-credential-entry/node-bootstrap` for `development`, or an isolated `test` runner with the explicit test-generation opt-in and a loopback gateway.
 
 Remote gateway backends `MUST` reject `alg:none` fixture JWTs in `staging` and `production`. Operators `SHOULD` register a real token through IAM bootstrap or supply a signed JWT from a secret store for any shared or remote gateway; a development fixture is disposable and expires within 24 hours.
 
 ### 5.4 Per-Repository Access Token Reuse And Regeneration
 
-Each independent Git repository owns its bootstrap access token. A multi-surface repository `MAY` own one token per manifest-bearing application root when those surfaces declare distinct `backend.appId` values. Tokens `MUST NOT` be shared between repositories, between lifecycle environments, between deployment profiles, or between surfaces with different application identities. The reused value is the manifest root's own private artifact; a token inherited through process env is an explicit operator override, not another repository's cache.
+Each independent Git repository owns its private operator bootstrap credential (where a lifecycle lane still uses one). A multi-surface repository `MAY` own one private operator credential per manifest-bearing application root when those surfaces declare distinct `backend.appId` values. Private operator credentials `MUST NOT` be shared between repositories, between lifecycle environments, between deployment profiles, or between surfaces with different application identities.
+
+The **public application access token** is a different credential class and is
+governed by `APP_ACCESS_TOKEN_SPEC.md`: it is committed in every per-scope env
+file, is unique per application root and profile, and is not a private operator
+bootstrap credential. This section's private cache, reuse, and regeneration rules
+do not apply to it.
 
 #### 5.4.1 Cache Artifact
 
@@ -255,7 +262,7 @@ Each independent Git repository owns its bootstrap access token. A multi-surface
 | Write discipline | Writers `MUST` write a temporary file in the same directory and rename it over the target. Readers `MUST` never observe a partially written bundle. |
 | Scope | Exactly one active token per manifest root (repository root or `apps/<surface>` application root), profile id, backend origin, and manifest `backend.appId` |
 
-An application repository that resolves `SDKWORK_ACCESS_TOKEN` from any other path or from a workspace-level shared file is non-conforming. Existing repositories `MUST` migrate the token into the canonical path on the next write; readers `MAY` accept the compatible spellings during the migration window.
+A private operator bootstrap credential `MUST` live only in the user-private store. The public application access token is separate: it lives in the app root's committed per-scope env file and is resolved by `APP_ACCESS_TOKEN_SPEC.md`; a repository that resolves a private operator token from a workspace-level shared file is non-conforming.
 
 #### 5.4.2 Reuse Contract
 
@@ -267,7 +274,7 @@ Before any IAM provisioning, fixture signing, or artifact write, the resolver `M
 - The `environment` claim, when present on a JWT, normalizes to the selected lifecycle (`dev`/`local` normalize to `development`, `prod` to `production`) and matches it. A JWT that omits the claim cannot be scope-validated for that dimension and is treated as opaque.
 - The `app_id` claim is opaque for reuse. IAM issues credentials carrying the registration-assigned runtime application id (an `app_<uuid>` value), which is never the manifest `backend.appId` key, so a mismatch cannot prove the token belongs to another application and `MUST NOT` reject reuse. Tenant and organization claims carry the cross-application isolation (next bullet), and a token minted for a different backend fails at request time through the audience binding and is regenerated per section 5.4.3.
 - `tenant_id` and `organization_id` match the manifest defaults when both the manifest and the token declare them.
-- A fixture JWT (`alg: none` with the literal `signature` segment) is accepted only where fixture generation is allowed: `development`, isolated `test` with the explicit test-generation opt-in or a loopback gateway, and never `staging` or `production`.
+- A fixture JWT (`alg:none` with the literal `signature` segment) is accepted only where fixture generation is allowed: `development`, isolated `test` with the explicit test-generation opt-in or a loopback gateway, and never `staging` or `production`. A public application access token (`token_class:application`, `kid:public-app-token`, signature segment `public`) is not a fixture and is accepted in every environment per `APP_ACCESS_TOKEN_SPEC.md`.
 - When the artifact carries `sdkwork-bootstrap-backend`, its normalized origin matches the active backend base URL; when it carries `sdkwork-bootstrap-environment`, it matches the selected lifecycle.
 
 When a token is reusable, the lifecycle resolver `MUST`:

@@ -129,7 +129,7 @@ Rules:
   `MUST NOT` be exposed to browser code. The platform cloud gateway realtime
   hosting toggle is `SDKWORK_API_CLOUD_GATEWAY_REALTIME_ENABLED`.
 - Do not put secrets in names prefixed with `PORTAL_PUBLIC_`, `VITE_`, `PUBLIC_`, `NEXT_PUBLIC_`, or any variable that is exposed to browser code.
-- `SDKWORK_ACCESS_TOKEN` is the unified private bootstrap access credential for every application root. It `MUST` appear in checked-in private env templates such as `.env.example` when the application calls protected app-api or backend-api surfaces. It `MUST NOT` use an app-prefixed name such as `SDKWORK_<APPLICATION_CODE>_ACCESS_TOKEN`. It `MUST NOT` be exposed through `VITE_*`, `PORTAL_PUBLIC_*`, or other browser-visible runtime config.
+- `SDKWORK_ACCESS_TOKEN` is the public application access token for every application root (`APP_ACCESS_TOKEN_SPEC.md`). It `MUST` appear in every per-scope env file and in checked-in templates such as `.env.example`. It is SaaS-isolation material, not a secret, and may be embedded in the selected browser artifact. It `MUST NOT` use an app-prefixed name such as `SDKWORK_<APPLICATION_CODE>_ACCESS_TOKEN`. It `MUST NOT` be duplicated under `VITE_*` or `PORTAL_PUBLIC_*`.
 - `SDKWORK_AUTH_TOKEN`, `SDKWORK_REFRESH_TOKEN`, `SDKWORK_API_KEY`, app-prefixed credential env names, and `VITE_*_TOKEN` remain forbidden as live credential inputs. `auth_token`, `refresh_token`, and API keys `MUST` come from login, refresh, or approved runtime credential providers—not environment variables.
 - After appbase login, registration, refresh, or current-session bootstrap succeeds, runtime session tokens from the global TokenManager `MUST` supersede env bootstrap credentials for outbound protected SDK calls. Env bootstrap credentials `MUST NOT` be merged with or override authenticated session tokens.
 - Boolean variables must accept only `true`, `false`, `1`, or `0` after normalization.
@@ -160,7 +160,7 @@ These variables form the baseline for SDKWork applications.
 | `SDKWORK_<APPLICATION_CODE>_<DEPENDENCY>_BACKEND_API_BASE_URL` | private | MAY when the dependency runs in a separate process | Dependency backend-api SDK base URL keyed by dependency SDK family/app code. External-deployment only: when the dependency assembly is embedded in the same gateway process, consumers `MUST NOT` use or require this variable and deployments `MUST NOT` default it to the gateway's own origin (`APPLICATION_GATEWAY_SPEC.md` section 2.3). |
 | `SDKWORK_<APPLICATION_CODE>_TOKEN_MANAGER_MODE` | private | MAY | Credential strategy: `appbase-global`, `service-context`, or `test`. It configures behavior only; it must not contain token values. |
 | `SDKWORK_<APPLICATION_CODE>_TOKEN_STORAGE` | private | MAY | Token storage strategy: `memory`, `browser-session`, `browser-local`, `os-secure-storage`, or `server-context`. Browser strategies must pass security review. |
-| `SDKWORK_ACCESS_TOKEN` | secret | SHOULD when protected app-api/backend-api is called before interactive login | Unified private bootstrap `access_token` used to seed the global TokenManager or service-context credential provider for SaaS deployment tenant isolation. It `MUST` be a signed SDKWork access token whose claims carry current `tenant_id`, `organization_id`, `app_id`, environment, deployment mode, and applicable scope metadata. Deployment profile and runtime target `MAY` be signed as optional runtime facts but `MUST NOT` be required by consumers. It `MUST NOT` use an app-prefixed env name. It `MUST NOT` be exposed to browser public runtime config. After login/session bootstrap, runtime session `accessToken` replaces this value. |
+| `SDKWORK_ACCESS_TOKEN` | public | MUST for every manifest-bearing application root and profile | Public application access token used for SaaS tenant, organization, application, environment, and deployment-profile isolation before interactive login. It is a three-part JWT with `token_class:application`, `alg:none`, and `kid:public-app-token`, committed in the owning app root's per-scope env file (`APP_ACCESS_TOKEN_SPEC.md`). It `MUST NOT` be accepted as a user session credential, `MUST NOT` carry user permissions, and `MUST NOT` use an app-prefixed env name. It is superseded by the session `accessToken` after login. |
 | `SDKWORK_ACCESS_TOKEN_HEADER` | private | MAY | Must be `Access-Token` for SDKWork v3 app-api/backend-api. Present only for compatibility validation, not customization. |
 | `SDKWORK_AUTH_TOKEN_HEADER` | private | MAY | Must be `Authorization` for SDKWork v3 bearer auth. Present only for compatibility validation, not customization. |
 | `SDKWORK_<APPLICATION_CODE>_DEFAULT_LOCALE` | private/public | MAY | Default BCP 47 locale such as `en-US` or `zh-CN`. This configures selection only; translated messages stay in i18n catalog fragments. |
@@ -546,8 +546,9 @@ Rules:
   selects only safe build facts and deploy tooling emits `/runtime-env.js` or
   `/runtime-env.json` with the same logical fields. Runtime config loads before
   SDK clients.
-- Browser-visible env contains no `SDKWORK_ACCESS_TOKEN`, auth token, refresh
-  token, API key, database URL, Redis URL, signing value, or private endpoint.
+- Browser-visible env contains the selected public application access token
+  `SDKWORK_ACCESS_TOKEN`, but no session access token, auth token, refresh token,
+  API key, database URL, Redis URL, signing value, or private endpoint.
 - Standalone Vite output contains no absolute application-ingress target URL.
   The Node-side dev server reads that target from the parent topology profile;
   browser modules receive same-origin SDK paths only.
@@ -666,9 +667,10 @@ Rules:
   `String.fromEnvironment(...)` or a typed wrapper.
 - Android emulator, iOS simulator, physical-device, LAN, and cloud origins are
   explicit source values. A materializer must not guess host-loopback aliases.
-- A live bootstrap token may exist only in the user-private credential bundle of
-  §5.1.7 for the `development` and `test` profiles, and must never enter a
-  release artifact.
+- The Flutter profile file `env/sdkwork.<profile-id>.json` `MUST` carry the
+  public application access token `SDKWORK_ACCESS_TOKEN` as required by
+  `APP_ACCESS_TOKEN_SPEC.md`. The token is public and committed; session access,
+  auth, and refresh tokens `MUST NOT` enter a release artifact.
 
 ### 5.1.6 Mini Program Formats
 
@@ -680,6 +682,7 @@ WeChat native mini program roots use a generated runtime JSON document:
   "SDKWORK_DEPLOYMENT_PROFILE": "cloud",
   "SDKWORK_PROFILE_ID": "cloud.production",
   "SDKWORK_RUNTIME_TARGET": "mini-program",
+  "SDKWORK_ACCESS_TOKEN": "<public application access token>",
   "SDKWORK_<APPLICATION_CODE>_APPLICATION_PUBLIC_HTTP_URL": "https://mini.example.com",
   "SDKWORK_<APPLICATION_CODE>_PLATFORM_API_GATEWAY_HTTP_URL": "https://api.example.com"
 }
@@ -696,6 +699,10 @@ Rules for WeChat native mini programs:
 
 - The selected `config/mini-program/runtime-env.<profile-id>.json` is copied or
   compiled into one deterministic public runtime module before `App()` starts.
+- The selected profile file `MUST` carry the public application access token
+  `SDKWORK_ACCESS_TOKEN` (`APP_ACCESS_TOKEN_SPEC.md`). Session access, auth, and
+  refresh tokens, platform secrets, upload private keys, and signing credentials
+  `MUST NOT` enter the build.
 - `project.config.json` owns safe shared WeChat tooling metadata.
   `project.private.config.json` owns developer-local IDE settings and stays
   ignored. App secrets, upload private keys, and signing credentials stay in
@@ -762,17 +769,18 @@ that profile id verbatim: `vite build --mode cloud.production` loads
 device, or tenant axis `MUST NOT` become a third name segment; it stays a build
 flag (`--runtime-target`, `UNI_PLATFORM`) applied on top of the two-segment mode.
 
-Private values never receive an env file of their own, except the packaged
-application bootstrap token described in the rules below. Every kind of value
-has exactly one home, and a value that has no row here has no file:
+Private values never receive an env file of their own. The public application
+access token is the one credential that lives in the per-scope env file, as
+required by `APP_ACCESS_TOKEN_SPEC.md`. Every kind of value has exactly one home,
+and a value that has no row here has no file:
 
 | Value | Home |
 | --- | --- |
 | shared build/runtime input | `.env` |
 | per-scope build/runtime input | `.env.<deployment-profile>.<environment>` |
 | per-scope topology source that materializes that file | `etc/topology/<deployment-profile>.<environment>.env` |
-| issued bootstrap access token (runtime and CLI use) | `~/.sdkwork/<application-code>/credentials/<profile-id>.json` |
-| packaged application bootstrap access token | the owning application root's `.env.<deployment-profile>.<environment>` (see rules) |
+| issued operator bootstrap credential (runtime and CLI use) | `~/.sdkwork/<application-code>/credentials/<profile-id>.json` |
+| public application access token (per app and profile) | the owning application root's per-scope env file (see rules and `APP_ACCESS_TOKEN_SPEC.md`) |
 | operator IAM bootstrap identity | `~/.sdkwork/iam-bootstrap/<environment>.json` |
 | host database profile | `config/host/postgres.env(.example)` (§7.1) |
 | desktop packaging host settings | `apps/<surface>/packaging/<platform>.env(.example)` |
@@ -789,16 +797,30 @@ process env, mounted secret files, secret manager             CI, containers, ho
 Rules:
 
 - Tracked materialized env files are safe, deterministic build/runtime inputs.
-  They contain no live credential values, except the packaged application
-  bootstrap token described in the next rule.
-- An application whose release lane packages a non-interactive credential `MAY`
-  carry `SDKWORK_ACCESS_TOKEN` in its own materialized per-scope file. The value
-  is that deployment's revocable bootstrap token, the file is checked in and
-  reviewed like any other change, and rotation is revoke + edit + commit + a
-  rebuilt artifact. The value `MUST NOT` appear in `VITE_*`, `PORTAL_PUBLIC_*`,
-  or any other browser-visible document, and no other private value may join it.
-  A repository that packages no credential keeps the token only in
-  `~/.sdkwork/<application-code>/credentials/<profile-id>.json`.
+  They contain no live session credential values. Every manifest-bearing
+  application root `MUST` carry its public application access token
+  (`SDKWORK_ACCESS_TOKEN`) in every per-scope file as required by
+  `APP_ACCESS_TOKEN_SPEC.md`.
+- The public application access token is SaaS-isolation material, not a secret.
+  It identifies the tenant, organization, application, environment, and
+  deployment profile before interactive login. It is checked in, reviewed like
+  any other configuration change, and rotated by regenerating every profile and
+  committing the diff. It `MUST NOT` be accepted as a user session credential,
+  `MUST NOT` carry user permissions, and `MUST NOT` be duplicated under
+  `VITE_*`, `PORTAL_PUBLIC_*`, or a format-specific public prefix. Only this
+  token may join a tracked env file; session access tokens, auth tokens, refresh
+  tokens, API keys, OAuth bearers, signing keys, and deployment secrets remain
+  private and `MUST NOT` appear in any tracked file.
+- `SDKWORK_ACCESS_TOKEN` is required and non-empty in every materialized
+  per-scope file for every manifest-bearing application root. It carries the
+  public application access token defined by `APP_ACCESS_TOKEN_SPEC.md`: a
+  three-part JWT with `token_class:application`, `alg:none`, and
+  `kid:public-app-token`. A missing, empty, malformed, or identity-mismatched
+  token `MUST` fail `dev`, `start`, `serve`, `build`, `package`, and `dist`
+  before the process or renderer spawns.
+- Rotation is an explicit regeneration of every profile file by the canonical
+  generator, reviewed as a normal diff and committed. A build or start command
+  `MUST NOT` generate, replace, or rewrite the token.
 - A composed name such as `.env.<profile-id>.local`,
   `.env.<profile-id>.bootstrap.local`, `.env.local`, `.env.postgres`,
   `env/sdkwork.<profile-id>.bootstrap.local.json`, or `.env.release.local`
@@ -808,8 +830,8 @@ Rules:
 - A scope file is written once and edited in place. A developer who needs a
   different value for one machine changes that scope or a non-env local
   override; they `MUST NOT` add a second env file on top of it.
-- Bootstrap credentials are written only to the credential bundle of the
-  user-private store, never to a repository file, and are read only by
+- Operator bootstrap credentials are written only to the credential bundle of
+  the user-private store, never to a repository file, and are read only by
   `resolve`-phase consumers (§6.1).
 - `staging` and `production` secrets come from secret managers, mounted secret
   files, protected process env, OS secure storage, or platform signing systems.
@@ -824,6 +846,80 @@ Rules:
 - Reference examples live under `templates/environment/`; application-specific
   values are materialized from that application's `etc/`, not copied back into
   the standards repository.
+
+#### 5.1.7.1 Inherited Env Layers
+
+Authoring and consumption are separate concerns. Authors write small layers;
+consumers still read exactly one resolved per-scope file.
+
+Repository topology layers, lowest precedence first:
+
+| Order | File | Role |
+| --- | --- | --- |
+| 1 | `etc/topology/base.env` | defaults shared by every deployment profile and environment |
+| 2 | `etc/topology/environments/<environment>.base.env` | defaults shared by both deployment profiles for one environment |
+| 3 | `etc/topology/<deployment-profile>.base.env` | defaults shared by one deployment profile (`standalone` or `cloud`) |
+| 4 | `etc/topology/overrides/<deployment-profile>.<environment>.env` | the profile/environment delta; omit it when the profile only inherits defaults |
+| output | `etc/topology/<deployment-profile>.<environment>.env` | generated resolved file read by every runtime and materializer |
+
+Optional application overlay, applied after the repository source and before
+format-specific output:
+
+| Order | File | Role |
+| --- | --- | --- |
+| 5 | `apps/<app>/etc/env.base.env` | application-wide defaults shared by every profile |
+| 6 | `apps/<app>/etc/env.<deployment-profile>.<environment>.env` | application/profile delta |
+
+Rules:
+
+- Merge order is numeric ascending; a later layer wins. Duplicate keys inside
+  one layer are rejected.
+- Keep each layer minimal: `base.env` holds only invariants shared by every
+  profile; environment- and deployment-specific values belong in their own
+  layer. Do not add a value to `base.env` merely because it is convenient.
+- Env files `MUST NOT` contain session tokens, auth tokens, API keys, or OAuth
+  bearers. The public application access token is the only token value allowed,
+  and it is generated into client surface files, never authored in a topology
+  layer.
+- Do not keep duplicate identity aliases for symmetry. Emit an app-prefixed
+  identity key only when a consumer reads it; otherwise use the canonical
+  generic key.
+- Do not keep a `VITE_*` mirror when the client materializer already derives it
+  from the canonical `SDKWORK_*` binding. Keep a mirror only when it encodes a
+  different browser-visible value.
+- Non-development profiles `SHOULD` use deployment-provided infrastructure
+  hosts. An `example.com` placeholder is allowed only as a source default that
+  the deployment layer overrides; a published deployment bundle `MUST NOT`
+  retain it.
+- The override layer is optional. When no layer defines the repository's
+  identity keys from `specs/topology.spec.json` `envKeys`
+  (`deploymentProfile`, `environment`, `profileId`, defaulting to
+  `SDKWORK_DEPLOYMENT_PROFILE`, `SDKWORK_ENVIRONMENT`, `SDKWORK_PROFILE_ID`),
+  the materializer generates them from the profile id. An explicit conflicting
+  value still fails.
+- `${KEY}` references are expanded after the merge, with cycle detection and a
+  hard failure on an unresolved reference. Expansion never reads process env.
+- Base layers (`base.env`, `<deployment-profile>.base.env`, app `env.base.env`)
+  `MUST NOT` contain credentials or secrets: `SDKWORK_ACCESS_TOKEN`,
+  `*_AUTH_TOKEN`, `*_REFRESH_TOKEN`, `*_API_KEY`, `PASSWORD`, `SECRET`,
+  `PRIVATE_KEY`, `DATABASE_URL`, `REDIS_URL`, or any `*_SECRET_FILE` value.
+  Private operator credentials belong in the user-private store or a protected
+  deployment secret, never in a tracked base layer.
+- A tracked override layer `MUST NOT` contain a `staging` or `production`
+  secret. Development-only fixture tokens are allowed only in a development
+  override and `MUST` be marked with a comment naming the fixture.
+- The resolved profile file is generated. It carries a `GENERATED` header,
+  deterministic key order, and `MUST NOT` be hand-edited. Edit the layer that
+  owns the value instead.
+- The canonical command is
+  `node <sdkwork-specs>/tools/materialize-topology-env.mjs --root <repository>`;
+  `--check` verifies the committed resolved files without rewriting.
+- The resolved file remains the sole input to `materialize-client-env.mjs`,
+  dev runners, and server env loaders, so no consumer needs to know the layer
+  layout.
+- The public application access token (`APP_ACCESS_TOKEN_SPEC.md`) is generated
+  after the merge, is unique per application and profile, and `MUST NOT` be
+  inherited from a base layer or an app `env.base.env`.
 
 ### 5.1.8 TLS Trust Keys
 
@@ -873,7 +969,7 @@ one PC application root.
 
 | Runtime target | Default config location | Default persistence | Standard profile behavior |
 | --- | --- | --- | --- |
-| `browser` | `/runtime-env.js` or `/runtime-env.json` served by the trusted host | Browser storage only through approved auth/session adapter | Public SDK URLs and flags only; no secrets, database URLs, or private endpoints. |
+| `browser` | `/runtime-env.js` or `/runtime-env.json` served by the trusted host | Browser storage only through approved auth/session adapter | Public SDK URLs, flags, and the public application access token only; no session credentials, database URLs, secrets, or private endpoints. |
 | `desktop` | `~/.sdkwork/<application-code>/config/<application-code>.toml` or `%USERPROFILE%\.sdkwork\<application-code>\config\<application-code>.toml` | SQLite under SDKWork user-private data directory | Installed desktop runtime; may start local services but desktop user config stays separate. |
 | `tablet-ipados` | Platform app-private config plus approved Tauri iOS config | SQLite or approved encrypted platform-local storage | Same PC or pad renderer and SDK/IAM runtime; iPadOS packaging metadata is target config. |
 | `tablet-android` | Platform app-private config plus approved Tauri Android config | SQLite or approved encrypted platform-local storage | Same PC or pad renderer and SDK/IAM runtime; Android package/signing metadata is target config. |
@@ -1003,24 +1099,36 @@ Rules:
 - Absolute HTTP/HTTPS origins must be added to the production Content Security Policy `connect-src`.
 - Generated SDK examples must not hard-code tenant-specific hosts.
 - Base URL values must not include query strings, fragments, embedded credentials, API keys, tokens, or tenant-specific secret material.
-- Environment variable names ending in `_REFRESH_TOKEN`, `_AUTH_TOKEN`, `_API_KEY`, or browser/public `*_TOKEN` are forbidden as live credential inputs unless a spec explicitly marks the variable as a test-only fixture. `SDKWORK_ACCESS_TOKEN` is the only allowed private bootstrap access credential according to section 6.1. Production browser configs must fail validation when bootstrap or session token values are exposed through `VITE_*` or `PORTAL_PUBLIC_*`.
+- Environment variable names ending in `_REFRESH_TOKEN`, `_AUTH_TOKEN`, `_API_KEY`, or `VITE_*_TOKEN`/`PORTAL_PUBLIC_*_TOKEN` are forbidden as live credential inputs unless a spec explicitly marks the variable as a test-only fixture. `SDKWORK_ACCESS_TOKEN` is the only allowed application access credential; it is public SaaS-isolation material carried by every per-scope env file (`APP_ACCESS_TOKEN_SPEC.md`). Session `AUTH_TOKEN`, `REFRESH_TOKEN`, API keys, OAuth bearers, and signing keys remain private and `MUST NOT` appear in `VITE_*`, `PORTAL_PUBLIC_*`, or any tracked env file.
 
 ### 6.1 Access Token And Credential Configuration
 
 Every SDKWork application that consumes protected app-api or backend-api surfaces
 `MUST` treat `Access-Token` as a mandatory outbound credential whenever a
 credential is available. Tenant, organization, app, environment, deployment
-profile, runtime target, and scope context `MUST` be carried inside signed token
-claims, not in client-writable request fields or SDKWork context-projection
-headers.
+profile, runtime target, and scope context `MUST` be carried inside token claims,
+not in client-writable request fields or SDKWork context-projection headers.
+
+Two access-token classes exist and `MUST NOT` be conflated:
+
+| Class | Env key | Purpose | Secrecy | Committed |
+| --- | --- | --- | --- | --- |
+| Application access token | `SDKWORK_ACCESS_TOKEN` | SaaS isolation before login | Public | Yes |
+| Session access token | runtime TokenManager state | Authenticated user session | Private | Never |
+
+The application access token is normative in `APP_ACCESS_TOKEN_SPEC.md`: it is a
+three-part JWT with `token_class:application`, `alg:none`, and
+`kid:public-app-token`, carried by every per-scope env file, and accepted only
+for credential-entry isolation. It `MUST NOT` authorize protected business
+operations or create a user session.
 
 Credential sources:
 
 | Phase | `access_token` source | `auth_token` source | Rule |
 | --- | --- | --- | --- |
-| Service/bootstrap | `SDKWORK_ACCESS_TOKEN` in private env or secret manager | Appbase IAM login/registration/refresh/current-session only | Used only before interactive login or for approved service-context runtimes (`server`, `container`, `test-runner`, and documented desktop service contexts). |
-| Interactive session | Appbase IAM login/registration/refresh/current-session response | Same appbase IAM response | Replaces bootstrap credentials in TokenManager, session store, and context store. |
-| Browser/renderer | TokenManager session storage after login | TokenManager session storage after login | `MUST NOT` read live tokens from `VITE_*`, `PORTAL_PUBLIC_*`, or public runtime config. |
+| Service/bootstrap | `SDKWORK_ACCESS_TOKEN` from the selected per-scope env file (public application token) | Appbase IAM login/registration/refresh/current-session only | Used only before interactive login for tenant/app/environment isolation. It `MUST NOT` authorize protected business operations. |
+| Interactive session | Appbase IAM login/registration/refresh/current-session response | Same appbase IAM response | Replaces the application access token in TokenManager, session store, and context store. |
+| Browser/renderer | Public application access token from the selected build env, then session storage after login | TokenManager session storage after login | `MUST NOT` read session access tokens, auth tokens, refresh tokens, API keys, or OAuth bearers from `VITE_*`, `PORTAL_PUBLIC_*`, or public runtime config. |
 
 Credential consumer phases:
 
@@ -1034,30 +1142,30 @@ Every command that resolves SDKWork runtime configuration runs in exactly one ph
 
 A `resolve` command that finds no reusable credential `MUST` fail closed with a diagnostic naming the selected lifecycle, the artifact path it inspected, and the explicit `provision` command that repairs it. Falling back to a credential-less launch is permitted only for an interactive application surface that is allowed to start unauthenticated, and that fallback `MUST NOT` be reported as success by a build or packaging command.
 
-Bootstrap lifecycle policy:
+Application access token lifecycle policy:
 
-| Environment | Private bootstrap source | Missing-token behavior | Browser artifact rule |
+| Environment | Public application token source | Missing-token behavior | Artifact rule |
 | --- | --- | --- | --- |
-| `development` | Repository environment-scoped artifact, an existing private `SDKWORK_ACCESS_TOKEN`, otherwise the shared IAM manifest-based local generator | Reuse the cached token; generate a disposable local JWT only when no reusable token exists | The IAM serve-only Vite plugin may inject the canonical credential-entry global before application modules execute. |
-| `test` | Explicit test token or a reusable environment-scoped artifact, otherwise the shared generator only when the isolated runner opts in | Reuse the cached token; fail unless a reusable token exists or `allowTestTokenGeneration: true` is set | Injection requires the separate `allowTestInjection: true` opt-in. |
-| `staging` | Secret manager, mounted secret, protected host env, or equivalent private runtime source | Reuse the provisioned token; fail closed when absent | Never embed in HTML, bundles, public env, or static runtime config. |
-| `production` | Secret manager, mounted secret, protected host env, or equivalent private runtime source | Reuse the provisioned token; fail closed when absent | Never embed in HTML, bundles, public env, or static runtime config. |
+| `development` | The app root's committed `.env.<profile-id>` / JSON profile file | Fail closed; a developer regenerates the committed profile with the canonical generator | The public token may be embedded in the selected build artifact. |
+| `test` | The app root's committed profile file | Fail closed | May be embedded; session tokens never. |
+| `staging` | The app root's committed profile file | Fail closed | May be embedded; session tokens never. |
+| `production` | The app root's committed profile file | Fail closed | May be embedded; session tokens never. |
 
-Bootstrap tokens are cached per independent Git repository and per profile id at
-`~/.sdkwork/<application-code>/credentials/<profile-id>.json`, never in a
-repository env file. A token that is present and still valid
-MUST be reused unchanged: startup, build, test, check, verify, and clean MUST NOT re-register,
-re-provision, or re-sign it. Regeneration happens only when the cache is absent, expired,
-identity-incompatible with the selected manifest/environment, or explicitly requested with
-`--refresh`. The normative reuse and regeneration contract is
-`IAM_APPLICATION_BOOTSTRAP_SPEC.md` section 5.4.
+The public application access token is committed with the profile file and is
+reused unchanged by `dev`, `start`, `serve`, `build`, `package`, `dist`, `test`,
+`check`, `verify`, and `clean`. A lifecycle command `MUST NOT` generate, sign,
+replace, or rewrite it; rotation is an explicit regeneration committed as a
+normal diff (`APP_ACCESS_TOKEN_SPEC.md` §3). Private operator bootstrap
+credentials, when a repository still uses them for CLI provisioning, remain in
+`~/.sdkwork/<application-code>/credentials/<profile-id>.json` and are never read
+by an application build when the public token is present.
 
-The canonical Node owners are `@sdkwork/iam-application-bootstrap` `ensureRepoBootstrapAccessToken(...)`, `sdkwork-iam/scripts/dev/ensure-repo-bootstrap-access-token.mjs`, `sdkwork-space/bin/with-bootstrap-token.mjs`, and loopback fixture merge through `sdkwork-iam/scripts/dev/create-dev-bootstrap-access-token-env.mjs`. The canonical Vite owner is `@sdkwork/iam-credential-entry/vite`. Application repositories `MUST NOT` copy fixture JWT creation, manifest identity lookup, env merge, private bootstrap env-file parsing, inline serialization, or canonical global assignment. `process.env.SDKWORK_ACCESS_TOKEN` Vite define replacement is forbidden as the browser handoff because it is not reliable for linked client source in Vite 6.
+The canonical Node owners are `@sdkwork/iam-application-bootstrap` `ensureRepoBootstrapAccessToken(...)`, `sdkwork-iam/scripts/dev/ensure-repo-bootstrap-access-token.mjs`, `sdkwork-space/bin/with-bootstrap-token.mjs`, and loopback fixture merge through `sdkwork-iam/scripts/dev/create-dev-bootstrap-access-token-env.mjs`. The canonical Vite owner is `@sdkwork/iam-credential-entry/vite`. Application repositories `MUST NOT` copy fixture JWT creation, manifest identity lookup, env merge, private bootstrap env-file parsing, inline serialization, or canonical global assignment. For the public application token, the canonical browser handoff is the selected profile's committed build env loaded by Vite and injected through the approved credential-entry plugin or an explicit `define` constant; the value is public and may be embedded. Private session credentials remain forbidden as a Vite define or browser handoff.
 
 | Credential | Source | Header | Env/config rule |
 | --- | --- | --- | --- |
 | Auth token | Appbase IAM session/login/refresh/current-session only | `Authorization: Bearer <auth_token>` | Forbidden in environment variables. Forbidden in browser public runtime config. |
-| Access token | Appbase IAM session/login/refresh/current-session, or private bootstrap `SDKWORK_ACCESS_TOKEN` before login | `Access-Token: <JWT access_token>` | `SDKWORK_ACCESS_TOKEN` `SHOULD` be configured for every application root that calls protected APIs. Value `MUST` be a signed JWT, not a semicolon claim string. Forbidden in browser public runtime config. Superseded by session tokens after login. |
+| Access token | Public application access token `SDKWORK_ACCESS_TOKEN` from the selected per-scope env file before login; Appbase IAM session/login/refresh/current-session response after login | `Access-Token: <JWT access_token>` | `SDKWORK_ACCESS_TOKEN` `MUST` be configured in every manifest-bearing app root and profile file. The application token is public (`alg:none`, `token_class:application`) and may be committed; it is superseded by the session token after login. Session access tokens are private and `MUST NOT` be committed or exposed in browser public runtime config. |
 | Refresh token | Appbase IAM refresh flow only | Not sent on business API requests | Not allowed in env or browser public runtime config. Storage is controlled by appbase IAM runtime. |
 | API key | Open-api credential provider for `api-key` or `open-api-flexible` mode | `X-API-Key` or declared scheme | Not allowed in environment variables. Raw value may exist only in protected secret manager, server-side non-env config, OS secure storage, or test fixture. Never in browser public runtime config. |
 | OAuth bearer | Open-api credential provider for `oauth` or `open-api-flexible` mode | `Authorization: Bearer <token>` | Raw value may exist only in protected secret manager, server-side config, OS secure storage, or test fixture. Never in browser public runtime config. |
@@ -1073,8 +1181,8 @@ Rules:
 - TokenManager config may be controlled by `SDKWORK_<APPLICATION_CODE>_TOKEN_MANAGER_MODE` and `SDKWORK_<APPLICATION_CODE>_TOKEN_STORAGE`, but those variables describe behavior only and must never contain token values.
 - `SDKWORK_ACCESS_TOKEN_HEADER` may exist only to assert that the runtime uses `Access-Token`; SDKWork v3 applications must reject any value other than `Access-Token`.
 - `SDKWORK_AUTH_TOKEN_HEADER` may exist only to assert that the runtime uses `Authorization`; SDKWork v3 applications must reject any value other than `Authorization`.
-- Browser public runtime config must never include token manager state, token storage contents, refresh tokens, API keys, or generated `getAuthHeaders()` output.
-- Staging and production build commands must produce byte-identical credential-free browser artifacts regardless of whether the build host process has `SDKWORK_ACCESS_TOKEN` set.
+- Browser public runtime config may include the selected profile's public application access token `SDKWORK_ACCESS_TOKEN` (never a session `access_token`, `auth_token`, refresh token, API key, OAuth bearer, or `getAuthHeaders()` output).
+- `dev`, `start`, `serve`, `build`, `package`, and `dist` `MUST` produce the selected profile's public application access token from the committed per-scope file and `MUST` fail closed when it is missing, empty, malformed, or identity-mismatched (`APP_ACCESS_TOKEN_SPEC.md` §4). Builds are deterministic with respect to that committed token; they `MUST NOT` mint or rewrite it.
 - Desktop apps should store tokens through OS secure storage or approved encrypted storage. Server-side service contexts should use typed request context or trusted service credentials, not `.env` session tokens.
 - Test fixtures may contain fake token strings only when the file is clearly test-only, excluded from production bundles, and covered by static scans that prevent reuse in release config.
 - Runtime env, tracked `.env.example`, bootstrap overlays, runtime TOML, and public runtime config `MUST NOT` define fixed IAM identity scope through `SDKWORK_IAM_BOOTSTRAP_*`, `SDKWORK_IAM_LOCAL_*`, `SDKWORK_USER_CENTER_BOOTSTRAP_*`, runtime `SDKWORK_APP_ID`, `VITE_SDKWORK_APP_ID`, or equivalent tenant/organization/user/owner bootstrap variables. Current tenant, organization, user, session, and app scope `MUST` come from dual-token JWT claims after login according to `IAM_LOGIN_INTEGRATION_SPEC.md`.
@@ -1082,7 +1190,7 @@ Rules:
 
 #### 6.1.1 Packaged Desktop Release Environment And Distribution Classes
 
-A packaged desktop application runs outside any source checkout, so it cannot re-resolve the packaging host's environment-scoped bootstrap artifact: only the built-in deployment defaults apply, and no bootstrap credential exists. A packaged build therefore `MUST` declare its distribution class, and the class decides whether the build carries a private release environment file that its native host applies before resolving the SDKWork deployment.
+A packaged desktop application runs outside any source checkout, so it cannot re-resolve the packaging host's operator credential cache. The public application access token is already part of the selected build profile and is not a secret; no private operator bootstrap credential is required for a normal packaged build. A deployment lane that still carries a private operator credential `MUST` declare its distribution class, and the class decides whether the build carries a private release environment file that its native host applies before resolving the SDKWork deployment. The rules below govern that private artifact only; they do not restrict the public application access token defined by `APP_ACCESS_TOKEN_SPEC.md`.
 
 | Distribution class | Declaration | Release environment artifact | Credential |
 | --- | --- | --- | --- |
@@ -1099,7 +1207,7 @@ Rules:
 - The launching host environment `MUST` outrank the artifact: a name the environment already declares wins, so an operator can redirect or replace the baked deployment without rebuilding.
 - The installed host `MUST` apply the artifact before it resolves the deployment and before it materializes or reuses a bootstrap token, so `IAM_APPLICATION_BOOTSTRAP_SPEC.md` §5.4 reuse still decides whether the credential is usable.
 - The installed host `MUST` report a named diagnostic when a `deployment` artifact is missing, unreadable, or yields no reusable credential, and that diagnostic `MUST` name the artifact path, the resolved lifecycle, the redeploy remedy, and the explicit provisioning command. A `public` build `MAY` fall back to interactive login silently; a `deployment` build `MUST NOT`, because its artifact claimed to carry a credential and its credentials forms cannot dispatch without one.
-- An artifact carrying `SDKWORK_ACCESS_TOKEN` `MUST` ship only to the deployment it was built for. Staging and production artifacts `MUST` come from a private bootstrap source — an operator-provisioned token or that deployment's IAM application-bootstrap provisioning — and never from fixture generation.
+- An artifact carrying `SDKWORK_ACCESS_TOKEN` carries the public application access token and may ship to the deployment it was built for. Private operator bootstrap credentials (`SDKWORK_IAM_BOOTSTRAP_*` and the `~/.sdkwork` cache) `MUST` stay out of every artifact and are never required by a normal packaged build.
 - The packaging host `MUST` reuse its own environment-scoped bootstrap artifact for the same lifecycle. A host that pins the lifecycle `MUST` drop an inherited deployment selection first, so another application's exported deployment cannot decide the tier.
 - An application repository `MUST` expose exactly one explicit command that provisions the selected lifecycle's bootstrap artifact, and `MUST` document it as the only supported way to create or replace a packaged credential. This repository (SDKWork BirdCoder) provides `pnpm env:token:ensure --environment <lifecycle>`, with `--refresh` for replacement.
 
@@ -2427,7 +2535,7 @@ Every application that adopts this standard should provide:
 - Standalone browser env tests that verify `browserOriginMode = same-origin`,
   public/Vite SDK Base URLs resolve against the page origin, and no internal
   application-ingress target URL is emitted.
-- Browser public runtime tests that verify no secret, database URL, Redis URL, token, signing key, or private endpoint is emitted through `/runtime-env.js`, `PORTAL_PUBLIC_*`, or `VITE_*`.
+- Browser public runtime tests that verify the selected public application access token is present, and that no session access token, auth token, refresh token, API key, OAuth bearer, signing key, database URL, Redis URL, or private endpoint is emitted through `/runtime-env.js`, `PORTAL_PUBLIC_*`, or `VITE_*`.
 - I18n runtime config tests that verify env/public config contains only locale strategy, active locale list, message-catalog manifest references, and version identifiers, not translated message content or app/root/package locale monoliths.
 - Database seed i18n env tests that verify seed locale/version values map only to database lifecycle config and do not override runtime locale negotiation.
 - Database selection tests for desktop SQLite and server PostgreSQL behavior.

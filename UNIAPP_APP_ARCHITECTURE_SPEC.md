@@ -268,7 +268,7 @@ Rules:
 - uni-app env files follow `ENVIRONMENT_SPEC.md` section 5.1: `.env.<profile-id>` with `VITE_SDKWORK_*` public keys; exactly one profile is selected per build and recorded in build evidence.
 - `config/mini-program/` and `config/app/` runtime templates (when those targets are enabled) declare matching `SDKWORK_ENVIRONMENT`, `SDKWORK_DEPLOYMENT_PROFILE`, `SDKWORK_PROFILE_ID`, and `SDKWORK_RUNTIME_TARGET` values.
 - `src/manifest.json` platform app ids are materialized from `config/host/`; committed manifest values must match the checked-in host examples or remain placeholders.
-- Builds contain no access tokens, platform secrets, private upload keys, database URLs, Redis URLs, or signing credentials. IDE private settings stay in ignored local files; a safe `.example` may be committed.
+- Builds `MUST` carry the selected profile's public application access token `SDKWORK_ACCESS_TOKEN` (`APP_ACCESS_TOKEN_SPEC.md`). They `MUST NOT` contain session access tokens, auth tokens, refresh tokens, platform secrets, private upload keys, database URLs, Redis URLs, or signing credentials. IDE private settings stay in ignored local files; a safe `.example` may be committed.
 - App packages follow native store rules for icons, screenshots, splash, permissions, and privacy manifests; mini program targets follow platform review/package-size rules.
 - Production build/upload commands must run route projection, config validation, platform package validation, manifest validation, and secret scans before upload.
 

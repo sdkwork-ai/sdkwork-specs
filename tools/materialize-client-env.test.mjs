@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 import {
   CLIENT_ENV_PROFILE_IDS,
   applyViteSurfaceCloudValues,
   createClientSurfaceValues,
+  materializeClientEnv,
   parseClientEnvDotenv,
 } from './materialize-client-env.mjs';
 
@@ -178,4 +182,107 @@ test('dotenv parser preserves URL values and ignores comments', () => {
       URL: 'https://example.com/a?b=c',
     },
   );
+});
+
+function writeFixture(root, relativePath, contents) {
+  const filePath = path.join(root, relativePath);
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, contents, 'utf8');
+}
+
+function createOverlayRoot(overlay = '') {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-client-env-overlay-'));
+  writeFixture(root, 'etc/sdkwork.deployment.config.json', JSON.stringify({
+    profiles: {
+      'standalone.development': { config: 'topology/standalone.development.env' },
+    },
+  }, null, 2));
+  writeFixture(root, 'etc/topology/standalone.development.env', [
+    'SDKWORK_IM_DEPLOYMENT_PROFILE=standalone',
+    'SDKWORK_IM_ENVIRONMENT=development',
+    'SDKWORK_IM_PROFILE_ID=standalone.development',
+    'SDKWORK_DEMO_HTTP_URL=http://127.0.0.1:10240',
+    '',
+  ].join('\n'));
+  writeFixture(root, 'etc/client-env.materialization.json', JSON.stringify({
+    schemaVersion: 1,
+    kind: 'sdkwork.client-env-materialization',
+    command: 'materialize',
+    sourceIdentity: {
+      deploymentProfileKeys: ['SDKWORK_IM_DEPLOYMENT_PROFILE'],
+      environmentKeys: ['SDKWORK_IM_ENVIRONMENT'],
+      profileIdKeys: ['SDKWORK_IM_PROFILE_ID'],
+    },
+    profiles: ['standalone.development'],
+    surfaces: [{
+      id: 'demo-app',
+      root: 'apps/demo',
+      format: 'mini-program',
+      runtimeTarget: 'mini-program',
+      identityPrefixes: ['SDKWORK_DEMO'],
+      accessToken: {
+        appId: 'demo-app',
+        tenantId: '100001',
+        organizationId: '0',
+        permissionScope: ['iam:self'],
+      },
+      bindings: {
+        SDKWORK_DEMO_HTTP_URL: ['SDKWORK_DEMO_HTTP_URL'],
+      },
+    }],
+  }, null, 2));
+  if (overlay) {
+    writeFixture(root, 'apps/demo/etc/env.base.env', overlay);
+  }
+  return root;
+}
+
+function readOverlayOutput(root) {
+  return JSON.parse(readFileSync(
+    path.join(root, 'apps', 'demo', 'config', 'mini-program', 'runtime-env.standalone.development.json'),
+    'utf8',
+  ));
+}
+
+test('applies an application env overlay after the repository topology', () => {
+  const root = createOverlayRoot('SDKWORK_DEMO_HTTP_URL=https://overlay.example.com\n');
+  try {
+    materializeClientEnv({ rootDir: root });
+    const values = readOverlayOutput(root);
+    assert.equal(values.SDKWORK_DEMO_HTTP_URL, 'https://overlay.example.com');
+    assert.equal(values.SDKWORK_ACCESS_TOKEN.split('.').length, 3);
+    assert.equal(values.SDKWORK_DEMO_PROFILE_ID, 'standalone.development');
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('app overlay cannot define the generated access token', () => {
+  const root = createOverlayRoot('SDKWORK_ACCESS_TOKEN=hand-written\n');
+  try {
+    assert.throws(
+      () => materializeClientEnv({ rootDir: root }),
+      /must not define SDKWORK_ACCESS_TOKEN/u,
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('check mode detects a stale app overlay output', () => {
+  const root = createOverlayRoot();
+  try {
+    materializeClientEnv({ rootDir: root });
+    writeFixture(
+      root,
+      'apps/demo/config/mini-program/runtime-env.standalone.development.json',
+      '{"stale":true}\n',
+    );
+    assert.throws(
+      () => materializeClientEnv({ rootDir: root, check: true }),
+      /is missing or stale/u,
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
 });

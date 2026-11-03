@@ -8,5 +8,6 @@
   "SDKWORK_<APPLICATION_CODE>_PROFILE_ID": "cloud.production",
   "SDKWORK_<APPLICATION_CODE>_RUNTIME_TARGET": "mini-program",
   "SDKWORK_<APPLICATION_CODE>_APPLICATION_PUBLIC_HTTP_URL": "https://mini.example.com",
-  "SDKWORK_<APPLICATION_CODE>_PLATFORM_API_GATEWAY_HTTP_URL": "https://api.example.com"
+  "SDKWORK_<APPLICATION_CODE>_PLATFORM_API_GATEWAY_HTTP_URL": "https://api.example.com",
+  "SDKWORK_ACCESS_TOKEN": "<public application access token>"
 }

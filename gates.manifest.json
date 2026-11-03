@@ -159,6 +159,18 @@
       "note": "Takes a positional root. Given --workspace it resolved a nonexistent path and reported success on 0 scanned files."
     },
     {
+      "id": "check:tenant-isolation-sql",
+      "tool": "check-tenant-isolation-sql.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--workspace",
+        "{workspace}"
+      ],
+      "tier": "contract",
+      "baseline": 0,
+      "note": "DATABASE_SPEC.md section 16 requires a static repository isolation gate over runtime SQL. The DDL half (DB086/DB089) was already enforced by check-database-framework-standard; no gate covered the runtime half. DB090 fails a statement that admits tenant_id IS NULL or organization_id IS NULL as a scope, DB091 a nullable/empty parameter branch that makes the tenant or organization predicate optional. Migration, baseline DDL, seed, .sdkwork backup and tmp SQL are excluded because DB092 backfills the sentinel there and the rest is not executable product SQL. The gate reached zero workspace-wide after removing the legacy NULL branch from 305 runtime predicates across 45 files in order, payment, promotion, invoice, membership, models, agents, inventory, notary and cloudrouter, and after the web-framework/IAM change that resolves tenant-level scope to the sentinel."
+    },
+    {
       "id": "check:pnpm-script-standard",
       "tool": "check-pnpm-script-standard.mjs",
       "scope": "workspace",

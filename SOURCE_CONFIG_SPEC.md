@@ -121,6 +121,12 @@ Rules:
   environment-value store. Each owned profile entry points to one source file
   under `etc/`; the referenced file path stays relative to `etc/` and cannot
   escape the deployable root.
+- A referenced topology profile file `MAY` be a generated resolved file. In that
+  case its source layers live under `etc/topology/base.env`,
+  `etc/topology/environments/<environment>.base.env`,
+  `etc/topology/<deployment-profile>.base.env`, and
+  `etc/topology/overrides/<profile-id>.env`; the resolved file is produced by
+  `tools/materialize-topology-env.mjs` (`ENVIRONMENT_SPEC.md` §5.1.7.1).
 - The canonical full matrix contains ten profile ids. A root may declare a
   smaller supported matrix only when its application/release contracts exclude
   the missing combinations. Selection of an undeclared profile fails closed.

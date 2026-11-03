@@ -9,8 +9,14 @@ files. Do not copy example origins, app ids, tokens, or secrets as live values.
 
 Files:
 
-- `sdkwork.deployment.config.example.json` - eight-profile source index.
-- `topology.profile.env.example` - source `etc/topology/<profile-id>.env` shape.
+- `sdkwork.deployment.config.example.json` - ten-profile source index.
+- `topology.base.env.example` - `etc/topology/base.env` shared defaults.
+- `topology.override.env.example` - `etc/topology/overrides/<profile-id>.env`
+  profile delta, including `${KEY}` inheritance.
+- `app.env.base.env.example` - `apps/<app>/etc/env.base.env` application-wide
+  overlay.
+- `topology.profile.env.example` - generated `etc/topology/<profile-id>.env`
+  resolved shape; edit the layers above instead of this file.
 - `vite.env.example` - PC, H5, and uni-app `.env.<profile-id>` shape.
 - `flutter.dart-define.example.json` - Flutter
   `env/sdkwork.<profile-id>.json` shape.
@@ -23,5 +29,6 @@ Files:
   (`ENVIRONMENT_SPEC.md` section 7.3); `database.env` in the same directory is
   the env-form equivalent.
 
-All tracked examples are public/non-secret. Local bootstrap credentials belong
-only in ignored `.local` overlays or secure runtime inputs.
+All tracked examples are public/non-secret. Private operator credentials belong
+only in `~/.sdkwork/<application-code>/credentials/<profile-id>.json` or a
+protected deployment secret; composed `.env.*.local` files are retired.

@@ -791,7 +791,7 @@ components:
       type: apiKey
       in: header
       name: Access-Token
-      description: Signed JWT access_token compact serialization (`header.payload.signature`).
+      description: JWT `access_token` compact serialization (`header.payload.signature`). Session tokens are signed; the public application token is `alg:none` with `token_class:application` (`APP_ACCESS_TOKEN_SPEC.md`).
     ApiKey:
       type: apiKey
       in: header
@@ -924,22 +924,23 @@ Rules:
 - A token claim that affects authorization `MUST` be signed or server-validated.
 - Auth/session creation endpoints in app-api are pre-session credential verification flows. They use `credential-entry-bootstrap` unless the IAM authority explicitly declares a pure-anonymous exception, and they return standard token objects and context metadata only after resolving the real IAM user, tenant, and organization context server-side.
 - Multi-organization login `MUST` be represented as a documented continuation response, not as a normal authenticated session. The continuation credential is not valid for protected business operations.
-- Production token validation `MUST` use tenant-bound signing keys or a server-side session lookup that proves tenant binding. A global shared tenant signing secret is forbidden for production and production-like profiles.
+- Production session token validation `MUST` use tenant-bound signing keys or a server-side session lookup that proves tenant binding. A global shared tenant signing secret is forbidden for production and production-like profiles. The public application access token is not a session token: it is isolation-only and is validated against its `token_class:application` claims and the enabled tenant-application registry per `APP_ACCESS_TOKEN_SPEC.md`.
 - Local Rust deployment `MUST` enforce the same logical token and tenant checks even if tokens are issued locally.
 
-### 10.0 Bootstrap Access Credential
+### 10.0 Public Application Access Credential
 
 Every application root that consumes protected app-api or backend-api surfaces
-`MUST` document a private bootstrap access credential in its env template.
-Service-context runtimes `SHOULD` configure `SDKWORK_ACCESS_TOKEN` before
-interactive login.
+`MUST` carry the public application access token `SDKWORK_ACCESS_TOKEN` in every
+per-scope env template (`APP_ACCESS_TOKEN_SPEC.md`). Service-context runtimes
+`SHOULD` configure it before interactive login. It is SaaS-isolation material,
+not a private bootstrap secret.
 
 Rules:
 
-- `SDKWORK_ACCESS_TOKEN` `MUST` contain a signed SDKWork `access_token` whose claims carry the ambient request context: at minimum `tenant_id`, `organization_id`, `app_id`, `environment`, and deployment mode (`deployment_mode`). Deployment profile and runtime target `MAY` be signed as additional fixed runtime facts but `MUST NOT` be required by consumers.
-- A bootstrap access token obeys the access-token scope rules of section 10.4: a tenant-level bootstrap token resolves organization scope `0`, and an organization-level bootstrap token resolves the organization id from its claim.
+- `SDKWORK_ACCESS_TOKEN` `MUST` contain the public application access token defined by `APP_ACCESS_TOKEN_SPEC.md` (three-part JWT, `token_class:application`, `alg:none`, `kid:public-app-token`) whose claims carry the ambient isolation context: at minimum `tenant_id`, `organization_id`, `app_id`, `environment`, `deployment_profile`, and deployment mode (`deployment_mode`). A private operator bootstrap credential, where a lifecycle still uses one, remains a signed SDKWork `access_token`. Deployment profile and runtime target `MAY` be additional fixed runtime facts but `MUST NOT` be required by consumers.
+- A bootstrap or public application access token obeys the access-token scope rules of section 10.4: a tenant-level token resolves organization scope `0`, and an organization-level token resolves the organization id from its claim.
 - `auth_token`, `refresh_token`, and API keys `MUST NOT` be configured through environment variables. They are obtained only from sdkwork-iam login, refresh, and current-session flows.
-- Bootstrap env credentials seed the global TokenManager or service-context credential provider only. They `MUST NOT` be copied into browser public runtime config, URLs, logs, UI, or feature state.
+- Bootstrap and public application env credentials seed the global TokenManager or service-context credential provider only. They `MUST NOT` carry user permissions, create a user session, or authorize protected business operations.
 - Login, registration, refresh, current-session bootstrap, and organization-selection completion `MUST` replace bootstrap credentials with IAM-issued session tokens.
 - Client request bodies, query parameters, path parameters, and SDKWork context-projection headers `MUST NOT` select current tenant, organization, user, session, or app scope when token claims already define that scope.
 

@@ -4,5 +4,6 @@
   "profileId": "cloud.production",
   "runtimeTarget": "android-native",
   "applicationApiBaseUrl": "https://app.example.com",
-  "platformApiGatewayBaseUrl": "https://api.example.com"
+  "platformApiGatewayBaseUrl": "https://api.example.com",
+  "SDKWORK_ACCESS_TOKEN": "<public application access token>"
 }

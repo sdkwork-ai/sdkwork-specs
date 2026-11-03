@@ -17,14 +17,18 @@ Canonical implementations (do not fork):
   the node-side lifecycle matrix with standalone/cloud + environment
   parameters and multi-domain splitting.
 - Dev/build runtime document builders: `tools/browser-runtime-env.mjs`.
+- Compile-time typed projection: `tools/generate-app-env-config.mjs`
+  (TypeScript, Dart, ArkTS `EnvConfig` generators, §3.1).
 - Shared Vite integration: `tools/browser-runtime-env-vite.mjs`.
 - Cloud multi-domain family derivation: `tools/browser-cloud-api-base.mjs`.
 
 Regression gates: `tools/app-base-url.test.mjs`,
 `tools/browser-runtime-env.test.mjs`,
 `tools/browser-runtime-env-vite.test.mjs`,
+`tools/materialize-topology-env.test.mjs`,
 `tools/check-browser-runtime-env-standard.mjs --root <repo>`,
-`tools/check-base-url-resolution.mjs --workspace <workspace-root>`.
+`tools/check-base-url-resolution.mjs --workspace <workspace-root>`,
+`tools/materialize-topology-env.mjs --root <repo> --check`.
 
 ---
 
@@ -95,12 +99,108 @@ Materialization formats per family are owned by
 `tools/materialize-client-env.mjs` (vite dotenv, flutter JSON, mini-program
 JSON); `tools/build-browser-client.mjs` owns the browser runtime document.
 
-A materialized file is loaded directly by its framework at build time — the Vite
-mode, Flutter's `--dart-define-from-file`, or the mini-program build copying its
-one selected JSON — and a runtime projection of the same values into a page or
-process `MUST NOT` substitute for it. A container reads the source topology file
-through `env_file` rather than a second copy of the deployment (`ENVIRONMENT_SPEC`
-§5.1.1).
+A materialized file is the authority for the selected profile. It is loaded by
+its framework at build time — the Vite mode, Flutter's
+`--dart-define-from-file`, the mini-program build copying its one selected JSON,
+or the Harmony generator. The per-profile file may itself be resolved from the
+inherited topology layers (`ENVIRONMENT_SPEC.md` §5.1.7.1), but every consumer
+still reads exactly one resolved file. A build-time typed projection of those
+values into an `EnvConfig` module is allowed and, for packaged surfaces,
+required by §3.1; an ad-hoc runtime fetch of a second copy of the deployment is
+not.
+
+### 3.1 Compile-time `EnvConfig` projection (packaged surfaces)
+
+Packaged client surfaces (Flutter, mini program, Harmony/native mobile, native
+desktop, and any surface that ships one build per lifecycle) `MUST` generate a
+typed `EnvConfig` module from the selected committed profile as part of their
+build. Runtime code imports that module; it `MUST NOT` parse the raw profile
+JSON, call `String.fromEnvironment` for each key, or read a generated
+`runtime-env.js` object directly in feature code.
+
+Canonical generator:
+
+```bash
+node <sdkwork-specs>/tools/generate-app-env-config.mjs \
+  --root <application-root> \
+  --profile <deployment-profile>.<environment> \
+  --format <typescript|dart|arkts> \
+  --output <generated-file>
+```
+
+Required emitted surface per language:
+
+| Format | Generated symbol | Runtime access |
+| --- | --- | --- |
+| TypeScript/JavaScript | `ENV_CONFIG` + `AppEnvConfig` type | `import { ENV_CONFIG } from './generated/envConfig'` |
+| Dart | `AppEnvConfig` class with static const fields | `AppEnvConfig.environment` |
+| ArkTS | `AppEnvConfig` class with static readonly fields | `AppEnvConfig.environment` |
+| WeChat mini program | `src/runtime/runtime-env.js` CommonJS object | `require('./runtime/runtime-env')` |
+
+A framework that cannot import a typed TS/ArkTS module at runtime (for example
+the WeChat CommonJS entry) `MUST` generate the equivalent framework-native
+config module from the same selected profile and expose the same field names;
+an optional typed `envConfig.ts` may wrap it for build-time checks.
+
+The generated module `MUST` expose at least: `environment`,
+`deploymentProfile`, `profileId`, `runtimeTarget`, `accessToken`,
+`applicationPublicHttpUrl`, `applicationPublicWebSocketUrl`,
+`platformApiGatewayHttpUrl`, `iamAppApiBaseUrl`.
+
+Rules:
+
+- The generator `MUST` fail when `SDKWORK_ACCESS_TOKEN` is absent, not a
+  three-part JWT, or its `app_id`/`environment`/`deployment_profile` claims do
+  not match the selected root and profile. The build `MUST` fail before
+  compilation in that case.
+- Build order is: materialize inherited topology layers → materialize client env
+  profiles → validate the selected profile → generate `EnvConfig` →
+  compile/package. A packaging command `MUST NOT` generate the token; it only
+  projects the committed value.
+- The generated file is build output. It `MUST` be produced by the canonical
+  generator, never hand-edited, and it `MUST NOT` carry session tokens, auth
+  tokens, refresh tokens, API keys, or OAuth bearers.
+- A surface `MAY` declare `excludeProfiles` in
+  `etc/client-env.materialization.json` only when an approved application-local
+  generator owns those profiles (for example a dev proxy overlay). The
+  repository `MUST` document the generator path and the excluded profiles; the
+  canonical materializer skips them instead of overwriting the file.
+- A surface `MAY` declare `identitySuffixes` to restrict the app-prefixed
+  identity keys generated from `identityPrefixes`. The canonical generic
+  `VITE_SDKWORK_ENVIRONMENT`, `VITE_SDKWORK_DEPLOYMENT_PROFILE`,
+  `VITE_SDKWORK_PROFILE_ID`, and `VITE_SDKWORK_RUNTIME_TARGET` keys are always
+  emitted. Omit an app-prefixed suffix when no consumer reads it; do not keep a
+  duplicate identity key only for symmetry.
+- HarmonyOS already projects its nested profile into
+  `entry/src/main/ets/generated/RuntimeConfig.ets`; that projection is the
+  ArkTS `EnvConfig` implementation and `MUST` expose the same fields and
+  fail-closed token check.
+- A repository whose toolchain cannot run the generator before compilation
+  `MUST` commit the generated file for the default profile and regenerate it for
+  every release build.
+- Existing packaged roots that still read the selected profile directly `MAY`
+  keep that loader only until their next env or build change; every release
+  build after that change `MUST` ship the generated `EnvConfig` module.
+  HarmonyOS, whose nested template is already projected into
+  `RuntimeConfig.ets`, is the reference implementation.
+
+### 3.2 Browser `EnvConfig` facade (runtime document)
+
+Browser surfaces keep the deploy-time runtime document (`BROWSER_RUNTIME_ENV_SPEC.md`
+§3) because one immutable artifact may be promoted across environments. They
+`MUST` expose a typed `EnvConfig` facade over
+`globalThis.SDKWORK_RUNTIME_ENV`; the facade reads the document at runtime and
+`MUST NOT` bake deploy-time URLs or the public application token into source
+constants.
+
+The public application access token may be injected into the document or the
+HTML bootstrap global (`APP_ACCESS_TOKEN_SPEC.md`), but session credentials
+`MUST NOT` appear in either.
+
+Reference browser facade:
+`apps/sdkwork-im-pc/packages/sdkwork-im-pc-core/src/sdk/envConfig.ts` — reads
+`globalThis.SDKWORK_RUNTIME_ENV` first, then Vite `import.meta.env`, then
+`process.env`, and exposes a typed `ImPcEnvConfig`.
 
 ## 4. `resolveBaseUrl` — one name, two layers
 
@@ -181,10 +281,17 @@ The Vite `--mode` profile parsing itself comes from
 
 - Application repositories: run
   `tools/check-browser-runtime-env-standard.mjs --root <repo>` (dev document
-  wiring, canonical tool consumption, no checked-in runtime document) and
+  wiring, canonical tool consumption, no checked-in runtime document),
+  `tools/materialize-topology-env.mjs --root <repo> --check` (inherited layers
+  and resolved profile freshness), and
   `tools/check-base-url-resolution.mjs --workspace <workspace-root>` in
   `check`; keep the mode-matrix assertions in the topology regression test.
-- Workspace rollout tracking: `tools/check-app-runtime-env-workspace.mjs
+- Workspace rollout: `tools/audit-env-inheritance-workspace.mjs
+  --workspace <workspace-root>` reports each repository as `inherited`,
+  `legacy`, `invalid` (a declared profile file is missing), or
+  `not-applicable`; `--check` is the rollout gate that fails while any declared
+  repository still uses flat per-profile files or has a missing profile.
+- Browser-surface rollout: `tools/check-app-runtime-env-workspace.mjs
   --workspace <workspace-root>` classifies every browser-surface repository
   (`ok` / `environment`-blocked / `code-gap`); `--report` exits 0 and prints
   the matrix during the install-gated adoption campaign, the default exits 1

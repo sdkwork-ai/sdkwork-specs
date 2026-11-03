@@ -215,6 +215,11 @@ Rules:
 - Step `workingDirectory` values `MUST` be safe relative paths.
 - Lifecycle execution `MUST` stop on the first failed step.
 - Release workflows for composable applications `MUST` run the applicable composition validators in `preflight` or `validate` before artifact publication when module, dependency SDK, route, permission, frontend package, Rust backend, or resolver behavior is part of the release scope.
+- Release workflows `MUST` run
+  `scripts/check-release-access-token-env.mjs` immediately after
+  `validate-config` and before planning or building. The check `MUST` fail the
+  workflow when a declared `test`, `staging`, `demo`, or `production` client
+  surface has no valid public application access token; it is not bypassable.
 - The framework `MUST` provide standard environment variables to every package
   target lifecycle step:
   - `SDKWORK_APP_ID`

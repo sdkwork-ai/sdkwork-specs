@@ -14,6 +14,10 @@ import {
   baseUrlsMaterializationValue,
   resolveBaseUrl as resolveAppBaseUrl,
 } from './app-base-url.mjs';
+import {
+  createApplicationAccessToken,
+  PUBLIC_APP_ACCESS_TOKEN_KEY,
+} from './app-access-token.mjs';
 
 export const CLIENT_ENV_DEPLOYMENT_PROFILES = ['standalone', 'cloud'];
 export const CLIENT_ENVIRONMENTS = ['development', 'test', 'staging', 'demo', 'production'];
@@ -131,6 +135,9 @@ function normalizeBinding(binding) {
 }
 
 function assertSafeClientKey(key) {
+  if (key === PUBLIC_APP_ACCESS_TOKEN_KEY) {
+    return;
+  }
   if (SECRET_KEY_PATTERN.test(key)) {
     throw new Error(`Client env output must not contain secret-bearing key ${key}.`);
   }
@@ -346,13 +353,35 @@ function identityValues(surface, profile) {
     [`${basePrefix}_PROFILE_ID`]: profile.profileId,
     [`${basePrefix}_RUNTIME_TARGET`]: surface.runtimeTarget,
   };
+  const suffixes = Array.isArray(surface.identitySuffixes)
+    ? new Set(surface.identitySuffixes.map((suffix) => String(suffix).trim().toUpperCase()))
+    : null;
+  const emit = (suffix) => suffixes === null || suffixes.has(suffix);
   for (const prefix of surface.identityPrefixes ?? []) {
-    values[`${prefix}_ENVIRONMENT`] = profile.environment;
-    values[`${prefix}_DEPLOYMENT_PROFILE`] = profile.deploymentProfile;
-    values[`${prefix}_PROFILE_ID`] = profile.profileId;
-    values[`${prefix}_RUNTIME_TARGET`] = surface.runtimeTarget;
+    if (emit('ENVIRONMENT')) values[`${prefix}_ENVIRONMENT`] = profile.environment;
+    if (emit('DEPLOYMENT_PROFILE')) values[`${prefix}_DEPLOYMENT_PROFILE`] = profile.deploymentProfile;
+    if (emit('PROFILE_ID')) values[`${prefix}_PROFILE_ID`] = profile.profileId;
+    if (emit('RUNTIME_TARGET')) values[`${prefix}_RUNTIME_TARGET`] = surface.runtimeTarget;
   }
   return values;
+}
+
+function applicationAccessTokenValues(surface, profile) {
+  const spec = surface.accessToken;
+  if (!spec || typeof spec !== 'object') {
+    return {};
+  }
+  return {
+    [PUBLIC_APP_ACCESS_TOKEN_KEY]: createApplicationAccessToken({
+      appId: String(spec.appId ?? '').trim(),
+      tenantId: String(spec.tenantId ?? '100001').trim(),
+      organizationId: String(spec.organizationId ?? '0').trim(),
+      environment: profile.environment,
+      deploymentProfile: profile.deploymentProfile,
+      runtimeTarget: surface.runtimeTarget,
+      permissionScope: spec.permissionScope,
+    }),
+  };
 }
 
 export function createClientSurfaceValues({ surface, sourceValues, profile }) {
@@ -390,9 +419,13 @@ export function createClientSurfaceValues({ surface, sourceValues, profile }) {
     values[key] = String(value);
   }
   Object.assign(values, identityValues(surface, profile));
+  Object.assign(values, applicationAccessTokenValues(surface, profile));
 
   const expectedNamespace = surface.format === 'vite' ? 'VITE_' : 'SDKWORK_';
   for (const key of Object.keys(values)) {
+    if (key === PUBLIC_APP_ACCESS_TOKEN_KEY) {
+      continue;
+    }
     if (!key.startsWith(expectedNamespace)) {
       throw new Error(`${surface.id} output key ${key} must use ${expectedNamespace}.`);
     }
@@ -404,6 +437,67 @@ export function createClientSurfaceValues({ surface, sourceValues, profile }) {
   }
   assertCloudClientUrls(values, profile);
   return values;
+}
+
+function readOptionalDotenvLayer(filePath, label) {
+  if (!existsSync(filePath)) {
+    return null;
+  }
+  const contents = readFileSync(filePath, 'utf8');
+  const values = parseClientEnvDotenv(contents);
+  const seen = new Set();
+  for (const rawLine of contents.split(/\r?\n/u)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) {
+      continue;
+    }
+    const separatorIndex = line.indexOf('=');
+    if (separatorIndex <= 0) {
+      continue;
+    }
+    const key = line.slice(0, separatorIndex).trim();
+    if (seen.has(key)) {
+      throw new Error(`${label} declares ${key} more than once.`);
+    }
+    seen.add(key);
+  }
+  return values;
+}
+
+/**
+ * Optional application env overlay (`ENVIRONMENT_SPEC.md` §5.1.7.1):
+ *   apps/<app>/etc/env.base.env
+ *   apps/<app>/etc/env.<profile-id>.env
+ * Later file wins. Values are merged after the repository topology and surface
+ * bindings, so an application can override a shared default for its own surface.
+ */
+function readApplicationEnvOverlay(rootDir, surface, profileId) {
+  const etcDir = path.join(rootDir, surface.root, 'etc');
+  const base = readOptionalDotenvLayer(
+    path.join(etcDir, 'env.base.env'),
+    `${surface.id} etc/env.base.env`,
+  );
+  const profile = readOptionalDotenvLayer(
+    path.join(etcDir, `env.${profileId}.env`),
+    `${surface.id} etc/env.${profileId}.env`,
+  );
+  if (!base && !profile) {
+    return {};
+  }
+  const merged = { ...(base ?? {}), ...(profile ?? {}) };
+  for (const key of Object.keys(merged)) {
+    if (key === PUBLIC_APP_ACCESS_TOKEN_KEY) {
+      throw new Error(
+        `${surface.id} etc env overlay must not define ${PUBLIC_APP_ACCESS_TOKEN_KEY}; the token is generated per application and profile.`,
+      );
+    }
+    assertSafeClientKey(key);
+    const expectedPrefix = surface.format === 'vite' ? 'VITE_' : 'SDKWORK_';
+    if (!key.startsWith(expectedPrefix)) {
+      throw new Error(`${surface.id} etc env overlay key ${key} must use ${expectedPrefix}.`);
+    }
+  }
+  return merged;
 }
 
 function resolveSurfaceOutputPath(rootDir, surface, profileId) {
@@ -421,7 +515,18 @@ function resolveSurfaceOutputPath(rootDir, surface, profileId) {
   if (surface.format === 'mini-program') {
     return path.join(appRoot, 'config', 'mini-program', `runtime-env.${profileId}.json`);
   }
+  if (surface.format === 'harmony-native') {
+    return path.join(appRoot, 'config', 'app', `runtime-env.${profileId}.json`);
+  }
   throw new Error(`${surface.id} uses unsupported materialization format ${surface.format}.`);
+}
+
+function serializeDotenvValue(value) {
+  const text = String(value ?? '');
+  if (text.length === 0 || /[\s#'"]/u.test(text)) {
+    return JSON.stringify(text);
+  }
+  return text;
 }
 
 function serializeDotenv({ values, sourcePath, rootDir, profileId, command }) {
@@ -431,7 +536,7 @@ function serializeDotenv({ values, sourcePath, rootDir, profileId, command }) {
     `# Regenerate with: ${command}`,
   ];
   for (const [key, value] of Object.entries(values).sort(([left], [right]) => left.localeCompare(right))) {
-    lines.push(`${key}=${value}`);
+    lines.push(`${key}=${serializeDotenvValue(value)}`);
   }
   return `${lines.join('\n')}\n`;
 }
@@ -529,7 +634,48 @@ export function materializeClientEnv({
       if (surface.format === 'none') {
         continue;
       }
+      if (Array.isArray(surface.excludeProfiles) && surface.excludeProfiles.includes(profileId)) {
+        continue;
+      }
       const outputPath = resolveSurfaceOutputPath(normalizedRoot, surface, profileId);
+      if (surface.format === 'harmony-native') {
+        // Harmony runtime config is a nested, hand-authored template. Preserve
+        // its shape and inject only the profile identity and public token.
+        if (!existsSync(outputPath)) {
+          throw new Error(`${surface.id} runtime template is missing: ${path.relative(normalizedRoot, outputPath)}.`);
+        }
+        const existing = readJson(outputPath);
+        const spec = surface.accessToken;
+        if (!spec?.appId) {
+          throw new Error(`${surface.id} must declare accessToken.appId.`);
+        }
+        existing.environment = sourceProfile.profile.environment;
+        existing.deploymentProfile = sourceProfile.profile.deploymentProfile;
+        existing.profileId = profileId;
+        existing.runtimeTarget = surface.runtimeTarget;
+        existing[PUBLIC_APP_ACCESS_TOKEN_KEY] = createApplicationAccessToken({
+          appId: String(spec.appId).trim(),
+          tenantId: String(spec.tenantId ?? '100001').trim(),
+          organizationId: String(spec.organizationId ?? '0').trim(),
+          environment: sourceProfile.profile.environment,
+          deploymentProfile: sourceProfile.profile.deploymentProfile,
+          runtimeTarget: surface.runtimeTarget,
+          permissionScope: spec.permissionScope,
+        });
+        const content = `${JSON.stringify(existing, null, 2)}\n`;
+        if (check) {
+          const actual = readFileSync(outputPath, 'utf8');
+          if (actual !== content) {
+            throw new Error(
+              `${path.relative(normalizedRoot, outputPath)} is missing or stale. Run ${config.command ?? 'the client env materializer'}.`,
+            );
+          }
+        } else {
+          writeFileSync(outputPath, content, 'utf8');
+        }
+        results.push(outputPath);
+        continue;
+      }
       // Vite dotenv surfaces consume raw single-origin topology values plus the
       // cloud dev-local gateway override; non-vite (build runtime document)
       // surfaces keep the full ';'-joined cloud API origin materialization.
@@ -554,6 +700,12 @@ export function materializeClientEnv({
             normalizedRoot,
             sourceProfile.values,
           );
+      // The application overlay is the highest-precedence source; apply it after
+      // topology projection so an app-specific value can replace a derived one.
+      Object.assign(values, readApplicationEnvOverlay(normalizedRoot, surface, profileId));
+      if (isViteSurface) {
+        assertCloudClientUrls(values, sourceProfile.profile);
+      }
       const content = surface.format === 'vite'
         ? serializeDotenv({
             values,

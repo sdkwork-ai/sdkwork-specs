@@ -949,7 +949,7 @@ Rules:
 - Cloud smoke tests must prove internal upstream URLs, platform surfaces,
   secrets, probes, and SDK base URL resolution are explicit while client
   bootstrap still receives one application ingress URL.
-- Credential-entry lifecycle tests must prove bootstrap provider completion precedes renderer spawn, missing provider output fails before the login UI becomes actionable, and production/public artifacts contain no bootstrap token.
+- Credential-entry lifecycle tests must prove bootstrap provider completion precedes renderer spawn, missing provider output fails before the login UI becomes actionable, and every build artifact carries the selected profile's public application access token (`APP_ACCESS_TOKEN_SPEC.md`) while containing no session access token, auth token, refresh token, API key, or OAuth bearer.
 - Runtime-plan tests must prove declared renderer bindings, spawned command arguments, access endpoints, CORS origins, and session registry bindings are identical.
 - Standalone browser runtime-plan tests must prove `browserVisibleOrigin` and
   `apiTargetOrigin` are distinct only for `dev-server-proxy`, browser SDK URLs

@@ -524,6 +524,13 @@ Rules:
 
 - Repositories that own organization-scoped tables or authored SQL `MUST` publish a repository-local machine contract that inventories those tables and any approved cross-organization system operations.
 - Static tests `MUST` inspect executable authored SQL, including normal strings, raw strings, joins, subqueries, and CTE statements, and fail when an organization-scoped read or mutation does not bind both tenant and organization scope.
+- The canonical static gate for the runtime scope predicate is:
+
+```text
+node ../sdkwork-specs/tools/check-tenant-isolation-sql.mjs --workspace ..
+```
+
+It fails on any runtime statement that admits `tenant_id IS NULL` or `organization_id IS NULL` as a scope (DB090), or that makes the tenant or organization predicate optional through a nullable or empty parameter branch (DB091). It excludes migration, baseline DDL, and seed SQL where DB092 backfills the sentinel, plus tool-owned backup and temporary trees. The threshold is zero.
 - Parser tests `MUST` include positive scoped statements and negative cases for a missing tenant predicate, missing organization predicate, unknown marker, forged marker, widened SQL shape, and an unbounded cross-organization operation.
 - Cross-organization operation tests `MUST` prove exact contract matching, independent service/worker or administrative authorization, bounded selection or mutation, audit/security-event emission, and absence from ordinary user/API repository methods.
 - A comment, marker, suppression, method name, or test fixture `MUST NOT` be accepted as authorization by itself.
@@ -1531,11 +1538,11 @@ Rules:
 - Static SDK/bootstrap scans MUST fail when authenticated app-api SDK clients or explicit `backend-admin` backend-api SDK clients are not passed through the global token-manager-aware SDK list such as `clients.sdkClients`.
 - Static SDK/bootstrap scans MUST fail when the same application runtime/session context creates more than one live `TokenManager`, creates per-domain/per-package/per-service TokenManagers, or constructs an authenticated app SDK client or explicit `backend-admin` backend SDK client without joining the global TokenManager closure.
 - Static SDK/bootstrap scans MUST fail when application packages import `@sdkwork/iam-sdk-adapter`, call `createIamAppSdkAdapter(...)`, call `createIamBackendSdkAdapter(...)`, or wire `createIamRuntime(...)` directly for appbase login instead of using the approved high-level appbase runtime/factory.
-- Static env/config scans MUST fail when `.env`, runtime TOML examples, `/runtime-env.js`, `PORTAL_PUBLIC_*`, or `VITE_*` contain live auth tokens, access tokens, refresh tokens, API keys, generated auth headers, or SDK credential DTOs.
-- Credential-entry lifecycle tests `MUST` cover `development`, `test`, `staging`, and `production`: development generation, explicit test opt-in, staging/production fail-closed behavior, and configured-token preservation in all environments.
+- Static env/config scans MUST fail when `.env`, runtime TOML examples, `/runtime-env.js`, `PORTAL_PUBLIC_*`, or `VITE_*` contain live session auth tokens, session access tokens, refresh tokens, API keys, OAuth bearers, generated auth headers, or SDK credential DTOs. The public application access token `SDKWORK_ACCESS_TOKEN` is explicitly allowed per `APP_ACCESS_TOKEN_SPEC.md`.
+- Credential-entry lifecycle tests `MUST` cover `development`, `test`, `staging`, `demo`, and `production`: every profile carries a non-empty public application access token, a missing/mismatched token fails before spawn, and configured-token preservation holds in all environments.
 - Credential-entry client tests `MUST` prove absence fails before network dispatch, bootstrap dispatch contains only `Access-Token`, login/session commit replaces bootstrap state, and `ProblemDetail` preserves `operationId`, `authProfile`, `failedStage`, `reason`, numeric `code`, and `traceId`.
-- Production browser tests `MUST` prove bootstrap tokens are absent from HTML, JavaScript, public runtime env, logs, caches, and screenshots; an approved short-lived exchange or trusted host channel is required before credential-entry UI becomes actionable.
-- Vite credential-entry tests `MUST` prove the canonical global is injected only by `@sdkwork/iam-credential-entry/vite` during development serve or explicitly opted-in test serve, inline values escape `<`, `>`, and `&`, and staging/production produce no plugin or token-bearing output.
+- Production browser tests `MUST` prove the selected public application access token is present in the build env, and that no session access token, auth token, refresh token, API key, or OAuth bearer is present in HTML, JavaScript, public runtime env, logs, caches, or screenshots.
+- Vite credential-entry tests `MUST` prove the canonical public application token is injected through the approved handoff in every environment, inline values escape `<`, `>`, and `&`, and no session token is emitted.
 - Vite development tests `MUST` prove each renderer uses a stable surface-qualified tool-native cache,
   source-linked or lazy third-party dependencies that escape the initial crawl are explicitly
   prebundled, and a fresh browser page receives dependency modules as JavaScript without
