@@ -50,12 +50,21 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, 'utf8').replace(/^\uFEFF/u, ''));
 }
 
-function formatFromManifest(manifest) {
-  const framework = String(manifest?.runtime?.framework ?? '').trim();
-  if (framework === 'flutter') return 'flutter';
-  if (framework === 'harmony-native' || framework === 'android-native' || framework === 'ios-native') {
-    return 'native';
+function formatFromManifest(manifest, appRoot = '') {
+  if (appRoot) {
+    if (existsSync(path.join(appRoot, 'pubspec.yaml'))) return 'flutter';
+    if (existsSync(path.join(appRoot, 'oh-package.json5'))) return 'native';
+    if (existsSync(path.join(appRoot, 'app.json')) || existsSync(path.join(appRoot, 'project.config.json'))) {
+      return 'mini-program';
+    }
   }
+  const directory = path.basename(appRoot);
+  if (directory.includes('flutter')) return 'flutter';
+  if (directory.includes('harmony')) return 'native';
+  if (directory.includes('mini-program')) return 'mini-program';
+  const framework = String(manifest?.runtime?.framework ?? '').trim();
+  if (framework.includes('flutter')) return 'flutter';
+  if (framework.includes('harmony') || framework.includes('arkts')) return 'native';
   if (
     framework.startsWith('mp-')
     || framework.includes('mini-program')
@@ -159,7 +168,7 @@ export function auditAppAccessTokenWorkspace(workspaceRoot) {
         });
         continue;
       }
-      const format = formatFromManifest(manifest);
+      const format = formatFromManifest(manifest, appRoot);
       const relativeRoot = `apps/${appEntry.name}`;
       const hasDeclaredSurface = surfaceRoots === null ? false : surfaceRoots.has(relativeRoot);
       const missing = [];

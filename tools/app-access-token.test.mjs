@@ -40,3 +40,23 @@ test('rejects a token whose app_id does not match the expected identity', () => 
     /app_id/u,
   );
 });
+
+test('distinguishes tenant-level and organization-level tokens', () => {
+  const tenant = createApplicationAccessToken({ ...identity, organizationId: '0' });
+  const organization = createApplicationAccessToken({ ...identity, organizationId: '42' });
+  assert.equal(decodeApplicationAccessToken(tenant).payload.login_scope, 'TENANT');
+  assert.equal(decodeApplicationAccessToken(organization).payload.login_scope, 'ORGANIZATION');
+  assert.equal(decodeApplicationAccessToken(organization).payload.organization_id, '42');
+  assert.throws(
+    () => createApplicationAccessToken({ ...identity, organizationId: '42', accessScope: 'tenant' }),
+    /tenant-level/u,
+  );
+  assert.throws(
+    () => createApplicationAccessToken({ ...identity, organizationId: '0', accessScope: 'organization' }),
+    /organization-level/u,
+  );
+  assert.throws(
+    () => assertApplicationAccessToken(tenant, { ...identity, loginScope: 'ORGANIZATION' }),
+    /login_scope/u,
+  );
+});

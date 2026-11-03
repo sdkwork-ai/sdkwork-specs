@@ -112,6 +112,8 @@ export function validateAccessTokenFiles(workspaceRoot) {
             if (!String(claims.environment ?? '').trim()) issues.push('environment');
             if (!String(claims.deployment_profile ?? '').trim()) issues.push('deployment_profile');
             if (!String(claims.runtime_target ?? '').trim()) issues.push('runtime_target');
+            const expectedLoginScope = String(claims.organization_id ?? '') === '0' ? 'TENANT' : 'ORGANIZATION';
+            if (claims.login_scope !== expectedLoginScope) issues.push('login_scope');
           }
         }
         unique.set(token, { file: relative, key, claims, issues });

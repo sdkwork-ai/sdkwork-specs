@@ -179,6 +179,50 @@ The generate command prints only the token string by default; `--json` prints
 the token with decoded header and payload. The signature segment is the literal
 `public`; it is not a secret and is never verified with a shared key.
 
+### 3.2 Tenant-Level And Organization-Level Tokens
+
+The token scope is explicit and is derived from `organization_id`:
+
+| Scope | `organization_id` | `login_scope` | Meaning |
+| --- | --- | --- | --- |
+| Tenant-level | `0` | `TENANT` | the application token can resolve tenant-wide operations for its `tenant_id` |
+| Organization-level | non-zero | `ORGANIZATION` | the same token is bound to one organization inside the tenant |
+
+Rules:
+
+- The generator `MUST` derive `login_scope` from `organization_id`; it `MUST NOT`
+  accept a contradictory `loginScope`.
+- A surface `MAY` declare `accessToken.scope` as `tenant` or `organization` as
+  an explicit guard. The value `MUST` agree with `accessToken.organizationId`;
+  a mismatch `MUST` fail materialization.
+- A tenant-level token `MUST` use `organization_id=0`. An organization-level
+  token `MUST` use a non-zero `organization_id`.
+- Server resolvers `MUST` reject a tenant-level token on a route that requires
+  an organization binding, and `MUST` reject an organization-level token on a
+  cross-organization or tenant-wide route.
+- A tenant-level token `MUST NOT` be used to impersonate an organization;
+  an organization-level token `MUST NOT` be widened to tenant scope by a
+  client-supplied organization id.
+- `permission_scope` does not change the token level. A tenant-level token with
+  `iam:self` and an organization-level token with `iam:self` remain different
+  scopes because of `organization_id` and `login_scope`.
+
+Examples:
+
+```bash
+# tenant-level
+node <sdkwork-specs>/tools/app-access-token.mjs generate \
+  --app-id sdkwork-im-pc --tenant-id 100001 --organization-id 0 \
+  --scope tenant --environment production --deployment-profile cloud \
+  --runtime-target browser
+
+# organization-level
+node <sdkwork-specs>/tools/app-access-token.mjs generate \
+  --app-id sdkwork-im-pc --tenant-id 100001 --organization-id 42 \
+  --scope organization --environment production --deployment-profile cloud \
+  --runtime-target browser
+```
+
 ## 4. Start And Build Gate
 
 - `dev`, `start`, `serve`, `build`, `package`, and `dist` `MUST` validate the
@@ -249,6 +293,7 @@ node <sdkwork-specs>/tools/check-release-access-token-env.mjs --root <repository
 
 # workspace adoption report
 node <sdkwork-specs>/tools/audit-app-access-token-workspace.mjs --workspace <workspace-root>
+node <sdkwork-specs>/tools/audit-client-surface-token-matrix.mjs --workspace <workspace-root>
 node <sdkwork-specs>/tools/validate-access-token-files.mjs --workspace <workspace-root> --check
 
 # adopt the token in client env configs / existing profile files

@@ -242,7 +242,8 @@ function printHelp() {
     [--environment <environment>] [--deployment-profile <standalone|cloud>] [--runtime-target <target>]
 
 Generate options:
-  --organization-id <id>       default 0
+  --organization-id <id>       default 0; 0 = tenant-level token, non-zero = organization-level token
+  --scope <tenant|organization> explicit scope guard; must agree with --organization-id
   --permission-scope <list>    comma-separated, default iam:self
   --session-id <id>            default bootstrap-public-<app>-<profile>.<environment>
   --issued-at <epoch-seconds>  default 1767225600
@@ -266,6 +267,10 @@ function runCli() {
   }
   if (command === 'verify') {
     if (!options.token) throw new Error('--token is required.');
+    const scope = String(options.scope ?? '').trim().toLowerCase();
+    if (scope && scope !== 'tenant' && scope !== 'organization') {
+      throw new Error('--scope must be tenant or organization.');
+    }
     const payload = assertApplicationAccessToken(options.token, {
       appId: options['app-id'],
       tenantId: options['tenant-id'],
@@ -273,6 +278,7 @@ function runCli() {
       environment: options.environment,
       deploymentProfile: options['deployment-profile'],
       runtimeTarget: options['runtime-target'],
+      loginScope: scope === 'tenant' ? 'TENANT' : scope === 'organization' ? 'ORGANIZATION' : undefined,
     });
     console.log(JSON.stringify({ valid: true, payload }, null, 2));
     return;
@@ -284,6 +290,7 @@ function runCli() {
     appId: options['app-id'],
     tenantId: options['tenant-id'],
     organizationId: options['organization-id'],
+    accessScope: options.scope,
     environment: options.environment,
     deploymentProfile: options['deployment-profile'],
     runtimeTarget: options['runtime-target'],

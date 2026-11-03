@@ -96,7 +96,10 @@ function readSurfaces(root) {
   const configPath = path.join(root, 'etc', 'client-env.materialization.json');
   if (!existsSync(configPath)) return null;
   const config = readJson(configPath);
-  return (config.surfaces ?? []).filter((surface) => surface.format !== 'none');
+  return (config.surfaces ?? []).map((surface) => ({
+    ...surface,
+    format: String(surface.format ?? '').trim(),
+  }));
 }
 
 export function checkReleaseAccessTokenEnv(rootDir, { environments = DEFAULT_RELEASE_ENVIRONMENTS, allowNoSurfaces = false } = {}) {
@@ -120,17 +123,20 @@ export function checkReleaseAccessTokenEnv(rootDir, { environments = DEFAULT_REL
   const failures = [];
 
   if (!surfaces || surfaces.length === 0) {
-    if (allowNoSurfaces) {
-      return { root, checked, failures, skipped: true };
-    }
     failures.push({
       profileId: '<surfaces>',
       reason: 'etc/client-env.materialization.json declares no client surface to carry the access token',
     });
     return { root, checked, failures };
   }
+  const clientSurfaces = surfaces.filter((surface) => surface.format !== 'none');
+  if (clientSurfaces.length === 0) {
+    // A repository that declares only format=none surfaces is server-only; it
+    // has no browser/mobile document to carry a public application token.
+    return { root, checked, failures, skipped: true };
+  }
 
-  for (const surface of surfaces) {
+  for (const surface of clientSurfaces) {
     const appRoot = path.join(root, String(surface.root ?? ''));
     const manifestPath = path.join(appRoot, 'agent.app.config.json');
     let format = surface.format;
