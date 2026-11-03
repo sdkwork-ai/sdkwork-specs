@@ -24,11 +24,15 @@ const DEFAULT_RELEASE_ENVIRONMENTS = ['test', 'staging', 'demo', 'production'];
 const PROFILE_PATTERN = /^(?:standalone|cloud)\.(development|test|staging|demo|production)$/u;
 
 function parseArgs(argv) {
-  const options = { root: process.cwd(), profiles: [], json: false };
+  const options = { root: process.cwd(), profiles: [], json: false, allowNoSurfaces: false };
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (token === '--json') {
       options.json = true;
+      continue;
+    }
+    if (token === '--allow-no-surfaces') {
+      options.allowNoSurfaces = true;
       continue;
     }
     if (token === '--root') {
@@ -95,7 +99,7 @@ function readSurfaces(root) {
   return (config.surfaces ?? []).filter((surface) => surface.format !== 'none');
 }
 
-export function checkReleaseAccessTokenEnv(rootDir, { environments = DEFAULT_RELEASE_ENVIRONMENTS } = {}) {
+export function checkReleaseAccessTokenEnv(rootDir, { environments = DEFAULT_RELEASE_ENVIRONMENTS, allowNoSurfaces = false } = {}) {
   const root = path.resolve(rootDir);
   const deploymentPath = path.join(root, 'etc', 'sdkwork.deployment.config.json');
   if (!existsSync(deploymentPath)) {
@@ -116,6 +120,9 @@ export function checkReleaseAccessTokenEnv(rootDir, { environments = DEFAULT_REL
   const failures = [];
 
   if (!surfaces || surfaces.length === 0) {
+    if (allowNoSurfaces) {
+      return { root, checked, failures, skipped: true };
+    }
     failures.push({
       profileId: '<surfaces>',
       reason: 'etc/client-env.materialization.json declares no client surface to carry the access token',
@@ -191,7 +198,10 @@ function main() {
   const environments = options.profiles.length > 0
     ? options.profiles.map((profile) => profile.split('.').pop())
     : DEFAULT_RELEASE_ENVIRONMENTS;
-  const result = checkReleaseAccessTokenEnv(options.root, { environments });
+  const result = checkReleaseAccessTokenEnv(options.root, {
+    environments,
+    allowNoSurfaces: options.allowNoSurfaces,
+  });
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
   } else {

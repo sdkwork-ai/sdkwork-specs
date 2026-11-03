@@ -122,6 +122,63 @@ Rules:
   A committed token does not expire in normal operation; `exp` is a rotation
   ceiling, not a session lifetime.
 
+### 3.1 Token Value Is A String
+
+`SDKWORK_ACCESS_TOKEN` is a **single JWT compact string**, never a JSON object:
+
+```text
+SDKWORK_ACCESS_TOKEN=eyJhbGciOiJub25lIiwia2lkIjoicHVibGljLWFwcC10b2tlbiIsInR5cCI6IkpXVCJ9.eyJhcHBfaWQiOiJzZGt3b3JrLWltLXBjIiwiYXVkIjoic2Rrd29yay1pbS1wYyIsImRlcGxveW1lbnRfbW9kZSI6InByaXZhdGUiLCJkZXBsb3ltZW50X3Byb2ZpbGUiOiJzdGFuZGFsb25lIiwiZW52aXJvbm1lbnQiOiJkZXZlbG9wbWVudCIsImV4cCI6NDEwMjQ0NDgwMCwiaWF0IjoxNzY3MjI1NjAwLCJpc3MiOiJzZGt3b3JrLWlhbS1wdWJsaWMiLCJsb2dpbl9zY29wZSI6IlRFTkFOVCIsIm9yZ2FuaXphdGlvbl9pZCI6IjAiLCJwZXJtaXNzaW9uX3Njb3BlIjpbImlhbTpzZWxmIl0sInJ1bnRpbWVfdGFyZ2V0IjoiYnJvd3NlciIsInNlc3Npb25faWQiOiJib290c3RyYXAtcHVibGljLXNka3dvcmstaW0tcGMtc3RhbmRhbG9uZS5kZXZlbG9wbWVudCIsInRlbmFudF9pZCI6IjEwMDAwMSIsInRva2VuX2NsYXNzIjoiYXBwbGljYXRpb24iLCJ0b2tlbl90eXBlIjoiYWNjZXNzIiwidG9rZW5fdmVyc2lvbiI6MSwidXNlcl9pZCI6IjAifQ.public
+```
+
+`etc/client-env.materialization.json` may contain an `accessToken` **input
+object**. That object is generator configuration, not the token:
+
+```json
+{
+  "accessToken": {
+    "appId": "sdkwork-im-pc",
+    "tenantId": "100001",
+    "organizationId": "0",
+    "permissionScope": ["iam:self"]
+  }
+}
+```
+
+The materializer generates the JWT string from that object and writes the
+string to the profile file. A surface `MUST NOT` store the object in a profile
+file, and a profile file `MUST NOT` store the object under
+`SDKWORK_ACCESS_TOKEN`.
+
+Generate, decode, and verify with the canonical tool:
+
+```bash
+# generate the JWT compact string
+node <sdkwork-specs>/tools/app-access-token.mjs generate \
+  --app-id sdkwork-im-pc \
+  --tenant-id 100001 \
+  --organization-id 0 \
+  --environment production \
+  --deployment-profile cloud \
+  --runtime-target browser \
+  --permission-scope iam:self
+
+# inspect header and claims
+node <sdkwork-specs>/tools/app-access-token.mjs decode --token "$SDKWORK_ACCESS_TOKEN"
+
+# verify the token against one profile
+node <sdkwork-specs>/tools/app-access-token.mjs verify \
+  --token "$SDKWORK_ACCESS_TOKEN" \
+  --app-id sdkwork-im-pc \
+  --tenant-id 100001 \
+  --environment production \
+  --deployment-profile cloud \
+  --runtime-target browser
+```
+
+The generate command prints only the token string by default; `--json` prints
+the token with decoded header and payload. The signature segment is the literal
+`public`; it is not a secret and is never verified with a shared key.
+
 ## 4. Start And Build Gate
 
 - `dev`, `start`, `serve`, `build`, `package`, and `dist` `MUST` validate the
@@ -150,6 +207,9 @@ Rules:
   `node <sdkwork-specs>/tools/check-release-access-token-env.mjs --root .`;
   sdkwork-im ships it as `.githooks/pre-commit` and installs
   `core.hooksPath=.githooks` through `scripts/dev/install-git-hooks.mjs`.
+  Other workspace modules install the shared hook with
+  `node <sdkwork-specs>/tools/install-workspace-release-token-hooks.mjs
+  --workspace <workspace-root>`.
 - A local developer who has not installed the hook still runs
   `pnpm check:release-access-token` in the repository check lane.
 

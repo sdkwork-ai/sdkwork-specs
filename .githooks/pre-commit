@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+# Workspace-shared pre-commit check. The repository root is resolved from Git,
+# so this hook works for every sibling module that points core.hooksPath here.
+repo_root=$(git rev-parse --show-toplevel)
+specs_root="$repo_root/../sdkwork-specs"
+if [ ! -f "$specs_root/tools/check-release-access-token-env.mjs" ]; then
+  echo "release access-token preflight skipped: $specs_root is not available" >&2
+  exit 0
+fi
+node "$specs_root/tools/check-release-access-token-env.mjs" --root "$repo_root" --allow-no-surfaces

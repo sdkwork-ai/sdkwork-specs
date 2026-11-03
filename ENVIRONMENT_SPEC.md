@@ -881,6 +881,10 @@ Rules:
   bearers. The public application access token is the only token value allowed,
   and it is generated into client surface files, never authored in a topology
   layer.
+- A development profile `MAY` use the canonical local database default
+  (`SDKWORK_DATABASE_PASSWORD=sdkworkdev123`). That value `MUST NOT` appear in
+  `test`, `staging`, `demo`, or `production`; those profiles use a secret file
+  (`*_PASSWORD_FILE`), secret manager, or deployment injection.
 - Do not keep duplicate identity aliases for symmetry. Emit an app-prefixed
   identity key only when a consumer reads it; otherwise use the canonical
   generic key.
