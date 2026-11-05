@@ -72,13 +72,16 @@ App-api resources for end-user login:
 Rules:
 
 - Redirect URIs `MUST` be validated against registered surfaces and allowed hosts.
+- The login provider list is the intersection of enabled integrations, the account-binding `oauth_login.enabled`/`allowedProviders` policy, and the tenant-visible provider catalog. An operator-defined catalog row `MUST` be honored (and overrides built-in metadata for the same provider code); a provider enabled only in the built-in catalog but without an enabled integration `MUST NOT` be shown.
 - Authorization state `MUST` be persisted in `iam_oauth_authorization_state` with expiry, PKCE binding, and one-time consumption semantics.
 - OAuth login `MUST` respect tenant account-binding policy (`iam.account_binding`).
 - OAuth auto-registration `MUST` be policy-controlled and fail closed when disabled.
 
 ## 4. SDKWork OAuth Provider (Authorization Server Role)
 
-SDKWork exposes a first-party OIDC-compatible authorization server through `sdkwork-iam-open-api`.
+SDKWork exposes a first-party OAuth 2.1 authorization-code server through `sdkwork-iam-open-api`.
+
+> Capability boundary: the server issues access/refresh tokens and supports authorization code + PKCE, token, refresh, revoke, introspect, userinfo, discovery, and JWKS. It does **not** issue an OIDC `id_token` and does not implement `nonce`, `prompt`, or `max_age`. A client that requires full OIDC MUST NOT be registered as a relying party until those capabilities are implemented; the desktop/browser SDKWork login uses the OAuth flow only.
 
 ### 4.1 Canonical Endpoints
 
@@ -92,17 +95,20 @@ SDKWork exposes a first-party OIDC-compatible authorization server through `sdkw
 | `/iam/v3/oauth/revoke` | POST | public | Revoke grant or token |
 | `/iam/v3/oauth/introspect` | POST | public | Token introspection for confidential clients |
 
-App-api completion endpoint:
+App-api endpoints for the hosted first-party login:
 
 | Endpoint | Method | Auth mode | Purpose |
 | --- | --- | --- | --- |
+| `/app/v3/api/oauth/authorizations` | POST | public | Create the pending authorization state for the hosted login (the page creates the state, renders login in place, then completes it; no browser redirect to a login route) |
 | `/app/v3/api/oauth/authorizations/{authorizationStateId}/completions` | POST | dual-token | Complete pending authorization after IAM login |
+| `/app/v3/api/auth/sessions/current/logout` | POST | public | Revoke the current session with its refresh token; accepted without an access token so logout still revokes the server session after the access token expired |
 
 Rules:
 
 - Authorization requests `MUST` require PKCE for public clients.
 - Confidential clients `MUST` authenticate at the token endpoint using `client_secret_post` or `client_secret_basic`.
 - Authorization codes `MUST` be one-time, short-lived, and bound to client, redirect URI, PKCE, tenant, and user.
+- A new login `MUST` replace only the previous session of the same application on the same device. Completing a desktop login `MUST NOT` revoke the browser session that authorized it, and sessions of other applications or other devices `MUST` remain valid; credential changes may still revoke all sessions for the user.
 - Issued OAuth access tokens `MUST` resolve through `OAuthTokenLookupService` and `iam_oauth_grant`.
 - Userinfo `MUST` expose only scopes granted to the requesting client.
 
@@ -132,6 +138,8 @@ Each relying party `MUST` declare OAuth metadata under `runtimeConfig.oauth.rely
   }
 }
 ```
+
+- A `clientId` `MUST` be globally unique across tenant applications; when omitted it defaults to the application's globally unique `app_id`. The database `MUST` enforce the namespace with a unique expression index over the explicit `clientId` or `app_id`, and a conflicting registration `MUST` fail instead of creating an ambiguous client id that desktop session exchange cannot resolve without a tenant hint.
 
 Rules:
 
