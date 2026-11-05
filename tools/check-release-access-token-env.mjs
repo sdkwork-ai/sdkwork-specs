@@ -123,6 +123,9 @@ export function checkReleaseAccessTokenEnv(rootDir, { environments = DEFAULT_REL
   const failures = [];
 
   if (!surfaces || surfaces.length === 0) {
+    // Server-only repositories have no client document to carry a public
+    // token; the pre-commit hook opts out explicitly with `--allow-no-surfaces`.
+    if (allowNoSurfaces) return { root, checked, failures, skipped: true };
     failures.push({
       profileId: '<surfaces>',
       reason: 'etc/client-env.materialization.json declares no client surface to carry the access token',

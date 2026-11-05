@@ -68,3 +68,15 @@ test('passes when every release profile carries a matching public token', () => 
     rmSync(root, { force: true, recursive: true });
   }
 });
+
+test('skips a server-only repository when allowNoSurfaces is set', () => {
+  const root = fixture();
+  try {
+    rmSync(path.join(root, 'etc/client-env.materialization.json'));
+    const result = checkReleaseAccessTokenEnv(root, { allowNoSurfaces: true });
+    assert.deepEqual(result.failures, []);
+    assert.equal(result.skipped, true);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
