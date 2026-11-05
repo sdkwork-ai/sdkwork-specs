@@ -4,13 +4,13 @@ import path from 'node:path';
 export function resolveAppId(repoRoot, topology) {
   const repoName = path.basename(path.resolve(repoRoot));
   const topologyAppId = topology?.appId;
-  if (topologyAppId && topologyAppId !== repoName) {
-    return {
-      appId: repoName,
-      errors: [
-        `appId mismatch: repository "${repoName}" vs topology.appId "${topologyAppId}"`,
-      ],
-    };
+  // The declared application spec is the identity; the checkout directory is
+  // infrastructure. An OEM product repository is named after the product, while
+  // the application code stays the stable namespace its IAM, store, and
+  // deployment records already use (OEM_BRANDING_SPEC.md §8). Identity is
+  // therefore read from the spec, never inferred from a folder name.
+  if (typeof topologyAppId === 'string' && topologyAppId.trim() !== '') {
+    return { appId: topologyAppId, errors: [] };
   }
   return { appId: repoName, errors: [] };
 }

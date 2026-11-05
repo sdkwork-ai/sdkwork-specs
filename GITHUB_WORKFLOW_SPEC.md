@@ -365,6 +365,7 @@ Rules:
 - Desktop host architectures `MUST` be distinguished by `targets[].variant` whenever one application ships more than one desktop host. The desktop artifacts of `tauri`, `electron`, and `capacitor` host packages carry the same `desktop` profile token and no host-architecture segment, so they would otherwise collide on one `packageId`. The variant value `MUST` be the lowercase host architecture, producing ids such as `windows-x64-standalone-desktop-tauri-msi` and `windows-x64-standalone-desktop-electron-msi`. An application shipping a single desktop host `MUST NOT` add the variant, and the variant `MUST` agree with the `clientArchitecture` pinned on the matching `artifacts.installConfig.packages[]` entry.
 - `format-token` `MUST` be lowercase kebab-case. Format values with separators normalize those separators to hyphens; for example `tar.gz` becomes `tar-gz`.
 - GitHub workflow artifact names `MUST` use `<release.artifactPrefix>-<packageId>`.
+- In a release-branded (OEM) assembly, `release.artifactPrefix` `MUST` equal the selected brand's artifact prefix; every workflow artifact whose contents are published `MUST` share it, while an internal-only artifact that no published name depends on `MAY` keep the framework family name (`OEM_BRANDING_SPEC.md` §2).
 - Multi-format targets `MUST` produce distinct package ids and artifact names for each format.
 - Single-format `targets[].id` `MUST` equal the canonical package id.
   Multi-format fixed ids use

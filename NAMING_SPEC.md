@@ -473,7 +473,8 @@ Rules:
 - Package ids with a real variant use `<platform>-<architecture>-<deployment-profile>-<profile>-<variant>-<format-token>`. Linux native variant packages use `linux-<distribution>-<architecture>-<deployment-profile>-<profile>-<variant>-<format-token>`.
 - Use the variant segment only when distinct releasable artifacts share the same platform, architecture, deployment profile, profile, and format. Examples include `cpu`, `nvidia-cuda`, and `amd-rocm` deployment bundles.
 - GitHub workflow artifact names use `<artifact-prefix>-<package-id>`.
-- `artifact-prefix` comes from `release.artifactPrefix` and normally matches `app.id` unless an application has a documented release-branding reason.
+- `artifact-prefix` comes from `release.artifactPrefix` and normally matches `app.id` unless an application has a documented release-branding reason. An OEM or multi-brand assembly takes it from the selected brand manifest and follows `OEM_BRANDING_SPEC.md` for every released file.
+- A release-branded artifact `MUST` carry the selected brand's prefix on every published file, sidecar, deployment bundle, and published-file workflow artifact, and `MUST NOT` carry another product's token. The prefix owner, the forbidden tokens, and the verification gate are normative in `OEM_BRANDING_SPEC.md` §2 and §7.
 - `format-token` is the lowercase kebab token for the package format. Dots and other separators are normalized to hyphens, for example `tar.gz` becomes `tar-gz`.
 - Valid Linux native package distributions are `debian` and `ubuntu` for `deb`, and `rhel`, `centos`, `fedora`, `opensuse`, and `suse` for `rpm`.
 - Generic Linux archive formats such as `tar.gz`, `appimage`, `snap`, and `flatpak` do not include the distribution segment unless a more specific future standard defines one.

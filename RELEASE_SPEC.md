@@ -36,6 +36,7 @@ Rules:
   deployment profile.
 - Hotfixes must still satisfy security, generated SDK, migration, and rollback rules for touched surfaces.
 - SDK releases must trace to OpenAPI/proto/generator inputs and generated output boundaries.
+- A release-branded (OEM) assembly names every published artifact, sidecar, deployment bundle, and the guides that reference them after the selected brand; the brand prefix, forbidden tokens, and gate requirements are normative in `OEM_BRANDING_SPEC.md`.
 
 ### 2.1 Deployment-Profile Release Lanes
 
