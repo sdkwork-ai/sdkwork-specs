@@ -71,6 +71,9 @@ function formatFromManifest(manifest) {
   const framework = String(manifest?.runtime?.framework ?? '').trim();
   if (framework === 'flutter') return 'flutter';
   if (framework === 'harmony-native' || framework === 'android-native' || framework === 'ios-native') return 'native';
+  // uni-app x / uniappx apps use the native JSON runtime profile
+  // (`config/app/runtime-env.<profile>.json`, UNIAPP_X_APP_ARCHITECTURE_SPEC §12).
+  if (framework.includes('uni-app-x') || framework.includes('uniappx')) return 'native';
   if (framework.startsWith('mp-') || framework.includes('mini-program') || framework === 'multi-mini-program') {
     return 'mini-program';
   }

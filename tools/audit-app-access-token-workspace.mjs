@@ -62,9 +62,11 @@ function formatFromManifest(manifest, appRoot = '') {
   if (directory.includes('flutter')) return 'flutter';
   if (directory.includes('harmony')) return 'native';
   if (directory.includes('mini-program')) return 'mini-program';
+  if (directory.includes('uniappx') || directory.includes('uni-app-x')) return 'native';
   const framework = String(manifest?.runtime?.framework ?? '').trim();
   if (framework.includes('flutter')) return 'flutter';
   if (framework.includes('harmony') || framework.includes('arkts')) return 'native';
+  if (framework.includes('uni-app-x') || framework.includes('uniappx')) return 'native';
   if (
     framework.startsWith('mp-')
     || framework.includes('mini-program')
