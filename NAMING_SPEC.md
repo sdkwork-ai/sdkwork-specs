@@ -17,7 +17,7 @@ SDKWork names use a fixed identity lattice. Do not collapse these layers into on
 | L3 process name | process name | `<process-name>` | `cloudrouter` | application code |
 | L4 manifest key | `app.key` | (manifest field, not a path placeholder) | `commerce-pc` | application code alone |
 | L5 repository stem | SDKWork repository | `sdkwork-<application-code>` when they match | `sdkwork-drive` | guaranteed equal to L2 |
-| L6 client architecture | client-arch | `<client-arch>` | `pc`, `pad`, `h5`, `flutter-mobile` | business capability or deployment profile |
+| L6 client architecture | client-arch | `<client-arch>` | `pc`, `pad`, `h5`, `flutter-mobile`, `uniappx` | business capability or deployment profile |
 | L7 domain | domain | `<domain>` | `commerce`, `iam` | product name |
 | L8 capability | capability | `<capability>` | `cart`, `merchandise` | `product`, `common`, `manager` |
 | L9 API owner | owner code | `<owner-code>` | `sdkwork-shop` | SDK family name |
@@ -148,6 +148,12 @@ Rules:
 | Mini program user console package | `sdkwork-<application-code>-mp-console-<capability>` | `sdkwork-shop-mp-console-order` |
 | Mini program internal admin package | `sdkwork-<application-code>-mp-admin-<capability>` | `sdkwork-shop-mp-admin-audit` |
 | Mini program host package | `sdkwork-<application-code>-mp-host` | `sdkwork-shop-mp-host` |
+| uni-app app root | `apps/sdkwork-<application-code>-uniapp/` | `apps/sdkwork-shop-uniapp/` |
+| uni-app app package | `sdkwork-<application-code>-uniapp-<capability>` | `sdkwork-shop-uniapp-order` |
+| uni-app host package | `sdkwork-<application-code>-uniapp-host` | `sdkwork-shop-uniapp-host` |
+| uni-app x app root | `apps/sdkwork-<application-code>-uniappx/` | `apps/sdkwork-shop-uniappx/` |
+| uni-app x app package | `sdkwork-<application-code>-uniappx-<capability>` | `sdkwork-shop-uniappx-order` |
+| uni-app x host package (one package for App, Web, and `MP_*` targets) | `sdkwork-<application-code>-uniappx-host` | `sdkwork-shop-uniappx-host` |
 | Shared mini program package | `sdkwork-<capability>-mini-program` | `sdkwork-order-mini-program` |
 | Android native app package | `sdkwork-<application-code>-android-mobile-<capability>` | `sdkwork-shop-android-mobile-order` |
 | Android native user console package | `sdkwork-<application-code>-android-mobile-console-<capability>` | `sdkwork-shop-android-mobile-console-order` |
@@ -213,6 +219,8 @@ Rules:
   section 3.1; dependency declaration integrity is normative in section 3.2.
 - Java packages use lowercase dotted names under an approved SDKWork root; Java classes use PascalCase.
 - TypeScript packages use kebab-case or approved scoped names; exported types/classes/components use PascalCase; functions and variables use camelCase.
+- uni-app x client architecture uses the single token `uniappx` in root and package names (`apps/sdkwork-<application-code>-uniappx/`, `sdkwork-<application-code>-uniappx-<capability>`). `uniapp-x`, `uni-app-x`, and `uni_app_x` are invalid path and package tokens; `uni-app-x` is only the framework value (`runtime.framework`), never a name segment.
+- uni-app x source files use `.uvue` for pages and Vue components, `.uts` for Vue-lifecycle and `uni.*` modules, and `.ts` for pure logic. `<script setup>` does not declare a `lang` attribute; PascalCase component names and camelCase composables follow the TypeScript conventions above.
 - Dart and Flutter package names use lowercase snake_case; SDKWork Flutter mobile packages use the `sdkwork_<application_code>_flutter_mobile_<capability>` family from `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`.
 - Android native SDKWork package directories use kebab-case `sdkwork-<application-code>-android-mobile-*`; Kotlin packages and Android namespaces use legal lowercase dotted names that preserve the SDKWork package identity.
 - iOS native SDKWork package directories use kebab-case `sdkwork-<application-code>-ios-mobile-*`; Swift package targets/modules use legal PascalCase names derived from the SDKWork package identity.

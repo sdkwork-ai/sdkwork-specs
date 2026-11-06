@@ -318,6 +318,7 @@ Rules:
 Rules:
 
 - `NONE` and `SDK` applications still own an `assets/` root and a cover; they never fabricate screenshots. A preview image or a real documentation capture `MAY` be used as a `PREVIEW_IMAGE`, never as a `SCREENSHOT`.
+- A uni-app x root uses `appType = "APP_UNIAPP"` because the backend `PlusProjectType` closed set has no uni-app x member. Its `ui/` screenshots cover every shipped target, and the capture config records the selected `vapor`/`vdom` mode so store media is generated from the same runtime the artifact uses.
 - Content applications (`PPT`, `VIDEO`, `POSTER`) render their media from the authored content. A deck preview is not a screenshot; a video poster is not a cover substitute.
 - A client application that ships only `API`, `CLI`, or other non-UI platforms needs no screenshot. Once it declares a UI platform, the per-surface screenshot rule applies.
 - An application that declares both `APP_REACT` and a non-UI backend family still uses one manifest; the matrix is evaluated per declared surface, not per package.

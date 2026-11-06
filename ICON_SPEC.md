@@ -55,7 +55,7 @@ For every navigation and toggle destination:
 
 ### 3.2 Mobile Bottom Tab Bar
 
-Every mobile application surface that renders a bottom tab bar `MUST` apply section 3.1: the selected tab uses the filled icon and every unselected tab uses the outline icon of the same glyph. This applies to H5/Capacitor React, Flutter, mini program, native Android, native iOS, native HarmonyOS, and uni-app roots.
+Every mobile application surface that renders a bottom tab bar `MUST` apply section 3.1: the selected tab uses the filled icon and every unselected tab uses the outline icon of the same glyph. This applies to H5/Capacitor React, Flutter, mini program, native Android, native iOS, native HarmonyOS, uni-app, and uni-app x roots.
 
 Rules:
 
@@ -98,6 +98,7 @@ Rules:
 | Native iOS | `UITabBarItem(title:image:selectedImage:)`, `UITabBarAppearance`, or SwiftUI symbol variant | Use `selectedImage` where available; with SwiftUI use `Image(systemName:)` plus `.symbolVariant(selected ? .fill : .none)` in a selected-aware tab item, or a custom tab bar that renders the pair. SF Symbols pairs such as `house` / `house.fill`. |
 | Native HarmonyOS | `TabContent.tabBar(builder)` driven by the selected index, or the shell's navigation component | Render the filled symbol or resource for the active index and the outline symbol for every other index. A side navigation uses the same selected-state input. |
 | uni-app | `pages.json` `tabBar.list[].iconPath` and `selectedIconPath`, or a custom tab bar | Declare both paths for every tab on every target that renders the native tab bar; custom tab bars consume the same pair. |
+| uni-app x | `pages.json` `tabBar.list[].iconPath` and `selectedIconPath`, or a custom tab bar in `.uvue` | Declare both paths for every tab on every target that renders the native tab bar; custom tab bars consume the same pair. App tab icons use the platform asset rules, and a `vapor` root `MUST NOT` replace the pair with a dynamic recolored glyph. |
 | Unity (when a tab or rail is shipped) | sprite pair driven by the selected index | Use the outline sprite for unselected and the filled sprite for selected; do not tint the same sprite as the only state change. |
 
 Rules:
@@ -134,7 +135,7 @@ Rules:
 
 - A tab-bar, sidebar, navigation-rail, drawer, or toggle destination `MUST` declare an `icon` object with both `outline` and `filled`. A single icon id is not a valid stateful navigation declaration.
 - Icon ids `MUST` be lowercase kebab-case glyph names (`home`, `shopping-cart`, `chart-line`). The filled asset `MUST` be identified by the `filled` field or the `-filled` suffix (`home-filled`); asset names `MUST NOT` use `active`, `selected`, `inactive`, `normal`, `hover`, `on`, or `off`.
-- A destination `MUST` use one stable glyph pair across PC, pad, H5, Flutter, mini program, native mobile, and uni-app implementations of the same workflow.
+- A destination `MUST` use one stable glyph pair across PC, pad, H5, Flutter, mini program, native mobile, uni-app, and uni-app x implementations of the same workflow.
 - The application shell/foundation package `MUST` own the icon registry and the mapping from id to rendered asset. Capability packages `MUST` reference registry ids and `MUST NOT` ship one-off navigation icons that bypass the registry.
 - A missing filled counterpart is a defect. The capability `MUST` add the asset, use the section 3.1 fill fallback, or fall back to a text-only destination; it `MUST NOT` render a single-variant icon that misrepresents state.
 - Route metadata `MUST NOT` declare raw SVG markup, inline path data, remote icon URLs, or per-platform icon overrides that contradict the shared pair.
@@ -234,7 +235,7 @@ Verification evidence for an icon change `MUST` include:
 - an accessibility test proving icon-only names, decorative hiding, and programmatic selected/current state;
 - a light-mode and dark-mode render for both variants, or a visual regression snapshot covering them;
 - a rendered-shape comparison proving the selected filled glyph differs from the outline glyph in pixels, not only in codepoint or asset id;
-- a platform test proving mini program/uni-app `iconPath` and `selectedIconPath` both exist and native mobile tab/rail items use the platform selected slot;
+- a platform test proving mini program/uni-app/uni-app x `iconPath` and `selectedIconPath` both exist and native mobile tab/rail items use the platform selected slot;
 - a static scan or review proving no color-only, stroke-thickening, scaling, or filter-based fill substitute was introduced.
 
 `TEST_SPEC.md` section 4 defines the executable frontend obligations; a repository `MUST` wire the equivalent gate into its verify aggregate when it ships navigation icons.

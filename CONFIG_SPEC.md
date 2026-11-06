@@ -674,7 +674,8 @@ Canonical profile id:
 
 `ENVIRONMENT_SPEC.md` section 5.1 is the file-format authority for the complete
 eight-profile matrix and the PC/H5 Vite, Flutter, native WeChat mini program,
-uni-app, native mobile, desktop, Node, Spring Boot, and Rust projections.
+uni-app, uni-app x, native mobile, desktop, Node, Spring Boot, and Rust
+projections.
 
 Profile aliases remain command compatibility only:
 

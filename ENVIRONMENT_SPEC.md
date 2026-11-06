@@ -733,6 +733,25 @@ platforms, not profile-id segments. One mini program root selects exactly one
 framework authority: native WeChat for `weixin-mini-program`, or uni-app for a
 declared multi-platform matrix. It must not keep both as competing source trees.
 
+uni-app x roots use the same `.env.<profile-id>` contract from the HBuilderX
+project root. The HBuilderX run/publish target (`web`, `mp-weixin`,
+`app-android`, `app-ios`, `app-harmony`) is a target axis, the selected
+`vapor`/`vdom` mode is an architecture axis declared in `manifest.json` and
+`agent.app.config.json`, and neither is encoded in an env file:
+
+```dotenv
+# .env.cloud.production
+VITE_SDKWORK_ENVIRONMENT=production
+VITE_SDKWORK_DEPLOYMENT_PROFILE=cloud
+VITE_SDKWORK_PROFILE_ID=cloud.production
+VITE_SDKWORK_RUNTIME_TARGET=android-native
+VITE_SDKWORK_<APPLICATION_CODE>_APPLICATION_PUBLIC_HTTP_URL=https://app.example.com
+```
+
+`uni-app-x` roots select exactly one framework authority (uni-app x) and do not
+keep a uni-app or native WeChat tree as a competing business source for the same
+target set.
+
 ### 5.1.7 Private Values And Migration
 
 Exactly one env-file shape exists per scope, and the list below is closed.

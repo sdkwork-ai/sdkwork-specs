@@ -48,6 +48,7 @@ No standard is complete until it is executable.
 | iOS native mobile architecture | Validate `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`: `sdkwork-<application-code>-ios-mobile-*`, `sdkwork-<application-code>-ios-mobile-console-*`, and `sdkwork-<application-code>-ios-mobile-admin-*` package names, thin root `App/`, generated Swift app/backend SDK boundary, iOS host adapters, route identity, iOS config, and release metadata |
 | Harmony native mobile architecture | Validate `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`: `sdkwork-<application-code>-harmony-mobile-*`, `sdkwork-<application-code>-harmony-mobile-console-*`, and `sdkwork-<application-code>-harmony-mobile-admin-*` package names, thin root `entry/`, generated ArkTS/TypeScript app/backend SDK boundary, HarmonyOS host adapters, route identity, Harmony config, and release metadata |
 | uni-app architecture | Validate `UNIAPP_APP_ARCHITECTURE_SPEC.md`: `sdkwork-<application-code>-uniapp-*`, `sdkwork-<application-code>-uniapp-console-*`, and `sdkwork-<application-code>-uniapp-admin-*` package names, thin root `src/` bootstrap, `pages.json`/subPackage projection, conditional compilation boundary, generated TypeScript app/backend SDK boundary, `uni.*` host adapters, route identity, and multi-target config/release metadata |
+| uni-app x architecture | Validate `UNIAPP_X_APP_ARCHITECTURE_SPEC.md`: `sdkwork-<application-code>-uniappx-*`, `sdkwork-<application-code>-uniappx-console-*`, and `sdkwork-<application-code>-uniappx-admin-*` package names, HBuilderX root with the `uni-app-x` manifest node, single `vapor`/`vdom` mode across manifest/agent config/mode spec, `.uvue` page ownership, `VUE3-VAPOR` boundary, mode minimum versions, generated TypeScript app/backend SDK boundary, `uni.*`/UTS host adapters, route identity, and multi-target config/release metadata through `tools/check-uniappx-architecture.mjs` |
 | Unity architecture | Validate `UNITY_APP_ARCHITECTURE_SPEC.md`: `com.sdkwork.<application-code>-unity-*` UPM package names with Assembly-Definition-enforced dependency direction, thin bootstrap scene and `Assets/Scripts/Bootstrap/`, generated C# app/backend SDK boundary, secure-storage token persistence, Unity host adapters, scene/route identity, and build/release preflight |
 | Static web architecture | Validate `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`: `sdkwork-<application-code>-static-web-*` page-group packages, content-only boundary (no login/session/admin), public data boundary, secret-free `dist/<profile>/<envAlias>/` output, route/sitemap/i18n alignment, and `<share>/web/static/` delivery |
 | Native mobile UI | Validate `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, or `APP_HARMONY_NATIVE_UI_SPEC.md`: package-local screens/pages/components/services/state/i18n/routes, host adapter contracts, app/user-console SDK boundary, UI states, and lifecycle/security checks |
@@ -57,7 +58,7 @@ No standard is complete until it is executable.
 | Drive | Drive API/SDK contract tests, Drive Uploader App SDK tests, Rust `DriveUploaderService` tests, upload-session idempotency, resumable part tests, attribution/statistic tests, retention cleanup tests, provider capability tests, business-module scans for forbidden app-local storage lifecycle |
 | IAM/security | Token validation, permission denial, tenant isolation, audit event, appbase login integration, logout clearing, Rust AppContext guard |
 | Frontend | Service tests with injected SDK client, UI integration tests |
-| UI architecture | Static/package scan that the package family matches `UI_ARCHITECTURE_SPEC.md` plus the relevant root architecture spec and exactly one detailed UI/package spec such as `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, or `BACKEND_UI_SPEC.md`; pad roots apply `APP_PAD_ARCHITECTURE_SPEC.md` then `APP_PC_REACT_UI_SPEC.md` or `BACKEND_UI_SPEC.md`; uni-app, Unity, and static web surfaces validate their root architecture spec's package-local UI rules |
+| UI architecture | Static/package scan that the package family matches `UI_ARCHITECTURE_SPEC.md` plus the relevant root architecture spec and exactly one detailed UI/package spec such as `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, or `BACKEND_UI_SPEC.md`; pad roots apply `APP_PAD_ARCHITECTURE_SPEC.md` then `APP_PC_REACT_UI_SPEC.md` or `BACKEND_UI_SPEC.md`; uni-app, uni-app x, Unity, and static web surfaces validate their root architecture spec's package-local UI rules |
 | Deployment | Standalone/cloud parity tests, topology profile validation, deployment profile and runtime target separation |
 | Runtime/test port isolation | Validate `APP_RUNTIME_TOPOLOGY_SPEC.md` §8.3: automated test runs that boot the application configure dedicated test ports through topology bind overrides (`--*-bind` / `SDKWORK_*_BIND`), never the manual dev default ports; tests release ports and terminate spawned runtime processes on completion; no automated run kills, restarts, or port-shares with a manually started dev instance |
 | Shell portability | Validate `PORTABILITY_SPEC.md` with `tools/check-shell-portability.mjs` (static lint + `bash -n` over every governed `.sh`, zero findings) and `tools/check-module-bin.mjs`: operator-side scripts stay bash 3.2/any-Linux portable, bash-4-only and GNU-only tokens are absent or exemption-marked (`PORTABILITY:target-linux`/`PORTABILITY:allow`), and checksum sidecars use the portable two-space format |
@@ -906,7 +907,8 @@ Rules:
   `env/sdkwork.<profile-id>.json`, native WeChat mini program
   `config/mini-program/runtime-env.<profile-id>.json`, uni-app
   `.env.<profile-id>`, and native mobile
-  `config/app/runtime-env.<profile-id>.json` when those roots are present.
+  `config/app/runtime-env.<profile-id>.json`, and uni-app x
+  `.env.<profile-id>` from its HBuilderX project root when those roots are present.
 - Secret-boundary tests `MUST` prove tracked architecture env files contain no
   live tokens, refresh tokens, API keys, private keys, signing credentials,
   database URLs, Redis URLs, or private endpoints; bootstrap credentials exist
@@ -1036,6 +1038,11 @@ Rules:
   `VITE_SDKWORK_*`, the `-p` platform remains a separate target axis, and one
   root does not keep native WeChat and uni-app as competing business source
   authorities.
+- uni-app x config tests `MUST` prove `.env.<profile-id>` uses
+  `VITE_SDKWORK_*`, the HBuilderX run/publish target remains a separate target
+  axis, the selected `vapor`/`vdom` mode is not encoded in an env file, and one
+  root does not keep uni-app, uni-app x, and native WeChat as competing business
+  source authorities.
 - Package-size tests `SHOULD` prove root package and subpackages stay within documented platform limits when tooling supports it.
 
 ## 2.4.5 Mini Program UI Tests
@@ -1174,7 +1181,27 @@ Rules:
 - Progressive function tests `MUST` prove representative pages render primary content without JavaScript.
 - Output layout tests `MUST` prove `dist/<profile>/<envAlias>/` output and the documented mapping to `<share>/web/static/` install delivery.
 
-## 2.4.13 App Assets Tests
+## 2.4.13 uni-app x Architecture Tests
+
+uni-app x architecture tests make `UNIAPP_X_APP_ARCHITECTURE_SPEC.md` executable. `tools/check-uniappx-architecture.mjs` is the reference implementation; its tests cover every rule below with fixture roots.
+
+Rules:
+
+- Root tests `MUST` verify `apps/sdkwork-<application-code>-uniappx/` contains `manifest.json` with the `uni-app-x` node, `App.uvue`, `main.uts`, `pages.json`, `.sdkwork/`, at least one enabled `config/browser|mini-program|app` directory, `config/host`, `bootstrap/`, `packages/`, `specs/uniappx-mode.spec.json`, `sdks/`, `scripts/`, and `tests/`.
+- Package naming tests `MUST` prove SDKWork source packages use `sdkwork-<application-code>-uniappx-*` and reserved `core`, `commons`, `shell`, `console-*`, `admin-*`, and `host` roles, and that exactly one `sdkwork-<application-code>-uniappx-host` package exists.
+- Mode tests `MUST` prove `manifest.json` `uni-app-x.vapor` agrees with `agent.app.config.json` `runtime.uniappxMode` and `specs/uniappx-mode.spec.json`, that exactly one mode is declared, and that the mode is not encoded in an environment, deployment profile, runtime target, or command segment.
+- Mode minimum-version tests `MUST` fail a `vapor` root whose delivered App targets declare Android below 6.0/API 23, iOS below 15.0, or HarmonyOS below API 20, and `MUST` fail a `vdom` root below Android 5.0/API 21, iOS 12.0, or HarmonyOS API 14.
+- Page ownership tests `MUST` fail when a `.vue` page exists under the root, when business pages live outside `packages/`, or when a feature package owns the root `pages.json` projection instead of route contributions.
+- Mode isolation tests `MUST` fail when `VUE3-VAPOR`/`#ifndef VUE3-VAPOR` conditions appear outside `sdkwork-<application-code>-uniappx-host` and root bootstrap, or when a feature package branches on the mode.
+- Source portability tests `MUST` fail on Options API, mixins, `this`, Vuex, complex descendant/child/attribute/pseudo selectors in authored `.uvue`/`.uts` sources, and missing stable `:key` on `v-for` lists.
+- SDK boundary tests `MUST` prove app and console packages use generated TypeScript app SDK clients or approved uni-app x wrappers through the core transport adapter, admin packages use generated backend SDK clients or approved backend wrappers, and no raw `uni.request` business calls, manual auth headers, or generated SDK edits are introduced.
+- Host boundary tests `MUST` fail when feature packages call `uni.*`, UTS plugin APIs, or platform globals (`wx.*`, `plus.*`) directly for host capabilities.
+- Route projection tests `MUST` prove route contributions generate or assemble `pages.json` pages, `subPackages`, and tabBar entries deterministically, with paired `iconPath`/`selectedIconPath` values.
+- IAM tests `MUST` prove platform login codes, phone-number grants, scene/query inputs, and provider-specific auth facts are exchanged through approved app-api/appbase flows, that `sdkwork-iam-uniappx` auth components are consumed instead of forked, and that storage/token/context state clears on logout, refresh failure, and account/tenant switch in both modes.
+- Config tests `MUST` prove `.env.<profile-id>` files use `VITE_SDKWORK_*` keys with matching identity fields, the HBuilderX run/publish target stays a separate axis, and host config separates platform app ids and minimum versions from private keys, tokens, API keys, and private endpoints.
+- Build evidence tests `MUST` prove the mode, HBuilderX version, view-layer compilation target, target runtime classification for Web/mini program fallback, and minimum-version compliance are recorded before release.
+
+## 2.4.14 App Assets Tests
 
 App assets tests make `APP_ASSETS_SPEC.md` executable for every `appType`.
 

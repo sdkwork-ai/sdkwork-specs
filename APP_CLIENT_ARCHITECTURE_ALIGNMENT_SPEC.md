@@ -1,10 +1,10 @@
 # App Client Architecture Alignment Standard
 
 - Version: 1.2
-- Scope: cross-client application architecture alignment for SDKWork PC, pad/tablet, H5/mobile React, Flutter, mini program, uni-app, Unity, static web (pure HTML), native Android, native iOS, native HarmonyOS, backend/admin UI, and future client roots
-- Related: `COMPOSABLE_ARCHITECTURE_SPEC.md`, `APPLICATION_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `UNIAPP_APP_ARCHITECTURE_SPEC.md`, `UNITY_APP_ARCHITECTURE_SPEC.md`, `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `ICON_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `BACKEND_UI_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `I18N_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
+- Scope: cross-client application architecture alignment for SDKWork PC, pad/tablet, H5/mobile React, Flutter, mini program, uni-app, uni-app x (`vapor`/`vdom`), Unity, static web (pure HTML), native Android, native iOS, native HarmonyOS, backend/admin UI, and future client roots
+- Related: `COMPOSABLE_ARCHITECTURE_SPEC.md`, `APPLICATION_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `NAMING_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md`, `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`, `ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md`, `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md`, `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md`, `UNIAPP_APP_ARCHITECTURE_SPEC.md`, `UNIAPP_X_APP_ARCHITECTURE_SPEC.md`, `UNITY_APP_ARCHITECTURE_SPEC.md`, `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`, `MODULE_SPEC.md`, `COMPONENT_SPEC.md`, `FRONTEND_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `ICON_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `APP_MOBILE_REACT_UI_SPEC.md`, `APP_FLUTTER_UI_SPEC.md`, `APP_MINI_PROGRAM_UI_SPEC.md`, `APP_ANDROID_NATIVE_UI_SPEC.md`, `APP_IOS_NATIVE_UI_SPEC.md`, `APP_HARMONY_NATIVE_UI_SPEC.md`, `BACKEND_UI_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `I18N_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
-This standard defines the common client architecture contract that keeps SDKWork application roots readable, composable, and aligned across PC, pad/tablet, H5/Capacitor, Flutter, mini program, native Android, native iOS, native HarmonyOS, and future client surfaces. Cross-stack layer roles, component ports, and package composition closure follow `COMPOSABLE_ARCHITECTURE_SPEC.md`.
+This standard defines the common client architecture contract that keeps SDKWork application roots readable, composable, and aligned across PC, pad/tablet, H5/Capacitor, Flutter, mini program, uni-app, uni-app x, native Android, native iOS, native HarmonyOS, and future client surfaces. Cross-stack layer roles, component ports, and package composition closure follow `COMPOSABLE_ARCHITECTURE_SPEC.md`.
 
 Architecture-specific standards own technology details. This file owns the shared structure: package taxonomy, dependency direction, route identity, component boundaries, SDK/IAM/runtime composition, and verification rules. Client applications should feel like different implementations of one system, not unrelated projects with different vocabulary.
 
@@ -48,13 +48,14 @@ SDKWork client roots use stable architecture identifiers.
 | Native iOS mobile app | `apps/sdkwork-<application-code>-ios-mobile` | `ios-mobile` | `IOS_APP_MOBILE_ARCHITECTURE_SPEC.md` |
 | Native HarmonyOS mobile app | `apps/sdkwork-<application-code>-harmony-mobile` | `harmony-mobile` | `HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md` |
 | uni-app cross-platform app (H5/`MP_*`/App) | `apps/sdkwork-<application-code>-uniapp` | `uniapp` | `UNIAPP_APP_ARCHITECTURE_SPEC.md` |
+| uni-app x cross-platform app (App/Web/`MP_*`, `vapor` or `vdom`) | `apps/sdkwork-<application-code>-uniappx` | `uniappx` | `UNIAPP_X_APP_ARCHITECTURE_SPEC.md` |
 | Unity game/3D app | `apps/sdkwork-<application-code>-unity` | `unity` UPM id segment (`com.sdkwork.<application-code>-unity-*`) | `UNITY_APP_ARCHITECTURE_SPEC.md` |
 | Static web (pure HTML) app | `apps/sdkwork-<application-code>-static-web` | `static-web` | `APP_STATIC_WEB_ARCHITECTURE_SPEC.md` |
 
 Rules:
 
 - The `-common` application root is a shared package-family root, not a runnable client surface. It owns contracts, service ports, runtime, bootstrap, SDK adapter boundaries, and domain RPC proto packages with no UI runtime dependency.
-- `apps/` is the application-root collection under a larger repository or workspace. Each child directory is the root of one runnable application surface for a selected language and architecture, such as PC React/Tauri, pad React/Tauri, H5 React/Capacitor, Flutter, mini program, native Android, native iOS, or native HarmonyOS, or one shared `-common` package-family root. Do not treat `apps/` itself as the source root for one language or collapse multiple architecture roots into one child directory.
+- `apps/` is the application-root collection under a larger repository or workspace. Each child directory is the root of one runnable application surface for a selected language and architecture, such as PC React/Tauri, pad React/Tauri, H5 React/Capacitor, Flutter, mini program, uni-app, uni-app x, native Android, native iOS, or native HarmonyOS, or one shared `-common` package-family root. Do not treat `apps/` itself as the source root for one language or collapse multiple architecture roots into one child directory.
 - New application roots `MUST` use the root naming in this table unless `GOVERNANCE_SPEC.md` records an exception.
 - The package segment `MUST` appear in every app-root package name owned by that architecture.
 - Architecture standards may define language-specific package naming, such as lower snake case for Dart packages.
@@ -130,6 +131,7 @@ The client roots in section 2 are the closed set of SDKWork-owned client archite
 | Desktop native shell | Tauri (default), Electron | covered: PC root plus `DESKTOP_APP_ARCHITECTURE_SPEC.md` host profiles | — |
 | Cross-platform Dart | Flutter | covered: Flutter mobile root | — |
 | Cross-platform Vue | uni-app | covered: uni-app root | — |
+| Cross-platform Vue with native App rendering | uni-app x (`vapor`/`vdom`) | covered: uni-app x root; `vapor` and `vdom` are modes of one root, not separate roots | choose the root; declare the mode |
 | Mini programs and mini games | WeChat/Alipay/DingTalk/Lark, `MP_*_GAME` | covered: mini program root platform rules, plus Unity root mini-game delivery | — |
 | Native phone | Kotlin/Swift/ArkTS | covered: Android/iOS/Harmony mobile roots | — |
 | Game engine 3D/2D client | Unity | covered: Unity root | — |
@@ -356,6 +358,7 @@ export interface SdkworkUiRouteContribution {
     iosNative?: "route" | "tab" | "sheet" | "fullScreenCover";
     harmonyNative?: "page" | "tab" | "dialog" | "sheet";
     uniapp?: "page" | "tab" | "subpackagePage";
+    uniappx?: "page" | "tab" | "subpackagePage";
     unity?: "scene" | "overlay" | "addressable";
     staticWeb?: "page";
     pad?: "page" | "split" | "inspector" | "sheet" | "popover" | "dialog";
@@ -365,7 +368,7 @@ export interface SdkworkUiRouteContribution {
 
 Rules:
 
-- Route `id`, `surface`, `domain`, `capability`, `screen`, `titleKey`, and `permissionHint` should be consistent across PC, pad, H5, Flutter, mini program, uni-app, Unity, static web, Android, iOS, and Harmony implementations of the same product workflow.
+- Route `id`, `surface`, `domain`, `capability`, `screen`, `titleKey`, and `permissionHint` should be consistent across PC, pad, H5, Flutter, mini program, uni-app, uni-app x, Unity, static web, Android, iOS, and Harmony implementations of the same product workflow.
 - A route contribution that appears as a tab-bar, sidebar, navigation-rail, drawer, or toggle destination `MUST` declare the paired `icon` variants (`outline` and `filled`) per `ICON_SPEC.md` section 5. A single icon id is not a valid stateful navigation declaration.
 - The `pad` presentation hint describes tablet composition intent (`split`, `inspector`, `sheet`, or `popover`) and does not encode a physical breakpoint. The pad shell maps it to the current window class.
 - Physical paths may differ by platform. For example, PC may use `/app/orders/:orderId`, H5 may use `/orders/:orderId`, Flutter may use a named route, mini program may use a subpackage page path, Android may use a navigation destination, iOS may use a navigation route, and Harmony may use a page path.
@@ -449,7 +452,8 @@ Rules:
 - PC and H5 Vite roots use `.env.<profile-id>`; pad roots use the same Vite `.env.<profile-id>` contract plus `config/tablet/` user runtime templates; Flutter uses
   `env/sdkwork.<profile-id>.json`; native WeChat mini programs use
   `config/mini-program/runtime-env.<profile-id>.json`; uni-app uses the Vite
-  `.env.<profile-id>` contract; native mobile roots use
+  `.env.<profile-id>` contract; uni-app x uses the same `.env.<profile-id>`
+  contract from its HBuilderX project root; native mobile roots use
   `config/app/runtime-env.<profile-id>.json`; Unity projects project the
   selected profile into `StreamingAssets/RuntimeConfig/`; static web roots
   materialize `config/browser/runtime.config.<profile-id>.json`.
@@ -496,6 +500,7 @@ Required cross-client architecture checks:
 | IAM boundary | Tests prove appbase IAM runtime, global token manager, token/context persistence, logout clearing, refresh failure, tenant switch, and account switch behavior. |
 | Host boundary | Static scan proves feature packages use host adapter contracts, not platform globals. |
 | Tablet adaptation | Pad roots and PC roots with tablet targets prove the `APP_PAD_ARCHITECTURE_SPEC.md` section 5 contract: window classes, orientations, multitasking, input parity, safe areas, accessibility, performance, and `specs/tablet-adaptation.spec.json` evidence. |
+| Vue mode | uni-app x roots prove one declared mode (`vapor` or `vdom`) agrees across `manifest.json` `uni-app-x.vapor`, `agent.app.config.json` `runtime.uniappxMode`, and `specs/uniappx-mode.spec.json`, and that mode-specific minimum versions and `.uvue` page ownership hold. |
 | Config boundary | Tests prove public/private/secret config separation and target-specific profile validation. |
 | Package build | Changed packages pass typecheck/analyze/build and focused tests for the selected architecture. |
 
@@ -511,5 +516,6 @@ Acceptance checklist:
 - [ ] SDK/IAM/runtime/bootstrap boundaries follow `APP_SDK_INTEGRATION_SPEC.md`.
 - [ ] Host adapters are typed and local-only.
 - [ ] Pad roots use the `pad` segment, one `pad-tauri` host, tablet runtime targets only, and the tablet adaptation contract; PC roots with tablet targets apply the same contract without creating a pad root.
+- [ ] uni-app x roots use the `uniappx` segment, `.uvue` pages, one declared `vapor`/`vdom` mode, and one `-uniappx-host` package; `vapor` and `vdom` never become separate roots.
 - [ ] Config and release metadata do not leak secrets.
 - [ ] Verification evidence is recorded before completion.

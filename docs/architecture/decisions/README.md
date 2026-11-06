@@ -12,3 +12,4 @@ Retired layout: `docs/adr/` must not be used for new ADRs.
 - [ADR-20260730 Repository Generated-State Boundary](ADR-20260730-repository-generated-state-boundary.md)
 - [ADR-20260917 Web Framework Table Prefix](ADR-20260917-web-framework-table-prefix.md)
 - [ADR-20261031 Pad Application Root Architecture](ADR-20261031-pad-application-root-architecture.md)
+- [ADR-20261106 uni-app x Application Root Architecture](ADR-20261106-uniappx-application-root-architecture.md)

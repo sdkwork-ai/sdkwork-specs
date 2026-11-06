@@ -200,7 +200,7 @@ Ubuntu is represented as:
 web, mobile, desktop, server, cli, mini-program, library, plugin
 ```
 
-`runtime.framework` is descriptive and should be specific, for example `react`, `react-tauri`, `react-h5`, `react-capacitor`, `flutter`, `android-native`, `ios-native`, `harmony-native`, `weixin-mini-program`, `multi-mini-program`, `uni-app`, `unity`, `static-html`, `electron`, `spring-boot`, `node-service`, `go-service`, or `rust-service`.
+`runtime.framework` is descriptive and should be specific, for example `react`, `react-tauri`, `react-h5`, `react-capacitor`, `flutter`, `android-native`, `ios-native`, `harmony-native`, `weixin-mini-program`, `multi-mini-program`, `uni-app`, `uni-app-x`, `unity`, `static-html`, `electron`, `spring-boot`, `node-service`, `go-service`, or `rust-service`.
 
 `runtime.defaultPlatform` and `runtime.defaultArchitecture` drive default latest download resolution and `platform_app.downloadUrl` projection.
 
@@ -231,7 +231,7 @@ profile or a replacement for exact package `runtimeTarget` metadata.
 
 Canonical client architecture values are `pc-web`, `h5`, `capacitor`,
 `flutter`, `tauri`, `electron`, `android-native`, `ios-native`,
-`harmony-native`, `mini-program`, `uniapp`, `unity`, and `static-web`. Target
+`harmony-native`, `mini-program`, `uniapp`, `uniappx`, `unity`, and `static-web`. Target
 platform values follow the
 lower-kebab workflow platform registry, including `web`, `h5`, `windows`,
 `macos`, `linux`, `ios`, `ipados`, `android`, `android-tablet`, `harmony`, and
@@ -273,6 +273,7 @@ Client roots must keep manifest runtime metadata aligned with their root archite
 | Native iOS mobile root | `mobile` | `ios-native` | `APP_IOS` |
 | Native HarmonyOS mobile root | `mobile` | `harmony-native` | `APP_HARMONY` |
 | uni-app root | `mini-program`, `mobile`, or `web` following delivery | `uni-app` | `MP_WEIXIN`, `MP_ALIPAY`, `MP_DINGTALK`, `MP_LARK`, `APP_ANDROID`, `APP_IOS`, `H5` |
+| uni-app x root | `mini-program`, `mobile`, or `web` following delivery | `uni-app-x` | `MP_WEIXIN`, `MP_ALIPAY`, `APP_ANDROID`, `APP_IOS`, `APP_HARMONY`, `H5`, `WEB` |
 | Unity root | `mobile`, `desktop`, `web`, or `mini-program` following delivery | `unity` | `APP_ANDROID`, `APP_IOS`, `DESKTOP_WINDOWS`, `DESKTOP_MACOS`, `DESKTOP_LINUX`, `WEB`, `MP_WEIXIN_GAME` |
 | Static web root | `web` | `static-html` | `WEB` |
 
@@ -287,6 +288,7 @@ Rules:
 - Native HarmonyOS apps should use `runtime.family = "mobile"` and `runtime.framework = "harmony-native"`.
 - Pad tablet-first roots should use `runtime.family = "desktop"`, `runtime.framework = "react-tauri"`, `clientArchitectures = ["tauri"]`, and only `tablet-ipados`/`tablet-android` package `runtimeTarget` entries. They must not declare `browser`, `desktop`, `server`, `container`, or mobile-framework targets.
 - uni-app roots should use `runtime.framework = "uni-app"` with the family of their primary delivery: `"mini-program"` for `MP_*`-only delivery, `"mobile"` when App packages are delivered, and `"web"` for H5-only roots. Package `runtimeTarget` records the delivery runtime (`mini-program`, `android-native`/`ios-native`, or `browser`), never the authoring framework.
+- uni-app x roots use `runtime.framework = "uni-app-x"`, `runtime.clientArchitectures = ["uniappx"]`, and the family of their primary delivery (`"mini-program"`, `"mobile"`, or `"web"`). They `MUST` declare `runtime.uniappxMode` as `vapor` or `vdom` and keep it equal to `manifest.json` `uni-app-x.vapor`. They use `app.appType = "APP_UNIAPP"` because the backend `PlusProjectType` closed set has no uni-app x member, and record that reason in `metadata`; the root standard and `runtime.framework` identify the framework. `publish.platforms` lists only delivered `MP_*`, `APP_*`, `H5`, or `WEB` values, and `vapor` roots declare only App targets whose minimum OS satisfies the mode.
 - Unity roots should use `runtime.framework = "unity"` with `runtime.family` per delivery lane: `"mobile"` for app-store builds, `"desktop"` for standalone builds, `"web"` for WebGL, and `"mini-program"` for mini-game delivery (`MP_*_GAME` platforms with `runtimeTarget = "mini-program"`).
 - Static web roots should use `runtime.family = "web"`, `runtime.framework = "static-html"`, and `clientArchitectures = ["static-web"]`.
 - Package ids and artifact names in the manifest follow `NAMING_SPEC.md`; source package names follow the matching architecture standard and are not copied into release package ids unless they are also the release artifact identity.

@@ -14,6 +14,7 @@ const SURFACE_RULES = [
   { suffix: '-common', role: 'common', runnable: false, architecture: 'APPLICATION_SPEC.md and MODULE_SPEC.md' },
   { suffix: '-flutter-mobile', role: 'flutter-mobile', runnable: true, architecture: 'FLUTTER_APP_MOBILE_ARCHITECTURE_SPEC.md' },
   { suffix: '-mini-program', role: 'mini-program', runnable: true, architecture: 'MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md' },
+  { suffix: '-uniappx', role: 'uniappx', runnable: true, architecture: 'UNIAPP_X_APP_ARCHITECTURE_SPEC.md' },
   { suffix: '-android-mobile', role: 'android-mobile', runnable: true, architecture: 'ANDROID_APP_MOBILE_ARCHITECTURE_SPEC.md' },
   { suffix: '-ios-mobile', role: 'ios-mobile', runnable: true, architecture: 'IOS_APP_MOBILE_ARCHITECTURE_SPEC.md' },
   { suffix: '-harmony-mobile', role: 'harmony-mobile', runnable: true, architecture: 'HARMONY_APP_MOBILE_ARCHITECTURE_SPEC.md' },

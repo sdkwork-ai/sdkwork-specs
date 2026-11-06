@@ -9,8 +9,10 @@ This standard defines the application-root architecture for SDKWork uni-app clie
 The framework authority is explicit:
 
 - A uni-app root `MUST` follow this standard as its root architecture authority.
+- A uni-app x root `MUST` follow `UNIAPP_X_APP_ARCHITECTURE_SPEC.md` instead. uni-app x uses `.uvue` pages, an HBuilderX project model, native App rendering, and the `vapor`/`vdom` Vue mode contract, so it is a separate root rather than a mode of this one.
 - A native WeChat Mini Program source root `MUST` follow `MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md` instead.
-- One application root `MUST NOT` keep uni-app and a native mini program tree as competing business source authorities for the same target set. The delivered product may combine one uni-app root with separate native roots, but each target has exactly one source authority.
+- One application root `MUST NOT` keep uni-app, uni-app x, and a native mini program tree as competing business source authorities for the same target set. A delivered product may combine one root with separate native roots, but each target has exactly one source authority.
+- New App-first cross-platform products should start from `UNIAPP_X_APP_ARCHITECTURE_SPEC.md`; this root remains the authority for products that stay on the uni-app Vue 3 + Vite runtime or depend on a plugin that uni-app x does not support. DCloud has announced the end of uni-app App-platform maintenance in 2027.
 
 SDKWork packages and uni-app platform `pages`/`subPackages` are different concepts. SDKWork packages are source, dependency, component, and composition boundaries. Platform `pages`, `subPackages`, and tabBar entries are runtime packaging boundaries. Business architecture is expressed through SDKWork packages first, then projected into `pages.json` through route metadata and build tooling.
 
