@@ -1,6 +1,6 @@
 # SDKWork IAM Application Bootstrap Standard
 
-- Version: 1.0
+- Version: 1.1
 - Scope: registered application templates, tenant applications, bootstrap orchestration, access credential issuance, manifest mapping, reusable framework package, and application onboarding enforcement
 - Related: `IAM_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `MODULE_SPEC.md`, `API_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `TEST_SPEC.md`, `DATABASE_FRAMEWORK_SPEC.md`
 
@@ -310,18 +310,18 @@ On regeneration the resolver `MUST` use the same repository, deployment profile,
 - Diagnostics `MUST` name the repository, lifecycle, artifact path, and outcome (`reused`, `generated`, `provisioned`, `unavailable`, `refresh`), and `MUST NOT` include token values.
 - The lifecycle checker `check-bootstrap-access-token-lifecycle-standard.mjs` is the machine gate for this section. It `MUST` fail a repository that has credential-entry surfaces but no lifecycle owner, that generates a token on every start without reuse, or that writes a non-conforming artifact path.
 
-#### 5.4.5 Packaging Projection
+#### 5.4.5 Packaging
 
-A packaging command is a `resolve` consumer (`ENVIRONMENT_SPEC.md` §6.1). It projects the resolved credential into a private artifact the installed application reads; it never mints one.
+A packaging command is a `resolve` consumer (`ENVIRONMENT_SPEC.md` §6.1). It reads the public application access token from the selected app root's committed per-scope env file (`APP_ACCESS_TOKEN_SPEC.md`) and bakes that profile's deployment selection and token into the built artifact; it never reads the private bootstrap credential cache and never mints a credential.
 
 Rules:
 
-- Packaging `MUST NOT` register, provision, enable, sign, generate a fixture, refresh, or rewrite a credential while a reusable token exists, and `MUST NOT` create one when none does. A packaging lane that provisions is non-conforming: it makes the build depend on network state and hidden operator credentials, and it regenerates a value the cache already settled.
-- The projected credential `MUST` be byte-identical to the value the resolver returned. Projection copies; it never normalizes, re-signs, or re-encodes.
-- An absent or non-reusable credential `MUST` fail the packaging command with a diagnostic naming the repository, lifecycle, artifact path, and the explicit `provision` command (`env:token:ensure --environment <lifecycle>`, `--refresh` to replace). It `MUST NOT` warn and continue.
-- The projection target `MUST` be a private runtime source of the installed application per `ENVIRONMENT_SPEC.md` §6.1.1, and it `MUST NOT` be the reusable cache itself: the cache stays the source launch's artifact, and the projection is a separate copy that ships.
-- Diagnostics `MUST` follow the §5.4.4 shape — repository, lifecycle, artifact path, outcome — and `MUST NOT` include the token value.
-- Verification `MUST` cover the three packaging cases: a reusable credential projects unchanged, a missing credential fails with the provisioning hint, and a `public` release produces no artifact at all.
+- Packaging `MUST NOT` register, provision, enable, sign, generate a fixture, refresh, or rewrite a credential, and `MUST NOT` read `~/.sdkwork/<application-code>/credentials/` or `SDKWORK_IAM_BOOTSTRAP_*`. The private cache is a CLI/resolve-phase input only and `MUST` stay out of every packaged artifact.
+- The embedded token `MUST` be the committed public application access token, byte-identical to the value in the selected per-scope file. Packaging copies it; it never normalizes, re-signs, or re-encodes it.
+- A missing, empty, malformed, or identity-mismatched token `MUST` fail the packaging command before the platform packaging step, with a diagnostic naming the app root, the profile file, the profile id, and the canonical materializer command (`node <sdkwork-specs>/tools/materialize-client-env.mjs --root <repository>`). It `MUST NOT` warn and continue.
+- The packaged artifact `MUST NOT` carry a private release environment file, an operator bootstrap credential, a session access token, an auth token, a refresh token, or a provider API key (`ENVIRONMENT_SPEC.md` §6.1.1).
+- Diagnostics `MUST` follow the §5.4.4 shape — repository, lifecycle, source file, outcome (`present`, `absent`) — and `MUST NOT` include the token value.
+- Verification `MUST` cover the three packaging cases: a complete identity-matched token is embedded unchanged, a missing or mismatched token fails with the materializer hint, and the built artifact carries no private credential of any kind.
 
 
 Canonical owners:

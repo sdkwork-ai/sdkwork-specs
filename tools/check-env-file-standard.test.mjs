@@ -11,7 +11,7 @@ test('reports invalid keys, duplicate keys, and unresolved interpolation', () =>
   try {
     mkdirSync(path.join(root, 'apps', 'demo'), { recursive: true });
     writeFileSync(
-      path.join(root, 'apps', 'demo', '.env.development'),
+      path.join(root, 'apps', 'demo', '.env.development'), // env-naming:allow
       'GOOD_KEY=1\nbad_key=2\nGOOD_KEY=3\nBROKEN=${MISSING}\n',
       'utf8',
     );

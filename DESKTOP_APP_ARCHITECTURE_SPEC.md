@@ -1,6 +1,6 @@
 # Desktop App Architecture Standard
 
-- Version: 1.2
+- Version: 1.3
 - Scope: PC desktop and large-screen tablet native applications, especially Tauri-, Electron-, and Capacitor-hosted web apps, desktop shells, iPadOS/Android tablet targets, native host adapters, local runtime integration, packaging, and release boundaries
 - Related: `APPLICATION_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `APP_PC_ARCHITECTURE_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APP_H5_ARCHITECTURE_SPEC.md`, `UI_ARCHITECTURE_SPEC.md`, `APP_PC_REACT_UI_SPEC.md`, `FRONTEND_SPEC.md`, `SDK_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `DEPLOYMENT_SPEC.md`, `SECURITY_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `TEST_SPEC.md`
 
@@ -404,7 +404,7 @@ Rules:
 - Desktop apps `MUST` use the same generated SDK boundary as web apps.
 - Desktop IAM login/session integration `MUST` follow `IAM_LOGIN_INTEGRATION_SPEC.md`; native hosts may support host storage, OAuth/deep-link bridging, and local runtime lifecycle, but must not own business authentication.
 - Desktop runtime/bootstrap `MUST` follow `APP_SDK_INTEGRATION_SPEC.md`: construct appbase app SDK clients, application/dependency app SDK clients, explicit `backend-admin` backend SDK clients only when the desktop runtime owns a `backend-admin` surface, one global token manager, token/context stores, open-api credential providers, and host adapters in one composition boundary.
-- An installed application `MUST` resolve its SDKWork deployment and bootstrap credential through the platform bootstrap contract. Every packaged build `MUST` declare its distribution class under `ENVIRONMENT_SPEC.md` §6.1.1: a `deployment` build `MUST` carry the private release environment for the pinned lifecycle, and a `public` build `MUST NOT` carry it. The host applies the artifact before resolving the deployment, the launching environment outranks it, the artifact never enters a browser bundle, and packaging never provisions or re-signs the credential it projects.
+- An installed application `MUST` resolve its SDKWork deployment from the build-time per-scope env file selected at packaging (`ENVIRONMENT_SPEC.md` §6.1.1): the built artifact carries the deployment selection, surface URLs, and public application access token, and the host applies no launch-time release environment. A launching-environment override may still redirect the deployment for an operator diagnostic. Private operator bootstrap credentials and session credentials `MUST NOT` enter a desktop artifact.
 - Renderer appbase IAM runtime `MUST` own login, registration, current session, refresh, logout, verification, OAuth, QR auth, password reset, runtime metadata, current-user self-service, and token propagation to authenticated SDK clients.
 - SDK clients are constructed in bootstrap/core code and injected into service facades.
 - UI components `MUST NOT` create SDK clients, manually attach auth headers, parse JWTs for authorization, or call raw HTTP for business behavior.
@@ -646,7 +646,7 @@ Rules:
 - Tablet package metadata `MUST` include stable bundle/package identifiers, version, icons, signing configuration references, and target outputs.
 - Release artifacts `MUST` be reproducible from source, lockfile, native host config (Tauri config, Electron builder config, or Capacitor platform config plus the pinned provider version), runtime config templates, and SDK versions.
 - Desktop installers, IPA artifacts, APK/AAB artifacts, and generated native projects must not include local secrets, developer caches, generated temporary files, or runtime state.
-- A `deployment` desktop artifact `MUST` carry the private release environment of `ENVIRONMENT_SPEC.md` §6.1.1 — the deployment selection and one revocable bootstrap credential, both projected for that deployment — and `MUST` fail packaging when the credential cannot be resolved. A `public` or general-purpose release `MUST NOT` carry it, and every other local secret, cache, and runtime state stays forbidden in both classes.
+- A packaged desktop artifact `MUST` carry the public application access token of the selected per-scope env file (`ENVIRONMENT_SPEC.md` §6.1.1) and `MUST` fail packaging when that file is missing, empty, or identity-mismatched. It `MUST NOT` carry a private release environment, operator bootstrap credential, session credential, local secret, developer cache, or runtime state.
 - Public release behavior must be verified with production-like config, not only dev server config.
 
 ## 10. Standard Verification

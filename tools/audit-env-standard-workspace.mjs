@@ -96,7 +96,7 @@ function findRetiredEnvNames(repoRoot) {
         queue.push({ dir: fullPath, depth: depth + 1 });
         continue;
       }
-      if (/^\.env\..+\.local$/u.test(entry.name) || entry.name === '.env.local') {
+      if (/^\.env\..+\.local$/u.test(entry.name) || entry.name === '.env.local') { // env-naming:allow
         offenders.push(path.relative(repoRoot, fullPath).replaceAll('\\', '/'));
       }
     }

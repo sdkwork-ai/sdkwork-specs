@@ -45,7 +45,7 @@ SDK transport rules:
 Gateway rules:
 
 - `credential_entry_public` is a migration helper name only. New route contracts use first-class `RouteAuth::CredentialEntryBootstrap`; the helper must construct that profile and must not encode it as `Public + flag`.
-- Credential-entry routes `MUST` require bootstrap `Access-Token` JWT for tenant isolation.
+- Credential-entry routes `MUST` require a short-lived bootstrap JWT for tenant isolation, carried as `Access-Token`.
 - The Web Framework credential-contamination guard `MUST` reject `Authorization`, refresh, API-key, OAuth, ingress/agent, and client-projected context credentials before handlers run. Handlers do not parse or reject headers themselves.
 
 ## 4. Configuration Layering
