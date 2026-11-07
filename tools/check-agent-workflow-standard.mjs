@@ -36,6 +36,7 @@ const IGNORED_DIRS = new Set([
   '.git',
   '.pnpm',
   '.vite',
+  '.tmp',
   'node_modules',
   'target',
   'dist',
@@ -503,22 +504,47 @@ function validatePackageWorkflow(root) {
 
     if (fs.existsSync(packageWorkflowPath)) {
       const packageLabel = relative(root, packageWorkflowPath);
+      // The dispatch-input budget is shared across every dependency (GitHub
+      // rejects a workflow above 25 workflow_dispatch inputs), so only a
+      // dependency pinned to a fixed ref (`entry.ref`) gets an override input;
+      // unpinned dependencies resolve through their repository variable
+      // (`vars.<REF_INPUT>`), mirroring
+      // check-github-workflow-integration.mjs.
+      const pinnedRefInputs = new Set();
+      for (const collectionName of ['dependencies', 'verificationDependencies']) {
+        const entries = workflow?.[collectionName];
+        if (!Array.isArray(entries)) continue;
+        for (const entry of entries) {
+          if (
+            typeof entry?.refInput === 'string'
+            && entry.refInput.trim() !== ''
+            && typeof entry?.ref === 'string'
+            && entry.ref.trim() !== ''
+          ) {
+            pinnedRefInputs.add(entry.refInput);
+          }
+        }
+      }
       for (const refInput of collectDependencyRefInputs(workflow)) {
-        const inputPattern = new RegExp(`^\\s{6}${refInput.inputName}:\\s*$`, 'mu');
-        if (!inputPattern.test(packageWorkflowText)) {
-          issues.push(
-            `${packageLabel} must expose workflow_dispatch input ${refInput.inputName} for ${refInput.pointer} ${refInput.value}`,
-          );
+        const pinned = pinnedRefInputs.has(refInput.value);
+        if (pinned) {
+          const inputPattern = new RegExp(`^\\s{6}${refInput.inputName}:\\s*$`, 'mu');
+          if (!inputPattern.test(packageWorkflowText)) {
+            issues.push(
+              `${packageLabel} must expose workflow_dispatch input ${refInput.inputName} for ${refInput.pointer} ${refInput.value}`,
+            );
+          }
+          if (!packageWorkflowText.includes(`github.event.inputs.${refInput.inputName}`)) {
+            issues.push(
+              `${packageLabel} dependency_refs_json must read github.event.inputs.${refInput.inputName} for ${refInput.value}`,
+            );
+          }
         }
         if (!packageWorkflowText.includes('dependency_refs_json')) {
           issues.push(`${packageLabel} must pass dependency_refs_json when dependency refInput values are declared`);
         } else if (!packageWorkflowText.includes(`"${refInput.value}"`)) {
           issues.push(
             `${packageLabel} dependency_refs_json must pass ${refInput.value} from github.event.inputs.${refInput.inputName} or vars.${refInput.value}`,
-          );
-        } else if (!packageWorkflowText.includes(`github.event.inputs.${refInput.inputName}`)) {
-          issues.push(
-            `${packageLabel} dependency_refs_json must read github.event.inputs.${refInput.inputName} for ${refInput.value}`,
           );
         } else if (!packageWorkflowText.includes(`vars.${refInput.value}`)) {
           issues.push(
