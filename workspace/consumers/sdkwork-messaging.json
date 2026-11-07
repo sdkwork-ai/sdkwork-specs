@@ -1,6 +1,9 @@
 {
   "pnpm": {
-    "packages": []
+    "packages": [
+      "../sdkwork-app-topology",
+      "../sdkwork-appbase/packages/common/foundation/sdkwork-appbase-component-core"
+    ]
   },
   "catalog": {}
 }
