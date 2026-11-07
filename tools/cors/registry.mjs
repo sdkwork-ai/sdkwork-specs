@@ -35,6 +35,12 @@ export const CORS_CONSOLE_HOST_ENV_KEYS = Object.freeze({
   baseDomains: 'SDKWORK_CORS_CONSOLE_HOST_BASE_DOMAINS',
 });
 
+/** Opt-in registered sub-domain rule keys (CORS_SPEC.md section 5.1). */
+export const CORS_SUBDOMAIN_HOST_ENV_KEYS = Object.freeze({
+  baseDomains: 'SDKWORK_CORS_SUBDOMAIN_BASE_DOMAINS',
+  schemes: 'SDKWORK_CORS_SUBDOMAIN_SCHEMES',
+});
+
 /**
  * Application-scoped `SDKWORK_<APPLICATION>_ALLOWED_ORIGINS` keys are retired:
  * they duplicated `SDKWORK_CORS_ALLOWED_ORIGINS` verbatim and drifted from it.

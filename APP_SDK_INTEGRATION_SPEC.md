@@ -430,11 +430,19 @@ Rules:
   or an explicit override key for that dependency, and the value `MUST` be an authored
   configuration input — not a value re-derived from this application's own bind.
 - **Resolution order for a Rust client that legitimately needs an absolute base URL.** (1) an
-  explicit dependency-specific override key declared for that surface; (2) the topology-derived
-  value for that surface under the selected profile; (3) a documented compile-time default for
-  split deployments. Host, port, and scheme come from the deployment contract, and the client
-  `MUST` fail bootstrap with a redacted diagnostic when none of the three yields a value, instead of
-  silently falling back to loopback.
+  explicit dependency-specific override key declared for that surface; (2) a healthy instance
+  selected from the database-backed HTTP service registry (`DISCOVERY_SPEC.md` section 12.1) — the
+  default production path for cloud and multi-instance deployments; (3) the topology-derived value
+  for that surface under the selected profile; (4) a documented compile-time default for split
+  deployments. Host, port, and scheme come from the deployment contract, and the client `MUST` fail
+  bootstrap with a redacted diagnostic when none of the four yields a value, instead of silently
+  falling back to loopback.
+- **Registry resolution is cache-first and degrades gracefully.** A backend `MUST` install the
+  process-global resolver at bootstrap, resolve peers from its cached snapshot on request paths
+  (never a per-call database round trip), and keep the last-known-good snapshot when a refresh
+  fails. A registry outage `MUST NOT` fail startup; the resolver falls through to the authored
+  topology value and then the split default. A target that fails a bounded number of consecutive
+  calls is demoted for a cooldown so the next resolution prefers another healthy instance.
 - **Standalone versus cloud, stated for backend clients.**
   - `standalone`: a same-origin-mounted dependency is consumed in-process and needs no base URL at
     all. When such a module nonetheless requires an HTTP client for a *different*, externally

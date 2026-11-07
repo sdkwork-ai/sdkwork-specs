@@ -11,7 +11,9 @@ import {
   CORS_CONSOLE_HOST_ENV_KEYS,
   CORS_MODULE_GATEWAY_ORIGINS_ENV_KEY,
   CORS_SHARED_ORIGINS_ENV_KEY,
+  CORS_SUBDOMAIN_HOST_ENV_KEYS,
   CORS_ORIGIN_KEY,
+  DEFAULT_PRODUCT_BASE_DOMAINS,
   LIFECYCLE_ENVIRONMENTS,
   browserBindValuesFromEnv,
   canonicalCorsOrigins,
@@ -42,6 +44,16 @@ export const CORS_GATE_ANCHORS = Object.freeze(['_sdkwork:verify', 'verify', 'ch
 /** A carrier is either a deployment value file or its source-controlled template. */
 export function isCarrierFileName(fileName) {
   return fileName.endsWith('.env') || fileName.endsWith('.env.example');
+}
+
+/**
+ * Layered topology **fragments** (`base.env`, `standalone.base.env`,
+ * `cloud.base.env`) are inputs to `materialize-topology-env.mjs`, not deployment
+ * profiles: they carry no `<environment>` segment and are composed into the
+ * generated `<profile>.<environment>.env` files the gate already audits.
+ */
+export function isFragmentCarrierFileName(fileName) {
+  return /^(?:[a-z0-9-]+\.)?base\.env$/u.test(fileName);
 }
 
 /**
@@ -125,6 +137,9 @@ export function collectCarriers(moduleDir, relativeBase = moduleDir) {
     if (!isDirectory(abs)) continue;
     for (const file of readdirSync(abs).sort()) {
       if (!isCarrierFileName(file)) continue;
+      // Layered fragments are composed into the profile carriers below; auditing
+      // them as profiles would only report their file name as invalid.
+      if (dir === 'etc/topology' && isFragmentCarrierFileName(file)) continue;
       const isTemplate = file.endsWith('.env.example');
       carriers.push({
         kind: dir === 'etc/topology' ? 'topology' : isTemplate ? 'template' : 'bundle',
@@ -253,6 +268,18 @@ export function consoleKeysOf(document) {
   return found;
 }
 
+/** Opt-in sub-domain rule keys found in a parsed document, keyed by component. */
+export function subdomainKeysOf(document) {
+  const found = {};
+  for (const [field, key] of Object.entries(CORS_SUBDOMAIN_HOST_ENV_KEYS)) {
+    const entry = document.byKey.get(key);
+    if (entry) found[field] = entry.value;
+  }
+  return found;
+}
+
+const SUPPORTED_SUBDOMAIN_SCHEMES = new Set(['http', 'https']);
+
 /**
  * Keys this spec recognises. Everything else that looks like a CORS key is
  * either a retired application-scoped allowlist or an ad-hoc module mechanism
@@ -263,6 +290,9 @@ const CANONICAL_CORS_KEYS = new Set([
   CORS_MODULE_GATEWAY_ORIGINS_ENV_KEY,
   'GATEWAY_CORS_ALLOWED_ORIGINS',
   ...Object.values(CORS_CONSOLE_HOST_ENV_KEYS),
+  ...Object.values(CORS_SUBDOMAIN_HOST_ENV_KEYS),
+  'GATEWAY_CORS_SUBDOMAIN_BASE_DOMAINS',
+  'GATEWAY_CORS_SUBDOMAIN_SCHEMES',
 ]);
 
 export function isCanonicalCorsKey(key) {
@@ -322,8 +352,10 @@ export function auditCarrier(module, carrier, options = {}) {
     if (isCanonicalCorsKey(key)) {
       // A canonical non-shared allowlist (gateway sidecar, module-gateway attach,
       // host-side GATEWAY_* prefix) is not derived here, but its entries must
-      // still be structurally valid for the environment.
-      if (!/_CONSOLE_HOST_/u.test(key)) {
+      // still be structurally valid for the environment. The console-host and
+      // sub-domain keys carry *host components*, never origins, so they are
+      // exempt from origin-value inspection.
+      if (!/_CONSOLE_HOST_/u.test(key) && !/_SUBDOMAIN_/u.test(key)) {
         errors.push(...inspectPlainOrigins(splitOrigins(document.byKey.get(key).value), parts.environment)
           .map((issue) => `${carrier.relativePath}: ${key}: ${issue}`));
       }
@@ -348,6 +380,41 @@ export function auditCarrier(module, carrier, options = {}) {
     const declared = ['labels', 'suffix', 'schemes'].filter((field) => consoleKeys[field] !== undefined);
     if (declared.length > 0 && declared.length < 3) {
       errors.push(`${carrier.relativePath}: console host pattern is fail-closed; declare labels, suffix and schemes together (found ${declared.join(', ')})`);
+    }
+  }
+
+  // Opt-in registered sub-domain rule (CORS_SPEC.md §5.1). The runtime rejects a
+  // half-configured or unregistered policy at startup, so a carrier must declare
+  // both keys with registered base domains and supported schemes.
+  const subdomainKeys = subdomainKeysOf(document);
+  if (Object.keys(subdomainKeys).length > 0) {
+    const declared = ['baseDomains', 'schemes'].filter(
+      (field) => subdomainKeys[field] !== undefined,
+    );
+    if (declared.length < 2) {
+      errors.push(
+        `${carrier.relativePath}: sub-domain origin rule is fail-closed; declare baseDomains and schemes together (found ${declared.join(', ')})`,
+      );
+    }
+    const baseDomains = splitOrigins(subdomainKeys.baseDomains ?? '');
+    for (const baseDomain of baseDomains) {
+      if (!DEFAULT_PRODUCT_BASE_DOMAINS.some((registered) => registered.toLowerCase() === baseDomain.toLowerCase())) {
+        errors.push(
+          `${carrier.relativePath}: ${CORS_SUBDOMAIN_HOST_ENV_KEYS.baseDomains} carries unregistered base domain ${baseDomain}`,
+        );
+      }
+    }
+    if (new Set(baseDomains).size !== baseDomains.length) {
+      errors.push(
+        `${carrier.relativePath}: ${CORS_SUBDOMAIN_HOST_ENV_KEYS.baseDomains} declares a duplicate base domain`,
+      );
+    }
+    for (const scheme of splitOrigins(subdomainKeys.schemes ?? '')) {
+      if (!SUPPORTED_SUBDOMAIN_SCHEMES.has(scheme.toLowerCase())) {
+        errors.push(
+          `${carrier.relativePath}: ${CORS_SUBDOMAIN_HOST_ENV_KEYS.schemes} carries unsupported scheme ${scheme}`,
+        );
+      }
     }
   }
 

@@ -55,6 +55,7 @@ Three layers exist, in this order. Only the first is in source config.
 | --- | --- | --- | --- |
 | 1 | Static exact allowlist | `SDKWORK_CORS_ALLOWED_ORIGINS` in `etc/topology/<profile>.<environment>.env`; the `[cors]` table of a gateway TOML | this spec §4 |
 | 2 | Registered console host pattern | `SDKWORK_CORS_CONSOLE_HOST_{LABELS,SUFFIX,SCHEMES,BASE_DOMAINS}` | this spec §5 |
+| 2.1 | Registered sub-domain rule (opt-in) | `SDKWORK_CORS_SUBDOMAIN_{BASE_DOMAINS,SCHEMES}`; the `[cors.registeredSubdomainHosts]` table of a gateway TOML | this spec §5.1 |
 | 3 | Runtime web CORS policy | `sdkwork-web-store-sqlx` migration `004_framework_cors_policy.sql` + admin API | `WEB_FRAMEWORK_SPEC.md` §12 |
 
 Layer 3 is a runtime data-plane override for operators; it `MUST NOT` be used to
@@ -216,6 +217,51 @@ Rules:
   surface labels (`-app`, `-admin`, `-open`) and any explicitly registered label.
   Duplicating a derived label by hand is drift.
 
+### 5.1 Registered Sub Domain Rule (Opt-In)
+
+The console pattern matches exactly one registered label per host. Some first-party
+browser surfaces are served on names that are not in the label registry:
+
+- an operator- or brand-chosen host (`platform.birdcoder.com`);
+- the apex of a registered domain (`sdkwork.com`);
+- a nested name (`region.console.sdkwork.com`).
+
+A platform validator cannot enumerate those names, and a missing entry blocks
+every browser write from that surface with `No 'Access-Control-Allow-Origin'
+header is present` or `Request header field <name> is not allowed by
+Access-Control-Allow-Headers in preflight response`. The **registered sub-domain
+rule** declares whole base domains trusted instead:
+
+```text
+SDKWORK_CORS_SUBDOMAIN_BASE_DOMAINS=<base>,…      # or [cors.registeredSubdomainHosts].baseDomains
+SDKWORK_CORS_SUBDOMAIN_SCHEMES=<http,https|https> # or [cors.registeredSubdomainHosts].schemes
+```
+
+An `Origin` matches when its scheme is one of `SCHEMES`, it carries no port,
+userinfo, path, query or fragment, and its host is either a listed base domain or
+a dot-anchored sub-domain of one, at **any** depth, with every label a valid DNS
+label.
+
+Rules:
+
+- The rule is **opt-in**: absent or empty `BASE_DOMAINS` keeps exact matching
+  only. It is an addition to §4 and §5, never a replacement.
+- Setting `BASE_DOMAINS` `MUST` be accompanied by `SCHEMES`; a partial set is
+  fail-closed at startup.
+- Every base domain `MUST` come from the registered base-domain registry (§3).
+  A policy that names any other domain `MUST` be rejected before the process
+  serves traffic, so a deployment can never widen CORS to a third-party domain.
+- The match is anchored on whole DNS labels: `evil-sdkwork.com`,
+  `notsdkwork.com` and `sdkwork.com.attacker.example` `MUST` stay rejected.
+- The runtime echoes the concrete `Origin` and keeps `Vary: Origin`; `*` is never
+  emitted, and credentials remain allowed.
+- The rule is only for a process that must accept **arbitrary first-party hosts**
+  of the organisation. A module that serves a known console `MUST` use the §5
+  pattern instead, because a host allow-list is never wider than it needs to be.
+- Production `MAY` include `http`: a mixed-content request is dropped by the
+  browser before it reaches the network, and an operator console that is
+  legitimately served over plain HTTP must still be able to preflight.
+
 ## 6. Carrier Contract Per Profile
 
 Every deployable root that declares a browser-facing surface in
@@ -337,7 +383,11 @@ hand-edit a label list in a carrier; the label list is derived.
 ## 9. Prohibited
 
 - Wildcard (`*`), regex, or suffix-matched origins; echoing an arbitrary
-  `Origin`; `Access-Control-Allow-Origin: *` with credentials.
+  `Origin`; `Access-Control-Allow-Origin: *` with credentials. The single
+  exception is the opt-in §5.1 registered sub-domain rule, which stays bounded by
+  the registered base-domain registry and still echoes the concrete origin.
+- A §5.1 base domain outside the registered registry, or a §5.1 policy that is
+  half-configured.
 - Path, query, fragment, port, or userinfo in an origin.
 - Loopback or internal dev-port origins in `test`/`staging`/`demo`/`production`.
 - Plain `http` console origins in production.
@@ -363,6 +413,9 @@ hand-edit a label list in a carrier; the label list is derived.
       references it from `_sdkwork:verify`, `verify`, or `check` (§8.1).
 - [ ] The platform gateway and any fleet-wide acceptor use §5 with complete key
       sets and production `SCHEMES=https`.
+- [ ] A process that must accept arbitrary first-party hosts (brand-chosen,
+      apex, or nested names) uses §5.1 with registered base domains and both
+      keys; every other module uses the exact §5 pattern.
 - [ ] `check-cors-standard` and `check-source-config-standard` pass for the
       workspace.
 - [ ] The workspace root `pnpm check:all` runs `check:cors-standard` and

@@ -23,7 +23,12 @@ import {
   splitOrigins,
 } from './registry.mjs';
 import { applyEnvUpdates, parseEnvDocument, rewriteEnvOrigins } from './env-file.mjs';
-import { expectedConsolePattern, isCanonicalCorsKey, profileFromFileName } from './scan.mjs';
+import {
+  expectedConsolePattern,
+  isCanonicalCorsKey,
+  isFragmentCarrierFileName,
+  profileFromFileName,
+} from './scan.mjs';
 
 /** Topology with two browser-facing surfaces and a materialised multi-base host list. */
 function demoTology() {
@@ -300,4 +305,22 @@ test('applyEnvUpdates reports no change when the file is already canonical', () 
   const text = 'SDKWORK_CORS_ALLOWED_ORIGINS=https://im.sdkwork.com\n';
   const { changed } = rewriteEnvOrigins(text, new Map([['SDKWORK_CORS_ALLOWED_ORIGINS', 'https://im.sdkwork.com']]));
   assert.equal(changed, false);
+});
+
+test('layered topology fragments are not profile carriers', () => {
+  // base.env / <profile>.base.env are inputs to materialize-topology-env.mjs;
+  // auditing them as profiles reported their file name as invalid forever.
+  for (const fragment of ['base.env', 'standalone.base.env', 'cloud.base.env']) {
+    assert.equal(isFragmentCarrierFileName(fragment), true, fragment);
+  }
+  for (const carrier of ['production.env', 'standalone.production.env', 'cloud.test.env', 'staging.env']) {
+    assert.equal(isFragmentCarrierFileName(carrier), false, carrier);
+  }
+});
+
+test('the opt-in sub-domain rule keys are canonical CORS keys', () => {
+  assert.ok(isCanonicalCorsKey('SDKWORK_CORS_SUBDOMAIN_BASE_DOMAINS'));
+  assert.ok(isCanonicalCorsKey('SDKWORK_CORS_SUBDOMAIN_SCHEMES'));
+  assert.ok(isCanonicalCorsKey('GATEWAY_CORS_SUBDOMAIN_BASE_DOMAINS'));
+  assert.ok(isCanonicalCorsKey('GATEWAY_CORS_SUBDOMAIN_SCHEMES'));
 });

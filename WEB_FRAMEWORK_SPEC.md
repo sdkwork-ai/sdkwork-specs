@@ -379,13 +379,18 @@ The framework enforces secure defaults without per-route business configuration:
   but `MUST NOT` need to; runtime assembly owns the merge.
 - The default CORS request-header allowlist `MUST` cover the SDKWork credential and protocol headers
   (`Authorization`, `Access-Token`, `Content-Type`, `Idempotency-Key`, `X-Content-SHA256`,
-  `X-Idempotency-Fingerprint`, `X-API-Key`, `X-SDKWork-Access-Token`) plus industry-common headers
+  `X-Idempotency-Fingerprint`, `X-API-Key`, `X-SDKWork-Access-Token`), the standard conditional
+  request headers of RFC 9110 §13 (`If-Match`, `If-None-Match`, `If-Modified-Since`,
+  `If-Unmodified-Since`), plus industry-common headers
   (`Accept`, `Accept-Language`, `Content-Language`, `X-Requested-With`, `X-Request-Id`,
   `X-Correlation-ID`, `X-Tenant-ID`, `X-Device-ID`, `X-Client-Version`, `X-App-Version`,
-  `X-Platform`, `Traceparent`, `Tracestate`), and `MUST` expose infrastructure response headers
-  (`X-Request-Id`, `X-SDKWork-Trace-Id`) via `Access-Control-Expose-Headers`. Development/test
-  policies `MAY` widen the preflight header gate to `*` so local surfaces never fail preflight when
-  the SDK grows a new request header; production validation `MUST` keep rejecting `*` headers.
+  `X-Platform`, `Traceparent`, `Tracestate`), and `MUST` expose infrastructure and conditional
+  response headers (`X-Request-Id`, `X-SDKWork-Trace-Id`, `ETag`, `Last-Modified`, `Location`,
+  `Retry-After`) via `Access-Control-Expose-Headers`. `ETag` is exposed because it is not a
+  CORS-safelisted response header: an optimistic-concurrency browser client cannot obtain the value
+  it must echo in `If-Match` without it. Development/test policies `MAY` widen the preflight header
+  gate to `*` so local surfaces never fail preflight when the SDK grows a new request header;
+  production validation `MUST` keep rejecting `*` headers.
 - The allowlist `MUST NOT` be widened to carry a custom header that duplicates a standard HTTP
   semantic. Locale negotiation is `Accept-Language` (`I18N_SPEC.md` section 4): a custom locale
   request header `MUST NOT` be added to any CORS policy, and a preflight failure `MUST` be fixed by

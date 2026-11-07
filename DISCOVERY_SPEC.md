@@ -85,8 +85,8 @@ Every RPC data-plane server that uses dynamic discovery `MUST` register with at 
 
 | Field | Requirement |
 | --- | --- |
-| `endpoint` | Published gRPC endpoint such as `grpcs://game.internal:50051` or approved loopback form in standalone dev. |
-| `protocol` | `grpc` for standard SDKWork RPC. |
+| `endpoint` | Published endpoint: `grpcs://game.internal:50051`, `https://api.example.com`, or an approved loopback form in standalone dev. |
+| `protocol` | `grpc` for SDKWork RPC, `http` for backend HTTP SDK base URLs (`DISCOVERY_SPEC.md` section 12.1). |
 | `version` | Service binary or contract release version. |
 | `status` | Reported serving status from the discovery common type model. |
 | `lease_ttl_seconds` | Lease duration used by renew loop. |
@@ -266,6 +266,86 @@ Rules:
 - Watch-driven cache refresh `SHOULD` be preferred over high-frequency polling.
 - Cross-namespace discovery `MUST` be explicit in resolver policy.
 
+### 12.1 Database-Backed HTTP Service Registry For Backend SDKs
+
+Backend Rust modules that call another SDKWork surface over HTTP resolve the
+base URL from the same registry. Environment-authored peer tables and per-call
+loopback derivation are no longer the production path.
+
+Registry records:
+
+- HTTP instances register with `protocol = http` and an absolute
+  `http(s)://host[:port]` `endpoint` (no trailing slash).
+- `service_name` `MUST` be the canonical service name **and** every SDK alias
+  that consumers use (for example `sdkwork-cloudrouter`, `cloudrouter`).
+- `instance_id` `MUST` be unique per process and port
+  (`<profile-id>:<hostname>:<port>`), so replicas and multi-port gateways
+  register distinct rows.
+- `metadata` `MUST` include `deployment_profile`, `runtime_target`, and
+  `gateway_environment` when the producer is a gateway.
+
+Registration lifecycle:
+
+- Registration is an idempotent upsert on
+  `(namespace, environment, service_name, instance_id)`. Repeated startup or a
+  replica race `MUST NOT` create duplicate rows.
+- A live instance `MUST` keep its lease id across re-registration; the lease
+  rotates only after expiry or deregistration.
+- The producer `MUST` renew the lease with a heartbeat at least three times per
+  lease TTL. A missed renewal beyond the lease `MUST` trigger re-registration or
+  process exit according to the deployment profile.
+- Graceful shutdown `MUST` deregister every leased service before the listener
+  stops.
+- Expired or soft-deleted rows are excluded from resolution. The discovery
+  control plane remains the authoritative reaper; a producer `MAY` run a bounded
+  producer-side sweep (for example the gateway's one-minute `reap_expired`) so
+  an embedded deployment without a control plane does not accumulate dead rows.
+
+Availability and QoS:
+
+- Every target `MUST` declare `status` (`serving`, `degraded`, `not_serving`),
+  `priority`, and `weight`. Discovery excludes `not_serving` and expired rows.
+- Consumers `MUST` prefer lower `priority`, then higher `weight`, then a stable
+  instance id.
+- Consumers `MUST` demote a target after a bounded number of consecutive
+  transport/protocol failures for a bounded cooldown, then prefer another
+  healthy instance. A success resets the failure streak.
+- Consumers `MUST` keep a last-known-good snapshot when a registry refresh
+  fails; a registry outage `MUST NOT` fail startup or erase working peers.
+- An operator `MAY` configure an active health probe
+  (`SDKWORK_DISCOVERY_HTTP_REGISTRY_HEALTH_PATH`, for example `/healthz`, plus
+  `SDKWORK_DISCOVERY_HTTP_REGISTRY_HEALTH_TIMEOUT_MS`). When set, each snapshot
+  refresh probes every target and applies the same failure threshold/cooldown; a
+  2xx resets the streak. Leaving the path unset keeps availability detection
+  failure-driven only. Probes are opt-in because not every HTTP surface exposes
+  a health path.
+
+Client precedence:
+
+1. explicit per-service override environment variable (split escape hatch);
+2. the target surface composed in-process (no HTTP base URL at all);
+3. a healthy instance selected from the registry (this section);
+4. the authored topology public HTTP URL;
+5. the documented split default — the degradation path when neither the
+   registry nor topology yields a value.
+
+Implementation contract:
+
+- The decision `MUST` remain in `sdkwork-utils-rust` module `service_base_url`;
+  the database-backed implementation lives in
+  `sdkwork-discovery-client` (`HttpRegistry`, `HttpRegistryResolver`).
+- Resolution `MUST` be synchronous and cache-first; a database round trip is
+  `MUST NOT` be added to a request path.
+- The composition root installs the resolver once during bootstrap. A second
+  installation is reported, never silently replaces the first.
+- `SDKWORK_DISCOVERY_HTTP_REGISTRY_ENABLED=false` disables the feature for
+  local/degraded runs; every other value keeps it enabled.
+- `SDKWORK_DISCOVERY_DATABASE_URL` selects a dedicated registry database; when
+  absent, `SDKWORK_DATABASE_URL` hosts the registry table. Every service in one
+  environment `MUST` point at the same registry database, otherwise discovery is
+  partitioned and peers cannot see each other.
+
+
 ## 13. Server Lifecycle
 
 Every discovery-enabled RPC data-plane host `MUST` implement:
@@ -316,6 +396,10 @@ Every discovery contract or runtime behavior change `MUST` verify:
 - [ ] RPC manifest covers every discovery service method.
 - [ ] Proto lint and breaking-change checks pass.
 - [ ] Registry upsert, lease renewal, expiration filtering, and idempotent deregistration tests pass.
+- [ ] HTTP registry registration is idempotent per `(namespace, environment, service_name, instance_id)`, keeps a live lease across re-registration, and expires after a missed heartbeat.
+- [ ] HTTP resolver precedence (explicit override > in-process > registry > authored URL > split default), failure demotion, cooldown, and last-known-good degradation tests pass.
+- [ ] The gateway registers every composed HTTP surface and SDK alias for each instance/port, and deregisters on graceful shutdown.
+- [ ] `node sdkwork-specs/tools/check-http-registry-resolution.mjs --workspace <root>` passes with an empty baseline: no backend HTTP SDK construction site bypasses the registry, and test-only stubs carry an explicit `registry:allow` marker.
 - [ ] Config draft validation, publish, effective resolution, and secret policy rejection tests pass.
 - [ ] Permission enforcement tests pass for registry and config operations.
 - [ ] Watch replay from `from_revision` and heartbeat behavior tests pass.
