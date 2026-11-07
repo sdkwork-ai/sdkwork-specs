@@ -123,9 +123,13 @@ const gatewayDependencyRoutesSource = readIfExists(
   'sdkwork-api-cloud-gateway/crates/sdkwork-api-cloud-gateway/src/embedded_dependency_routes.rs',
 );
 assert.ok(gatewayDependencyRoutesSource, 'sdkwork-api-cloud-gateway embedded dependency routes must exist');
+// e69f4c2 moved the gateway to the composed WebModule form; both entrypoints
+// are canonical sdkwork_api_iam_assembly initializations (API_ASSEMBLY_SPEC
+// §4.1.1). What the audit forbids is any adapter-side IAM bootstrap that
+// bypasses the owner assembly.
 assert.match(
   gatewayDependencyRoutesSource,
-  /sdkwork_api_iam_assembly::assemble_owner_api_surfaces_with_pool/u,
+  /sdkwork_api_iam_assembly::(?:assemble_owner_api_surfaces_with_pool|web_module_with_pool)/u,
   'sdkwork-api-cloud-gateway must initialize IAM through the canonical owner assembly before serving embedded routes.',
 );
 
