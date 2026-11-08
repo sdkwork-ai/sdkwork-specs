@@ -126,7 +126,10 @@ for (const file of files) {
 const infra = [
   ['sdkwork-utils/packages/sdkwork-utils-rust/src/service_base_url.rs', 'pub trait HttpServiceRegistry'],
   ['sdkwork-discovery/crates/sdkwork-discovery-client/src/registry.rs', 'uk_discovery_service_instance_identity'],
+  ['sdkwork-discovery/crates/sdkwork-discovery-client/src/selection.rs', 'pub enum LoadBalanceStrategy'],
+  ['sdkwork-discovery/crates/sdkwork-discovery-client/src/resolver.rs', 'select_target_with'],
   ['sdkwork-specs/DISCOVERY_SPEC.md', '### 12.1 Database-Backed HTTP Service Registry For Backend SDKs'],
+  ['sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md', '### 5.4 Backend SDK Call Framework'],
 ];
 const missingInfra = infra.filter(([file, marker]) => {
   const full = path.join(workspaceRoot, file);
@@ -149,6 +152,27 @@ if (missingStandaloneBootstrap.length > 0) {
     console.error(`  - ${file} is missing install_resolver_from_env`);
   }
   process.exit(1);
+}
+
+// The gateway must register its instance/port before it serves traffic, and
+// deregister on graceful shutdown.
+const gatewayMain = path.join(
+  workspaceRoot,
+  'sdkwork-api-cloud-gateway/crates/sdkwork-api-cloud-gateway/src/listener_main.rs',
+);
+if (existsSync(gatewayMain)) {
+  const content = readFileSync(gatewayMain, 'utf8');
+  const start = content.indexOf('ServiceRegistryRuntime::start');
+  const serve = content.indexOf('axum::serve');
+  const problems = [];
+  if (start < 0) problems.push('missing ServiceRegistryRuntime::start');
+  if (serve >= 0 && start > serve) problems.push('registration must run before axum::serve');
+  if (!content.includes('service_registry.shutdown')) problems.push('missing graceful deregistration');
+  if (problems.length > 0) {
+    console.error('Gateway startup registration contract is broken:');
+    for (const problem of problems) console.error(`  - listener_main.rs: ${problem}`);
+    process.exit(1);
+  }
 }
 
 if (missingInfra.length > 0) {

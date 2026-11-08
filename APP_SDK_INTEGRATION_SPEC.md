@@ -536,6 +536,60 @@ Rules:
   must not wait for admin organization or user pages to discover missing IAM routes through 404
   responses.
 
+### 5.4 Backend SDK Call Framework
+
+Every backend SDKWork HTTP SDK call `MUST` be made through a call framework that combines
+registry resolution, client pooling, load balancing, and result reporting. The reference
+implementation is `sdkwork-utils-rust::service_base_url` (resolution and reporting) +
+`sdkwork-discovery-client::HttpRegistryResolver` (database-backed targets) +
+`sdkwork-discovery-client::LoadBalanceStrategy`.
+
+Rules:
+
+- **Startup registration.** A process that owns an HTTP surface `MUST` register every
+  instance/port before serving traffic. The gateway binds the listener, registers every composed
+  surface and SDK alias, and only then builds the router (`DISCOVERY_SPEC.md` §12.1). Registration
+  is fail-open, but the attempt and its outcome `MUST` be logged.
+- **Per-call resolution.** A base URL resolved once at process startup `MUST NOT` be pinned for
+  the process lifetime when the target can change. Resolution happens per call or per request:
+  explicit override > in-process surface > healthy registry instance > authored topology URL >
+  split default. A long-lived adapter caches clients **by resolved base URL**, so a new target
+  creates/reuses a client for that URL instead of rewriting the only client.
+- **Client pooling.** Cache SDK clients keyed by resolved base URL (and credentials where the
+  generated client stores them per instance). Bound the cache (for example 64 entries for
+  per-user media clients, 16 for service-level clients). A pooled client is `Arc`-shared and
+  never mutated with another caller's credentials.
+- **Result reporting.** After a call, report success/failure for the exact base URL used. Report
+  transport failures; do not demote a target for a 4xx/5xx response that proves the target
+  answered. Success resets the failure streak.
+- **Load balancing.** `priority` is the QoS tier: every strategy spreads traffic only inside the
+  best admissible tier. Tier-internal strategies are `priority` (default), `round_robin`,
+  `random`, and `weighted_random`, selected by
+  `SDKWORK_DISCOVERY_HTTP_REGISTRY_LOAD_BALANCER`. Producers may set registration
+  `priority`/`weight` for canary/blue-green tiers.
+- **LAN endpoints.** Cluster registry endpoints `MUST` be LAN-reachable; public edge domains
+  `MUST NOT` be registered. External consumers use an explicit per-service override. The endpoint
+  `MUST` be auto-discovered by convention (private URL > advertise IP > private-preferred
+  interface > host name); a new replica must not require a per-service host/port table. IPv6
+  endpoints are bracketed.
+- **Per-call headers.** If a generated client stores request headers (trace id, per-call auth) on
+  the client object, that client `MUST NOT` be shared/pooled across calls; build it per call or use
+  a generator surface that accepts per-request headers. Pooling is only safe for clients whose
+  configuration is immutable across calls.
+- **Dialogue and media adapters.** Chat turns resolve the transport per turn
+  (`CloudRouterTurnTransport::resolve`). Media tools resolve the media client per invocation and
+  pool clients per `(base URL, auth token)` (`CloudRouterMediaClient`). Generations/media
+  gateways and the standalone image adapter resolve per SDK call and follow target changes.
+
+Verification:
+
+- `node sdkwork-specs/tools/check-http-registry-resolution.mjs --workspace .` must report zero
+  unbaselined bypasses and must find the gateway startup registration.
+- Adapter tests must prove two consecutive resolutions alternate targets when the registry
+  returns two healthy instances (chat and media).
+- Cross-process load balancing requires one shared registry database per environment; each
+  replica registers its own `instance_id`/port and LAN endpoint.
+
 ## 6. Frontend Service And Component Rules
 
 Frontend applications compose UI packages, services, SDK clients, IAM runtime, and host adapters.

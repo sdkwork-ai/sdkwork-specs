@@ -275,7 +275,19 @@ loopback derivation are no longer the production path.
 Registry records:
 
 - HTTP instances register with `protocol = http` and an absolute
-  `http(s)://host[:port]` `endpoint` (no trailing slash).
+  `http(s)://host[:port]` `endpoint` (no trailing slash). In cluster deployments
+  the endpoint `MUST` be a LAN-reachable address (authored private/LAN URL, an
+  explicit advertise IP, an auto-detected private-preferred interface, or the
+  host name). Public edge domains `MUST NOT` be registered: the registry serves
+  east-west traffic, and external consumers use an explicit per-service
+  override or the public edge.
+- Zero-config bootstrap is the default: the registry database reuses
+  `SDKWORK_DISCOVERY_DATABASE_URL` or the application `SDKWORK_DATABASE_URL`;
+  namespace defaults to `platform`; environment comes from
+  `SDKWORK_ENVIRONMENT` (or the gateway aliases) with the process runtime
+  environment as fallback; the endpoint is auto-discovered. A new backend
+  registers its service names and bound port; it must not require a per-service
+  host/port table. IPv6 endpoints `MUST` be bracketed (`http://[fd00::1]:8080`).
 - `service_name` `MUST` be the canonical service name **and** every SDK alias
   that consumers use (for example `sdkwork-cloudrouter`, `cloudrouter`).
 - `instance_id` `MUST` be unique per process and port
@@ -305,8 +317,18 @@ Availability and QoS:
 
 - Every target `MUST` declare `status` (`serving`, `degraded`, `not_serving`),
   `priority`, and `weight`. Discovery excludes `not_serving` and expired rows.
-- Consumers `MUST` prefer lower `priority`, then higher `weight`, then a stable
-  instance id.
+- `priority` is the QoS tier: every load-balancing strategy `MUST` restrict
+  traffic to the best admissible tier (lowest `priority`). Within that tier the
+  default strategy `MUST` prefer higher `weight`, then a stable instance id.
+- An operator `MAY` select the tier-internal strategy with
+  `SDKWORK_DISCOVERY_HTTP_REGISTRY_LOAD_BALANCER`:
+  `priority` (default: highest weight first), `round_robin`, `random`, or
+  `weighted_random` (`weight` is the relative probability). All strategies
+  `MUST` honor status, cooldown, and the priority tier.
+- A producer `MAY` configure its own registration `priority`/`weight` (the
+  gateway uses `SDKWORK_API_CLOUD_GATEWAY_REGISTRY_PRIORITY` and
+  `SDKWORK_API_CLOUD_GATEWAY_REGISTRY_WEIGHT`), so weighted strategies and
+  canary/blue-green tiers are operator-controlled.
 - Consumers `MUST` demote a target after a bounded number of consecutive
   transport/protocol failures for a bounded cooldown, then prefer another
   healthy instance. A success resets the failure streak.
@@ -334,6 +356,11 @@ Implementation contract:
 - The decision `MUST` remain in `sdkwork-utils-rust` module `service_base_url`;
   the database-backed implementation lives in
   `sdkwork-discovery-client` (`HttpRegistry`, `HttpRegistryResolver`).
+- The resolver `MUST` implement the configured load-balancing strategy without a
+  database round trip, and `MUST` keep strategy state (round-robin cursor,
+  random seed) process-local. The backend SDK call framework contract is
+  `APP_SDK_INTEGRATION_SPEC.md` §5.4: per-call resolution, base-URL-keyed client
+  pooling, result reporting, and LAN endpoints.
 - Resolution `MUST` be synchronous and cache-first; a database round trip is
   `MUST NOT` be added to a request path.
 - The composition root installs the resolver once during bootstrap. A second
