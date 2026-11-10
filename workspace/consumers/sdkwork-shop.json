@@ -1,6 +1,7 @@
 {
   "pnpm": {
     "packages": [
+      "../sdkwork-order/apps/sdkwork-order-common/packages/sdkwork-order-mobile-react-orders",
       "../sdkwork-app-topology",
       "../sdkwork-utils/packages/sdkwork-utils-typescript",
       "../sdkwork-catalog/sdks/sdkwork-catalog-app-sdk/sdkwork-catalog-app-sdk-typescript",
@@ -21,9 +22,11 @@
       "../sdkwork-iam/sdks/sdkwork-iam-open-sdk/sdkwork-iam-open-sdk-typescript",
       "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-credential-entry",
       "../sdkwork-appbase/packages/common/foundation/sdkwork-runtime-bootstrap",
+      "../sdkwork-appbase/packages/common/foundation/sdkwork-appbase-component-core",
       "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-appbase-pc-react",
       "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-i18n-pc-react",
-      "../sdkwork-ui/sdkwork-ui-pc-react"
+      "../sdkwork-ui/sdkwork-ui-pc-react",
+      "../sdkwork-ui/sdkwork-ui-mobile-react"
     ]
   },
   "catalog": {
