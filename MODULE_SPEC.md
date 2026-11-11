@@ -1,4 +1,4 @@
-﻿# Reusable Module Standard
+# Reusable Module Standard
 
 - Version: 1.0
 - Scope: reusable frontend/backend modules, appbase packages, service facades, extension points, module composition
@@ -133,6 +133,131 @@ Rules:
 - TypeScript modules use `src/index.ts` as the export boundary and typed SDK ports from `TYPESCRIPT_CODE_SPEC.md`.
 - Frontend modules keep UI, hooks, services, state, routes, and i18n separated according to `FRONTEND_CODE_SPEC.md`.
 
+## 4.2 Backend Module Call Boundary (In-Process First)
+
+Authority: this section. It applies to every Rust backend crate in a module repository (`crates/*/src`, `services/*/src`), and it overrides any local convenience adapter.
+
+### 4.2.1 The rule
+
+Every SDKWork packaged deployment runs **one backend process against one PostgreSQL**: the gateway process embeds every module (`integrated` topology), and each module's data lives in the same database. Therefore, when a backend module needs another SDKWork module's data or behavior, it `MUST` reach it **in-process**:
+
+- depend on the sibling module's contract/service/repository crate in `Cargo.toml` and call its public port, trait, or query API directly; or
+- if the shared behavior is only expressed as an HTTP handler today, move that behavior down into the layer both modules can depend on (`<module>-contract`, `<module>-service`, `<module>-repository-sqlx`) and call it directly from both sides.
+
+### 4.2.2 Forbidden
+
+- Reading an environment variable that addresses a sibling SDKWork module's HTTP surface from backend business code, and calling it with `reqwest`, `hyper`, or a generated HTTP client. Forbidden shapes include `SDKWORK_<MODULE>_BACKEND_API_*`, `SDKWORK_<MODULE>_OPEN_API_*`, `SDKWORK_<MODULE>_<NAME>_URL`, and module-scoped forms such as `APPSTORE_DRIVE_BASE_URL`, `SDKWORK_FORUM_DRIVE_URL`, `SDKWORK_DRIVE_FACADE_URL`.
+- Introducing a backend-to-backend adapter whose **default** mode is HTTP, or whose use depends on a service credential (`SDKWORK_ACCESS_TOKEN`, a shared secret) that the packaged deployment does not provision.
+- Treating a loopback origin (`http://127.0.0.1:<port>`) as "the same process". It is a separate socket hop with its own authentication, availability, timeout, and failure semantics, and it fails at request time — after business state has already changed.
+- Adding a new entry to a repository's `specs/backend-module-call-boundary.allow.json` without a written reason and a linked migration plan.
+
+### 4.2.3 Allowed exceptions
+
+Recorded in `specs/backend-module-call-boundary.allow.json` with a non-empty `reason`:
+
+- Calls to **external** providers (payment gateways, LLM/search vendors, push providers, OAuth/ACME endpoints, webhook receivers).
+- Calls made by **clients**: app SDKs, CLIs, agent tools, desktop/tauri hosts, browser runtimes that act as a client of the gateway.
+- A deliberate **split deployment** in which the sibling runs in another process or container. Such an adapter `MUST` default to the in-process mode, `MUST` require an explicit opt-in variable for HTTP, and `MUST` fail at startup — never at the first business request — when its credentials are missing.
+
+### 4.2.4 Why
+
+The boundary exists because of a production incident: the order module called the account module over loopback HTTP, required `SDKWORK_ACCESS_TOKEN`, and the deployment had neither the token nor an account HTTP service. Every coupon redemption returned `HTTP 500` **after** the coupon had already been consumed and the order had been marked paid. An in-process call cannot produce that class of failure: it shares the transaction and connection pool, cannot drift on auth or error mapping, and needs no deployment-time configuration.
+
+### 4.2.5 Verification
+
+```bash
+node sdkwork-specs/tools/check-backend-module-call-boundary.mjs --root <repo>
+node sdkwork-specs/tools/check-backend-module-call-boundary.mjs --workspace <workspace-root>
+```
+
+The check is deliberately narrow: it flags sibling-module endpoints read from non-client backend crates. It ignores external vendors, infrastructure endpoints (`database`, `redis`, `otel`, …), self-published URLs (`*_PUBLIC_*`, `*_REDIRECT_*`, `*_LOGIN_*`, JWKS/issuer), and client/tool/desktop crates.
+
+### 4.2.6 Known debt (migration in progress)
+
+The workspace audit at the time this rule was introduced found **46 backend-to-backend HTTP call sites across 16 repositories**. Thirteen are fixed (§4.2.6.1); **9 remain across 4 repositories** (§4.2.6.2). New code `MUST NOT` add to this list; each remaining item is a tracked migration, not a precedent.
+
+**Blocked upstream (drive)**: three migrations need additive Drive APIs that do not exist yet — they are why `canvas` page-content writes and `deployments` upload sessions currently fail closed instead of degrading:
+
+- `DriveUploadService::complete_stored_version(CompleteStoredVersionUploadCommand { tenant_id, space_id, node_id, storage_provider_id, bucket, object_key, content_type, content_length, checksum_sha256_hex, idempotency_key, operator_id }) -> Result<DriveNodeVersion, DriveServiceError>`
+- `SqlDriveNodeVersionStore::restore_version(tenant_id, node_id, version_id, operator_id) -> Result<DriveNodeVersion, DriveServiceError>`
+- `DriveUploadSessionService::{prepare,retrieve,complete,cancel}` callable with a `PgPool` (today finalisation lives only in the Drive route)
+- batch node+ACL lookup for course's material save (`resolve_node_access_batch(tenant, node_ids, subject)`), which removes the last N+1
+
+**Blocked upstream**: `sdkwork-feeds` → news needs `NewsPublishedItemQueryPort::list_published_items(limit) -> Vec<PublishedNewsItem>` on the shared pool (`WHERE status='published' AND archived_at IS NULL ORDER BY published_at DESC, priority ASC LIMIT $1`, item = `id, title, summary, author_name, featured, priority, published_at`). Until the news module exposes it, the news feed source stays unregistered by default.
+
+#### 4.2.6.1 Fixed
+
+| Repository | Target module(s) | What changed |
+| --- | --- | --- |
+| `sdkwork-order` | account | Adapter defaults to the in-process store; HTTP is an explicit, startup-validated opt-in. |
+| `sdkwork-order` | course | The periodic relay calls the course module's `CourseEntitlementGrantRepository` in-process on the shared pool; the URL/secret pair and `reqwest` were dropped from the service host. Idempotency (`purchase_ref` → enrollment idempotency key), batch size, interval and per-order error isolation preserved. |
+| `sdkwork-community` | membership, order | In-process ports on the shared pool by default (membership repository + `OrderManagementDetailQuery`); HTTP survives only in `commerce_http.rs` behind an explicit, startup-validated opt-in. |
+| `sdkwork-course` | drive | `InProcessDriveCoursePort` reproduces the drive route's tenant scope, active node/space, `reader` ACL, 30–300 s grant TTL and token signing; the HTTP adapter is opt-in only. |
+| `sdkwork-appstore` | drive, search, iam | In-process drive/search ports with the same tenant scoping and reader ACL; `APPSTORE_IAM_BASE_URL` was dead config and is deleted; the module now boots with **no** sibling endpoint configuration. |
+| `sdkwork-knowledgebase` | drive, memory | The drive HTTP transport was deleted outright (the embedded path already existed); memory defaults to `in_process` and `http` requires a valid base URL at bootstrap. |
+| `sdkwork-im` | portal, community | Both were false positives with a real smell behind them: the portal URL is the browser-visible origin injected into the PC shell (CSP/HTML), now resolved only from this process's own published origin; `embedded_dependency_routes.rs` **mounts** sibling routes and merely wrote `SDKWORK_FEEDS_COMMUNITY_OPEN_API_BASE_URL` so the feeds HTTP adapter could loop back — the read/write and the feeds dependency were deleted, community is called in-process. |
+| `sdkwork-feeds` | community, news | Community source reads `CommunitySqlxStore::list_feed` in-process on the shared pool with the same `approved_only`, stream-key filters, ordering and page clamp. **News is blocked**: no sibling published-item port exists, so no news adapter is registered by default and the exact port signature is recorded below. |
+| `sdkwork-forum` | drive, search | Drive reads and download grants in-process (`find_active_node`/`find_active_space` + `reader` ACL + 30–300 s grant TTL); search goes through `PostgresqlSearchProvider` with one shared payload DTO for both transports. `SDKWORK_FORUM_DRIVE_URL` was a logging no-op and is deleted; only search keeps an opt-in HTTP mode (`SDKWORK_FORUM_SEARCH_MODE=http`), validated at startup. |
+| `sdkwork-mail` | drive | In-process attachment port on the host pool: active node/space lookup plus the message owner's `reader` ACL, validated **before** the message row is written. Attachments are Drive node references, so there is no upload path to port. `SDKWORK_MAIL_DRIVE_MODE=http` is the only opt-in. |
+| `sdkwork-canvas` | drive | Port rewritten in-process: create via `DriveUploaderService::upload_bytes`, read/list via node-version + storage-object stores with `reader`/`writer` ACL, tenant quota, and chunked integrity-checked reads. **Page-content update/restore fail closed** pending the two Drive APIs recorded above. |
+| `sdkwork-deployments` | drive, knowledgebase | Website-root create/re-read, provider-event delivery and KB active-publication reads now run in-process on the host pool (KB's own store is `AnyPool`-only). The Drive **upload-session** finalisation has no Service-level API, so it is never a default: production-like profiles refuse to boot without an explicit HTTP opt-in. **[Superseded by the drive upload-session API — see `sdkwork-webserver` note.]** |
+| `sdkwork-webserver` | drive, knowledgebase | Website rendering reads Drive (`get_root` + resource resolution + ranged object reads with the same 304/412/416/integrity semantics) and KB's `KnowledgeWikiPublicProviderService` in-process; the three `deploy.*` URL fields were dead config and are deleted. Provider mode is an explicit opt-in (`SDKWORK_WEBSERVER_*_PROVIDER_MODE=http`), validated at startup. **Platform note**: this repository cannot be `cargo check --workspace`-verified on Windows — `data_plane/socket_activation.rs` and `protocol_pool.rs` use `std::os::unix` in baseline code; Linux CI is required for that gate. |
+
+#### 4.2.6.2 Remaining
+
+| Repository | Target module(s) | Endpoint variables |
+| --- | --- | --- |
+| `sdkwork-agents` | knowledgebase, memory | `SDKWORK_AGENTS_KNOWLEDGEBASE_BASE_URL`, `SDKWORK_AGENTS_MEMORY_BASE_URL` |
+| `sdkwork-browser` | llm | `BROWSER_AGENT_LLM_URL` |
+| `sdkwork-cloudrouter` | portal (edge runtime) | `SDKWORK_CLOUDROUTER_EDGE_PORTAL_BASE_URL` |
+| `sdkwork-notes` | drive | `SDKWORK_DRIVE_FACADE_URL` |
+
+Out of scope for this rule (governed elsewhere): RPC endpoints (`RPC_SPEC.md`), service discovery, observability exporters, and browser-bundle (`VITE_*`) URL hand-off.
+
+Remaining priority: `sdkwork-browser` (5, LLM runtime calls) and `sdkwork-agents` (2, knowledgebase/memory bridges) are next; `sdkwork-notes` (1) and the `sdkwork-cloudrouter` edge portal origin (1) follow.
+
+#### 4.2.7 Review checklist for an in-process migration
+
+A module that replaces a sibling HTTP call with an in-process port `MUST` be reviewed against this checklist before it is considered done.
+
+**Conformance**
+
+- [ ] No sibling endpoint variable is read on the default path; any remaining read sits in an explicitly named `*_http_adapter` module and is covered by an allowlist entry with a reason.
+- [ ] Library code has no `panic!`/`unwrap`/`expect` on a reachable path (`RUST_CODE_SPEC.md` §7).
+- [ ] Errors map to the same kinds as the HTTP path, so HTTP status codes do not change.
+- [ ] Tenant and organization scoping is preserved and comes from the request context, not from an environment default.
+- [ ] Authorization checks the sibling route performed are reproduced by calling the sibling's own permission service — never re-implemented.
+- [ ] Idempotency keys, batch sizes, intervals, timeouts and retry bounds are unchanged or stricter.
+- [ ] Public API paths, response envelopes and permission requirements are unchanged.
+- [ ] `Cargo.toml` uses workspace dependencies, declares `[lib].name` when the package name has a hyphen, and commits the regenerated `Cargo.lock`.
+
+**Cohesion and coupling**
+
+- [ ] The port lives in the layer that owns the decision (service or host composition), not inside a route handler or a bootstrap function.
+- [ ] Business rules did not move into the adapter; the adapter only translates and delegates.
+- [ ] No duplicated DTO mapping: the outbound HTTP DTO and the in-process DTO are not both maintained for the same concept.
+- [ ] Dead configuration is deleted (env vars, topology entries, k8s manifests, runbooks, component specs), not left "just in case".
+- [ ] The new crate follows the existing adapter family's shape (for example `sdkwork-order-integration-<target>`), rather than inventing a second pattern.
+
+**Performance**
+
+- [ ] The in-process path reuses the host connection pool; it does not open a second pool for one call.
+- [ ] No per-item round trip where a set-based query is possible (no N+1 on batch paths).
+- [ ] New queries have a supporting index or an existing one; capture the `EXPLAIN` for the main query.
+- [ ] A heavyweight dependency is not pulled in for a single call: if the sibling crate drags native/TLS/SDK builds, consider depending on its narrower contract/repository crate.
+- [ ] Batch sizes and page limits stay bounded, and a failure cannot stall the worker loop.
+
+**Verification**
+
+```bash
+cargo check --workspace
+cargo test -p <touched crates>
+node sdkwork-specs/tools/check-backend-module-call-boundary.mjs --root <repo>
+node sdkwork-specs/tools/check-rust-crate-naming-standard.mjs --root <repo>
+node sdkwork-specs/tools/check-rust-manifest-standard.mjs --root <repo>
+node sdkwork-specs/tools/check-rust-backend-composition.mjs --root <repo>
+```
+
 ## 5. SDK Client Port Injection
 
 Reusable modules separate what changes from what stays stable:
@@ -259,4 +384,5 @@ Each reusable module `MUST` include:
 - [ ] Standalone/cloud variation and runtime-target variation are hidden behind runtime/bootstrap.
 - [ ] Extension points are explicit.
 - [ ] Module tests use fake or generated SDK clients.
+- [ ] Backend crates reach sibling modules in-process; no sibling-module HTTP endpoint is read from backend code (`MODULE_SPEC.md` §4.2).
 - [ ] README documents integration and verification.
