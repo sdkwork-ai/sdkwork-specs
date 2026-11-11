@@ -925,6 +925,23 @@ Forbidden:
 - Repository crates depending on HTTP framework/request context crates.
 - Member Cargo manifests declaring sibling SDKWork source `path` dependencies instead of
   `{ workspace = true }`.
+- **Backend code calling another SDKWork module over HTTP instead of in-process.** No
+  `reqwest`/`ureq`/`hyper` client, no generated sibling SDK client, and no
+  `SDKWORK_<MODULE>_*_URL`/`_ORIGIN` read may appear in a backend crate to reach a sibling
+  module's `app`/`backend`/`internal`/`open` API surface. Call the sibling's
+  contract/service/repository port through a normal Cargo dependency, on the shared pool.
+  A loopback origin is not "the same process": it is a separate socket hop with its own
+  authentication and its own failure timing. This is normative in `MODULE_SPEC.md` §4.2
+  (rule, allowed exceptions, review checklist in §4.2.7) and is **gated** by:
+
+  ```bash
+  node <sdkwork-specs>/tools/check-backend-module-call-boundary.mjs --workspace <workspace-root>
+  ```
+
+  The only permitted exceptions are external providers, client/tool/desktop crates, and a
+  genuine split deployment recorded with a written reason in
+  `<repo>/specs/backend-module-call-boundary.allow.json`; such an adapter must default to
+  in-process and fail at **startup** when its opt-in configuration is missing.
 - App-local upload/provider logic that bypasses Drive Uploader.
 - Treating a route manifest, path constant, or OpenAPI document as proof that a dependency API is
   mounted in the current Rust runtime.

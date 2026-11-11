@@ -174,16 +174,19 @@ The check is deliberately narrow: it flags sibling-module endpoints read from no
 
 ### 4.2.6 Known debt (migration in progress)
 
-The workspace audit at the time this rule was introduced found **46 backend-to-backend HTTP call sites across 16 repositories**. Thirteen are fixed (§4.2.6.1); **9 remain across 4 repositories** (§4.2.6.2). New code `MUST NOT` add to this list; each remaining item is a tracked migration, not a precedent.
+The workspace audit at the time this rule was introduced found **46 backend-to-backend HTTP call sites across 16 repositories**. **All are resolved**: sixteen repository/target groups migrated to in-process calls (§4.2.6.1) and two endpoint groups are **recorded exceptions** with written reasons (§4.2.6.2). `check-backend-module-call-boundary.mjs --workspace` reports **0 violations**. New code `MUST NOT` add to either list.
 
-**Blocked upstream (drive)**: three migrations need additive Drive APIs that do not exist yet — they are why `canvas` page-content writes and `deployments` upload sessions currently fail closed instead of degrading:
+**Open functional decisions** (not boundary violations, but surfaced by this migration):
 
-- `DriveUploadService::complete_stored_version(CompleteStoredVersionUploadCommand { tenant_id, space_id, node_id, storage_provider_id, bucket, object_key, content_type, content_length, checksum_sha256_hex, idempotency_key, operator_id }) -> Result<DriveNodeVersion, DriveServiceError>`
-- `SqlDriveNodeVersionStore::restore_version(tenant_id, node_id, version_id, operator_id) -> Result<DriveNodeVersion, DriveServiceError>`
-- `DriveUploadSessionService::{prepare,retrieve,complete,cancel}` callable with a `PgPool` (today finalisation lives only in the Drive route)
-- batch node+ACL lookup for course's material save (`resolve_node_access_batch(tenant, node_ids, subject)`), which removes the last N+1
+- **`sdkwork-browser` LLM** — **decided**: an audit found no completion implementation in `sdkwork-llm` at all (`impl LanguageModelPort for` count = 0; `OpenLlmService` holds only a store; provider endpoint/secret/model columns are never read or written; provider adapters are explicitly "Phase 2" in the architecture doc). An in-process provider therefore cannot exist today, so the browser agent **keeps HTTP as its default** for the LLM call — with startup validation — and that endpoint is a **recorded exception**, not a migration. `=in_process` stays as the opt-in for when a provider lands.
+- **`sdkwork-feeds` news** — **resolved**: the news module now exposes `list_published_items(tenant_id, limit)` and the feeds news source registers in-process by default (schema probe), with HTTP only as an explicit opt-in.
+- **`sdkwork-canvas` restore**: drive's `restore_version` flips version lifecycle without advancing the node head, so the canvas pointer guard still answers 500.
+- **`sdkwork-appstore` build cost** — **capability delivered, adoption pending**: `drive-object-runtime` now has `backend-fs` / `backend-s3` features; a metadata-only consumer that opts out of `backend-s3` drops from 1025 to 659 `cargo tree` lines (−366 packages). Adopting that requires changing the **consumer** manifests (appstore, notes, canvas, webserver, deployments), which is outside this repository's boundary work.
 
-**Blocked upstream**: `sdkwork-feeds` → news needs `NewsPublishedItemQueryPort::list_published_items(limit) -> Vec<PublishedNewsItem>` on the shared pool (`WHERE status='published' AND archived_at IS NULL ORDER BY published_at DESC, priority ASC LIMIT $1`, item = `id, title, summary, author_name, featured, priority, published_at`). Until the news module exposes it, the news feed source stays unregistered by default.
+**Resolved upstream blockers** (kept as a record of what the migration needed):
+
+- **Drive** — delivered: `DriveUploadService::complete_stored_version(...)`, `SqlDriveNodeVersionStore::restore_version(...)`, `DriveUploadSessionService::{prepare,retrieve,complete,cancel}` callable with a `PgPool` (route logic moved down, not duplicated), `SqlDrivePermissionService::resolve_node_access_batch(...)`, and an `object-runtime` feature split (`backend-fs` / `backend-s3`) that cuts a metadata-only consumer by **366 packages** (1025 → 659).
+- **News** — delivered: `list_published_items(tenant_id, limit)` (internal, tenant-scoped) and `list_published_items_public(limit)` (the public open surface, cross-tenant by design) on one port; the open route now delegates to it, and `sdkwork-feeds` registers the news source in-process by default (schema probe).
 
 #### 4.2.6.1 Fixed
 
@@ -202,19 +205,19 @@ The workspace audit at the time this rule was introduced found **46 backend-to-b
 | `sdkwork-canvas` | drive | Port rewritten in-process: create via `DriveUploaderService::upload_bytes`, read/list via node-version + storage-object stores with `reader`/`writer` ACL, tenant quota, and chunked integrity-checked reads. **Page-content update/restore fail closed** pending the two Drive APIs recorded above. |
 | `sdkwork-deployments` | drive, knowledgebase | Website-root create/re-read, provider-event delivery and KB active-publication reads now run in-process on the host pool (KB's own store is `AnyPool`-only). The Drive **upload-session** finalisation has no Service-level API, so it is never a default: production-like profiles refuse to boot without an explicit HTTP opt-in. **[Superseded by the drive upload-session API — see `sdkwork-webserver` note.]** |
 | `sdkwork-webserver` | drive, knowledgebase | Website rendering reads Drive (`get_root` + resource resolution + ranged object reads with the same 304/412/416/integrity semantics) and KB's `KnowledgeWikiPublicProviderService` in-process; the three `deploy.*` URL fields were dead config and are deleted. Provider mode is an explicit opt-in (`SDKWORK_WEBSERVER_*_PROVIDER_MODE=http`), validated at startup. **Platform note**: this repository cannot be `cargo check --workspace`-verified on Windows — `data_plane/socket_activation.rs` and `protocol_pool.rs` use `std::os::unix` in baseline code; Linux CI is required for that gate. |
+| `sdkwork-browser` | llm | LLM calls moved behind an explicit adapter. **Final state: HTTP is the default** because `sdkwork-llm` has no in-process completion implementation at all (see the decision below); `=in_process` is the opt-in and fails with an actionable message when no provider is injected. Startup validation guarantees no request-time 500 once an LLM path is enabled; rules mode still boots endpoint-free. Allowlisted with the Phase-2 reason. |
+| `sdkwork-agents` | knowledgebase, memory | Both bridges moved to ports: in-process on the host pool, HTTP adapters extracted to `http_adapter.rs` and selected only by an explicit mode variable; result limits/ordering, tenant scoping and error kinds preserved. |
+| `sdkwork-notes` | drive | Drive access split into adapters: `drive_in_process` (create via `upload_bytes`, ranged reads with integrity checks, `reader`/`writer` ACL, quota) plus an opt-in `drive_http_adapter`; the page-content mapping is shared rather than duplicated. |
 
 #### 4.2.6.2 Remaining
 
 | Repository | Target module(s) | Endpoint variables |
 | --- | --- | --- |
-| `sdkwork-agents` | knowledgebase, memory | `SDKWORK_AGENTS_KNOWLEDGEBASE_BASE_URL`, `SDKWORK_AGENTS_MEMORY_BASE_URL` |
-| `sdkwork-browser` | llm | `BROWSER_AGENT_LLM_URL` |
-| `sdkwork-cloudrouter` | portal (edge runtime) | `SDKWORK_CLOUDROUTER_EDGE_PORTAL_BASE_URL` |
-| `sdkwork-notes` | drive | `SDKWORK_DRIVE_FACADE_URL` |
+| _(none)_ | — | — |
+
+`sdkwork-cloudrouter` is **not** a violation: its `edge-runtime` is a separate edge process that terminates public traffic and proxies the gateway / backend-api / app-api / portal surfaces upstream. That is the §4.2.3 split-deployment exception, recorded with a written reason for each of its four upstream variables in `sdkwork-cloudrouter/specs/backend-module-call-boundary.allow.json`.
 
 Out of scope for this rule (governed elsewhere): RPC endpoints (`RPC_SPEC.md`), service discovery, observability exporters, and browser-bundle (`VITE_*`) URL hand-off.
-
-Remaining priority: `sdkwork-browser` (5, LLM runtime calls) and `sdkwork-agents` (2, knowledgebase/memory bridges) are next; `sdkwork-notes` (1) and the `sdkwork-cloudrouter` edge portal origin (1) follow.
 
 #### 4.2.7 Review checklist for an in-process migration
 

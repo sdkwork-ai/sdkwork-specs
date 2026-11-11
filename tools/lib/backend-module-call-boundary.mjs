@@ -1,4 +1,4 @@
-// Backend module call boundary (MODULE_SPEC.md §4.2).
+﻿// Backend module call boundary (MODULE_SPEC.md §4.2).
 //
 // A SDKWork backend module MUST reach a sibling module in-process (a Cargo
 // dependency on its service/contract/repository port), never through that
@@ -148,6 +148,36 @@ const ALLOWLIST_FILE_NAMES = [
 
 const ENV_READ = /env::var(?:_os)?\(\s*"([A-Z0-9_]+)"\s*\)/g;
 const ENDPOINT_LITERAL = /"([A-Z][A-Z0-9_]*_(?:BASE_URL|URL|ORIGIN|ENDPOINT|BASEURI))"/g;
+
+/**
+ * Second detection mode: backend code that speaks a sibling module's HTTP
+ * surface directly instead of only reading an endpoint variable. It fires when
+ * one file both builds an outbound HTTP client and names a sibling API surface.
+ * Route crates are excluded — they *serve* those paths.
+ */
+const OUTBOUND_CLIENT = /reqwest::Client|ureq::(?:agent|get|post)|hyper::Client|hyper_util::client/;
+const SIBLING_SURFACE_PATH = /\/(?:app|backend|internal|open)\/v3\/api\//;
+const GENERATED_SDK_CLIENT =
+  /use\s+sdkwork_[a-z0-9_]+_sdk\b|SdkworkAppClient::|SdkworkBackendClient::|sdkwork_[a-z0-9_]+_sdk::[A-Za-z]*Client/;
+
+/** Crates that serve a surface rather than call one. */
+const ROUTE_CRATE_PATTERN = /-routes-/;
+
+/**
+ * Crates that are clients of the platform, not backends: desktop/mobile hosts,
+ * CLIs, generated SDK wrappers, and client-local bridges. They legitimately
+ * speak HTTP to the gateway, so mode 2 does not scan them.
+ */
+const CLIENT_SIDE_CRATE_PATTERN = /-(bridge|client|cli|desktop|tauri|tool|tools|tool-[a-z0-9-]+)$/;
+
+/**
+ * Synthetic "endpoint" names reported by the second detection mode. They let an
+ * allowlist entry target one detection shape (`"envVar": "(inline surface path)"`
+ * or `"(generated sdk client)"`), while the documented file-scoped entry — the
+ * one without `envVar` — covers both. A written reason is still required.
+ */
+const INLINE_SURFACE_ENV_VAR = '(inline surface path)';
+const GENERATED_SDK_ENV_VAR = '(generated sdk client)';
 
 const SKIPPED_DIR_NAMES = new Set(['node_modules', 'target', 'external', 'dist', 'build']);
 
@@ -371,5 +401,65 @@ export function validateBackendModuleCallBoundary(repoRoot) {
       }
     }
   }
+  // Second mode: backend code that speaks a sibling HTTP surface directly
+  // (an outbound client plus a sibling API path, or a generated SDK client).
+  for (const { crateDir, srcDir } of candidateCrateDirs(repoRoot)) {
+    if (
+      isClientCrate(crateDir) ||
+      ROUTE_CRATE_PATTERN.test(path.basename(crateDir)) ||
+      CLIENT_SIDE_CRATE_PATTERN.test(path.basename(crateDir))
+    ) {
+      continue;
+    }
+    const files = [];
+    walkRustFiles(srcDir, files);
+    for (const file of files) {
+      const relativeFile = path.relative(repoRoot, file).replace(/\\/g, '/');
+      if (relativeFile.includes('/tests/') || relativeFile.endsWith('/tests.rs')) {
+        continue;
+      }
+      const source = fs.readFileSync(file, 'utf8');
+      const cfg = source.search(/#\[cfg\(test\)\]/);
+      const body = cfg < 0 ? source : source.slice(0, cfg);
+      if (!OUTBOUND_CLIENT.test(body)) {
+        continue;
+      }
+      const surface = body.match(SIBLING_SURFACE_PATH);
+      if (surface) {
+        // The same allowlist contract as the env-var mode: a deliberate
+        // exception is recorded in the repository's
+        // `backend-module-call-boundary.allow.json`. Opt-in split-deployment
+        // adapters live in an explicit `*_http_adapter` module and are
+        // recorded file-scoped (no `envVar`) with a written reason.
+        if (!isAllowed(allowlist, relativeFile, INLINE_SURFACE_ENV_VAR, 'sibling')) {
+          issues.push({
+            file: relativeFile,
+            line: 1,
+            envVar: INLINE_SURFACE_ENV_VAR,
+            module: 'sibling',
+            message:
+              `${relativeFile}: builds an outbound HTTP client and names ${surface[0]} — ` +
+              'backend code must call the sibling module in-process (MODULE_SPEC.md §4.2)',
+          });
+        }
+        continue;
+      }
+      if (
+        GENERATED_SDK_CLIENT.test(body) &&
+        !isAllowed(allowlist, relativeFile, GENERATED_SDK_ENV_VAR, 'sibling')
+      ) {
+        issues.push({
+          file: relativeFile,
+          line: 1,
+          envVar: GENERATED_SDK_ENV_VAR,
+          module: 'sibling',
+          message:
+            `${relativeFile}: constructs or imports a sibling generated SDK client — ` +
+            'backend code must call the sibling module in-process (MODULE_SPEC.md §4.2)',
+        });
+      }
+    }
+  }
+
   return issues;
 }

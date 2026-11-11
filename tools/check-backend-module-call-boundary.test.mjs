@@ -135,3 +135,122 @@ test('the CLI exits 1 on a violation and 0 when clean', () => {
     cleanup(clean);
   }
 });
+
+// Second detection mode: an outbound HTTP client plus a sibling API surface, or
+// a generated sibling SDK client, in non-client/non-route backend code.
+const OUTBOUND_SURFACE_SOURCE = [
+  'pub async fn upload() {',
+  '    let client = reqwest::Client::new();',
+  '    let _ = client.post("http://drive/app/v3/api/drive/upload_sessions/x/complete");',
+  '}',
+].join('\n');
+
+const GENERATED_SDK_SOURCE = [
+  'use sdkwork_drive_app_sdk_generated_rust::SdkworkAppClient;',
+  'pub fn build() -> SdkworkAppClient {',
+  '    let _http = reqwest::Client::new();',
+  '    SdkworkAppClient::new("http://drive")',
+  '}',
+].join('\n');
+
+test('second mode flags an outbound client that names a sibling API surface', () => {
+  const root = createRepo({
+    crateName: 'sdkwork-appstore-service-host',
+    source: OUTBOUND_SURFACE_SOURCE,
+  });
+  try {
+    const issues = validateBackendModuleCallBoundary(root);
+    assert.equal(issues.length, 1);
+    assert.equal(issues[0].envVar, '(inline surface path)');
+    assert.match(issues[0].message, /\/app\/v3\/api\//);
+    assert.match(issues[0].message, /in-process/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('second mode flags a generated sibling SDK client', () => {
+  // The generated-SDK shape is evaluated inside the outbound-client gate, which
+  // is how the Drive/Notes adapters report it: they construct the generated app
+  // client and also build a reqwest client for presigned uploads.
+  const root = createRepo({
+    crateName: 'sdkwork-api-canvas-assembly',
+    source: GENERATED_SDK_SOURCE,
+  });
+  try {
+    const issues = validateBackendModuleCallBoundary(root);
+    assert.equal(issues.length, 1);
+    assert.equal(issues[0].envVar, '(generated sdk client)');
+    assert.match(issues[0].message, /generated SDK client/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('route crates and client crates are not scanned by the second mode', () => {
+  const routeCrate = createRepo({
+    crateName: 'sdkwork-cloudrouter-routes-admin',
+    source: OUTBOUND_SURFACE_SOURCE,
+  });
+  const clientCrate = createRepo({
+    crateName: 'sdkwork-agents-tool-cloudrouter',
+    source: OUTBOUND_SURFACE_SOURCE,
+  });
+  try {
+    assert.deepEqual(validateBackendModuleCallBoundary(routeCrate), []);
+    assert.deepEqual(validateBackendModuleCallBoundary(clientCrate), []);
+  } finally {
+    cleanup(routeCrate);
+    cleanup(clientCrate);
+  }
+});
+
+test('a file-scoped allowlist entry covers the second mode', () => {
+  const file = 'crates/sdkwork-appstore-service-host/src/lib.rs';
+  const source = OUTBOUND_SURFACE_SOURCE;
+  const fileScoped = createRepo({
+    crateName: 'sdkwork-appstore-service-host',
+    source,
+    allowlist: [
+      {
+        file,
+        reason: 'explicit HTTP opt-in, default is in-process, startup-validated',
+      },
+    ],
+  });
+  // An entry that pins an env var must not silently cover the inline-surface
+  // shape: that would let one migration hide an unrelated call site.
+  const envVarScoped = createRepo({
+    crateName: 'sdkwork-appstore-service-host',
+    source,
+    allowlist: [
+      {
+        file,
+        envVar: 'APPSTORE_DRIVE_BASE_URL',
+        reason: 'opt-in split deployment; the default mode is in-process',
+      },
+    ],
+  });
+  try {
+    assert.deepEqual(validateBackendModuleCallBoundary(fileScoped), []);
+    assert.equal(validateBackendModuleCallBoundary(envVarScoped).length, 1);
+  } finally {
+    cleanup(fileScoped);
+    cleanup(envVarScoped);
+  }
+});
+
+test('a file-scoped allowlist entry still needs a written reason', () => {
+  const root = createRepo({
+    crateName: 'sdkwork-appstore-service-host',
+    source: GENERATED_SDK_SOURCE,
+    allowlist: [
+      { file: 'crates/sdkwork-appstore-service-host/src/lib.rs', reason: '   ' },
+    ],
+  });
+  try {
+    assert.equal(validateBackendModuleCallBoundary(root).length, 1);
+  } finally {
+    cleanup(root);
+  }
+});
