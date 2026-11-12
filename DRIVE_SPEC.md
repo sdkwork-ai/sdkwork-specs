@@ -446,7 +446,65 @@ Rules:
 - Rust services `MUST NOT` build object keys, create Drive upload sessions directly, maintain part facts, call storage providers directly, write app-local files as durable SDKWork content, or call Drive App API over HTTP when they can depend on the Drive server-side uploader service.
 - External non-Rust services that cannot link the Drive server-side uploader service may use Drive App API or an approved generated Drive SDK, but they still follow the same attribution, profile, retention, and business-reference rules.
 
-### 9.2 Attribution And Statistics
+### 9.2 Cross-Module Content Storage Through Rust Crates
+
+A Rust backend module that owns non-Drive business content but stores bytes in Drive
+(`sdkwork-documents`, `sdkwork-knowledgebase`, CMS media, generated artifacts) `MUST`
+integrate Drive by linking the Drive Rust crates in-process instead of calling Drive HTTP
+APIs. The same-process crate boundary is the canonical integration path.
+
+Required crates:
+
+```rust
+sdkwork_drive_workspace_service   // spaces, nodes, uploader service/store
+sdkwork_drive_object_runtime      // storage provider resolution and object store
+sdkwork_drive_config              // Drive database configuration
+sdkwork_drive_storage_contract    // object store contract
+```
+
+Rules:
+
+- The consuming module `MUST` create a dedicated Drive PostgreSQL pool from the same
+  database URL through a Drive-owned bootstrap helper, install the Drive schema, and keep
+  that pool separate from its own pool. It `MUST NOT` issue raw SQL against `dr_*` tables,
+  and `MUST NOT` assume the Drive schema is installed by another process.
+- Standalone/local deployments `MUST` seed an active Drive storage provider (the
+  `local_filesystem` provider for the module bucket) through the same bootstrap path;
+  cloud deployments `MUST` resolve an existing active provider. A missing or inactive
+  provider fails the write rather than falling back to app-local files.
+- Space creation `MUST` use `SqlDriveSpaceService` with a typed `DriveSpaceType`; a module
+  that owns a dedicated content space declares its own type (for example `documents`) and
+  persists the returned space id in its own metadata. It `MUST NOT` reuse `personal` or
+  invent space ids outside the Drive contract.
+- File and folder creation `MUST` use `SqlDriveWorkspaceService::ensure_nodes` with
+  `DriveWorkspaceObjectRef` values produced by the Drive uploader/object store. Object keys,
+  buckets, part facts, and provider credentials `MUST NOT` be constructed by the consuming
+  module.
+- Byte upload `MUST` use `DriveUploaderService::upload_bytes` (or an approved profile
+  helper) with `PrepareUploaderUploadCommand`. `UploaderTarget::Space` requires a validated
+  target space; `UploaderTarget::AutoUploadSpace` is the default when the module has no
+  dedicated space.
+- Every upload `MUST` carry tenant, `app_id`, `app_resource_type`, `app_resource_id`,
+  actor, profile, retention, and operator attribution. Business modules persist only the
+  returned Drive node id, space id, content version, content type, and checksum.
+- Reads `MUST` resolve the Drive node through `SqlDriveWorkspaceService` and stream bytes
+  through the Drive object store. A module `MUST NOT` open the provider bucket directly,
+  trust a client-supplied node id without tenant scoping, or expose stored object keys.
+- The consuming module `MUST NOT` call `/app/v3/api/drive/*` or any Drive HTTP surface from
+  the same Rust backend when the crates above can be linked. HTTP is reserved for external
+  non-Rust callers and for clients that cannot share the process boundary.
+- Publishing `MUST` be transactional in the business database and idempotent in Drive:
+  re-publishing replaces the node content through a new uploader task and bumps the
+  stored content version; a failed Drive write leaves the previous published revision
+  intact and returns a typed error.
+- Deleting business content `MUST` delete or trash the Drive node through the Drive
+  service boundary in the same operation or a recorded cleanup job. Orphaned Drive nodes
+  are not an acceptable steady state.
+- Cross-module Drive access is a trusted backend boundary. The consuming module `MUST`
+  derive the tenant from its verified request context, never from a request body or
+  projection header, and must scope every Drive query by that tenant.
+
+### 9.3 Attribution And Statistics
 
 Every Drive Uploader task must be attributable across these dimensions:
 
@@ -465,7 +523,7 @@ Every Drive Uploader task must be attributable across these dimensions:
 
 Usage, quota, billing, tenant reports, user reports, and product analytics should aggregate from Drive uploader facts, not app-local counters. Application domains may keep denormalized read models for query performance, but Drive remains the source of truth for upload lifecycle and statistics.
 
-### 9.3 Resumability, Retention, And Cleanup
+### 9.4 Resumability, Retention, And Cleanup
 
 Resumable upload is a Drive Uploader capability. The SDK may compute `fileFingerprint`, `taskId`, checksum, content type, original filename, `chunkSizeBytes`, and local progress state, but Drive owns task and part facts.
 
@@ -490,7 +548,7 @@ temporary
 
 Temporary retention must include TTL and cleanup behavior such as soft delete, hard delete, and optional second-stage hard-delete timing. Maintenance jobs such as `expired_upload_content_sweep` and `abandoned_upload_task_sweep` own cleanup. Automatic soft delete or hard delete must write audit records and `dr_drive_file_sensitive_operation` snapshots.
 
-### 9.4 Upload Space Ownership
+### 9.5 Upload Space Ownership
 
 Drive Uploader uses the business display name `Upload`; the persisted Drive space type remains `app_upload` for generic application uploads. When the normalized upload `scene` is `im`, Drive Uploader must use the business display name `IM` and persisted Drive space type `im`.
 
@@ -860,7 +918,7 @@ These rules exist because unconstrained naming has already produced conflicting 
 - Format: lowercase kebab-case, ASCII letters, digits, and `-` only.
 - `scene` names the workflow, not the file type and not the profile: `deployment-package`, `chat-message`, `catalog-image`, `admin-import`.
 - `scene` `MUST NOT` be dynamically composed from a user-supplied value or from an unbounded enum. A per-kind suffix is allowed only when the kind set is closed and enumerated elsewhere in the application contract, and even then a fixed scene plus a separate dimension is preferred.
-- Reserved scenes owned by Drive: `im` (section 9.4). An application `MUST NOT` declare or send `scene = im`.
+- Reserved scenes owned by Drive: `im` (section 9.5). An application `MUST NOT` declare or send `scene = im`.
 
 `uploadProfileCode`:
 
