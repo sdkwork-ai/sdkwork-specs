@@ -140,6 +140,21 @@ module route on that session, with no path to recovery except re-login.
   into the session query that already runs.
 - An epoch advance `MUST` cost at most one re-resolution per session, not per
   request, and `MUST` not synchronize the fleet.
+- A module manifest shipped in the bundle `MUST` be materialized without editing
+  a hand-maintained enable list; `optionalModules` is the only opt-out. A module
+  whose routes the application serves `MUST NOT` stay optional
+  (`IAM_MODULE_MANIFEST_SPEC.md` section 1).
+
+### 3.9 Declared route permissions are enforced
+
+- A route manifest that declares a required permission `MUST` produce an
+  enforced route guard. A code generator that renders routes from a manifest
+  `MUST` propagate `auth.permission`; dropping it turns a permission-gated
+  route into an authentication-only route and is an authorization bypass.
+- Enforcement `MUST` use the shared matcher (3.5) so a `*` or `{domain}.*`
+  grant does not require catalog pre-expansion.
+- Verification: `node tools/check-permission-guard-standard.mjs --workspace
+  <space-root>` fails a generator that drops the declared permission.
 
 ## 4. Performance Budget
 

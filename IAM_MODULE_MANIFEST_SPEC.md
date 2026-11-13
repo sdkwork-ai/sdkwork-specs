@@ -17,7 +17,28 @@ Applications may additionally ship:
 iam/registry/iam-registry.config.json
 ```
 
-## 1. Top-Level Shape
+## 1. Module Discovery
+
+A module manifest that ships in the bundle `MUST` be materialized on startup
+without editing a hand-maintained enable list; a new module therefore reaches
+existing sessions through the authorization epoch without a user re-login
+(`AUTHORIZATION_STATE_SPEC.md` 3.4 and 3.8).
+
+- `iam/modules/<moduleId>/iam.module.manifest.json` present in the bundle is
+  enabled by default.
+- `optionalModules` names shipped modules that stay disabled; listing one of
+  them in `enabledModules` opts it back in.
+- `enabledModules` remains the explicit intent record and is unioned with the
+  discovered manifests.
+- Discovery `MUST` be deterministic (sorted, deduplicated) and `MUST` fail
+  startup when a discovered manifest cannot be read or parsed.
+- A module whose routes are served by the application MUST NOT be left in
+  `optionalModules`; silently shipping a served module without its catalog is a
+  defect, not a deployment choice.
+
+Verification: `node <sdkwork-specs>/tools/check-authz-state-standard.mjs --root <iam-root>`.
+
+## 2. Top-Level Shape
 
 ```json
 {
@@ -55,7 +76,7 @@ Rules:
 - `catalogVersion` follows semantic versioning for catalog-breaking changes.
 - `dependencies.requiresModules` must form an acyclic graph.
 
-## 2. Permission Entries
+## 3. Permission Entries
 
 ```json
 {
@@ -76,7 +97,7 @@ Rules:
 - `deprecated` entries must set `replacementCode` unless an approved governance exception exists.
 - Retired permissions must not appear in new role grants.
 
-## 3. Role Entries
+## 4. Role Entries
 
 ### 3.1 Platform standard roles
 
@@ -158,7 +179,7 @@ Rules:
 - Seed profiles must distinguish dev/test demo users from production owner or operator subjects.
 - Bootstrap defaults must not replace runtime role binding authorization; they only initialize known subjects for an environment profile.
 
-## 4. Component Registration
+## 5. Component Registration
 
 `component.spec.json` `contracts` should include:
 
@@ -166,7 +187,7 @@ Rules:
 "iamModuleManifest": "specs/iam.module.manifest.json"
 ```
 
-## 5. Validation Rules
+## 6. Validation Rules
 
 | Id | Rule |
 | --- | --- |

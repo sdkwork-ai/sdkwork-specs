@@ -165,6 +165,57 @@ if (matcher) {
   );
 }
 
+// Module auto-load: a shipped manifest materializes without a hand-maintained
+// enable list (AUTHORIZATION_STATE_SPEC 3.8, IAM_MODULE_MANIFEST_SPEC 1).
+const discoverPath = 'crates/sdkwork-iam-module-registry/src/discover.rs';
+const discover = read(discoverPath);
+if (discover) {
+  expect(
+    discover.includes('pub fn enabled_module_ids'),
+    `${discoverPath}: discovers shipped module manifests automatically`,
+  );
+  expect(
+    discover.includes('pub fn discover_registry_modules'),
+    `${discoverPath}: materialization uses registry auto-discovery`,
+  );
+  expect(
+    discover.includes('optional_modules'),
+    `${discoverPath}: optional modules remain an explicit opt-out`,
+  );
+}
+const registryManifestPath = 'crates/sdkwork-iam-module-registry/src/manifest.rs';
+const registryManifest = read(registryManifestPath);
+if (registryManifest) {
+  expect(
+    registryManifest.includes('optional_modules') && registryManifest.includes('optionalModules'),
+    `${registryManifestPath}: registry config models optionalModules`,
+  );
+}
+const materializePath = 'crates/sdkwork-iam-module-registry/src/materialize.rs';
+const materialize = read(materializePath);
+if (materialize) {
+  expect(
+    !materialize.includes('discover_modules(&root, &config.enabled_modules)'),
+    `${materializePath}: materialization no longer restricts to the hand-maintained enable list`,
+  );
+}
+const registryConfigPath = 'iam/registry/iam-registry.config.json';
+try {
+  const registryConfig = JSON.parse(
+    fs.readFileSync(path.join(root, registryConfigPath), 'utf8'),
+  );
+  expect(
+    Array.isArray(registryConfig.optionalModules),
+    `${registryConfigPath}: declares optionalModules (opt-out only)`,
+  );
+  expect(
+    registryConfig.optionalModules.length === 0,
+    `${registryConfigPath}: no shipped module is silently disabled`,
+  );
+} catch {
+  failures.push(`missing or invalid registry config: ${registryConfigPath}`);
+}
+
 if (values.json) {
   process.stdout.write(`${JSON.stringify({ ok: failures.length === 0, passes, failures }, null, 2)}\n`);
 } else {
