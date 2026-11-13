@@ -215,19 +215,72 @@ function sourcePermissionLiterals() {
 
 const sourceLiterals = sourcePermissionLiterals();
 
+/**
+ * Permissions enforced by hand-written Rust route manifests and handler guards
+ * (`with_required_permission`, `authenticated_actor`, `require_permission`).
+ * Machine-readable route manifests are authoritative, but many applications
+ * still build their route tables in Rust.
+ */
+function rustEnforcedPermissions() {
+  const enforced = new Map();
+  const patterns = [
+    /\.with_required_permission\(\s*"([a-z][a-z0-9_]*\.[a-z0-9_.]+)"\s*\)/g,
+    /authenticated_actor\(\s*&[^,]+,\s*"([a-z][a-z0-9_]*\.[a-z0-9_.]+)"\s*\)/g,
+    /require_permission\(\s*&?[A-Za-z0-9_.]+,\s*"([a-z][a-z0-9_]*\.[a-z0-9_.]+)"\s*\)/g,
+    /required_permission\s*[:=]\s*Some\(\s*"([a-z][a-z0-9_]*\.[a-z0-9_.]+)"\s*\)/g,
+  ];
+  const walk = (dir, repo) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const absolute = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === 'target' || entry.name === 'tests' || entry.name === 'generated') continue;
+        walk(absolute, repo);
+      } else if (entry.isFile() && entry.name.endsWith('.rs')) {
+        const source = fs.readFileSync(absolute, 'utf8').split(/(?:^|\n)#\[cfg\(test\)\]/)[0];
+        for (const pattern of patterns) {
+          for (const match of source.matchAll(pattern)) {
+            if (!enforced.has(match[1])) enforced.set(match[1], new Set());
+            enforced
+              .get(match[1])
+              .add(`${repo}:${path.basename(absolute)}`);
+          }
+        }
+      }
+    }
+  };
+  for (const entry of fs.readdirSync(workspace, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith('sdkwork-')) continue;
+    for (const crateDir of ['crates', 'services']) {
+      walk(path.join(workspace, entry.name, crateDir), entry.name);
+    }
+  }
+  return enforced;
+}
+
+const rustEnforced = rustEnforcedPermissions();
+
 const report = [];
 for (const [code, moduleId] of [...permissions.entries()].sort(([a], [b]) => a.localeCompare(b))) {
   // `*` is the break-glass grant itself, not a capability.
   if (code === '*') continue;
   const covering = coveringRoles(code);
   const operations = [...(routes.get(code) ?? [])];
+  const rustGuards = [...(rustEnforced.get(code) ?? [])];
+  const enforced = operations.length > 0 || rustGuards.length > 0;
   if (values['uncovered-only'] && covering.length > 0) continue;
   report.push({
     code,
     moduleId,
     covering,
     enforcedBy: operations.slice(0, 4),
-    enforced: operations.length > 0,
+    rustGuards: rustGuards.slice(0, 4),
+    enforced,
     referencedBy: [...(sourceLiterals.get(code) ?? [])].slice(0, 4),
   });
 }
