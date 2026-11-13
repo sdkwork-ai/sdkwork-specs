@@ -126,7 +126,10 @@ for (const repo of listRepos()) {
     collectRustFiles(path.join(repoRoot, crateDir), files);
   }
   for (const andFile of files) {
-    const source = fs.readFileSync(andFile, 'utf8');
+    const rawSource = fs.readFileSync(andFile, 'utf8');
+    // Unit tests legitimately build literal scopes; a generated test module is
+    // conventionally appended, so scan only the production portion.
+    const source = rawSource.split(/(?:^|\n)#\[cfg\(test\)\]/)[0];
     scanned.push(relative(repo, andFile));
 
     // 1. Declared permission predicates: fn has_permission(...) { ... }
@@ -187,6 +190,59 @@ for (const repo of listRepos()) {
           kind: 'route-manifest-permission-dropped',
           message:
             'route generator deserializes auth.mode but never emits with_required_permission, so declared permissions are not enforced (AUTHORIZATION_STATE_SPEC 3.9)',
+        });
+      }
+    }
+
+    // 5. Literal `matches!` allow-lists of permission codes (the pattern that
+    //    ignored * and *.read in provider execution).
+    if (source.includes('permission_scope')) {
+      for (const match of source.matchAll(/matches!\s*\(/g)) {
+        const open = source.indexOf('(', match.index);
+        let depth = 0;
+        let end = open;
+        for (let index = open; index < source.length; index += 1) {
+          if (source[index] === '(') depth += 1;
+          if (source[index] === ')') {
+            depth -= 1;
+            if (depth === 0) {
+              end = index + 1;
+              break;
+            }
+          }
+        }
+        const call = source.slice(open, end);
+        const hasPermissionLiteral = /"[a-z][a-z0-9_]*\.[a-z0-9_.]+"/.test(call);
+        if (!hasPermissionLiteral) continue;
+        if (hasMatcher(call)) continue;
+        const line = source.slice(0, match.index).split('\n').length;
+        findings.push({
+          file: relative(repo, andFile),
+          line,
+          kind: 'literal-permission-allowlist',
+          message:
+            'matches! allow-list of permission codes bypasses wildcard grants; authorize each required code with the shared matcher (AUTHORIZATION_STATE_SPEC 3.5)',
+        });
+      }
+    }
+
+    // 6. Hand-rolled matchers: equality between a permission-like identifier and
+    //    a literal code, outside a delegated matcher.
+    if (/permission/i.test(source)) {
+      for (const match of source.matchAll(
+        /([A-Za-z_][A-Za-z0-9_.]*)\s*==\s*"([a-z][a-z0-9_]*\.[a-z0-9_.]+)"/g,
+      )) {
+        const identifier = match[1].toLowerCase();
+        if (!/(permission|scope|grant)/.test(identifier)) continue;
+        const contextWindow = source.slice(Math.max(0, match.index - 160), match.index + 160);
+        if (hasMatcher(contextWindow)) continue;
+        const line = source.slice(0, match.index).split('\n').length;
+        findings.push({
+          file: relative(repo, andFile),
+          line,
+          kind: 'literal-permission-equality',
+          message:
+            'hand-rolled permission matcher compares a literal code; delegate to the shared wildcard matcher (AUTHORIZATION_STATE_SPEC 3.5)',
         });
       }
     }
