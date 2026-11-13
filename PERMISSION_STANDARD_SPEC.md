@@ -139,6 +139,23 @@ Authoritative implementations:
 
 UI `can()` checks are hints only. Server enforcement is mandatory.
 
+### Session Authorization State
+
+The `permissionScope` produced by the pipeline is a **versioned snapshot of
+current authorization state**, never a login-time frozen grant.
+
+- It `MUST` be re-resolved from current role bindings, role grants, catalog, and
+  exclusions whenever the authorization epoch advances.
+- The access token `MUST NOT` embed the expanded scope; the credential proves
+  identity and session validity only.
+- Grant patterns (`*`, `{domain}.*`, `*.{action}`) `MUST` be evaluated with
+  `permission_matches` / `permission_scope_matches_any`, not by string equality.
+- Shipping a new permission code or module `MUST NOT` require users to log in
+  again.
+
+Normative contract, epoch advancement rules, cache/TTL bounds, scale budgets,
+and required conformance tests: `AUTHORIZATION_STATE_SPEC.md`.
+
 ## OpenAPI Extensions
 
 | Extension | Meaning |
