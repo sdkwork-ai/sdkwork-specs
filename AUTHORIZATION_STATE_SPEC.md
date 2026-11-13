@@ -212,6 +212,11 @@ Enforcement: `node tools/check-authz-state-standard.mjs --root .` rejects a
 workspace that reintroduces a login-time-only authorization snapshot or removes
 the epoch contract.
 
+Reachability: `node tools/audit-permission-reachability.mjs --workspace <root>
+--fail-on-uncovered-enforced` fails when a route-enforced permission code has no
+grant a non-break-glass role can hold; the same report lists catalogued codes
+that only break-glass `*` can reach.
+
 ## 8. Reviewer Checklist
 
 - Does the change add a permission code? Existing sessions must authorize it
