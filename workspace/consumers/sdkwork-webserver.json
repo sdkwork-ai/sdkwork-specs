@@ -3,6 +3,7 @@
     "packages": [
       "../sdkwork-app-topology",
       "../sdkwork-appbase/packages/common/foundation/sdkwork-runtime-bootstrap",
+      "../sdkwork-appbase/packages/common/foundation/sdkwork-appbase-component-core",
       "../sdkwork-appbase/packages/mobile-react/foundation/sdkwork-appbase-mobile-react",
       "../sdkwork-appbase/packages/mobile-react/foundation/sdkwork-shell-mobile-react",
       "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-appbase-pc-react",
@@ -47,6 +48,7 @@
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-permission",
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-tenant",
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-user",
+      "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-official-accounts",
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-console-cloud-account",
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-console-core",
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-react",
