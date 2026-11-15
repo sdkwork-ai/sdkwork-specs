@@ -48,6 +48,7 @@
       "../sdkwork-appbase/packages/pc-react/integration/*",
       "../sdkwork-appbase/packages/pc-react/notification/sdkwork-notification-pc-react",
       "../sdkwork-appbase/sdks/sdkwork-base-data-backend-sdk/sdkwork-base-data-backend-sdk-typescript",
+      "../sdkwork-appstore/sdks/sdkwork-appstore-backend-sdk/sdkwork-appstore-backend-sdk-typescript",
       "../sdkwork-assets/apps/sdkwork-assets-common/packages/sdkwork-assets-core",
       "../sdkwork-assets/apps/sdkwork-assets-pc/packages/*",
       "../sdkwork-assets/sdks/sdkwork-assets-app-sdk/sdkwork-assets-app-sdk-typescript",
