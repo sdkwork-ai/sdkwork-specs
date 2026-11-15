@@ -149,6 +149,7 @@
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-permission",
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-tenant",
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-user",
+      "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-mini-program",
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-official-accounts",
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-react",
       "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-user-center-core-pc-react",
