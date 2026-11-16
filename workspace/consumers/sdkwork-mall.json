@@ -5,6 +5,7 @@
       "../sdkwork-account/sdks/sdkwork-account-app-sdk/sdkwork-account-app-sdk-typescript",
       "../sdkwork-account/sdks/sdkwork-account-backend-sdk/sdkwork-account-backend-sdk-typescript",
       "../sdkwork-order/apps/sdkwork-order-common/packages/*",
+      "../sdkwork-order/apps/sdkwork-order-common/packages/sdkwork-order-mobile-react-orders",
       "../sdkwork-order/sdks/sdkwork-order-app-sdk/sdkwork-order-app-sdk-typescript",
       "../sdkwork-order/sdks/sdkwork-order-backend-sdk/sdkwork-order-backend-sdk-typescript",
       "../sdkwork-membership/apps/sdkwork-membership-common/packages/*",
