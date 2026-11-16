@@ -101,6 +101,8 @@
       "../sdkwork-community/sdks/sdkwork-community-backend-sdk/sdkwork-community-backend-sdk-typescript",
       "../sdkwork-core/sdkwork-core-pc-react",
       "../sdkwork-course/sdks/sdkwork-course-backend-sdk/sdkwork-course-backend-sdk-typescript",
+      "../sdkwork-deployments/sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript",
+      "../sdkwork-deployments/sdks/sdkwork-deployments-backend-sdk/sdkwork-deployments-backend-sdk-typescript",
       "../sdkwork-documents/apps/sdkwork-documents-pc/packages/sdkwork-documents-pc-admin-documents",
       "../sdkwork-documents/apps/sdkwork-documents-pc/packages/sdkwork-documents-pc-api-reference",
       "../sdkwork-documents/apps/sdkwork-documents-pc/packages/sdkwork-documents-pc-commons",
