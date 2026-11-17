@@ -505,11 +505,28 @@ Rules:
 - A module that both serves end users and owns a background/worker path `MUST` keep the two
   identity sources separate: request-scoped identity for user turns, and an explicitly declared
   service identity — never a borrowed end-user token — for background work.
+- **The typed credential carrier is the shared component.** The web framework injects
+  `sdkwork_utils_rust::caller_identity::CallerCredentials` (the verified dual tokens) as a request
+  extension beside `WebRequestContext` at the ContextInjection stage; `WebRequestContext` itself
+  carries presence flags only and is never a token container. An outbound adapter extracts that
+  extension and applies it with `apply_typed` / `apply` / `wire_headers`; a module `MUST NOT`
+  re-derive identity from raw request headers per site, and `MUST NOT` read a process
+  `*_ACCESS_TOKEN` / `*_AUTH_TOKEN` environment value for a user-scoped hop. A generated client that
+  carries per-call headers `MUST` be built per call, or cached by `(base URL, credential
+  fingerprint)` — never mutated on a pooled instance. A genuinely background/bootstrap-only path
+  `MUST` declare `identity:service <justification>` in the source so the exception is reviewable.
+- **Wire order.** When a generated client exposes typed setters, set the `Access-Token` first and the
+  `Authorization` bearer last; generated clients clean up a stale API-key header inside
+  `set_access_token` and only the token setters leave both halves of the pair on the wire.
 
 Verification: `node <sdkwork-specs>/tools/check-embedded-self-loop.mjs --workspace <workspace-root>`
 `MUST` pass, including its backend-source inspection for loopback base-URL derivation. Repository
 verification `MUST` also fail when a Rust module derives an outbound base URL from its own
-ingress/bind variable.
+ingress/bind variable. `node <sdkwork-specs>/tools/check-http-registry-resolution.mjs --workspace
+<workspace-root>` `MUST` pass and `MUST` fail a registry-resolved SDK construction site that applies
+no caller identity, or that reads a process access/auth token environment value, unless it declares
+`identity:service <justification>`. Known migration debt is tracked in that checker with a per-site
+removal plan and reported as warnings, never as a silent pass.
 
 ### 5.3 Appbase Backend IAM Runtime Rule
 

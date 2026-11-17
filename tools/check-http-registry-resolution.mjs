@@ -101,6 +101,7 @@ if (existsSync(cratesRoot)) {
 
 const violations = [];
 const baselined = [];
+const registryCandidates = [];
 
 for (const file of files) {
   let content;
@@ -115,7 +116,10 @@ for (const file of files) {
   // baseline entry and carries no production authority.
   if (content.includes('registry:allow')) continue;
   const name = relative(file);
-  if (REGISTRY_MARKERS.some((marker) => content.includes(marker))) continue;
+  if (REGISTRY_MARKERS.some((marker) => content.includes(marker))) {
+    registryCandidates.push({ name, content });
+    continue;
+  }
   if (BASELINED.has(name)) {
     baselined.push(name);
   } else {
@@ -123,12 +127,117 @@ for (const file of files) {
   }
 }
 
+// APP_SDK_INTEGRATION_SPEC.md §5.2.1: a registry-resolved hop that acts on
+// behalf of an end user MUST carry that caller's dual tokens. A bypass is only
+// acceptable with one of the two reviewable in-file markers:
+//   - a caller-identity carrier / setter (`CallerCredentials`,
+//     `set_auth_token`, `set_access_token`, `missing_caller_identity`), or
+//   - `identity:service <justification>` for a genuinely background/worker or
+//     bootstrap-only path that is allowed an explicitly declared service
+//     identity (never a borrowed end-user token).
+const CALLER_IDENTITY_MARKERS = [
+  'CallerCredentials',
+  'caller_credentials',
+  'missing_caller_identity',
+  'set_auth_token',
+  'set_access_token',
+];
+const SERVICE_IDENTITY_MARKER = 'identity:service';
+
+// A direct process-credential read inside a registry-resolved call site is the
+// substitution §5.2.1 forbids on a user-scoped path. Indirect reads (a const
+// name passed to `env::var`) still need review; this heuristic catches the
+// explicit form the known debt uses.
+const PROCESS_TOKEN_ENV =
+  /env::var\(\s*"[A-Z0-9_]*(?:ACCESS|AUTH)_TOKEN[A-Z0-9_]*"\s*\)/u;
+// Indirect read through a `const ..._ACCESS_TOKEN_ENV` name (the same
+// substitution with one more indirection).
+const PROCESS_TOKEN_CONST = /const [A-Z0-9_]*ACCESS_TOKEN[A-Z0-9_]*_ENV\s*:/u;
+
+// Known §5.2.1 debt, reviewed 2026-11-18. Each entry names the destination
+// surface and what the migration must do; the entry is removed in the change
+// that fixes the site. Never add an entry without a date and a removal plan.
+const IDENTITY_BASELINE = new Map([
+  [
+    'sdkwork-aiot/crates/sdkwork-aiot-intelligence-bridge/src/cloud_router.rs',
+    'device speech turn uses the process cloudrouter key; carry the device session identity (tenant/organization/user) in SpeechTurnInput and apply the caller pair',
+  ],
+  [
+    'sdkwork-canvas/crates/sdkwork-api-canvas-assembly/src/service/drive_http_adapter.rs',
+    'drive app-api call sets only a process SDKWORK_ACCESS_TOKEN (no Authorization); thread CallerCredentials from the canvas write handler and build the client per call',
+  ],
+  [
+    'sdkwork-course/crates/sdkwork-course-embedded-bootstrap/src/adapters/drive_sdk.rs',
+    'drive app-api call sets only a process SDKWORK_ACCESS_TOKEN (no Authorization); add the caller pair to CourseServiceContext and drop the env requirement',
+  ],
+  [
+    'sdkwork-deployments/crates/sdkwork-deploy-web-port/src/lib.rs',
+    'deployment web port uses a process API key; decide caller identity vs declared service identity and declare it explicitly',
+  ],
+  [
+    'sdkwork-generations/crates/sdkwork-generations-provider-adapter/src/gateway.rs',
+    'media provider reads process GENERATIONS_MEDIA_GATEWAY_AUTH_TOKEN/ACCESS_TOKEN and pools clients by base URL only; thread the caller pair through MediaSdkGateway and pool by (base URL, credential fingerprint)',
+  ],
+  [
+    'sdkwork-image/crates/sdkwork-image-generation-provider-adapter/src/adapter.rs',
+    'image provider uses a process API key; thread the caller pair to the provider boundary and keep the key only for the background poller',
+  ],
+  [
+    'sdkwork-knowledgebase/crates/sdkwork-knowledgebase-agent-provider/src/cloud_router.rs',
+    'user chat turn uses the process cloudrouter key; build the client per turn from the caller pair and keep the key on the embedding path',
+  ],
+  [
+    'sdkwork-notes/crates/sdkwork-api-notes-assembly/src/service/drive_http_adapter.rs',
+    'drive app-api call sets only a process SDKWORK_ACCESS_TOKEN (no Authorization); thread CallerCredentials from the notes write handler and build the client per call',
+  ],
+  [
+    'sdkwork-voice/crates/sdkwork-voice-embedded-bootstrap/src/bootstrap.rs',
+    'voice speech generation uses a process API key; carry the caller pair once the route is wired',
+  ],
+  [
+    'sdkwork-webserver/crates/sdkwork-api-webserver-standalone-gateway/src/website_provider_http_adapter.rs',
+    'website provider adapter uses a process API key; thread caller identity through the website request path or declare the service identity',
+  ],
+  [
+    'sdkwork-webserver/crates/sdkwork-api-webserver-standalone-gateway/src/website_runtime_cloud.rs',
+    'website runtime cloud client uses a process API key; thread caller identity through the website request path or declare the service identity',
+  ],
+  [
+    'sdkwork-webserver/crates/sdkwork-webserver-agent/src/main.rs',
+    'control-plane bootstrap client; declare the service identity explicitly (identity:service) or thread the caller pair',
+  ],
+]);
+
+const identityViolations = [];
+const identityBaselined = [];
+for (const { name, content } of registryCandidates) {
+  if (content.includes(SERVICE_IDENTITY_MARKER)) continue;
+  const carriesIdentity = CALLER_IDENTITY_MARKERS.some((marker) =>
+    content.includes(marker),
+  );
+  const substitutesProcessToken =
+    PROCESS_TOKEN_ENV.test(content) || PROCESS_TOKEN_CONST.test(content);
+  if (carriesIdentity && !substitutesProcessToken) continue;
+  if (IDENTITY_BASELINE.has(name)) {
+    identityBaselined.push(name);
+    continue;
+  }
+  identityViolations.push({
+    name,
+    reason: substitutesProcessToken
+      ? 'reads a process ACCESS/AUTH token env for a registry-resolved call'
+      : 'applies no caller identity to a registry-resolved call',
+  });
+}
+
 const infra = [
   ['sdkwork-utils/packages/sdkwork-utils-rust/src/service_base_url.rs', 'pub trait HttpServiceRegistry'],
+  ['sdkwork-utils/packages/sdkwork-utils-rust/src/caller_identity.rs', 'pub struct CallerCredentials'],
   ['sdkwork-discovery/crates/sdkwork-discovery-client/src/registry.rs', 'uk_discovery_service_instance_identity'],
   ['sdkwork-discovery/crates/sdkwork-discovery-client/src/selection.rs', 'pub enum LoadBalanceStrategy'],
   ['sdkwork-discovery/crates/sdkwork-discovery-client/src/resolver.rs', 'select_target_with'],
   ['sdkwork-specs/DISCOVERY_SPEC.md', '### 12.1 Database-Backed HTTP Service Registry For Backend SDKs'],
+  ['sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md', '### 5.2.1 Caller-Identity Propagation Through Backend SDK Calls'],
   ['sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md', '### 5.4 Backend SDK Call Framework'],
 ];
 const missingInfra = infra.filter(([file, marker]) => {
@@ -201,6 +310,28 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
+if (identityViolations.length > 0) {
+  console.error(
+    `[error] ${identityViolations.length} registry-resolved SDK call site(s) do not carry caller identity (APP_SDK_INTEGRATION_SPEC.md section 5.2.1):`,
+  );
+  for (const violation of identityViolations) {
+    console.error(`  - ${violation.name}: ${violation.reason}`);
+  }
+  console.error(
+    'Thread the caller dual tokens through sdkwork_utils_rust::caller_identity::CallerCredentials (Authorization bearer + Access-Token) instead of process credentials, or annotate a genuinely background/bootstrap-only path with `identity:service <justification>`.',
+  );
+  process.exit(1);
+}
+
+if (identityBaselined.length > 0) {
+  console.warn(
+    `[warn] ${identityBaselined.length} registry-resolved call site(s) still owe caller-identity propagation (tracked, removal plan in this file):`,
+  );
+  for (const name of identityBaselined) {
+    console.warn(`  - ${name}: ${IDENTITY_BASELINE.get(name)}`);
+  }
+}
+
 console.log(
-  `HTTP registry resolution gate passed (${files.length} Rust files scanned, ${baselined.length} baselined).`,
+  `HTTP registry resolution gate passed (${files.length} Rust files scanned, ${baselined.length} baselined, ${registryCandidates.length} registry-resolved sites, ${registryCandidates.length - identityViolations.length - identityBaselined.length} aligned, ${identityBaselined.length} tracked).`,
 );
