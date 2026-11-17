@@ -2,9 +2,9 @@
 
 - Version: 1.2
 - Scope: standalone/cloud application deployment profiles, Java Spring, Rust backend, HTTP/RPC runtime bootstrap, frontend bootstrap, environment config
-- Related: `APPLICATION_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `CONFIG_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `ENVIRONMENT_SPEC.md`, `REGION_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `RELEASE_SPEC.md`, `API_SPEC.md`, `RPC_SPEC.md`, `RPC_FRAMEWORK_SPEC.md`, `DISCOVERY_SPEC.md`, `RPC_RESILIENCE_SPEC.md`, `RUST_RPC_SPEC.md`, `APP_RUNTIME_TOPOLOGY_SPEC.md`, `SDK_SPEC.md`, `IAM_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `SDKWORK_WEBSERVER_SPEC.md`
+- Related: `APPLICATION_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md`, `CONFIG_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `ENVIRONMENT_SPEC.md`, `REGION_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `RELEASE_SPEC.md`, `API_SPEC.md`, `RPC_SPEC.md`, `RPC_FRAMEWORK_SPEC.md`, `DISCOVERY_SPEC.md`, `RPC_RESILIENCE_SPEC.md`, `RUST_RPC_SPEC.md`, `APP_RUNTIME_TOPOLOGY_SPEC.md`, `SDK_SPEC.md`, `IAM_SPEC.md`, `IAM_LOGIN_INTEGRATION_SPEC.md`, `SDKWORK_WEBSERVER_SPEC.md`
 
-SDKWork applications must deploy through one of two standardized application deployment profiles: `standalone` or `cloud`. Shared module APIs, route contracts, generated SDKs, IAM request context, and runtime bootstrap must remain the same across both profiles.
+SDKWork applications must deploy through one of two standardized application deployment profiles: `standalone` or `cloud`. Shared module APIs, route contracts, generated SDKs, IAM request context, and runtime bootstrap must remain the same across both profiles. Application-factory publication, installation, hosting, upgrade, and retirement are governed by `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md`; this standard remains the deployment-profile, runtime-topology, and environment-naming authority.
 
 Use `CONFIG_SPEC.md` for typed runtime config, SDK client construction, token storage adapters, and feature flags.
 

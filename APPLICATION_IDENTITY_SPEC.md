@@ -2,7 +2,7 @@
 
 - Version: 1.0
 - Scope: application identity anchor, one-to-one relations across deployment/identity/commerce modules, access-token application binding, tenant isolation dimension, lifecycle state vocabulary, naming and conformance
-- Related: `IAM_SPEC.md`, `IAM_OAUTH_SPEC.md`, `IAM_APPLICATION_BOOTSTRAP_SPEC.md`, `DATABASE_SPEC.md`, `DATABASE_FRAMEWORK_SPEC.md`, `API_SPEC.md`, `NAMING_SPEC.md`, `SECURITY_SPEC.md`, `MIGRATION_SPEC.md`, `TEST_SPEC.md`
+- Related: `IAM_SPEC.md`, `IAM_OAUTH_SPEC.md`, `IAM_APPLICATION_BOOTSTRAP_SPEC.md`, `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md`, `DATABASE_SPEC.md`, `DATABASE_FRAMEWORK_SPEC.md`, `API_SPEC.md`, `NAMING_SPEC.md`, `SECURITY_SPEC.md`, `MIGRATION_SPEC.md`, `TEST_SPEC.md`
 - Canonical location: `APPLICATION_IDENTITY_SPEC.md` in the `sdkwork-specs` standards root
 
 This standard defines what "an application" means in SDKWork, which module owns which layer of it, and how an access token binds to one tenant's running application. It exists because deployment, identity, and commerce each grew their own notion of "application" and template, and the only thing joining them was a free-form document.
@@ -21,8 +21,10 @@ Exactly one word per concept. A word listed in the third column `MUST NOT` be us
 | SKU | One independently describable, deliverable variant of a product | a version number, an optimistic-lock column |
 | Scaffold | Design-time generator input used to create a product application | a runtime definition |
 | Client credential | The OAuth client id and secret of one installation | the application identity |
+| Release scope (`ownership_scope`) | The level a published application is released at: one tenant, one organization, or one person | the session's `login_scope`, a permission scope, a sharing flag |
+| Isolation key | The column tuple a data-plane query filters by for one release scope | a display filter, a UI-only narrowing |
 
-Terms `template`, `app`, and `version` are retired as application-identity vocabulary. Where they survive as physical names, they refer to the specific subordinate concept above and `MUST` be documented as such.
+Terms `template`, `app`, and `version` are retired as application-identity vocabulary. Where they survive as physical names, they refer to the specific subordinate concept above and `MUST` be documented as such. The cross-module factory pipeline that publishes, installs, hosts, upgrades, and retires these concepts is governed by `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md`; this standard remains the vocabulary, uniqueness, and token-binding authority for the identity layer.
 
 A `template` `MUST NOT` name a first-class application definition in a new contract. The only surviving template concept is the design-time scaffold (§1 Scaffold), which is a generator input rather than an application definition.
 
@@ -37,6 +39,7 @@ A `template` `MUST NOT` name a first-class application definition in a new contr
 | Relation | Cardinality | Rule |
 | --- | --- | --- |
 | Installation ↔ deploy application | exactly 1:1 | one install record per anchor, one anchor per install record |
+| Installation ↔ release scope | exactly 1:1 | one `ownership_scope` per installation, immutable for its lifetime (§4.1) |
 | Product application ↔ deploy application | exactly 1:1 per tenant | a tenant's copy of a product has one anchor |
 | Product version ↔ installation | 1:N | one immutable version serves many installs; the install freezes the identity slice it was created from |
 
@@ -60,6 +63,7 @@ An access token issued for an application instance `MUST` carry:
 | `app_id` | **deploy application identity**, in every token family |
 | `aud` | equal to `app_id` for deployment credentials; equal to the authorized client id for OAuth authorization-server tokens |
 | `azp` | OAuth authorization-server tokens: the authorized client id. Deployment session tokens omit it, because `IAM_SPEC` §5.2 admits a closed claim list that does not include it |
+| `ownership_scope` | The installation's release scope (§4.1): `TENANT`, `ORGANIZATION`, or `USER`. Deployment session tokens and public application access tokens carry it. An OAuth authorization-server token `MAY` omit it: its consumers resolve the scope from the installation at request time, and an absent claim is read as the legacy `login_scope` derivation, never as `USER` |
 | `env`, `dlv` | environment and deployment mode |
 | `scp` | granted scopes (resolved server side; `IAM_SPEC` §5.2 forbids signing permission scope) |
 | `sid`, `jti`, `iat`, `exp`, `kid` | session, token, and signing metadata |
@@ -78,6 +82,30 @@ Two token families share the anchor but not the audience:
 
 - **Deployment credential** (local session and access tokens): `aud = app_id`, `azp` omitted.
 - **OAuth authorization-server token** (authorization code and refresh grants): `app_id =` the deployment anchor, `aud = azp =` the authorized client id. A deployment that presents such a token to another application is rejected by the audience check that compares `aud` against its own client identifiers.
+
+### 4.1 Release Scope And Data Isolation
+
+One source tree produces **different deployments and different access tokens**; the release scope is what differs. An installation therefore carries exactly one `ownership_scope`:
+
+| `ownership_scope` | Meaning | `iam_application_installation.organization_id` | `owner_user_id` | Isolation key |
+| --- | --- | --- | --- | --- |
+| `TENANT` (default) | Released to a whole tenant | `0` | absent | `(tenant_id, app_id)` |
+| `ORGANIZATION` | Released to one organization | non-zero organization id | absent | `(tenant_id, organization_id, app_id)` |
+| `USER` | Released to one person | `0` | required, the owning user | `(tenant_id, app_id, user_id)` |
+
+Rules:
+
+1. `TENANT` is the only default. An installation created without an explicit scope `MUST` be `TENANT`; a client, a console form, or a provisioning body that omits the value `MUST NOT` produce any other level.
+2. The scope `MUST` be selected at publication time and is **immutable** for the installation's lifetime. Switching a live installation between levels would silently re-interpret every stored row under a different key, so a scope change `MUST` be a new installation (new deploy application), never an update.
+3. The installation is the authority for the scope. Token issuance `MUST` read it from the installation row; a request `MUST NOT` be able to choose, widen, or narrow it. A request that declares a scope `MUST` match the installation or the issuance `MUST` fail closed. An interactive login is bound the same way: an `ORGANIZATION` release requires that organization's login context, and a `USER` release requires a personal login by the recorded owner.
+4. The deploy application's `owner_type` (`deploy_app.owner_type`) is the same vocabulary plus the platform-internal `PLATFORM` level (`DEPLOY` owns reach). An installation `MUST` be `TENANT`-shaped when its deploy application is `PLATFORM`, and the other three levels `MUST` agree one-to-one.
+5. Authorization is unchanged: scope selects *data*, never *permission*. A `USER`-scoped deployment grants no more than the same permission scope of a tenant-level one.
+6. The signed claim is `ownership_scope` with the same upper-case values, signed by the issuer from the installation row. Its presence is fixed-size and admitted by `IAM_SPEC` §5.2; a consumer that reads it `MUST` reject an unknown value. An absent claim is resolved by the legacy derivation — `TENANT` when `organization_id` is `0`/absent, `ORGANIZATION` otherwise, never `USER` — which covers a credential issued before this rule and an OAuth authorization-server token whose consumers resolve the scope from the installation server-side.
+7. The token's `organization_id` follows the release level. `ORGANIZATION` carries the installation's organization id. `USER` carries the sentinel `0`: a personal release is tenant-level, so `login_scope` stays `TENANT` and only `ownership_scope` distinguishes it from a tenant release. `TENANT` carries `0` for a deployment credential and keeps the ordinary login-context organization for an interactive session; the release level does not narrow a session's business-data scope, and the application's own isolation key remains `(tenant_id, app_id)`.
+8. `USER` scope binds the credential subject to the owner: issuance `MUST` fail closed when the subject of the credential is not the installation's `owner_user_id`. A personal installation has no ambient "any user" credential.
+9. Data planes `MUST` filter by the isolation key of the installation's scope, not by the session's `login_scope` alone: a tenant-level session of a `USER`-scoped deployment still filters by `(tenant_id, app_id, user_id)`. A table that stores rows for an installation `MUST` carry the key columns it needs (`app_id` plus `organization_id` or `user_id`); a tenant-only filter on a personal deployment is a data leak and `MUST` be treated as a defect.
+10. The public application access token (`APP_ACCESS_TOKEN_SPEC.md`) carries the same claim. A `USER`-scoped installation `MUST NOT` accept a public token without `ownership_scope = USER`: its default derivation (tenant) never matches, so the token is rejected rather than silently reading tenant data.
+
 
 ## 5. Cross-Module References
 
@@ -139,7 +167,8 @@ This standard supersedes the following behaviours once a consumer migrates:
 - [ ] Installation ↔ anchor and product ↔ anchor relations are enforced by unique constraints.
 - [ ] No display-name matching resolves an application across modules.
 - [ ] Access tokens carry `app_id` as the anchor, `aud == app_id`, and no second installation claim.
-- [ ] Data queries filter by `(tenant_id, app_id)`; cross-tenant access requires a platform scope.
+- [ ] Every installation carries an immutable `ownership_scope`; `TENANT` is the default, and the claim of the same name is issued by the installation, never by the request.
+- [ ] Data queries filter by `(tenant_id, app_id)`, by `(tenant_id, organization_id, app_id)` for an organization release, or by `(tenant_id, app_id, user_id)` for a personal release; cross-tenant access requires a platform scope.
 - [ ] One price authority per application.
 - [ ] Every cross-module soft reference has a reconciliation job.
 - [ ] Table, index, and constraint names satisfy `DATABASE_SPEC.md` §7 and use registered prefixes only.
