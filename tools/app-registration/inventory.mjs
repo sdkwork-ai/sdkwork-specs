@@ -120,7 +120,19 @@ function manifestPermissionScope(manifest) {
   return Array.isArray(scope) ? scope.filter((entry) => typeof entry === 'string') : [];
 }
 
-function manifestEnvironmentDomain(manifest, environment) {
+/**
+ * Read the authored domain sources of one lifecycle.
+ *
+ * The registrar normalizes and validates the value (`resolvePrimaryDomain`), so
+ * the scan keeps every source separate instead of collapsing them here: a value
+ * that is present but not a hostname must fail the item, not be silently
+ * replaced by a lower-precedence source. `domain` is the highest-precedence raw
+ * candidate and is retained for operators reading the inventory.
+ * @param manifest - parsed `agent.app.config.json`
+ * @param environment - canonical lifecycle
+ * @returns the raw sources plus the resolved candidate and its origin
+ */
+function manifestEnvironmentDomainSources(manifest, environment) {
   const environments = manifest?.environments ?? {};
   const aliases = {
     development: ['development', 'dev'],
@@ -129,14 +141,28 @@ function manifestEnvironmentDomain(manifest, environment) {
     demo: ['demo'],
     production: ['production', 'prod'],
   }[environment] ?? [environment];
+  let sectionAlias = '';
+  let section = {};
   for (const alias of aliases) {
-    const section = environments[alias];
-    const domain = String(section?.accessUrl ?? section?.deployUrl ?? '').trim();
-    if (domain) {
-      return domain;
+    const candidate = environments[alias];
+    if (candidate && typeof candidate === 'object') {
+      sectionAlias = alias;
+      section = candidate;
+      break;
     }
   }
-  return String(manifest?.backend?.primaryDomain ?? manifest?.backend?.domain ?? '').trim();
+  const accessUrl = String(section?.accessUrl ?? '').trim();
+  const deployUrl = String(section?.deployUrl ?? '').trim();
+  const backendPrimaryDomain = String(manifest?.backend?.primaryDomain ?? '').trim();
+  const backendDomain = String(manifest?.backend?.domain ?? '').trim();
+  const candidates = [
+    [sectionAlias ? `environments.${sectionAlias}.accessUrl` : '', accessUrl],
+    [sectionAlias ? `environments.${sectionAlias}.deployUrl` : '', deployUrl],
+    ['backend.primaryDomain', backendPrimaryDomain],
+    ['backend.domain', backendDomain],
+  ];
+  const [source, domain] = candidates.find(([, value]) => value) ?? ['', ''];
+  return { environmentSection: sectionAlias, accessUrl, deployUrl, domain, domainSource: source };
 }
 
 /**
@@ -379,7 +405,7 @@ export function buildRegistrationInventory(options = {}) {
     const environments = {};
     for (const environment of REGISTRATION_ENVIRONMENTS) {
       environments[environment] = {
-        domain: manifestEnvironmentDomain(manifest, environment),
+        ...manifestEnvironmentDomainSources(manifest, environment),
         anchorSinks: resolveAnchorSink(repoRoot, environment)
           .map((sink) => ({
             deploymentProfile: sink.deploymentProfile,
@@ -400,6 +426,8 @@ export function buildRegistrationInventory(options = {}) {
       appType: String(manifest?.app?.appType ?? '').trim(),
       applicationType: mapManifestAppTypeToApplicationType(manifest?.app?.appType) ?? '',
       backendAppId: String(manifest?.backend?.appId ?? '').trim(),
+      backendPrimaryDomain: String(manifest?.backend?.primaryDomain ?? '').trim(),
+      backendDomain: String(manifest?.backend?.domain ?? '').trim(),
       tenantId: String(manifest?.backend?.tenantId ?? '').trim(),
       organizationId: String(manifest?.backend?.organizationId ?? '').trim(),
       permissionScope,

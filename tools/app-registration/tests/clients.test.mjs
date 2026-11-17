@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 import { DeployApiError, createDeployApplicationClient, findAppBySlug } from '../deploy-client.mjs';
@@ -24,6 +25,10 @@ function iamClient(baseUrl, overrides = {}) {
     timeoutMs: 2_000,
     ...overrides,
   });
+}
+
+function sha256Hex(value) {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
 test('deploy list finds the exact slug and ignores mere LIKE hits', async () => {
@@ -86,6 +91,85 @@ test('deploy create refuses to run without an idempotency key', async () => {
       (error) => error instanceof DeployApiError && /Idempotency-Key/u.test(error.message),
     );
     assert.equal(stack.requestsFor('POST', '/app/v3/api/apps').length, 0);
+  } finally {
+    await stack.close();
+  }
+});
+
+test('deploy create also sends the body digest the idempotency middleware requires', async () => {
+  const stack = await startFakeStack();
+  try {
+    const client = deployClient(stack.baseUrl);
+    const body = { name: 'SDKWork IM PC', slug: 'sdkwork-im-pc', appKind: 'SPA_WEB' };
+    await client.createApp(body, { idempotencyKey: 'sdkwork-app-register:development:sdkwork-im-pc' });
+    const [post] = stack.requestsFor('POST', '/app/v3/api/apps');
+    const declared = String(post.headers['x-content-sha256'] ?? '');
+    assert.match(
+      declared,
+      /^[0-9a-f]{64}$/u,
+      'X-Content-SHA256 must be the lowercase hex SHA-256 of the request body',
+    );
+    assert.equal(
+      declared,
+      sha256Hex(post.rawBody),
+      'the digest describes the exact bytes sent, not a re-serialized object',
+    );
+    assert.equal(
+      declared,
+      sha256Hex(JSON.stringify(body)),
+      'the digest matches JSON.stringify(body) encoded as UTF-8',
+    );
+    assert.equal(
+      post.headers['idempotency-key'],
+      'sdkwork-app-register:development:sdkwork-im-pc',
+      'the Idempotency-Key is still sent alongside the digest',
+    );
+  } finally {
+    await stack.close();
+  }
+});
+
+test('a deploy create digest is stable across a retry', async () => {
+  const stack = await startFakeStack();
+  try {
+    const client = deployClient(stack.baseUrl);
+    stack.failNextOnce({ method: 'POST', path: '/app/v3/api/apps', status: 503 });
+    const body = { name: 'SDKWork IM PC', slug: 'sdkwork-im-pc', appKind: 'SPA_WEB' };
+    const key = 'sdkwork-app-register:development:sdkwork-im-pc';
+    await assert.rejects(() => client.createApp(body, { idempotencyKey: key }));
+    const created = await client.createApp(body, { idempotencyKey: key });
+    const posts = stack.requestsFor('POST', '/app/v3/api/apps');
+    assert.equal(posts.length, 2);
+    assert.equal(
+      posts[0].headers['x-content-sha256'],
+      posts[1].headers['x-content-sha256'],
+      'a retried command must carry the same digest or the middleware records a new fingerprint',
+    );
+    assert.equal(posts[0].headers['idempotency-key'], posts[1].headers['idempotency-key']);
+    assert.equal(created.deployApplicationId, '900100');
+  } finally {
+    await stack.close();
+  }
+});
+
+test('deploy surfaces Retry-After on a rate-limited call', async () => {
+  const stack = await startFakeStack();
+  try {
+    const client = deployClient(stack.baseUrl);
+    stack.failNextOnce({
+      method: 'GET',
+      path: '/app/v3/api/apps',
+      status: 429,
+      headers: { 'retry-after': '2' },
+      body: { status: 429, code: 42901, detail: 'too many requests' },
+    });
+    await assert.rejects(
+      () => client.listApps({ keyword: 'x' }),
+      (error) => error instanceof DeployApiError
+        && error.status === 429
+        && error.retryable === true
+        && error.retryAfterMs === 2_000,
+    );
   } finally {
     await stack.close();
   }
@@ -270,6 +354,7 @@ test('IAM provision and enable drive the bootstrap-body routes', async () => {
       instanceKey: '1001_dev',
       displayName: 'IM PC',
       environment: 'development',
+      primaryDomain: 'demo.sdkwork.com',
       accessPermissions: ['iam:self'],
     });
     assert.equal(provisioned.deployApplicationId, '1001');
@@ -278,6 +363,12 @@ test('IAM provision and enable drive the bootstrap-body routes', async () => {
     assert.equal(posts.length, 1);
     assert.equal(posts[0].body.authToken, 'operator-token');
     assert.equal(posts[0].body.deployApplicationId, '1001');
+    assert.equal(posts[0].body.primaryDomain, 'demo.sdkwork.com');
+    assert.equal(
+      posts[0].headers['x-content-sha256'],
+      sha256Hex(posts[0].rawBody),
+      'the body digest is sent on IAM commands too',
+    );
 
     const enabled = await client.enableTenantApplication(provisioned.tenantApplicationId, {
       tenantId: '100001',
@@ -293,6 +384,178 @@ test('IAM provision and enable drive the bootstrap-body routes', async () => {
   }
 });
 
+test('IAM refuses to provision without a primary domain, exactly like enable', async () => {
+  const stack = await startFakeStack();
+  try {
+    const client = iamClient(stack.baseUrl);
+    await assert.rejects(
+      () => client.provisionTenantApplication({
+        deployApplicationId: '1001',
+        provisioningIdempotencyKey: 'iam-bootstrap-key',
+        applicationType: 'pc',
+        tenantId: '100001',
+        organizationId: '0',
+        instanceKey: '1001_dev',
+        environment: 'development',
+      }),
+      (error) => error instanceof IamApiError
+        && error.status === 400
+        && /primaryDomain is required/u.test(error.message),
+    );
+  } finally {
+    await stack.close();
+  }
+});
+
+test('the installation environment upsert uses the dual-token route and upserts by key', async () => {
+  const stack = await startFakeStack();
+  try {
+    const client = iamClient(stack.baseUrl, {
+      management: { accessToken: 'access-1', authToken: 'auth-1' },
+    });
+    const provisioned = await client.provisionTenantApplication({
+      deployApplicationId: '1001',
+      provisioningIdempotencyKey: 'iam-bootstrap-key',
+      applicationType: 'pc',
+      tenantId: '100001',
+      organizationId: '0',
+      instanceKey: '1001_dev',
+      environment: 'development',
+      primaryDomain: 'demo.sdkwork.com',
+    });
+    const first = await client.upsertInstallationEnvironment({
+      tenantId: '100001',
+      installationId: provisioned.tenantApplicationId,
+      envKey: 'development',
+      primaryDomain: 'demo.sdkwork.com',
+      envStatus: 'active',
+      idempotencyKey: 'sdkwork-app-register:env:100001:ta-1:development',
+    });
+    assert.equal(first.environmentKey, 'development');
+    assert.equal(first.primaryDomain, 'demo.sdkwork.com');
+    assert.equal(first.status, 'active');
+    const second = await client.upsertInstallationEnvironment({
+      tenantId: '100001',
+      installationId: provisioned.tenantApplicationId,
+      envKey: 'development',
+      primaryDomain: 'demo.sdkwork.com',
+      envStatus: 'active',
+      idempotencyKey: 'sdkwork-app-register:env:100001:ta-1:development',
+    });
+    assert.equal(second.environmentId, first.environmentId, 'PUT upserts the same row');
+    assert.equal(stack.environmentRows.size, 1);
+
+    const puts = stack.environmentRequests();
+    assert.equal(puts.length, 2);
+    assert.equal(puts[0].headers['access-token'], 'access-1');
+    assert.match(String(puts[0].headers.authorization), /^Bearer auth-1$/u);
+    assert.equal(
+      puts[0].headers['idempotency-key'],
+      'sdkwork-app-register:env:100001:ta-1:development',
+    );
+    assert.equal(puts[0].body.primaryDomain, 'demo.sdkwork.com');
+    assert.equal(puts[0].body.envStatus, 'active');
+    assert.equal(
+      puts[0].headers['x-content-sha256'],
+      sha256Hex(puts[0].rawBody),
+      'the environment command carries its body digest',
+    );
+  } finally {
+    await stack.close();
+  }
+});
+
+test('the environment upsert mints a dual-token session from the operator password', async () => {
+  const stack = await startFakeStack();
+  try {
+    const client = iamClient(stack.baseUrl, {
+      auth: { username: 'admin', password: 'secret' },
+      management: { username: 'admin', password: 'secret' },
+    });
+    assert.equal(client.hasManagementCredentials(), true);
+    const provisioned = await client.provisionTenantApplication({
+      deployApplicationId: '1001',
+      provisioningIdempotencyKey: 'iam-bootstrap-key',
+      applicationType: 'pc',
+      tenantId: '100001',
+      organizationId: '0',
+      instanceKey: '1001_dev',
+      environment: 'development',
+      primaryDomain: 'demo.sdkwork.com',
+    });
+    const row = await client.upsertInstallationEnvironment({
+      tenantId: '100001',
+      installationId: provisioned.tenantApplicationId,
+      envKey: 'development',
+      primaryDomain: 'demo.sdkwork.com',
+      envStatus: 'active',
+    });
+    assert.equal(row.status, 'active');
+    const logins = stack.requestsFor('POST', '/app/v3/api/auth/sessions');
+    assert.equal(logins.length, 1, 'the session is minted once per client');
+    assert.equal(logins[0].body.grantType, 'password');
+    assert.equal(logins[0].body.username, 'admin');
+    assert.equal(stack.environmentRequests()[0].headers['access-token'], 'access-session-1');
+  } finally {
+    await stack.close();
+  }
+});
+
+test('the environment upsert fails closed when no dual-token credential exists', async () => {
+  const stack = await startFakeStack();
+  try {
+    const client = iamClient(stack.baseUrl);
+    assert.equal(client.hasManagementCredentials(), false);
+    const provisioned = await client.provisionTenantApplication({
+      deployApplicationId: '1001',
+      provisioningIdempotencyKey: 'iam-bootstrap-key',
+      applicationType: 'pc',
+      tenantId: '100001',
+      organizationId: '0',
+      instanceKey: '1001_dev',
+      environment: 'development',
+      primaryDomain: 'demo.sdkwork.com',
+    });
+    await assert.rejects(
+      () => client.upsertInstallationEnvironment({
+        tenantId: '100001',
+        installationId: provisioned.tenantApplicationId,
+        envKey: 'development',
+        primaryDomain: 'demo.sdkwork.com',
+        envStatus: 'active',
+      }),
+      (error) => error instanceof IamApiError
+        && error.kind === 'invalid-settings'
+        && /SDKWORK_IAM_MANAGEMENT_ACCESS_TOKEN/u.test(error.message)
+        && /SDKWORK_IAM_BOOTSTRAP_OPERATOR_USERNAME/u.test(error.message),
+    );
+    assert.equal(stack.environmentRequests().length, 0, 'no unauthenticated request is sent');
+  } finally {
+    await stack.close();
+  }
+});
+
+test('the environment upsert refuses an empty primary domain before calling IAM', async () => {
+  const stack = await startFakeStack();
+  try {
+    const client = iamClient(stack.baseUrl, {
+      management: { accessToken: 'access-1', authToken: 'auth-1' },
+    });
+    await assert.rejects(
+      () => client.upsertInstallationEnvironment({
+        tenantId: '100001',
+        installationId: 'ta-1',
+        envKey: 'development',
+        primaryDomain: '  ',
+      }),
+      (error) => error instanceof IamApiError && /no primaryDomain/u.test(error.message),
+    );
+    assert.equal(stack.environmentRequests().length, 0);
+  } finally {
+    await stack.close();
+  }
+});
+
 test('IAM client refuses a body-only client without bootstrap credentials', () => {
   assert.throws(
     () => createIamApplicationClient({ baseUrl: 'http://127.0.0.1:1', auth: {} }),
@@ -300,7 +563,7 @@ test('IAM client refuses a body-only client without bootstrap credentials', () =
   );
 });
 
-test('IAM failures keep the status and the problem detail', async () => {
+test('IAM failures keep the status, the problem detail, and Retry-After', async () => {
   const stack = await startFakeStack();
   try {
     const client = iamClient(stack.baseUrl);
@@ -315,6 +578,18 @@ test('IAM failures keep the status and the problem detail', async () => {
       (error) => error instanceof IamApiError
         && error.status === 409
         && /anchor already claimed/u.test(error.message),
+    );
+    stack.failNextOnce({
+      method: 'POST',
+      path: '/backend/v3/api/iam/tenant_applications',
+      status: 429,
+      headers: { 'retry-after': '3' },
+    });
+    await assert.rejects(
+      () => client.provisionTenantApplication({ deployApplicationId: '1001' }),
+      (error) => error instanceof IamApiError
+        && error.status === 429
+        && error.retryAfterMs === 3_000,
     );
   } finally {
     await stack.close();

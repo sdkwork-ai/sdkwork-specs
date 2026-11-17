@@ -10,7 +10,13 @@
  *   `POST /app/v3/api/apps` (`apps.create`, `deploy.apps.write`) and
  *   `GET /app/v3/api/apps/{appId}` (`apps.retrieve`, `deploy.apps.read`).
  * - `crates/sdkwork-routes-deploy-app-api/src/app_delivery_routes.rs:444-467`
- *   requires the `Idempotency-Key` header on `apps.create`.
+ *   requires the `Idempotency-Key` header on `apps.create`, and the idempotency
+ *   middleware refuses a command that carries a body without
+ *   `X-Content-SHA256` (or `X-Idempotency-Fingerprint`):
+ *   `sdkwork-web-framework` `crates/sdkwork-web-core/src/idempotency.rs`
+ *   `resolve_idempotency_fingerprint`. This client therefore always sends both:
+ *   the key names the retry slot, the digest names the payload. See
+ *   `http-fingerprint.mjs`.
  * - `crates/sdkwork-intelligence-deploy-repository-sqlx/src/apps.rs:507-528`
  *   resolves `{appId}` against `deploy_app.uuid`; `:370` turns a duplicate
  *   `(tenant_id, slug)` insert into a `409` conflict; `:286-332` replays the row
@@ -31,6 +37,12 @@
  * @module app-registration/deploy-client
  */
 
+import {
+  bodyFingerprintHeaders,
+  parseRetryAfterMs,
+  serializeRequestBody,
+} from './http-fingerprint.mjs';
+
 /** Deploy app-api path prefix. */
 export const DEPLOY_APPS_PATH = '/app/v3/api/apps';
 
@@ -48,6 +60,8 @@ export class DeployApiError extends Error {
     this.status = details.status ?? 0;
     this.code = details.code ?? '';
     this.retryable = Boolean(details.retryable);
+    /** `Retry-After` delay announced by the server, in milliseconds (0 when absent). */
+    this.retryAfterMs = Number(details.retryAfterMs) > 0 ? Number(details.retryAfterMs) : 0;
     this.details = details;
   }
 }
@@ -182,14 +196,13 @@ export function createDeployApplicationClient(options) {
   const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 10_000;
 
   async function request(method, pathAndQuery, { body, idempotencyKey } = {}) {
+    const serializedBody = serializeRequestBody(body);
     const headers = {
       accept: 'application/json',
       'access-token': accessToken,
       authorization: `Bearer ${authToken}`,
+      ...bodyFingerprintHeaders(serializedBody),
     };
-    if (body !== undefined) {
-      headers['content-type'] = 'application/json';
-    }
     if (idempotencyKey) {
       headers['idempotency-key'] = idempotencyKey;
     }
@@ -201,7 +214,7 @@ export function createDeployApplicationClient(options) {
       response = await fetchImpl(`${origin}${pathAndQuery}`, {
         method,
         headers,
-        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+        ...(serializedBody !== undefined ? { body: serializedBody } : {}),
         ...(signal !== undefined ? { signal } : {}),
       });
     } catch (error) {
@@ -236,6 +249,7 @@ export function createDeployApplicationClient(options) {
           status: response.status,
           code: problemCode(payload),
           retryable: response.status >= 500 || response.status === 429,
+          retryAfterMs: parseRetryAfterMs(response.headers?.get?.('retry-after')),
         },
       );
     }

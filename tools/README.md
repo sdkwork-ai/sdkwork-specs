@@ -47,17 +47,26 @@ Rules:
   every application root of a workspace into Deploy and IAM and hands the
   returned deploy-application anchor to the profile materializers. Per
   app x environment it resolves the application by exact slug or creates it with
-  a deterministic `Idempotency-Key`, reads the decimal anchor from
+  a deterministic `Idempotency-Key` plus the `X-Content-SHA256` body digest the
+  idempotency middleware requires, reads the decimal anchor from
   `AppResponse.deployApplicationId` (falling back to `--anchor-map` only as a
-  downgrade path) plus the addressable uuid,
-  provisions/enables the one IAM installation bound to that anchor with the
-  framework-compatible provisioning key, writes `SDKWORK_DEPLOY_APPLICATION_ID`
-  into the authored topology override layer, and re-runs
-  `materialize-topology-env.mjs` plus `materialize-client-env.mjs`. It fails
-  closed on a missing credential variable or an unresolvable anchor, records
-  every item as created/reused/failed, and reflects the failure count in its exit
-  code. `--inventory <path>` writes the scan without touching anything;
-  `--dry-run` prints the plan; `--report <path>` writes the per-item report.
+  downgrade path) plus the addressable uuid, provisions/enables the one IAM
+  installation bound to that anchor with the framework-compatible provisioning
+  key, and writes the lifecycle as an
+  `iam_application_installation_environment` row (`PUT .../environments/{envKey}`,
+  `envStatus=active`) before enabling it — one installation per anchor, one row
+  per lifecycle. The row needs a primary domain, resolved from
+  `--primary-domain` (`{env}`/`{slug}` placeholders), the manifest
+  `environments.<env>.accessUrl|deployUrl`, or `backend.primaryDomain|domain`;
+  with no source the item fails at plan time. It then writes
+  `SDKWORK_DEPLOY_APPLICATION_ID` into the authored topology override layer and
+  re-runs `materialize-topology-env.mjs` plus `materialize-client-env.mjs`. It
+  fails closed on a missing credential variable or an unresolvable anchor,
+  retries `429`/`5xx` with `Retry-After`-aware jittered backoff, registers items
+  with bounded concurrency, records every item as created/reused/failed, and
+  reflects the failure count in its exit code. `--inventory <path>` writes the
+  scan without touching anything; `--dry-run` prints the plan;
+  `--report <path>` writes the per-item report.
 - `check-source-config-standard.mjs` validates deployable-root `etc/`
   ownership, canonical `standalone|cloud` x
   `development|test|staging|demo|production` profile ids, default-profile

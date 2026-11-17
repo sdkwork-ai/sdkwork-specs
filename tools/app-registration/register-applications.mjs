@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   DEPLOY_APPLICATION_ID_ENV,
+  IAM_MANAGEMENT_SETTINGS_ENV,
   REGISTRATION_ENVIRONMENTS,
   REGISTRATION_SETTINGS_ENV,
   RegistrationConfigurationError,
@@ -54,17 +55,26 @@ Selection:
   --only <id>                Register one application root (repeatable)
   --deployment-profile <p>   standalone|cloud override for env-file selection
                              (default: standalone for development/test, cloud otherwise)
+  --primary-domain <pattern> IAM installation domain; supports {env} and {slug}
+                             placeholders, e.g. "app.{env}.sdkwork.com". Falls back to
+                             environments.<env>.accessUrl|deployUrl, then
+                             backend.primaryDomain|domain. No source fails the plan.
 
 Execution:
   --dry-run                  Print the plan; no request, no file write
   --report <path>            Write the JSON report
   --json                     Print the whole report as JSON
   --inventory <path>         Write the registration inventory and exit
-  --retries <n>              Attempts per item for retryable failures (default: 2)
-  --retry-delay <ms>         Base backoff between attempts (default: 250)
+  --retries <n>              Attempts per item for retryable failures (default: 5;
+                             429 waits at least Retry-After, then exponential backoff)
+  --retry-delay <ms>         Base backoff between attempts (default: 500)
+  --concurrency <n>          Applications registered in parallel, 1..8 (default: 2)
   --anchor-kind <kind>       deploy-application-id (default) | deploy-application-uuid
   --anchor-map <path>        JSON map of "<app-id>@<environment>" -> decimal deploy application id
   --allow-unverified-iam-binding  Accept an IAM response that does not echo deployApplicationId
+  --no-register-environments Do not upsert the installation environment row (downgrade path;
+                             the installation is then still enabled, which token issuance
+                             rejects for this lifecycle)
   --no-write-anchor          Do not write ${DEPLOY_APPLICATION_ID_ENV} into the env configuration
   --no-record-deploy-uuid    Do not write SDKWORK_DEPLOY_APPLICATION_UUID bookkeeping
   --no-regenerate-topology   Do not re-run materialize-topology-env.mjs after writing the anchor
@@ -81,6 +91,10 @@ Environment (required unless --dry-run / --inventory):
   ${REGISTRATION_SETTINGS_ENV.iam.passwordCandidates[0]}
   ${REGISTRATION_SETTINGS_ENV.tenantId} / ${REGISTRATION_SETTINGS_ENV.organizationId}
                              Optional tenant scope (manifest values otherwise)
+  ${IAM_MANAGEMENT_SETTINGS_ENV.accessTokenCandidates[0]} + ${IAM_MANAGEMENT_SETTINGS_ENV.authTokenCandidates[0]}
+                             Optional dual-token session for the installation-environment
+                             route; without it the session is minted from the operator
+                             username + password.
 `;
 
 function readJsonFile(filePath) {
@@ -104,11 +118,14 @@ export function parseArgs(argv) {
     reportPath: '',
     inventoryPath: '',
     json: false,
-    maxAttempts: 2,
-    retryDelayMs: 250,
+    maxAttempts: 5,
+    retryDelayMs: 500,
+    concurrency: 2,
+    primaryDomainPattern: '',
     anchorKind: 'deploy-application-id',
     anchorMapPath: '',
     allowUnverifiedIamBinding: false,
+    registerEnvironments: true,
     writeAnchor: true,
     recordDeployUuid: true,
     regenerateTopologyEnv: true,
@@ -171,6 +188,14 @@ export function parseArgs(argv) {
         options.retryDelayMs = Number(valueOf(index, arg));
         index += 1;
         break;
+      case '--concurrency':
+        options.concurrency = Number(valueOf(index, arg));
+        index += 1;
+        break;
+      case '--primary-domain':
+        options.primaryDomainPattern = valueOf(index, arg);
+        index += 1;
+        break;
       case '--anchor-kind':
         options.anchorKind = valueOf(index, arg);
         index += 1;
@@ -181,6 +206,9 @@ export function parseArgs(argv) {
         break;
       case '--allow-unverified-iam-binding':
         options.allowUnverifiedIamBinding = true;
+        break;
+      case '--no-register-environments':
+        options.registerEnvironments = false;
         break;
       case '--no-write-anchor':
         options.writeAnchor = false;
@@ -207,6 +235,9 @@ export function parseArgs(argv) {
   }
   if (!Number.isInteger(options.retryDelayMs) || options.retryDelayMs < 0) {
     throw new RegistrationConfigurationError('--retry-delay must be a non-negative integer');
+  }
+  if (!Number.isInteger(options.concurrency) || options.concurrency < 1 || options.concurrency > 8) {
+    throw new RegistrationConfigurationError('--concurrency must be an integer in 1..8');
   }
   return options;
 }
@@ -253,16 +284,21 @@ function printItemLines(report) {
   for (const entry of report.entries) {
     if (entry.status === 'planned' || entry.status === 'invalid') {
       const defects = entry.defects?.length ? `  defects=${entry.defects.length}` : '';
-      console.log(`[${entry.status}] ${entry.label} slug=${entry.slug}${defects}`);
+      const domain = entry.primaryDomain ? ` domain=${entry.primaryDomain}` : '';
+      console.log(`[${entry.status}] ${entry.label} slug=${entry.slug}${domain}${defects}`);
       continue;
     }
     const anchor = entry.deployApplicationId || '-';
     const iam = entry.iam?.status ? `iam=${entry.iam.status}` : 'iam=-';
+    const envRow = entry.installationEnvironment ?? {};
+    const envKey = envRow.envKey ?? entry.environment ?? '';
+    const envStatus = envRow.status ?? '-';
+    const env = envKey ? ` env=${envKey}:${envStatus}` : '';
     const written = (entry.anchor?.written ?? []).length;
     const materialized = entry.materialize?.status ?? '-';
     const line = `[${entry.status}] ${entry.label} anchor=${anchor} uuid=${
       entry.deployApplicationUuid || '-'
-    } ${iam} anchorFiles=${written} materialize=${materialized}`;
+    } ${iam}${env} anchorFiles=${written} materialize=${materialized}`;
     console.log(entry.status === 'failed' ? `${line}\n    error: ${entry.error}` : line);
   }
 }
@@ -344,13 +380,17 @@ async function main(argv) {
     console.log(
       `\nregister-applications ${environment}: planned=${counts.planned} created=${counts.created} `
       + `reused=${counts.reused} failed=${counts.failed}${counts.invalid ? ` invalid=${counts.invalid}` : ''} `
+      + `environmentsActive=${counts.environmentsActive}`
+      + `${counts.environmentsSkipped ? ` environmentsSkipped=${counts.environmentsSkipped}` : ''}`
+      + `${counts.environmentsDeduplicated ? ` environmentsDeduplicated=${counts.environmentsDeduplicated}` : ''} `
       + `anchorWritten=${counts.anchorWritten} materialized=${counts.materialized}`
       + `${counts.materializeFailed ? ` materializeFailed=${counts.materializeFailed}` : ''}`
       + `${counts.materializeConflict ? ` materializeConflict=${counts.materializeConflict}` : ''}`,
     );
     console.log(
       `selection: scope=${report.scope} deploymentProfile=${report.deploymentProfile} `
-      + `anchorKind=${report.anchorKind} dryRun=${report.dryRun}`,
+      + `anchorKind=${report.anchorKind} concurrency=${report.concurrency} dryRun=${report.dryRun}`
+      + `${report.primaryDomainPattern ? ` primaryDomainPattern=${report.primaryDomainPattern}` : ''}`,
     );
     if (options.reportPath) {
       console.log(`report written: ${options.reportPath}`);

@@ -1,26 +1,60 @@
 #!/usr/bin/env node
 
 /**
- * IAM tenant-application bootstrap client used by the registrar.
+ * IAM client used by the registrar: tenant-application bootstrap (body
+ * credentials) plus installation-environment management (dual-token session).
  *
- * Route authority (`IAM_APPLICATION_BOOTSTRAP_SPEC` §2, mirrored by
- * `@sdkwork/iam-application-bootstrap` `src/fetch-client.ts`):
+ * # Route authority (read from `sdkwork-iam`, not guessed)
  *
- * - `POST /backend/v3/api/iam/tenant_applications` (`tenantApplications.create`,
- *   auth mode `bootstrap-body`) — provision or reconcile the one installation
- *   bound to a deploy application. The bootstrap operator credentials travel in
- *   the body through `authToken` or `username` + `password`.
- * - `POST /backend/v3/api/iam/tenant_applications/{tenantApplicationId}/enable`
- *   (`tenantApplications.enable`, auth mode `bootstrap-body`).
+ * - `crates/sdkwork-routes-iam-backend-api/src/manifest.rs:643` declares
+ *   `POST /backend/v3/api/iam/tenant_applications`
+ *   (`tenantApplications.create`, auth mode `bootstrap-body`), and `:661`
+ *   declares `POST /backend/v3/api/iam/tenant_applications/{tenantApplicationId}/enable`
+ *   (also `bootstrap-body`). The bootstrap operator credentials travel in the
+ *   body through `authToken` or `username` + `password`
+ *   (`sdkwork-iam-web-adapter/src/super_admin_auth.rs` `resolve_bootstrap_actor`).
+ * - `crates/sdkwork-routes-iam-backend-api/src/manifest.rs:105` declares
+ *   `PUT /backend/v3/api/iam/tenants/{tenantId}/applications/{tenantApplicationId}/environments/{environmentKey}`
+ *   (`tenantApplications.environments.update`, auth mode `dual-token`), handled by
+ *   `crates/sdkwork-routes-iam-backend-api/src/installation_lifecycle.rs`.
+ *   `upsert_installation_environment` reconciles the row keyed by
+ *   `(installation_id, env_key)`, stores `primary_domain` and `env_status`
+ *   (`pending` | `active` | `disabled`), and returns `409` when the domain is
+ *   already registered to another environment of the tenant.
+ * - The enable step (`crates/sdkwork-iam-web-adapter/src/application_registry.rs:1199`)
+ *   refuses an installation whose `primary_domain` is blank
+ *   (`primaryDomain must be configured before enabling tenant application`).
+ *   That is the second gap the rehearsal exposed: the domain is a required
+ *   provisioning input, not an optional decoration.
+ * - Runtime token issuance opens with
+ *   `decide_installation_environment_access`
+ *   (`crates/sdkwork-iam-web-adapter/src/installation_lifecycle.rs:129`): once an
+ *   installation has any environment row, a token request for an unregistered
+ *   environment fails closed, and a row that is not `active` blocks issuance.
+ *   One installation serves every lifecycle, and each lifecycle is a row.
  *
- * `GET /backend/v3/api/iam/tenant_applications/{id}` is a dual-token admin read
- * and is deliberately not used: the registrar holds bootstrap-body credentials
- * only, so the binding is verified from the reconciliation response (the durable
- * record of the write), and a response that does not echo the anchor is refused
- * rather than assumed.
+ * # Credentials
+ *
+ * The environment route is dual-token: `Authorization: Bearer <auth token>` plus
+ * `Access-Token: <access token>`. That pair is a *session*, so it is resolved in
+ * this order:
+ *
+ * 1. explicit management tokens (`SDKWORK_IAM_MANAGEMENT_ACCESS_TOKEN` +
+ *    `SDKWORK_IAM_MANAGEMENT_AUTH_TOKEN`, or their `SDKWORK_IAM_BACKEND_*` aliases);
+ * 2. a session minted from the bootstrap operator `username` + `password` through
+ *    `POST /app/v3/api/auth/sessions` (`sessions.create`, credential-entry
+ *    bootstrap, `sdkwork-routes-iam-app-api/src/manifest.rs:6`), cached for the run;
+ * 3. otherwise the call fails closed naming the variables to set — the registrar
+ *    never enables an installation whose environment row it could not write.
  *
  * @module app-registration/iam-client
  */
+
+import {
+  bodyFingerprintHeaders,
+  parseRetryAfterMs,
+  serializeRequestBody,
+} from './http-fingerprint.mjs';
 
 /** Backend API prefix for the IAM bootstrap operations. */
 export const IAM_BACKEND_API_PREFIX = '/backend/v3/api';
@@ -28,7 +62,13 @@ export const IAM_BACKEND_API_PREFIX = '/backend/v3/api';
 /** Provision/reconcile path. */
 export const IAM_TENANT_APPLICATIONS_PATH = '/iam/tenant_applications';
 
-/** Typed refusal of one IAM bootstrap call. */
+/** Tenant-scoped installation management path prefix (dual-token surface). */
+export const IAM_TENANT_APPLICATIONS_MANAGEMENT_PREFIX = '/iam/tenants';
+
+/** App-api login path used to mint a dual-token session for the operator. */
+export const IAM_APP_SESSION_LOGIN_PATH = '/app/v3/api/auth/sessions';
+
+/** Typed refusal of one IAM call. */
 export class IamApiError extends Error {
   /**
    * @param message - operator-facing message naming the route and the cause
@@ -42,6 +82,8 @@ export class IamApiError extends Error {
     this.status = details.status ?? 0;
     this.code = details.code ?? '';
     this.retryable = Boolean(details.retryable);
+    /** `Retry-After` delay announced by the server, in milliseconds (0 when absent). */
+    this.retryAfterMs = Number(details.retryAfterMs) > 0 ? Number(details.retryAfterMs) : 0;
     this.details = details;
   }
 }
@@ -115,8 +157,8 @@ export function unwrapIamItem(payload, path) {
 }
 
 /**
- * Create an IAM bootstrap-body client.
- * @param options - backend base URL, bootstrap operator auth, timeout, fetch override
+ * Create an IAM bootstrap-body + installation-management client.
+ * @param options - backend base URL, bootstrap operator auth, management session, timeout
  * @returns the client
  */
 export function createIamApplicationClient(options) {
@@ -137,27 +179,37 @@ export function createIamApplicationClient(options) {
     ? { authToken: trim(auth.authToken) }
     : { username: trim(auth.username), password: trim(auth.password) };
 
-  async function request(pathAndQuery, body) {
-    const signal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+  const management = options.management ?? {};
+  const explicitAccessToken = trim(management.accessToken);
+  const explicitAuthToken = trim(management.authToken);
+  const mintUsername = trim(management.username || auth.username);
+  const mintPassword = trim(management.password || auth.password);
+  const canMintSession = mintUsername.length > 0 && mintPassword.length > 0;
+  /** @type {{accessToken: string, authToken: string} | null} */
+  let mintedSession = null;
+
+  function signalFor() {
+    return typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
       ? AbortSignal.timeout(timeoutMs)
       : undefined;
+  }
+
+  async function send(method, url, { headers, body, pathLabel }) {
+    const signal = signalFor();
     let response;
     try {
-      response = await fetchImpl(`${origin}${IAM_BACKEND_API_PREFIX}${pathAndQuery}`, {
-        method: 'POST',
-        headers: {
-          accept: 'application/json',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify(body ?? {}),
+      response = await fetchImpl(url, {
+        method,
+        headers,
+        ...(body !== undefined ? { body } : {}),
         ...(signal !== undefined ? { signal } : {}),
       });
     } catch (error) {
       throw new IamApiError(
-        `IAM API POST ${pathAndQuery} is unreachable at ${origin} (${
+        `IAM API ${method} ${pathLabel} is unreachable at ${origin} (${
           error instanceof Error ? error.message : String(error)
         })`,
-        { kind: 'unreachable', path: pathAndQuery, retryable: true },
+        { kind: 'unreachable', path: pathLabel, retryable: true },
       );
     }
     const text = await response.text().catch(() => '');
@@ -167,26 +219,100 @@ export function createIamApplicationClient(options) {
         payload = JSON.parse(text);
       } catch {
         throw new IamApiError(
-          `IAM API POST ${pathAndQuery} answered HTTP ${response.status} with a non-JSON body`,
-          { kind: 'unreadable', path: pathAndQuery, status: response.status },
+          `IAM API ${method} ${pathLabel} answered HTTP ${response.status} with a non-JSON body`,
+          { kind: 'unreadable', path: pathLabel, status: response.status },
         );
       }
     }
     if (!response.ok) {
+      const retryable = response.status >= 500 || response.status === 429;
       throw new IamApiError(
-        `IAM API POST ${pathAndQuery} was rejected with HTTP ${response.status}${
+        `IAM API ${method} ${pathLabel} was rejected with HTTP ${response.status}${
           problemCode(payload) ? ` (problem code ${problemCode(payload)})` : ''
         }${problemMessage(payload) ? `: ${problemMessage(payload)}` : ''}`,
         {
           kind: 'rejected',
-          path: pathAndQuery,
+          path: pathLabel,
           status: response.status,
           code: problemCode(payload),
-          retryable: response.status >= 500 || response.status === 429,
+          retryable,
+          retryAfterMs: parseRetryAfterMs(response.headers?.get?.('retry-after')),
         },
       );
     }
+    return payload;
+  }
+
+  async function request(pathAndQuery, body) {
+    const serializedBody = serializeRequestBody(body ?? {});
+    const payload = await send(
+      'POST',
+      `${origin}${IAM_BACKEND_API_PREFIX}${pathAndQuery}`,
+      {
+        headers: {
+          accept: 'application/json',
+          ...bodyFingerprintHeaders(serializedBody),
+        },
+        body: serializedBody,
+        pathLabel: pathAndQuery,
+      },
+    );
     return unwrapIamItem(payload, pathAndQuery);
+  }
+
+  /**
+   * Mint (once per run) the dual-token operator session the management routes need.
+   * @returns the session tokens
+   */
+  async function resolveManagementSession() {
+    if (explicitAccessToken && explicitAuthToken) {
+      return { accessToken: explicitAccessToken, authToken: explicitAuthToken };
+    }
+    if (mintedSession) {
+      return mintedSession;
+    }
+    if (!canMintSession) {
+      throw new IamApiError(
+        'IAM installation-environment registration needs a dual-token operator session: set '
+        + 'SDKWORK_IAM_MANAGEMENT_ACCESS_TOKEN + SDKWORK_IAM_MANAGEMENT_AUTH_TOKEN (aliases '
+        + 'SDKWORK_IAM_BACKEND_ACCESS_TOKEN / SDKWORK_IAM_BACKEND_AUTH_TOKEN), or set '
+        + 'SDKWORK_IAM_BOOTSTRAP_OPERATOR_USERNAME + SDKWORK_IAM_BOOTSTRAP_OPERATOR_PASSWORD so '
+        + 'the registrar can mint the session through POST /app/v3/api/auth/sessions. The '
+        + 'environment route is dual-token only, and the registrar will not enable an '
+        + 'installation whose environment row it cannot write.',
+        { kind: 'invalid-settings', path: IAM_APP_SESSION_LOGIN_PATH },
+      );
+    }
+    const serializedBody = serializeRequestBody({
+      grantType: 'password',
+      username: mintUsername,
+      password: mintPassword,
+    });
+    const payload = await send(
+      'POST',
+      `${origin}${IAM_APP_SESSION_LOGIN_PATH}`,
+      {
+        headers: {
+          accept: 'application/json',
+          ...bodyFingerprintHeaders(serializedBody),
+        },
+        body: serializedBody,
+        pathLabel: IAM_APP_SESSION_LOGIN_PATH,
+      },
+    );
+    const data = payload && typeof payload === 'object' && 'data' in payload ? payload.data : payload;
+    const item = (data && typeof data === 'object' && (data.item ?? data)) || {};
+    const accessToken = trim(item.accessToken ?? item.access_token);
+    const authToken = trim(item.authToken ?? item.auth_token);
+    if (!accessToken || !authToken) {
+      throw new IamApiError(
+        `IAM login ${IAM_APP_SESSION_LOGIN_PATH} returned no accessToken/authToken pair, so the `
+        + 'installation-environment route cannot be authenticated',
+        { kind: 'unreadable', path: IAM_APP_SESSION_LOGIN_PATH },
+      );
+    }
+    mintedSession = { accessToken, authToken };
+    return mintedSession;
   }
 
   return {
@@ -216,6 +342,67 @@ export function createIamApplicationClient(options) {
         `${IAM_TENANT_APPLICATIONS_PATH}/${encodeURIComponent(id)}/enable`,
         { ...authFields, ...body },
       );
+    },
+
+    /**
+     * Whether this client can authenticate the dual-token management surface.
+     * @returns true when explicit tokens are configured or a session can be minted
+     */
+    hasManagementCredentials() {
+      return (explicitAccessToken.length > 0 && explicitAuthToken.length > 0) || canMintSession;
+    },
+
+    /**
+     * Creates or reconciles one environment row of an installation.
+     *
+     * `PUT` is the idempotent upsert the IAM lifecycle exposes: the row is keyed by
+     * `(installation_id, env_key)`, so a repeated run rewrites the same row instead
+     * of adding a second one. The request carries a deterministic
+     * `Idempotency-Key` so a retry after a timeout replays it.
+     * @param command - tenant, installation id, environment key, domain, status
+     * @returns the environment item (`environmentId`, `environmentKey`, `status`, ...)
+     */
+    async upsertInstallationEnvironment(command = {}) {
+      const tenantId = trim(command.tenantId);
+      const installationId = trim(command.installationId);
+      const envKey = trim(command.envKey);
+      const primaryDomain = trim(command.primaryDomain);
+      if (!tenantId || !installationId || !envKey) {
+        throw new IamApiError(
+          'environment registration requires tenantId, installationId, and envKey',
+          { kind: 'invalid-settings' },
+        );
+      }
+      if (!primaryDomain) {
+        throw new IamApiError(
+          `environment ${envKey} of installation ${installationId} has no primaryDomain; IAM `
+          + 'enable refuses an installation without one',
+          { kind: 'invalid-settings' },
+        );
+      }
+      const session = await resolveManagementSession();
+      const pathLabel = `${IAM_TENANT_APPLICATIONS_MANAGEMENT_PREFIX}/${encodeURIComponent(tenantId)}`
+        + `/applications/${encodeURIComponent(installationId)}`
+        + `/environments/${encodeURIComponent(envKey)}`;
+      const serializedBody = serializeRequestBody({
+        primaryDomain,
+        envStatus: trim(command.envStatus) || 'active',
+      });
+      const headers = {
+        accept: 'application/json',
+        authorization: `Bearer ${session.authToken}`,
+        'access-token': session.accessToken,
+        ...bodyFingerprintHeaders(serializedBody),
+      };
+      if (trim(command.idempotencyKey)) {
+        headers['idempotency-key'] = trim(command.idempotencyKey);
+      }
+      const payload = await send('PUT', `${origin}${IAM_BACKEND_API_PREFIX}${pathLabel}`, {
+        headers,
+        body: serializedBody,
+        pathLabel,
+      });
+      return unwrapIamItem(payload, pathLabel);
     },
   };
 }

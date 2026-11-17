@@ -85,6 +85,7 @@ function manifest(overrides = {}) {
     environments: {
       development: { accessUrl: 'http://127.0.0.1:4734' },
       production: { accessUrl: 'https://demo.sdkwork.com' },
+      ...(overrides.environments ?? {}),
     },
   };
 }
@@ -104,7 +105,7 @@ function clientEnv() {
   };
 }
 
-function settingsFor(stack) {
+function settingsFor(stack, options = {}) {
   return {
     deploy: {
       baseUrl: stack.baseUrl,
@@ -115,6 +116,9 @@ function settingsFor(stack) {
     iam: {
       baseUrl: stack.baseUrl,
       auth: { authToken: 'operator-token' },
+      management: options.management === false
+        ? { accessToken: '', authToken: '', username: '', password: '' }
+        : { accessToken: 'management-access', authToken: 'management-auth' },
       timeoutMs: 2_000,
     },
     tenantId: '100001',
@@ -133,14 +137,21 @@ function recordingRunner() {
   };
 }
 
-async function runRegistration({ workspaceRoot, stack, environment = 'development', overrides = {} }) {
+async function runRegistration({
+  workspaceRoot,
+  stack,
+  environment = 'development',
+  overrides = {},
+  management = true,
+}) {
   const runner = recordingRunner();
+  const sleeps = [];
   const inventory = buildRegistrationInventory({ workspaceRoot });
   const report = await registerApplications(
     {
       workspaceRoot,
       environment,
-      settings: settingsFor(stack),
+      settings: settingsFor(stack, { management }),
       retryDelayMs: 0,
       regenerateTopologyEnv: false,
       materialize: true,
@@ -149,10 +160,13 @@ async function runRegistration({ workspaceRoot, stack, environment = 'developmen
     {
       inventory,
       runNodeScript: runner.run,
-      sleep: async () => {},
+      sleep: async (milliseconds) => {
+        sleeps.push(milliseconds);
+      },
+      jitter: () => 0,
     },
   );
-  return { report, runner };
+  return { report, runner, sleeps };
 }
 
 function readEnv(filePath) {
@@ -390,23 +404,37 @@ test('an IAM response that cannot prove the binding is refused', async () => {
     hooks: [{
       method: 'POST',
       path: '/backend/v3/api/iam/tenant_applications',
-      handle: () => ({
-        status: 201,
-        body: {
-          code: 0,
-          data: {
-            item: {
-              tenantApplicationId: 'ta-x',
-              id: 'ta-x',
-              appId: 'app-runtime-x',
-              status: 'enabled',
-              applicationType: 'pc',
-              instanceKey: 'x_dev',
+      handle: ({ installations }) => {
+        // The stand-in installation must be real enough that the environment
+        // upsert that now runs before enable finds it; the point of this test is
+        // the missing anchor echo, not the environment row.
+        installations.set('900100', {
+          tenantApplicationId: 'ta-x',
+          id: 'ta-x',
+          appId: 'app-runtime-x',
+          status: 'draft',
+          primaryDomain: '127.0.0.1',
+          applicationType: 'pc',
+          instanceKey: 'x_dev',
+        });
+        return {
+          status: 201,
+          body: {
+            code: 0,
+            data: {
+              item: {
+                tenantApplicationId: 'ta-x',
+                id: 'ta-x',
+                appId: 'app-runtime-x',
+                status: 'enabled',
+                applicationType: 'pc',
+                instanceKey: 'x_dev',
+              },
             },
+            traceId: 't',
           },
-          traceId: 't',
-        },
-      }),
+        };
+      },
     }],
   });
   try {
@@ -629,7 +657,13 @@ test('scope=all registers every manifest root and reports the materializer confl
       },
       {
         name: 'sdkwork-demo/apps/sdkwork-demo-h5',
-        manifest: manifest({ app: { key: 'sdkwork-demo-h5', name: 'SDKWork Demo H5' } }),
+        manifest: manifest({
+          app: { key: 'sdkwork-demo-h5', name: 'SDKWork Demo H5' },
+          // Each installation environment row owns a unique domain: IAM keeps
+          // `(tenant_id, primary_domain)` unique across live rows, so two apps
+          // cannot both claim the shared development ingress host.
+          environments: { development: { accessUrl: 'https://h5.sdkwork-demo.test' } },
+        }),
       },
     ],
   });
@@ -724,6 +758,335 @@ test('--deployment-profile narrows the hand-off to one authored layer', async ()
     assert.equal(report.counts.failed, 0, JSON.stringify(report.entries[0]?.error));
     assert.equal(report.entries[0].anchor.written.length, 1);
     assert.match(report.entries[0].anchor.written[0], /cloud\.development\.env$/u);
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('one installation serves every lifecycle; each lifecycle is an environment row', async () => {
+  const workspace = createWorkspace({
+    repositories: [{ name: 'sdkwork-demo', manifest: manifest(), clientEnv: clientEnv() }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const development = await runRegistration({ workspaceRoot: workspace.root, stack });
+    assert.equal(development.report.counts.failed, 0, JSON.stringify(development.report.entries[0]?.error));
+    const devEntry = development.report.entries[0];
+    assert.equal(devEntry.status, 'created');
+    assert.equal(devEntry.iam.status, 'enabled');
+    assert.equal(devEntry.installationEnvironment.envKey, 'development');
+    assert.equal(devEntry.installationEnvironment.status, 'active');
+    assert.equal(devEntry.installationEnvironment.primaryDomain, '127.0.0.1');
+
+    const production = await runRegistration({
+      workspaceRoot: workspace.root,
+      stack,
+      environment: 'production',
+    });
+    assert.equal(production.report.counts.failed, 0, JSON.stringify(production.report.entries[0]?.error));
+    const prodEntry = production.report.entries[0];
+    assert.equal(prodEntry.status, 'reused', 'the production run adopts the development deploy app');
+    assert.equal(prodEntry.deployApplicationUuid, devEntry.deployApplicationUuid);
+    assert.equal(
+      prodEntry.deployApplicationId,
+      devEntry.deployApplicationId,
+      'one deploy app means one anchor, not one anchor per lifecycle',
+    );
+    assert.equal(prodEntry.iam.tenantApplicationId, devEntry.iam.tenantApplicationId);
+    assert.equal(prodEntry.iam.status, 'enabled');
+    assert.equal(prodEntry.installationEnvironment.envKey, 'production');
+    assert.equal(prodEntry.installationEnvironment.status, 'active');
+    assert.equal(prodEntry.installationEnvironment.primaryDomain, 'demo.sdkwork.com');
+
+    assert.equal(stack.apps.size, 1, 'one deploy application across lifecycles');
+    assert.equal(stack.installations.size, 1, 'one installation across lifecycles');
+    assert.equal(stack.environmentRows.size, 2, 'one environment row per registered lifecycle');
+    assert.deepEqual(
+      [...stack.environmentRows.values()].map((row) => `${row.environmentKey}:${row.status}`).sort(),
+      ['development:active', 'production:active'],
+    );
+    assert.equal(stack.requestsFor('POST', '/app/v3/api/apps').length, 1);
+    assert.equal(stack.environmentRequests().length, 2);
+
+    const repeatedProduction = await runRegistration({
+      workspaceRoot: workspace.root,
+      stack,
+      environment: 'production',
+    });
+    assert.equal(repeatedProduction.report.counts.reused, 1);
+    assert.equal(stack.apps.size, 1);
+    assert.equal(stack.installations.size, 1);
+    assert.equal(stack.environmentRows.size, 2, 'a repeated run rewrites the row instead of adding one');
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('the environment row is written before the installation is enabled', async () => {
+  const workspace = createWorkspace({
+    repositories: [{ name: 'sdkwork-demo', manifest: manifest(), clientEnv: clientEnv() }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({ workspaceRoot: workspace.root, stack });
+    assert.equal(report.counts.failed, 0, JSON.stringify(report.entries[0]?.error));
+    const provisionIndex = stack.requests.findIndex(
+      (entry) => entry.method === 'POST' && entry.path === '/backend/v3/api/iam/tenant_applications',
+    );
+    const environmentIndex = stack.requests.findIndex(
+      (entry) => entry.method === 'PUT' && entry.path.includes('/environments/'),
+    );
+    const enableIndex = stack.requests.findIndex(
+      (entry) => entry.method === 'POST' && entry.path.endsWith('/enable'),
+    );
+    assert.ok(provisionIndex >= 0 && environmentIndex >= 0 && enableIndex >= 0);
+    assert.ok(
+      provisionIndex < environmentIndex,
+      'the installation id that addresses the row comes from the provision response',
+    );
+    assert.ok(
+      environmentIndex < enableIndex,
+      'enable must not publish an installation whose environment row does not exist yet',
+    );
+    const [environmentRequest] = stack.environmentRequests();
+    assert.deepEqual(environmentRequest.body, {
+      primaryDomain: '127.0.0.1',
+      envStatus: 'active',
+    });
+    assert.match(
+      environmentRequest.path,
+      /^\/backend\/v3\/api\/iam\/tenants\/100001\/applications\/ta-1\/environments\/development$/u,
+    );
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('a repository with no primary domain source fails at plan time and touches nothing', async () => {
+  const workspace = createWorkspace({
+    repositories: [{
+      name: 'sdkwork-demo',
+      manifest: manifest({ environments: { development: { accessUrl: '' }, production: { accessUrl: '' } } }),
+      clientEnv: clientEnv(),
+    }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({ workspaceRoot: workspace.root, stack });
+    assert.equal(report.counts.failed, 1);
+    assert.equal(report.counts.planned, 1);
+    const entry = report.entries[0];
+    assert.equal(entry.errorKind, 'plan');
+    assert.match(entry.error, /no primaryDomain source for development/u);
+    assert.match(entry.error, /--primary-domain/u);
+    assert.match(entry.error, /backend\.primaryDomain/u);
+    assert.equal(stack.requests.length, 0, 'a plan defect must not reach Deploy or IAM');
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('--primary-domain expands {env} and {slug} and wins over the manifest', async () => {
+  const workspace = createWorkspace({
+    repositories: [{ name: 'sdkwork-demo', manifest: manifest(), clientEnv: clientEnv() }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({
+      workspaceRoot: workspace.root,
+      stack,
+      overrides: { primaryDomainPattern: 'app-{slug}.{env}.sdkwork.test' },
+    });
+    assert.equal(report.counts.failed, 0, JSON.stringify(report.entries[0]?.error));
+    const entry = report.entries[0];
+    assert.equal(entry.primaryDomain, 'app-sdkwork-demo.development.sdkwork.test');
+    assert.equal(entry.primaryDomainSource, '--primary-domain');
+    const [provision] = stack.requestsFor('POST', '/backend/v3/api/iam/tenant_applications');
+    assert.equal(provision.body.primaryDomain, 'app-sdkwork-demo.development.sdkwork.test');
+    assert.equal(
+      stack.environmentRequests()[0].body.primaryDomain,
+      'app-sdkwork-demo.development.sdkwork.test',
+    );
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('--primary-domain rejects an unknown placeholder instead of sending it', async () => {
+  const workspace = createWorkspace({
+    repositories: [{ name: 'sdkwork-demo', manifest: manifest(), clientEnv: clientEnv() }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({
+      workspaceRoot: workspace.root,
+      stack,
+      overrides: { primaryDomainPattern: 'app-{tenant}.sdkwork.test' },
+    });
+    assert.equal(report.counts.failed, 1);
+    assert.match(report.entries[0].error, /unsupported placeholder \{tenant\}/u);
+    assert.equal(stack.requests.length, 0);
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('surfaces that resolve to one installation write one environment row', async () => {
+  const workspace = createWorkspace({
+    repositories: [
+      { name: 'sdkwork-demo', manifest: manifest(), clientEnv: clientEnv() },
+      {
+        name: 'sdkwork-demo/apps/sdkwork-demo-h5',
+        // The same app.key keeps both manifest roots on one deploy slug, which is
+        // the multi-surface case: one installation, one environment row.
+        manifest: manifest({ app: { key: 'sdkwork-demo', name: 'SDKWork Demo H5' } }),
+      },
+    ],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({
+      workspaceRoot: workspace.root,
+      stack,
+      overrides: { scope: 'all' },
+    });
+    assert.equal(report.counts.planned, 2);
+    assert.equal(report.counts.failed, 0, JSON.stringify(report.entries.map((entry) => entry.error)));
+    assert.equal(stack.apps.size, 1, 'both surfaces share one deploy application');
+    assert.equal(stack.installations.size, 1, 'both surfaces share one installation');
+    assert.equal(stack.environmentRows.size, 1, 'the environment row is created once');
+    assert.equal(stack.environmentRequests().length, 1, 'no second PUT for the same row');
+    assert.equal(
+      report.counts.environmentsDeduplicated,
+      1,
+      'the second surface records the shared row instead of re-upserting it',
+    );
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('a 429 on a command waits at least Retry-After before the retry', async () => {
+  const workspace = createWorkspace({
+    repositories: [{ name: 'sdkwork-demo', manifest: manifest(), clientEnv: clientEnv() }],
+  });
+  const stack = await startFakeStack();
+  try {
+    stack.failNextOnce({
+      method: 'POST',
+      path: '/backend/v3/api/iam/tenant_applications',
+      status: 429,
+      headers: { 'retry-after': '2' },
+      body: { status: 429, code: 42901, detail: 'too many requests' },
+    });
+    const { report, sleeps } = await runRegistration({
+      workspaceRoot: workspace.root,
+      stack,
+      overrides: { maxAttempts: 5, retryDelayMs: 100 },
+    });
+    assert.equal(report.counts.failed, 0, JSON.stringify(report.entries[0]?.error));
+    assert.ok(sleeps.length >= 1, 'the throttled call must wait before retrying');
+    assert.ok(
+      sleeps[0] >= 2_000,
+      `the wait must honour Retry-After (2000ms), got ${sleeps[0]}ms`,
+    );
+    assert.equal(stack.requestsFor('POST', '/backend/v3/api/iam/tenant_applications').length, 2);
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('without a dual-token session the item fails before enable leaves the installation unusable', async () => {
+  const workspace = createWorkspace({
+    repositories: [{ name: 'sdkwork-demo', manifest: manifest(), clientEnv: clientEnv() }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({
+      workspaceRoot: workspace.root,
+      stack,
+      management: false,
+    });
+    assert.equal(report.counts.failed, 1);
+    assert.match(report.entries[0].error, /dual-token operator session/u);
+    assert.equal(stack.environmentRequests().length, 0);
+    assert.equal(
+      stack.requests.filter((entry) => entry.method === 'POST' && entry.path.endsWith('/enable')).length,
+      0,
+      'an installation whose environment row cannot be written must not be enabled',
+    );
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('two applications claiming one domain fail at plan time instead of racing a 409', async () => {
+  const workspace = createWorkspace({
+    repositories: [
+      {
+        name: 'sdkwork-demo',
+        manifest: manifest({
+          backend: { domain: 'shared.sdkwork.test' },
+          environments: { development: {}, production: {} },
+        }),
+        clientEnv: clientEnv(),
+      },
+      {
+        name: 'sdkwork-demo-two',
+        manifest: manifest({
+          app: { key: 'sdkwork-demo-two', name: 'SDKWork Demo Two' },
+          backend: { domain: 'shared.sdkwork.test' },
+          environments: { development: {}, production: {} },
+        }),
+      },
+    ],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({ workspaceRoot: workspace.root, stack });
+    assert.equal(report.counts.planned, 2);
+    assert.equal(report.counts.failed, 2);
+    for (const entry of report.entries) {
+      assert.equal(entry.errorKind, 'plan');
+      assert.match(entry.error, /primaryDomain shared\.sdkwork\.test/u);
+      assert.match(entry.error, /also claimed by/u);
+    }
+    assert.equal(stack.requests.length, 0);
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('--no-register-environments is the explicit downgrade path', async () => {
+  const workspace = createWorkspace({
+    repositories: [{ name: 'sdkwork-demo', manifest: manifest(), clientEnv: clientEnv() }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({
+      workspaceRoot: workspace.root,
+      stack,
+      overrides: { registerEnvironments: false },
+    });
+    assert.equal(report.counts.failed, 0, JSON.stringify(report.entries[0]?.error));
+    assert.equal(report.entries[0].installationEnvironment.status, 'skipped');
+    assert.equal(report.counts.environmentsSkipped, 1);
+    assert.equal(stack.environmentRequests().length, 0);
+    assert.equal(
+      stack.requests.filter((entry) => entry.method === 'POST' && entry.path.endsWith('/enable')).length,
+      1,
+      'the downgrade path still enables the installation',
+    );
   } finally {
     await stack.close();
     workspace.cleanup();

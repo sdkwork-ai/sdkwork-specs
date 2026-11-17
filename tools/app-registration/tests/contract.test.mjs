@@ -14,11 +14,15 @@ import {
   deployAppCreateIdempotencyKey,
   deployAppKindForApplicationType,
   deriveProvisioningIdempotencyKey,
+  environmentUpsertIdempotencyKey,
+  expandPrimaryDomainPattern,
   mapManifestAppTypeToApplicationType,
   normalizeEnvironment,
+  normalizePrimaryDomain,
   readDeployAppItem,
   readTenantApplicationItem,
   resolveDeploySlug,
+  resolvePrimaryDomain,
   resolveRegistrationSettings,
   tenantApplicationInstanceKey,
 } from '../contract.mjs';
@@ -306,4 +310,178 @@ test('settings resolution accepts either IAM auth shape and validates URLs', () 
     () => resolveRegistrationSettings({ ...base, SDKWORK_DEPLOY_BACKEND_TIMEOUT_MS: '5' }),
     /500\.\.60000/u,
   );
+});
+
+test('the settings carry the optional dual-token management credentials', () => {
+  const base = {
+    SDKWORK_DEPLOY_BACKEND_API_BASE_URL: 'http://127.0.0.1:3902',
+    SDKWORK_DEPLOY_BACKEND_ACCESS_TOKEN: 'access',
+    SDKWORK_DEPLOY_BACKEND_AUTH_TOKEN: 'auth',
+    SDKWORK_IAM_BACKEND_API_BASE_URL: 'http://127.0.0.1:3901',
+    SDKWORK_IAM_BOOTSTRAP_OPERATOR_USERNAME: 'admin',
+    SDKWORK_IAM_BOOTSTRAP_OPERATOR_PASSWORD: 'secret',
+  };
+  const withOperatorPassword = resolveRegistrationSettings(base);
+  assert.deepEqual(withOperatorPassword.iam.management, {
+    accessToken: '',
+    authToken: '',
+    username: 'admin',
+    password: 'secret',
+  });
+
+  const explicit = resolveRegistrationSettings({
+    ...base,
+    SDKWORK_IAM_MANAGEMENT_ACCESS_TOKEN: 'mgmt-access',
+    SDKWORK_IAM_MANAGEMENT_AUTH_TOKEN: 'mgmt-auth',
+  });
+  assert.equal(explicit.iam.management.accessToken, 'mgmt-access');
+  assert.equal(explicit.iam.management.authToken, 'mgmt-auth');
+
+  const aliases = resolveRegistrationSettings({
+    ...base,
+    SDKWORK_IAM_BACKEND_ACCESS_TOKEN: 'alias-access',
+    SDKWORK_IAM_BACKEND_AUTH_TOKEN: 'alias-auth',
+  });
+  assert.equal(aliases.iam.management.accessToken, 'alias-access');
+  assert.equal(aliases.iam.management.authToken, 'alias-auth');
+});
+
+test('a domain is normalized into the absolute hostname IAM stores', () => {
+  assert.equal(normalizePrimaryDomain('https://Demo.SDKWork.com'), 'demo.sdkwork.com');
+  assert.equal(normalizePrimaryDomain('http://127.0.0.1:4734'), '127.0.0.1');
+  assert.equal(normalizePrimaryDomain('demo.sdkwork.com/api/v1?x=1'), 'demo.sdkwork.com');
+  assert.equal(normalizePrimaryDomain('user@demo.sdkwork.com:8443'), 'demo.sdkwork.com');
+  assert.equal(normalizePrimaryDomain('demo.sdkwork.com.'), 'demo.sdkwork.com');
+  assert.equal(normalizePrimaryDomain('localhost'), 'localhost');
+  for (const invalid of [
+    '',
+    '   ',
+    'demo sdkwork.com',
+    '*.sdkwork.com',
+    'https://',
+    '[::1]',
+    'demo..sdkwork.com',
+    '-demo.sdkwork.com',
+    `${'a'.repeat(64)}.sdkwork.com`,
+  ]) {
+    assert.throws(
+      () => normalizePrimaryDomain(invalid),
+      (error) => error instanceof RegistrationConfigurationError
+        && /absolute hostname/u.test(error.message),
+      `${JSON.stringify(invalid)} must be refused`,
+    );
+  }
+});
+
+test('the --primary-domain pattern expands {env} and {slug} and rejects other tokens', () => {
+  assert.equal(
+    expandPrimaryDomainPattern('{slug}.{env}.sdkwork.test', {
+      environment: 'development',
+      slug: 'sdkwork-im-pc',
+    }),
+    'sdkwork-im-pc.development.sdkwork.test',
+  );
+  assert.equal(
+    expandPrimaryDomainPattern('app.sdkwork.test', { environment: 'production', slug: 'x' }),
+    'app.sdkwork.test',
+    'a pattern without placeholders is used verbatim',
+  );
+  assert.throws(
+    () => expandPrimaryDomainPattern('{tenant}.sdkwork.test', { environment: 'test', slug: 'x' }),
+    (error) => error instanceof RegistrationConfigurationError
+      && /unsupported placeholder \{tenant\}/u.test(error.message),
+  );
+  assert.throws(
+    () => expandPrimaryDomainPattern('{slug}.sdkwork.test', { environment: 'test', slug: '' }),
+    (error) => error instanceof RegistrationConfigurationError && /no deploy slug/u.test(error.message),
+  );
+});
+
+test('the primary domain resolves from the documented sources in order', () => {
+  const entry = {
+    environments: {
+      development: {
+        accessUrl: 'http://127.0.0.1:4734',
+        deployUrl: 'https://deploy.sdkwork.test',
+      },
+    },
+    backendPrimaryDomain: 'backend.sdkwork.test',
+    backendDomain: 'domain.sdkwork.test',
+  };
+  assert.deepEqual(
+    resolvePrimaryDomain({ entry, environment: 'development', slug: 'sdkwork-im' }),
+    {
+      domain: '127.0.0.1',
+      source: 'environments.development.accessUrl',
+      checked: [
+        'environments.development.accessUrl',
+        'environments.development.deployUrl',
+        'backend.primaryDomain',
+        'backend.domain',
+      ],
+    },
+  );
+  assert.equal(
+    resolvePrimaryDomain({
+      entry: { ...entry, environments: { development: { deployUrl: 'https://deploy.sdkwork.test' } } },
+      environment: 'development',
+    }).source,
+    'environments.development.deployUrl',
+  );
+  assert.equal(
+    resolvePrimaryDomain({ entry: { backendDomain: 'domain.sdkwork.test' }, environment: 'development' })
+      .source,
+    'backend.domain',
+  );
+  assert.deepEqual(
+    resolvePrimaryDomain({
+      entry: { backendPrimaryDomain: 'backend.sdkwork.test' },
+      environment: 'production',
+      pattern: 'app-{slug}.{env}.sdkwork.test',
+      slug: 'sdkwork-im',
+    }),
+    {
+      domain: 'app-sdkwork-im.production.sdkwork.test',
+      source: '--primary-domain',
+      checked: [
+        '--primary-domain',
+        'environments.production.accessUrl',
+        'environments.production.deployUrl',
+        'backend.primaryDomain',
+        'backend.domain',
+      ],
+    },
+  );
+  const none = resolvePrimaryDomain({ entry: {}, environment: 'staging' });
+  assert.equal(none.domain, '');
+  assert.equal(none.source, '');
+  assert.deepEqual(none.checked, [
+    'environments.staging.accessUrl',
+    'environments.staging.deployUrl',
+    'backend.primaryDomain',
+    'backend.domain',
+  ]);
+  // A present-but-invalid higher-precedence source fails instead of falling
+  // through to a domain nobody authored for this application.
+  assert.throws(
+    () => resolvePrimaryDomain({
+      entry: {
+        environments: { development: { accessUrl: 'not a url' } },
+        backendDomain: 'domain.sdkwork.test',
+      },
+      environment: 'development',
+    }),
+    (error) => error instanceof RegistrationConfigurationError
+      && /environments\.development\.accessUrl/u.test(error.message),
+  );
+});
+
+test('the environment upsert key is deterministic per installation row', () => {
+  const first = environmentUpsertIdempotencyKey('100001', 'ta-1', 'development');
+  assert.equal(first, environmentUpsertIdempotencyKey('100001', 'ta-1', 'development'));
+  assert.notEqual(first, environmentUpsertIdempotencyKey('100001', 'ta-1', 'production'));
+  assert.notEqual(first, environmentUpsertIdempotencyKey('100001', 'ta-2', 'development'));
+  const longKey = environmentUpsertIdempotencyKey('100001', 'x'.repeat(200), 'development');
+  assert.ok(longKey.length <= DEPLOY_IDEMPOTENCY_KEY_MAX_LEN, `key too long: ${longKey.length}`);
+  assert.equal(longKey, environmentUpsertIdempotencyKey('100001', 'x'.repeat(200), 'development'));
 });

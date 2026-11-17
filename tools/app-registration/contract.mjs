@@ -26,12 +26,36 @@
  *   `deployApplicationUuid` (addressable on the app API) and
  *   `deployApplicationId` (the anchor IAM and the token carry).
  *
+ * # Installation and environment model
+ *
+ * - One deploy application has one IAM installation: `uk_iam_application_installation_deploy`
+ *   makes `iam_application_installation.deploy_application_id` one-to-one, and
+ *   `provision_tenant_application` reconciles deploy-application-first
+ *   (`resolve_tenant_application_by_deploy_application_id`). The deploy
+ *   `uk_deploy_app_tenant_slug` slug is environment-independent, so the same
+ *   repository registered for `development` and `production` keeps one deploy
+ *   app, one anchor, and one installation.
+ * - A lifecycle is **not** a second installation. It is one
+ *   `iam_application_installation_environment` row under that installation
+ *   (`env_key`, `primary_domain`, `env_status`), written through
+ *   `PUT /backend/v3/api/iam/tenants/{tenantId}/applications/{installationId}/environments/{envKey}`.
+ *   Token issuance then requires the requested environment's row to exist and be
+ *   `active`; an installation whose rows it could not write must not be enabled.
+ *
  * # Idempotency model
  *
  * - `apps.create` uses `Idempotency-Key: sdkwork-app-register:<environment>:<slug>`.
  *   The key and the body depend only on the app slug, the environment, and the
  *   app's own manifest fields, so a retry replays the first row instead of
  *   colliding on `uk_deploy_app_tenant_slug`.
+ * - Every body-carrying command also sends `X-Content-SHA256` (lowercase hex
+ *   SHA-256 of the exact request bytes). The idempotency middleware rejects a
+ *   command with a body that omits it, so the `Idempotency-Key` alone is not a
+ *   valid request.
+ * - The installation-environment upsert uses
+ *   `Idempotency-Key: sdkwork-app-register:env:<tenant>:<installation>:<envKey>`
+ *   keyed by the row identity, so several surfaces of one installation converge
+ *   on one row.
  * - `iam.tenantApplications.create` uses
  *   `provisioningIdempotencyKey = iam-bootstrap-<sha256(...)[0..40]>` over the
  *   same identity tuple the framework derives it from
@@ -54,6 +78,9 @@ export const IAM_PROVISIONING_IDEMPOTENCY_KEY_PREFIX = 'iam-bootstrap-';
 
 /** Longest `Idempotency-Key` the deploy route accepts. */
 export const DEPLOY_IDEMPOTENCY_KEY_MAX_LEN = 128;
+
+/** Longest `primaryDomain` IAM stores (`iam_application_installation_environment.primary_domain`). */
+export const PRIMARY_DOMAIN_MAX_LEN = 253;
 
 /** Longest deploy application slug (`deploy_app.slug VARCHAR(120)`). */
 export const DEPLOY_APP_SLUG_MAX_LEN = 120;
@@ -127,6 +154,29 @@ export const REGISTRATION_SETTINGS_ENV = Object.freeze({
   }),
   tenantId: 'SDKWORK_TENANT_ID',
   organizationId: 'SDKWORK_ORGANIZATION_ID',
+});
+
+/**
+ * Optional dual-token credentials for the IAM installation-management surface.
+ *
+ * `tenantApplications.environments.update` is a `dual-token` route, unlike the
+ * bootstrap-body provision/enable routes, so the environment row cannot be
+ * written with the operator body credentials. When these are absent the client
+ * mints a session from the bootstrap operator username + password instead; when
+ * neither exists the registrar fails the item before enabling an installation
+ * whose environment row it could not write.
+ */
+export const IAM_MANAGEMENT_SETTINGS_ENV = Object.freeze({
+  accessTokenCandidates: [
+    'SDKWORK_IAM_MANAGEMENT_ACCESS_TOKEN',
+    'SDKWORK_IAM_BACKEND_ACCESS_TOKEN',
+  ],
+  authTokenCandidates: [
+    'SDKWORK_IAM_MANAGEMENT_AUTH_TOKEN',
+    'SDKWORK_IAM_BACKEND_AUTH_TOKEN',
+    'SDKWORK_IAM_BOOTSTRAP_OPERATOR_AUTH_TOKEN',
+    'SDKWORK_IAM_BOOTSTRAP_AUTH_TOKEN',
+  ],
 });
 
 /** Raised when registration cannot start because configuration is missing. */
@@ -300,6 +350,195 @@ export function tenantApplicationInstanceKey(anchor, environment) {
     return `${normalized}_prod`;
   }
   return `${normalized}_${lifecycle.replace(/-/gu, '_')}`;
+}
+
+/**
+ * Expand `{env}` / `{slug}` placeholders in a `--primary-domain` pattern.
+ *
+ * The placeholder set is closed on purpose: an unknown token is a typo that
+ * would otherwise reach IAM as a literal domain label.
+ * @param pattern - authored pattern, e.g. `im.{env}.sdkwork.com`
+ * @param values - canonical environment and the deploy slug
+ * @returns the expanded value
+ * @throws {RegistrationConfigurationError} on an unknown placeholder or empty slug use
+ */
+export function expandPrimaryDomainPattern(pattern, values = {}) {
+  const raw = trimToValue(pattern);
+  if (!raw) {
+    throw new RegistrationConfigurationError('--primary-domain pattern is empty');
+  }
+  return raw.replace(/\{([a-zA-Z0-9_-]+)\}/gu, (match, token) => {
+    if (token === 'env') {
+      return normalizeEnvironment(values.environment);
+    }
+    if (token === 'slug') {
+      const slug = trimToValue(values.slug);
+      if (!slug) {
+        throw new RegistrationConfigurationError(
+          `--primary-domain pattern ${JSON.stringify(raw)} uses {slug}, but this item has no deploy `
+          + 'slug yet; fix the manifest identity before using the placeholder',
+        );
+      }
+      return slug;
+    }
+    throw new RegistrationConfigurationError(
+      `--primary-domain pattern ${JSON.stringify(raw)} uses unsupported placeholder ${match}; only `
+      + '{env} and {slug} are substituted',
+    );
+  });
+}
+
+const HOSTNAME_LABEL = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u;
+
+/**
+ * Normalize an authored domain into the absolute hostname IAM stores.
+ *
+ * IAM's `normalize_primary_domain`
+ * (`crates/sdkwork-iam-web-adapter/src/installation_lifecycle.rs:352`) accepts any
+ * non-blank value without whitespace or a wildcard, and lowercases it; the
+ * installation environment table additionally treats the value as an absolute
+ * host. A manifest `accessUrl` is a URL (`http://127.0.0.1:4734`), so the scheme,
+ * port, path, query, userinfo, and trailing dot are removed here — a URL stored
+ * verbatim would become a domain no host can match.
+ * @param raw - authored value (URL or hostname)
+ * @param label - who supplied it (for the diagnostic)
+ * @returns the lowercase hostname
+ * @throws {RegistrationConfigurationError} when the value is not an absolute hostname
+ */
+export function normalizePrimaryDomain(raw, label = 'primaryDomain') {
+  const authored = trimToValue(raw);
+  const invalid = (reason) =>
+    new RegistrationConfigurationError(
+      `${label}=${JSON.stringify(authored)} is not an absolute hostname (${reason}); IAM stores the `
+      + 'installation environment domain verbatim, and enable refuses an installation without one',
+      { value: authored, label },
+    );
+  if (!authored) {
+    throw invalid('the value is blank');
+  }
+  let host = authored;
+  if (/^[a-z][a-z0-9+.-]*:\/\//iu.test(host)) {
+    let parsed;
+    try {
+      parsed = new URL(host);
+    } catch {
+      throw invalid('not a parseable absolute URL');
+    }
+    host = parsed.hostname;
+  } else if (host.startsWith('//')) {
+    try {
+      host = new URL(`http:${host}`).hostname;
+    } catch {
+      throw invalid('not a parseable scheme-relative URL');
+    }
+  }
+  host = host.split('/')[0].split('?')[0].split('#')[0];
+  const userinfo = host.lastIndexOf('@');
+  if (userinfo >= 0) {
+    host = host.slice(userinfo + 1);
+  }
+  if (host.startsWith('[')) {
+    throw invalid('an IPv6 literal is not a hostname IAM can store');
+  }
+  const port = host.lastIndexOf(':');
+  if (port >= 0) {
+    host = host.slice(0, port);
+  }
+  host = host.trim().toLowerCase().replace(/\.+$/u, '');
+  if (!host) {
+    throw invalid('no host component');
+  }
+  if (host.length > PRIMARY_DOMAIN_MAX_LEN) {
+    throw invalid(`longer than ${PRIMARY_DOMAIN_MAX_LEN} characters`);
+  }
+  if (/[\s*]/u.test(host)) {
+    throw invalid('contains whitespace or a wildcard');
+  }
+  for (const labelPart of host.split('.')) {
+    if (labelPart.length === 0 || labelPart.length > 63 || !HOSTNAME_LABEL.test(labelPart)) {
+      throw invalid(`label ${JSON.stringify(labelPart)} is not a DNS label`);
+    }
+  }
+  return host;
+}
+
+/** Sources a primary domain is read from, highest precedence first. */
+export const PRIMARY_DOMAIN_SOURCES = Object.freeze([
+  '--primary-domain',
+  'environments.<environment>.accessUrl',
+  'environments.<environment>.deployUrl',
+  'backend.primaryDomain',
+  'backend.domain',
+]);
+
+/**
+ * Resolve one item's primary domain.
+ *
+ * Precedence: the `--primary-domain` pattern (`{env}`/`{slug}` expanded), then the
+ * lifecycle `accessUrl`, then `deployUrl`, then the manifest-wide
+ * `backend.primaryDomain`, then `backend.domain`. An authored value that is
+ * present but invalid fails the item instead of falling through: silently using a
+ * lower-precedence domain would anchor the installation to a host nobody
+ * intended.
+ * @param input - entry, environment, slug, and the optional CLI pattern
+ * @returns the hostname, its source, and every source that was consulted
+ * @throws {RegistrationConfigurationError} when a present source is not a hostname
+ */
+export function resolvePrimaryDomain(input = {}) {
+  const environment = normalizeEnvironment(input.environment);
+  const entry = input.entry ?? {};
+  const section = entry.environments?.[environment] ?? {};
+  const pattern = trimToValue(input.pattern);
+  const candidates = [];
+  if (pattern) {
+    candidates.push({
+      source: '--primary-domain',
+      value: expandPrimaryDomainPattern(pattern, { environment, slug: input.slug }),
+    });
+  }
+  candidates.push({
+    source: `environments.${environment}.accessUrl`,
+    value: section.accessUrl,
+  });
+  candidates.push({
+    source: `environments.${environment}.deployUrl`,
+    value: section.deployUrl,
+  });
+  candidates.push({ source: 'backend.primaryDomain', value: entry.backendPrimaryDomain });
+  candidates.push({ source: 'backend.domain', value: entry.backendDomain });
+  const checked = candidates.map((candidate) => candidate.source);
+  for (const candidate of candidates) {
+    if (!trimToValue(candidate.value)) {
+      continue;
+    }
+    return {
+      domain: normalizePrimaryDomain(candidate.value, candidate.source),
+      source: candidate.source,
+      checked,
+    };
+  }
+  return { domain: '', source: '', checked };
+}
+
+/**
+ * Deterministic `Idempotency-Key` for one installation-environment upsert.
+ *
+ * Keyed by the row identity (`installation`, `env_key`), not by the surface: a
+ * repository whose several surfaces map to one installation must not create a
+ * second row per surface, and a retry after a timeout must replay the first.
+ * @param tenantId - tenant scope
+ * @param installationId - IAM installation id
+ * @param envKey - canonical environment key
+ * @returns the idempotency key, within the route's 128-character limit
+ */
+export function environmentUpsertIdempotencyKey(tenantId, installationId, envKey) {
+  const key = `sdkwork-app-register:env:${trimToValue(tenantId)}:${trimToValue(installationId)}:`
+    + `${trimToValue(envKey)}`;
+  if (key.length <= DEPLOY_IDEMPOTENCY_KEY_MAX_LEN) {
+    return key;
+  }
+  const digest = createHash('sha256').update(key).digest('hex').slice(0, 24);
+  return `sdkwork-app-register:env:${digest}`;
 }
 
 /**
@@ -678,6 +917,8 @@ export function resolveRegistrationSettings(env = process.env) {
   const iamAuth = iamAuthToken.value
     ? { authToken: iamAuthToken.value }
     : { username: iamUsername.value, password: iamPassword.value };
+  const managementAccessToken = readFirstEnv(env, IAM_MANAGEMENT_SETTINGS_ENV.accessTokenCandidates);
+  const managementAuthToken = readFirstEnv(env, IAM_MANAGEMENT_SETTINGS_ENV.authTokenCandidates);
 
   return {
     deploy: {
@@ -690,6 +931,15 @@ export function resolveRegistrationSettings(env = process.env) {
       baseUrl: assertHttpBaseUrl(iamBase.value, iamBase.key),
       auth: iamAuth,
       timeoutMs: readTimeout(env, REGISTRATION_SETTINGS_ENV.iam.timeoutMs),
+      // The installation-environment route is dual-token; these credentials are
+      // optional because the client can mint a session from the operator
+      // username + password, and because `--no-register-environments` opts out.
+      management: {
+        accessToken: managementAccessToken.value,
+        authToken: managementAuthToken.value,
+        username: iamUsername.value,
+        password: iamPassword.value,
+      },
     },
     tenantId,
     organizationId,

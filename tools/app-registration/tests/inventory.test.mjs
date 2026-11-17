@@ -45,6 +45,7 @@ function manifest(overrides = {}) {
     environments: {
       development: { accessUrl: 'http://127.0.0.1:4734' },
       production: { accessUrl: 'https://im.sdkwork.com' },
+      ...(overrides.environments ?? {}),
     },
   };
 }
@@ -145,11 +146,57 @@ test('the inventory records surfaces, environments, sinks, and token carriers', 
     assert.deepEqual(surfaceEntry.tokenCarrier.surfaces[0].profiles.present, ['standalone.development']);
     assert.equal(surfaceEntry.tokenCarrier.surfaces[0].profiles.missing.length, 9);
     assert.equal(surfaceEntry.environments.development.domain, 'http://127.0.0.1:4734');
+    assert.equal(
+      surfaceEntry.environments.development.domainSource,
+      'environments.development.accessUrl',
+      'the scan names the source the registrar will normalize',
+    );
+    assert.equal(surfaceEntry.environments.development.accessUrl, 'http://127.0.0.1:4734');
+    assert.equal(surfaceEntry.environments.development.deployUrl, '');
     assert.equal(surfaceEntry.environments.production.domain, 'https://im.sdkwork.com');
     assert.deepEqual(
       surfaceEntry.environments.development.anchorSinks.map((sink) => sink.kind),
       ['topology-override'],
     );
+  });
+});
+
+test('the scan keeps accessUrl, deployUrl, and the backend fallback apart', () => {
+  createWorkspace((root) => {
+    writeJson(path.join(root, 'sdkwork-im', 'agent.app.config.json'), manifest({
+      environments: {
+        development: { deployUrl: 'https://deploy-dev.sdkwork.test' },
+        test: { accessUrl: '', deployUrl: '' },
+      },
+      backend: { primaryDomain: 'im.sdkwork.test' },
+    }));
+    const inventory = buildRegistrationInventory({ workspaceRoot: root });
+    const entry = inventory.entries[0];
+    assert.equal(
+      entry.environments.development.domain,
+      'https://deploy-dev.sdkwork.test',
+      'deployUrl is the second source when accessUrl is absent',
+    );
+    assert.equal(entry.environments.development.domainSource, 'environments.development.deployUrl');
+    assert.equal(
+      entry.environments.test.domain,
+      'im.sdkwork.test',
+      'the manifest-wide backend.primaryDomain is the fallback',
+    );
+    assert.equal(entry.environments.test.domainSource, 'backend.primaryDomain');
+    assert.equal(entry.backendPrimaryDomain, 'im.sdkwork.test');
+    assert.equal(entry.environments.staging.domain, 'im.sdkwork.test');
+  });
+});
+
+test('a manifest with no domain source at all reports an empty candidate', () => {
+  createWorkspace((root) => {
+    writeJson(path.join(root, 'sdkwork-im', 'agent.app.config.json'), manifest({
+      environments: { development: {}, production: {} },
+    }));
+    const inventory = buildRegistrationInventory({ workspaceRoot: root });
+    assert.equal(inventory.entries[0].environments.development.domain, '');
+    assert.equal(inventory.entries[0].environments.development.domainSource, '');
   });
 });
 
