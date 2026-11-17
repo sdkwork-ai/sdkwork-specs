@@ -1,6 +1,6 @@
 # SDKWork Database Contract Standard
 
-- Version: 3.1
+- Version: 3.2
 - Scope: PostgreSQL-first authoritative server persistence, SQLite client-local persistence, relational database contracts, schema registry inputs, table naming, logical data types, tenant and subject isolation, indexes, transactions, schema evolution, repository access, lifecycle orchestration, and database readiness for SDKWork-owned systems
 - Related: `API_SPEC.md`, `PAGINATION_SPEC.md`, `SUBJECT_ID_SPEC.md`, `DATABASE_FRAMEWORK_SPEC.md`, `DATABASE_SPEC_PROCESS_SHARED_POOL.md`, `SCHEMA_REGISTRY_SPEC.md`, `MIGRATION_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `WEB_BACKEND_SPEC.md`, `RUST_CODE_SPEC.md`, `TEST_SPEC.md`
 - Canonical location: `DATABASE_SPEC.md` in the `sdkwork-specs` standards root
@@ -308,6 +308,7 @@ Rules:
 - New business table names `MUST` follow `<module_prefix>_<entity_name>`.
 - `<module_prefix>` `MUST` be a registered business module or bounded-context prefix, not a product name, company name, deployment name, programming language, or legacy project prefix.
 - A platform infrastructure layer that owns a bounded context `MAY` register a descriptive prefix naming that context (for example `framework_` for the web framework layer). Such a prefix `MUST` be registered in `tools/database-module-registry.json` before first use, and that registry entry is the sole authority for ownership. See `docs/architecture/decisions/ADR-20260917-web-framework-table-prefix.md`.
+- Workspace, project, application, and template design-time assets use the source-of-record module prefix (DB065). A shared design-time prefix is permitted only when it is registered in `tools/database-module-registry.json` before first use (DB061, DB064, DB072); the retired `studio_` project prefix is an L0 migration fact and `MUST NOT` name a new table (DB066, DB068). See `docs/architecture/decisions/ADR-20261117-design-time-table-prefix.md`.
 - Entity names `SHOULD` use singular nouns. Collection semantics should be represented by relation tables or child entities.
 - Standard suffixes include `_history`, `_event`, `_snapshot`, `_detail`, `_item`, `_relation`, `_binding`, `_assignment`, `_outbox`, `_inbox`, `_read_model`, and `_audit`.
 - Foreign key-like fields `SHOULD` use `<entity>_id` or a domain-specific subject field name such as `tenant_id` and `organization_id`.
@@ -701,7 +702,7 @@ CI, schema linters, migration tools, or repository audits `SHOULD` implement the
 | DB068 | MUST | Legacy table-prefix gaps are classified by priority and risk. |
 | DB069 | MUST | Owner-review tables confirm system-of-record owner before target name approval. |
 | DB070 | SHOULD | External channel, connector, and provider account tables use `integration_` or a more specific approved prefix. |
-| DB071 | SHOULD | Workspace, project, application, and template design-time assets use `studio_` or a more specific approved prefix. |
+| DB071 | SHOULD | Workspace, project, application, and template design-time assets use the source-of-record module prefix; a shared design-time prefix requires registry registration and `MUST NOT` be a retired project prefix such as `studio_`. |
 | DB072 | SHOULD | Entity annotations, DDL, migrations, audit files, and schema linter rules share the same prefix registry. |
 | DB073 | MUST | Authoritative server relational persistence declares `databaseRole=authoritative-server` and uses PostgreSQL. |
 | DB074 | MUST | SQLite declares `databaseRole=client-local` and is not used by a server, shared-state, or system-of-record runtime. |
