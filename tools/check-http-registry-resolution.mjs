@@ -163,20 +163,12 @@ const IDENTITY_BASELINE = new Map([
     'device speech turn uses the process cloudrouter key; carry the device session identity (tenant/organization/user) in SpeechTurnInput and apply the caller pair',
   ],
   [
-    'sdkwork-canvas/crates/sdkwork-api-canvas-assembly/src/service/drive_http_adapter.rs',
-    'drive app-api call sets only a process SDKWORK_ACCESS_TOKEN (no Authorization); thread CallerCredentials from the canvas write handler and build the client per call',
-  ],
-  [
     'sdkwork-course/crates/sdkwork-course-embedded-bootstrap/src/adapters/drive_sdk.rs',
     'drive app-api call sets only a process SDKWORK_ACCESS_TOKEN (no Authorization); add the caller pair to CourseServiceContext and drop the env requirement',
   ],
   [
     'sdkwork-deployments/crates/sdkwork-deploy-web-port/src/lib.rs',
     'deployment web port uses a process API key; decide caller identity vs declared service identity and declare it explicitly',
-  ],
-  [
-    'sdkwork-generations/crates/sdkwork-generations-provider-adapter/src/gateway.rs',
-    'media provider reads process GENERATIONS_MEDIA_GATEWAY_AUTH_TOKEN/ACCESS_TOKEN and pools clients by base URL only; thread the caller pair through MediaSdkGateway and pool by (base URL, credential fingerprint)',
   ],
   [
     'sdkwork-image/crates/sdkwork-image-generation-provider-adapter/src/adapter.rs',
