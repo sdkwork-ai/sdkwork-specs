@@ -170,10 +170,6 @@ const IDENTITY_BASELINE = new Map([
     'sdkwork-voice/crates/sdkwork-voice-embedded-bootstrap/src/bootstrap.rs',
     'voice speech generation uses a process API key; carry the caller pair once the route is wired',
   ],
-  [
-    'sdkwork-webserver/crates/sdkwork-webserver-agent/src/main.rs',
-    'control-plane bootstrap client; declare the service identity explicitly (identity:service) or thread the caller pair',
-  ],
 ]);
 
 const identityViolations = [];
