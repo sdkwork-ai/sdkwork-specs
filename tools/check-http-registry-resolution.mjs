@@ -171,14 +171,6 @@ const IDENTITY_BASELINE = new Map([
     'voice speech generation uses a process API key; carry the caller pair once the route is wired',
   ],
   [
-    'sdkwork-webserver/crates/sdkwork-api-webserver-standalone-gateway/src/website_provider_http_adapter.rs',
-    'website provider adapter uses a process API key; thread caller identity through the website request path or declare the service identity',
-  ],
-  [
-    'sdkwork-webserver/crates/sdkwork-api-webserver-standalone-gateway/src/website_runtime_cloud.rs',
-    'website runtime cloud client uses a process API key; thread caller identity through the website request path or declare the service identity',
-  ],
-  [
     'sdkwork-webserver/crates/sdkwork-webserver-agent/src/main.rs',
     'control-plane bootstrap client; declare the service identity explicitly (identity:service) or thread the caller pair',
   ],
