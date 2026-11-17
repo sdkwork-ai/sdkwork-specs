@@ -2,7 +2,7 @@
 
 - Version: 3.2
 - Scope: PostgreSQL-first authoritative server persistence, SQLite client-local persistence, relational database contracts, schema registry inputs, table naming, logical data types, tenant and subject isolation, indexes, transactions, schema evolution, repository access, lifecycle orchestration, and database readiness for SDKWork-owned systems
-- Related: `API_SPEC.md`, `PAGINATION_SPEC.md`, `SUBJECT_ID_SPEC.md`, `DATABASE_FRAMEWORK_SPEC.md`, `DATABASE_SPEC_PROCESS_SHARED_POOL.md`, `SCHEMA_REGISTRY_SPEC.md`, `MIGRATION_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `WEB_BACKEND_SPEC.md`, `RUST_CODE_SPEC.md`, `TEST_SPEC.md`
+- Related: `API_SPEC.md`, `PAGINATION_SPEC.md`, `SUBJECT_ID_SPEC.md`, `DATABASE_FRAMEWORK_SPEC.md`, `DATABASE_SPEC_PROCESS_SHARED_POOL.md`, `SCHEMA_REGISTRY_SPEC.md`, `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md`, `MIGRATION_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `WEB_BACKEND_SPEC.md`, `RUST_CODE_SPEC.md`, `TEST_SPEC.md`
 - Canonical location: `DATABASE_SPEC.md` in the `sdkwork-specs` standards root
 
 This standard defines the database contract for SDKWork. It is independent of Java, Rust, TypeScript, Python, Go, PHP, C#, ORM choice, and migration tool, but it is intentionally not database-product neutral at the physical implementation boundary:
@@ -305,7 +305,7 @@ Rules:
 Rules:
 
 - Table and column names `MUST` use lowercase `snake_case`.
-- New business table names `MUST` follow `<module_prefix>_<entity_name>`.
+- New business table names `MUST` follow `<module_prefix>_<entity_name>`. The application-factory tables `deploy_app*`, `deploy_application_scaffold*`, `iam_application_installation*`, `appstore_application*`, and `webserver_application*` are named by this section; their concept ownership and one-to-one relations are defined by `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` section 2.
 - `<module_prefix>` `MUST` be a registered business module or bounded-context prefix, not a product name, company name, deployment name, programming language, or legacy project prefix.
 - A platform infrastructure layer that owns a bounded context `MAY` register a descriptive prefix naming that context (for example `framework_` for the web framework layer). Such a prefix `MUST` be registered in `tools/database-module-registry.json` before first use, and that registry entry is the sole authority for ownership. See `docs/architecture/decisions/ADR-20260917-web-framework-table-prefix.md`.
 - Workspace, project, application, and template design-time assets use the source-of-record module prefix (DB065). A shared design-time prefix is permitted only when it is registered in `tools/database-module-registry.json` before first use (DB061, DB064, DB072); the retired `studio_` project prefix is an L0 migration fact and `MUST NOT` name a new table (DB066, DB068). See `docs/architecture/decisions/ADR-20261117-design-time-table-prefix.md`.

@@ -2,7 +2,7 @@
 
 - Version: 1.0
 - Scope: release trains, versioning, release candidates, artifacts, signing, SBOM, provenance, changelog, staged rollout, rollback, release evidence
-- Related: `APP_MANIFEST_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `DEPLOYMENT_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `QUALITY_GATE_SPEC.md`, `COMPOSABLE_ARCHITECTURE_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `APP_PERMISSION_COMPOSITION_SPEC.md`, `MIGRATION_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `DOCUMENTATION_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `OBSERVABILITY_SPEC.md`, `TEST_SPEC.md`, `GOVERNANCE_SPEC.md`
+- Related: `APP_MANIFEST_SPEC.md`, `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md`, `GITHUB_WORKFLOW_SPEC.md`, `DEPLOYMENT_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `QUALITY_GATE_SPEC.md`, `COMPOSABLE_ARCHITECTURE_SPEC.md`, `APP_COMPOSITION_SPEC.md`, `APP_PERMISSION_COMPOSITION_SPEC.md`, `MIGRATION_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `DOCUMENTATION_SPEC.md`, `SECURITY_SPEC.md`, `PRIVACY_SPEC.md`, `OBSERVABILITY_SPEC.md`, `TEST_SPEC.md`, `GOVERNANCE_SPEC.md`
 
 This standard defines how SDKWork applications, services, SDKs, and reusable packages become releasable artifacts.
 
@@ -12,7 +12,7 @@ Rules:
 
 - Application identity, package targets, media, install metadata, and release notes are governed by `APP_MANIFEST_SPEC.md`.
 - GitHub packaging and deployment automation follows `GITHUB_WORKFLOW_SPEC.md`.
-- Runtime and deployment behavior follows `DEPLOYMENT_SPEC.md`, `CONFIG_SPEC.md`, and `ENVIRONMENT_SPEC.md`.
+- Runtime and deployment behavior follows `DEPLOYMENT_SPEC.md`, `CONFIG_SPEC.md`, and `ENVIRONMENT_SPEC.md`. Application-factory publication, installation, hosting, upgrade, and retirement follow `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md`; this standard remains the release evidence, rollout, and rollback authority.
 - Supply-chain evidence follows `SUPPLY_CHAIN_SECURITY_SPEC.md`.
 - A release is not valid without release gate evidence from `QUALITY_GATE_SPEC.md`.
 

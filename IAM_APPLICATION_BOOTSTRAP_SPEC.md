@@ -2,7 +2,7 @@
 
 - Version: 1.2
 - Scope: deploy applications, tenant applications, bootstrap orchestration, access credential issuance, manifest mapping, reusable framework package, and application onboarding enforcement
-- Related: `IAM_SPEC.md`, `APPLICATION_IDENTITY_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `MODULE_SPEC.md`, `API_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `TEST_SPEC.md`, `DATABASE_FRAMEWORK_SPEC.md`
+- Related: `IAM_SPEC.md`, `APPLICATION_IDENTITY_SPEC.md`, `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `MODULE_SPEC.md`, `API_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `TEST_SPEC.md`, `DATABASE_FRAMEWORK_SPEC.md`
 
 This standard defines the canonical deploy-application-first IAM application model and the reusable bootstrap framework that every new SDKWork application must use.
 
@@ -13,7 +13,7 @@ SDKWork IAM application onboarding has one installation layer anchored on the de
 | Layer | Database | Meaning |
 | --- | --- | --- |
 | Deploy application | Owned outside IAM (deploy/cloudrouter manifests) | The deployed runtime identity an installation serves; `deployApplicationId` is the anchor |
-| Tenant application | `iam_tenant_application` | Tenant-scoped runtime instance with `deploy_application_id`, domain, access permissions, `application_type`, status, and runtime `app_id` |
+| Installation (wire name "tenant application") | `iam_application_installation` (renamed from `iam_tenant_application` by IAM migration `0043`) | Tenant-scoped runtime instance with `deploy_application_id`, domain, access permissions, `application_type`, status, and runtime `app_id` |
 
 Rules:
 
@@ -22,7 +22,7 @@ Rules:
 - Enable transitions the tenant application to an operable state.
 - Access credential issuance creates delegated `auth_token` and `access_token` only after the tenant application is enabled.
 - Deployment is not a separate IAM table. Deployment behavior is expressed through provision, update, enable, and runtime configuration on the tenant application.
-- Application identity, the deploy-application anchor, and access-token `app_id` binding follow `APPLICATION_IDENTITY_SPEC.md`.
+- Application identity, the deploy-application anchor, and access-token `app_id` binding follow `APPLICATION_IDENTITY_SPEC.md`. The end-to-end factory pipeline around this bootstrap (deploy publication, environment/domain planning, token materialization, upgrade, uninstall, failure/compensation) follows `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md`; this standard remains the bootstrap command and API authority.
 
 ## 2. Canonical Backend API Surface
 
@@ -79,6 +79,13 @@ Rules:
   `applicationType`, `instanceKey`, `displayName`, `environment`, `accessPermissions`,
   `runtimeConfig`); it does not register an application template and accepts no `templateId` or
   `appKey`.
+- Management and bootstrap provisioning both accept the release scope: `ownershipScope`
+  (`TENANT` | `ORGANIZATION` | `USER`, default `TENANT`) plus `ownerUserId` for `USER`. The command
+  `MUST` validate the pair against `organizationId` (`TENANT` and `USER` require `0`,
+  `ORGANIZATION` requires non-zero) and `MUST` fail closed instead of defaulting a mismatched
+  combination. The scope is immutable afterwards: re-provisioning an installation with a different
+  scope is a conflict naming the stored scope, never an in-place change
+  (`APPLICATION_IDENTITY_SPEC.md` §4.1).
 - Browser applications must use `tenantApplications.management.*` through the generated backend
   SDK or approved IAM service facade. They must not call bootstrap-body operations or handle
   bootstrap credentials.
@@ -496,6 +503,7 @@ Each embedded IAM repository `MUST` provide `scripts/dev/*-iam-application-boots
 - [ ] Backend bootstrap paths use `lower_snake_case` static segments.
 - [ ] Generated backend SDK and `@sdkwork/iam-service` expose `iam.tenantApplications.*` and `iam.accessCredentials.create`, and no retired `iam.applications.register` surface.
 - [ ] Provisioning requests carry `applicationType` and `deployApplicationId`, never `templateId` or `appKey`.
+- [ ] Provisioning requests carry `ownershipScope` (default `TENANT`) and, for `USER`, `ownerUserId`; the value agrees with `organizationId` and is immutable afterwards (`APPLICATION_IDENTITY_SPEC.md` §4.1).
 - [ ] Application-owned scripts import `@sdkwork/iam-application-bootstrap` instead of raw bootstrap HTTP.
 - [ ] Embedded Rust runtimes import `sdkwork-iam-embedded-application-bootstrap` instead of local tenant-application SQL.
 - [ ] Manifest mapping and auth merge live in the framework package.
