@@ -22,6 +22,7 @@ Rules:
 - Enable transitions the tenant application to an operable state.
 - Access credential issuance creates delegated `auth_token` and `access_token` only after the tenant application is enabled.
 - Deployment is not a separate IAM table. Deployment behavior is expressed through provision, update, enable, and runtime configuration on the tenant application.
+- Application identity, the deploy-application anchor, and access-token `app_id` binding follow `APPLICATION_IDENTITY_SPEC.md`. This section describes the current two-layer IAM records; where the two disagree, `APPLICATION_IDENTITY_SPEC.md` governs after the consumer migrates.
 
 ## 2. Canonical Backend API Surface
 

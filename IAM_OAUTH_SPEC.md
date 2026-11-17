@@ -116,6 +116,8 @@ Rules:
 
 Relying-party clients are registered through enabled `iam_tenant_application` records.
 
+The OAuth client id identifies the installation credential, not the application. Access-token `app_id` binding and the application identity anchor follow `APPLICATION_IDENTITY_SPEC.md`.
+
 Each relying party `MUST` declare OAuth metadata under `runtimeConfig.oauth.relyingParty`:
 
 ```json
