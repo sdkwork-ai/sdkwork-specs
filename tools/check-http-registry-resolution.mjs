@@ -153,6 +153,16 @@ const PROCESS_TOKEN_ENV =
 // Indirect read through a `const ..._ACCESS_TOKEN_ENV` name (the same
 // substitution with one more indirection).
 const PROCESS_TOKEN_CONST = /const [A-Z0-9_]*ACCESS_TOKEN[A-Z0-9_]*_ENV\s*:/u;
+// A generated client's `set_api_key` renders `X-Api-Key`. On a machine surface
+// that is only legal with a declared `identity:service` (the service-identity
+// pair is rendered instead); on a user-scoped surface it is the forbidden
+// process-credential substitution. Either way the file must say which it is.
+const PROCESS_API_KEY_SUBSTITUTION = /set_api_key\s*\(/u;
+// An actual target-resolution call (not merely a mention of the module or an
+// installation of the resolver). This is what makes a file a registry call
+// site, so a raw HTTP client is audited exactly like a generated SDK caller.
+const REGISTRY_CALL =
+  /(?:registry_base_url_or|registry_base_url|registry_http_target)\s*\(/u;
 
 // Known §5.2.1 debt, reviewed 2026-11-18. Each entry names the destination
 // surface and what the migration must do; the entry is removed in the change
@@ -172,16 +182,39 @@ const IDENTITY_BASELINE = new Map([
   ],
 ]);
 
+// Every file that resolves a target through the registry owes an identity
+// decision, including raw HTTP clients that never construct a generated SDK.
+// The CONSTRUCTOR filter above only governs which files must resolve through the
+// registry; it must not hide a caller/service-identity gap.
+const registryResolved = [];
+for (const file of files) {
+  let content;
+  try {
+    content = readFileSync(file, 'utf8');
+  } catch {
+    continue;
+  }
+  if (content.includes('registry:allow')) continue;
+  if (!REGISTRY_CALL.test(content)) continue;
+  registryResolved.push({ name: relative(file), content });
+}
+
 const identityViolations = [];
 const identityBaselined = [];
-for (const { name, content } of registryCandidates) {
+for (const { name, content } of registryResolved) {
   if (content.includes(SERVICE_IDENTITY_MARKER)) continue;
   const carriesIdentity = CALLER_IDENTITY_MARKERS.some((marker) =>
     content.includes(marker),
   );
   const substitutesProcessToken =
     PROCESS_TOKEN_ENV.test(content) || PROCESS_TOKEN_CONST.test(content);
-  if (carriesIdentity && !substitutesProcessToken) continue;
+  const appliesApiKey = PROCESS_API_KEY_SUBSTITUTION.test(content);
+  // A declared service identity may render its own pair; only a file that
+  // neither carries a caller identity nor declares `identity:service` while
+  // applying `X-Api-Key` is a substitution.
+  if (carriesIdentity && !substitutesProcessToken && (!appliesApiKey || content.includes(SERVICE_IDENTITY_MARKER))) {
+    continue;
+  }
   if (IDENTITY_BASELINE.has(name)) {
     identityBaselined.push(name);
     continue;
@@ -190,7 +223,9 @@ for (const { name, content } of registryCandidates) {
     name,
     reason: substitutesProcessToken
       ? 'reads a process ACCESS/AUTH token env for a registry-resolved call'
-      : 'applies no caller identity to a registry-resolved call',
+      : appliesApiKey
+        ? 'applies X-Api-Key to a registry-resolved call without declaring identity:service'
+        : 'applies no caller identity to a registry-resolved call',
   });
 }
 
@@ -297,5 +332,5 @@ if (identityBaselined.length > 0) {
 }
 
 console.log(
-  `HTTP registry resolution gate passed (${files.length} Rust files scanned, ${baselined.length} baselined, ${registryCandidates.length} registry-resolved sites, ${registryCandidates.length - identityViolations.length - identityBaselined.length} aligned, ${identityBaselined.length} tracked).`,
+  `HTTP registry resolution gate passed (${files.length} Rust files scanned, ${baselined.length} baselined, ${registryResolved.length} registry-resolved sites, ${registryResolved.length - identityViolations.length - identityBaselined.length} aligned, ${identityBaselined.length} tracked).`,
 );

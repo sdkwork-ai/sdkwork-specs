@@ -519,12 +519,31 @@ Rules:
   `Authorization` bearer last; generated clients clean up a stale API-key header inside
   `set_access_token` and only the token setters leave both halves of the pair on the wire.
 
+##### 5.2.1.1 Machine Callers (Internal-Api / Backend-Agent)
+
+A call that has no end-user request behind it — a background worker, publisher, node daemon, or
+in-process device surface — `MUST` present an **explicitly declared service identity** instead of a
+caller pair:
+
+- internal-api authenticates `X-SDKWork-Ingress-Token` plus an `Access-Token`; backend-agent
+  authenticates `X-SDKWork-Agent-Token` plus an `Access-Token`. The `Access-Token` supplies the IAM
+  application/tenant scope the principal resolves against; the service token alone fails
+  `missing-access-token`.
+- A generated SDK's default `X-Api-Key` is rejected by both profiles as credential-profile
+  contamination. Use `sdkwork_utils_rust::service_identity::ServiceCredentials` (with
+  `wire_headers(ServiceTokenKind::…)`) and fail closed with `missing_service_credentials` naming the
+  surface and both required settings when either half is absent.
+- The module `MUST` declare `identity:service <justification>` so the exception stays reviewable, and
+  the deployment `MUST` provision the IAM application access token (for example through a
+  `*_ACCESS_TOKEN_FILE` secret setting) rather than an inline secret.
+
 Verification: `node <sdkwork-specs>/tools/check-embedded-self-loop.mjs --workspace <workspace-root>`
 `MUST` pass, including its backend-source inspection for loopback base-URL derivation. Repository
 verification `MUST` also fail when a Rust module derives an outbound base URL from its own
 ingress/bind variable. `node <sdkwork-specs>/tools/check-http-registry-resolution.mjs --workspace
-<workspace-root>` `MUST` pass and `MUST` fail a registry-resolved SDK construction site that applies
-no caller identity, or that reads a process access/auth token environment value, unless it declares
+<workspace-root>` `MUST` pass and `MUST` fail any registry target-resolution call site — generated
+SDK or raw HTTP client alike — that applies no caller identity, reads a process access/auth token
+environment value, or applies `set_api_key` without declaring `identity:service`, unless it declares
 `identity:service <justification>`. Known migration debt is tracked in that checker with a per-site
 removal plan and reported as warnings, never as a silent pass.
 
