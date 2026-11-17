@@ -74,7 +74,7 @@ export function adoptAppAccessTokenInRepo(repoRoot, { dryRun = false } = {}) {
     if (surface.format === 'none') {
       continue;
     }
-    if (surface.accessToken?.appId) {
+    if (surface.accessToken?.appId || surface.accessToken?.appIdEnv) {
       continue;
     }
     const resolved = resolveManifest(root, surface);

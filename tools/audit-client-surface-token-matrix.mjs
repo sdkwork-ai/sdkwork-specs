@@ -13,7 +13,11 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import { assertApplicationAccessToken } from './app-access-token.mjs';
+import {
+  assertApplicationAccessToken,
+  isMissingAppIdEnvironmentError,
+  resolveApplicationAccessTokenAppId,
+} from './app-access-token.mjs';
 
 const ALL_PROFILES = ['standalone', 'cloud'].flatMap(
   (deploymentProfile) => ['development', 'test', 'staging', 'demo', 'production'].map(
@@ -116,7 +120,7 @@ function discoverSurfaces(root) {
   return surfaces;
 }
 
-export function auditClientSurfaceTokenMatrix(workspaceRoot) {
+export function auditClientSurfaceTokenMatrix(workspaceRoot, { env = process.env } = {}) {
   const root = path.resolve(workspaceRoot);
   const rows = [];
   for (const surface of discoverSurfaces(root)) {
@@ -128,7 +132,21 @@ export function auditClientSurfaceTokenMatrix(workspaceRoot) {
     const format = surface.format && surface.format !== 'auto'
       ? surface.format
       : formatFromManifest(manifest);
-    const expectedAppId = surface.accessToken?.appId ?? manifest?.backend?.appId ?? manifest?.app?.key;
+    // Resolve the expected identity with the materializer's own logic. A
+    // deploy-anchored surface has no expected app id when this machine has no
+    // anchor; the audit then validates the token shape/profile claims only
+    // instead of comparing against the retired manifest id.
+    let expectedAppId;
+    if (surface.accessToken && typeof surface.accessToken === 'object') {
+      try {
+        expectedAppId = resolveApplicationAccessTokenAppId(surface.accessToken, env).appId;
+      } catch (error) {
+        if (!isMissingAppIdEnvironmentError(error)) throw error;
+        expectedAppId = undefined;
+      }
+    } else {
+      expectedAppId = manifest?.backend?.appId ?? manifest?.app?.key;
+    }
     const profiles = Array.isArray(surface.profiles) && surface.profiles.length > 0
       ? surface.profiles
       : ALL_PROFILES;

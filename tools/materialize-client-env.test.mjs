@@ -11,6 +11,7 @@ import {
   materializeClientEnv,
   parseClientEnvDotenv,
 } from './materialize-client-env.mjs';
+import { decodeApplicationAccessToken } from './app-access-token.mjs';
 
 test('canonical client profile matrix contains both deployment profiles and five environments', () => {
   assert.deepEqual(CLIENT_ENV_PROFILE_IDS, [
@@ -135,8 +136,80 @@ test('vite projection emits generic and application-scoped identity', () => {
   assert.equal(values.VITE_SDKWORK_RUNTIME_TARGET, 'browser');
 });
 
-test('client projection rejects secrets and cloud loopback URLs', () => {
+function accessTokenSurface(appIdInput) {
+  return {
+    id: 'demo-app',
+    format: 'mini-program',
+    runtimeTarget: 'mini-program',
+    accessToken: {
+      ...appIdInput,
+      tenantId: '100001',
+      organizationId: '0',
+      permissionScope: ['iam:self'],
+    },
+  };
+}
+
+const CLOUD_PRODUCTION_PROFILE = Object.freeze({
+  deploymentProfile: 'cloud',
+  environment: 'production',
+  profileId: 'cloud.production',
+});
+
+test('env-sourced appId reads the deployment anchor instead of a literal id', () => {
+  const values = createClientSurfaceValues({
+    surface: accessTokenSurface({ appIdEnv: 'SDKWORK_DEPLOY_APPLICATION_ID' }),
+    sourceValues: {},
+    profile: CLOUD_PRODUCTION_PROFILE,
+    env: { SDKWORK_DEPLOY_APPLICATION_ID: ' app-anchor-1 ' },
+  });
+  const { payload } = decodeApplicationAccessToken(values.SDKWORK_ACCESS_TOKEN);
+  assert.equal(payload.app_id, 'app-anchor-1');
+  assert.equal(payload.aud, 'app-anchor-1');
+});
+
+test('an inline ${ENV_VAR} placeholder is an equivalent env source', () => {
+  const values = createClientSurfaceValues({
+    surface: accessTokenSurface({ appId: '${SDKWORK_DEPLOY_APPLICATION_ID}' }),
+    sourceValues: {},
+    profile: CLOUD_PRODUCTION_PROFILE,
+    env: { SDKWORK_DEPLOY_APPLICATION_ID: 'app-anchor-2' },
+  });
+  const { payload } = decodeApplicationAccessToken(values.SDKWORK_ACCESS_TOKEN);
+  assert.equal(payload.app_id, 'app-anchor-2');
+  assert.equal(payload.aud, 'app-anchor-2');
+});
+
+test('env-sourced appId fails and names the variable when the anchor is unavailable', () => {
+  for (const env of [{}, { SDKWORK_DEPLOY_APPLICATION_ID: '' }, { SDKWORK_DEPLOY_APPLICATION_ID: '   ' }]) {
+    assert.throws(
+      () => createClientSurfaceValues({
+        surface: accessTokenSurface({ appIdEnv: 'SDKWORK_DEPLOY_APPLICATION_ID' }),
+        sourceValues: {},
+        profile: CLOUD_PRODUCTION_PROFILE,
+        env,
+      }),
+      /SDKWORK_DEPLOY_APPLICATION_ID is not set/u,
+    );
+  }
+});
+
+test('accessToken rejects declaring both a literal appId and an appIdEnv source', () => {
   assert.throws(
+    () => createClientSurfaceValues({
+      surface: accessTokenSurface({
+        appId: 'sdkwork-cloudrouter',
+        appIdEnv: 'SDKWORK_DEPLOY_APPLICATION_ID',
+      }),
+      sourceValues: {},
+      profile: CLOUD_PRODUCTION_PROFILE,
+      env: { SDKWORK_DEPLOY_APPLICATION_ID: 'app-anchor-1' },
+    }),
+    /either appIdEnv or appId, not both/u,
+  );
+});
+
+test('client projection rejects secrets and cloud loopback URLs', () => {  assert.throws(
     () => createClientSurfaceValues({
       surface: {
         id: 'demo-pc',
@@ -251,6 +324,7 @@ test('applies an application env overlay after the repository topology', () => {
     const values = readOverlayOutput(root);
     assert.equal(values.SDKWORK_DEMO_HTTP_URL, 'https://overlay.example.com');
     assert.equal(values.SDKWORK_ACCESS_TOKEN.split('.').length, 3);
+    assert.equal(decodeApplicationAccessToken(values.SDKWORK_ACCESS_TOKEN).payload.app_id, 'demo-app');
     assert.equal(values.SDKWORK_DEMO_PROFILE_ID, 'standalone.development');
   } finally {
     rmSync(root, { force: true, recursive: true });

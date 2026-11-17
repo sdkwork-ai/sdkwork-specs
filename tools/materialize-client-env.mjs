@@ -17,6 +17,7 @@ import {
 import {
   createApplicationAccessToken,
   PUBLIC_APP_ACCESS_TOKEN_KEY,
+  resolveApplicationAccessTokenAppId,
 } from './app-access-token.mjs';
 
 export const CLIENT_ENV_DEPLOYMENT_PROFILES = ['standalone', 'cloud'];
@@ -366,14 +367,18 @@ function identityValues(surface, profile) {
   return values;
 }
 
-function applicationAccessTokenValues(surface, profile) {
+function applicationAccessTokenValues(surface, profile, env = process.env) {
   const spec = surface.accessToken;
   if (!spec || typeof spec !== 'object') {
     return {};
   }
+  // `appIdEnv` reads the deployment anchor from the environment; a missing
+  // variable fails generation here and names it. Never fall back to a
+  // compiled-in app id (`APP_ACCESS_TOKEN_SPEC.md` §3.1.1).
+  const { appId } = resolveApplicationAccessTokenAppId(spec, env);
   return {
     [PUBLIC_APP_ACCESS_TOKEN_KEY]: createApplicationAccessToken({
-      appId: String(spec.appId ?? '').trim(),
+      appId,
       tenantId: String(spec.tenantId ?? '100001').trim(),
       organizationId: String(spec.organizationId ?? '0').trim(),
       accessScope: spec.scope,
@@ -385,7 +390,7 @@ function applicationAccessTokenValues(surface, profile) {
   };
 }
 
-export function createClientSurfaceValues({ surface, sourceValues, profile }) {
+export function createClientSurfaceValues({ surface, sourceValues, profile, env = process.env }) {
   const values = {};
   for (const prefix of surface.includePrefixes ?? []) {
     for (const [key, value] of Object.entries(sourceValues)) {
@@ -420,7 +425,7 @@ export function createClientSurfaceValues({ surface, sourceValues, profile }) {
     values[key] = String(value);
   }
   Object.assign(values, identityValues(surface, profile));
-  Object.assign(values, applicationAccessTokenValues(surface, profile));
+  Object.assign(values, applicationAccessTokenValues(surface, profile, env));
 
   const expectedNamespace = surface.format === 'vite' ? 'VITE_' : 'SDKWORK_';
   for (const key of Object.keys(values)) {
@@ -602,6 +607,7 @@ export function materializeClientEnv({
   rootDir = process.cwd(),
   configPath = DEFAULT_CONFIG_PATH,
   check = false,
+  env = process.env,
 } = {}) {
   const normalizedRoot = path.resolve(rootDir);
   const { config } = loadMaterializationConfig(normalizedRoot, configPath);
@@ -647,15 +653,18 @@ export function materializeClientEnv({
         }
         const existing = readJson(outputPath);
         const spec = surface.accessToken;
-        if (!spec?.appId) {
-          throw new Error(`${surface.id} must declare accessToken.appId.`);
+        if (!spec || typeof spec !== 'object') {
+          throw new Error(
+            `${surface.id} must declare accessToken.appIdEnv (a deployment anchor env var) or accessToken.appId.`,
+          );
         }
+        const { appId } = resolveApplicationAccessTokenAppId(spec, env);
         existing.environment = sourceProfile.profile.environment;
         existing.deploymentProfile = sourceProfile.profile.deploymentProfile;
         existing.profileId = profileId;
         existing.runtimeTarget = surface.runtimeTarget;
         existing[PUBLIC_APP_ACCESS_TOKEN_KEY] = createApplicationAccessToken({
-          appId: String(spec.appId).trim(),
+          appId,
           tenantId: String(spec.tenantId ?? '100001').trim(),
           organizationId: String(spec.organizationId ?? '0').trim(),
           accessScope: spec.scope,
@@ -689,6 +698,7 @@ export function materializeClientEnv({
         surface,
         sourceValues: surfaceSourceValues,
         profile: sourceProfile.profile,
+        env,
       });
       const values = isViteSurface
         ? applyViteSurfaceCloudValues(surfaceValues, sourceProfile.values, sourceProfile.profile, {

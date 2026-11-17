@@ -15,6 +15,96 @@ import { fileURLToPath } from 'node:url';
 
 export const PUBLIC_APP_ACCESS_TOKEN_KEY = 'SDKWORK_ACCESS_TOKEN';
 export const PUBLIC_APP_ACCESS_TOKEN_KID = 'public-app-token';
+
+/**
+ * `accessToken` field naming the environment variable that carries the app id.
+ *
+ * A deployment that makes the deploy application the identity of every access
+ * token (`IAM_APPLICATION_BOOTSTRAP_SPEC.md`, `APP_ACCESS_TOKEN_SPEC.md` §3.1.1)
+ * cannot compile the app id into the repository: the id belongs to the
+ * installation. Such a surface declares `"appIdEnv": "<ENV_VAR>"` instead of
+ * `"appId"`, and the materializer reads the anchor from that variable. The
+ * equivalent inline placeholder `"appId": "${<ENV_VAR>}"` is accepted too.
+ */
+export const APP_ACCESS_TOKEN_APP_ID_ENV_FIELD = 'appIdEnv';
+
+const APP_ID_ENV_PLACEHOLDER_PATTERN = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/u;
+
+/**
+ * Raised when an `appIdEnv`-sourced surface is materialized or verified without
+ * the named environment variable.
+ *
+ * A missing anchor must never fall back to a retired literal: the token would
+ * carry an identity IAM suppresses. The error keeps `envName` and `code` so a
+ * verification gate can report a readable `skipped: <ENV> not set` instead of
+ * failing or silently passing.
+ */
+export class MissingAppIdEnvironmentError extends Error {
+  constructor(envName) {
+    super(
+      `${envName} is not set: this surface takes its public application token app id from the `
+      + 'deployment application anchor, so the generator must fail instead of falling back to a '
+      + 'compiled-in app id',
+    );
+    this.name = 'MissingAppIdEnvironmentError';
+    this.code = 'APP_ID_ENV_MISSING';
+    this.envName = envName;
+  }
+}
+
+/**
+ * Classify a resolver failure as the "anchor unavailable" case.
+ * @param error - thrown value.
+ * @returns true when it is a {@link MissingAppIdEnvironmentError}.
+ */
+export function isMissingAppIdEnvironmentError(error) {
+  return error instanceof MissingAppIdEnvironmentError;
+}
+
+function resolveAppIdFromEnvironment(envName, env) {
+  const value = String(env?.[envName] ?? '').trim();
+  if (!value) {
+    throw new MissingAppIdEnvironmentError(envName);
+  }
+  return { appId: value, source: 'env', envName };
+}
+
+/**
+ * Resolve the app id of one `accessToken` input object.
+ *
+ * Precedence: `appIdEnv` (or an inline `${ENV_VAR}` placeholder in `appId`)
+ * reads the deployment anchor; a plain `appId` remains a literal identity for
+ * surfaces whose app id is genuinely repository-owned. Declaring both a literal
+ * and an env source is ambiguous and fails.
+ * @param accessTokenSpec - materialization `accessToken` input object.
+ * @param env - environment bag to read the anchor from.
+ * @returns the resolved app id plus its source.
+ */
+export function resolveApplicationAccessTokenAppId(accessTokenSpec = {}, env = process.env) {
+  const spec = accessTokenSpec && typeof accessTokenSpec === 'object' ? accessTokenSpec : {};
+  const envField = String(spec[APP_ACCESS_TOKEN_APP_ID_ENV_FIELD] ?? '').trim();
+  const declaredAppId = String(spec.appId ?? '').trim();
+  if (envField && declaredAppId) {
+    throw new Error(
+      `accessToken must declare either ${APP_ACCESS_TOKEN_APP_ID_ENV_FIELD} or appId, not both.`,
+    );
+  }
+  if (envField) {
+    return resolveAppIdFromEnvironment(envField, env);
+  }
+  const placeholder = APP_ID_ENV_PLACEHOLDER_PATTERN.exec(declaredAppId);
+  if (placeholder?.[1]) {
+    return resolveAppIdFromEnvironment(placeholder[1], env);
+  }
+  if (declaredAppId) {
+    return { appId: declaredAppId, source: 'literal' };
+  }
+  throw new Error(
+    `accessToken must declare ${APP_ACCESS_TOKEN_APP_ID_ENV_FIELD} (a deployment anchor env var) `
+    + 'or appId (a repository-owned app id) for a public application access token.',
+  );
+}
+
 export const PUBLIC_APP_ACCESS_TOKEN_ISS = 'sdkwork-iam-public';
 export const PUBLIC_APP_ACCESS_TOKEN_SIGNATURE = 'public';
 export const PUBLIC_APP_ACCESS_TOKEN_CLASS = 'application';

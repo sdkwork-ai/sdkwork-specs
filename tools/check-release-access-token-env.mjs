@@ -18,7 +18,11 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import { assertApplicationAccessToken } from './app-access-token.mjs';
+import {
+  assertApplicationAccessToken,
+  isMissingAppIdEnvironmentError,
+  resolveApplicationAccessTokenAppId,
+} from './app-access-token.mjs';
 
 const DEFAULT_RELEASE_ENVIRONMENTS = ['test', 'staging', 'demo', 'production'];
 const PROFILE_PATTERN = /^(?:standalone|cloud)\.(development|test|staging|demo|production)$/u;
@@ -105,7 +109,10 @@ function readSurfaces(root) {
   }));
 }
 
-export function checkReleaseAccessTokenEnv(rootDir, { environments = DEFAULT_RELEASE_ENVIRONMENTS, allowNoSurfaces = false } = {}) {
+export function checkReleaseAccessTokenEnv(
+  rootDir,
+  { environments = DEFAULT_RELEASE_ENVIRONMENTS, allowNoSurfaces = false, env = process.env } = {},
+) {
   const root = path.resolve(rootDir);
   const deploymentPath = path.join(root, 'etc', 'sdkwork.deployment.config.json');
   if (!existsSync(deploymentPath)) {
@@ -159,6 +166,31 @@ export function checkReleaseAccessTokenEnv(rootDir, { environments = DEFAULT_REL
     if (format === 'harmony-native' || format === 'android-native' || format === 'ios-native') {
       format = 'native';
     }
+    // Resolve the expected app identity with the materializer's own logic. A
+    // release surface that takes its app id from the deploy anchor cannot be
+    // verified without that anchor, so fail and name the variable instead of
+    // comparing against the retired manifest id (APP_ACCESS_TOKEN_SPEC §3.1.1).
+    let expectedAppId;
+    if (surface.accessToken && typeof surface.accessToken === 'object') {
+      try {
+        expectedAppId = resolveApplicationAccessTokenAppId(surface.accessToken, env).appId;
+      } catch (error) {
+        if (isMissingAppIdEnvironmentError(error)) {
+          failures.push({
+            profileId: surface.id,
+            reason: `${error.envName} is required to verify this release surface's public application token`,
+          });
+          continue;
+        }
+        failures.push({
+          profileId: surface.id,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
+    } else {
+      expectedAppId = manifest?.backend?.appId ?? manifest?.app?.key;
+    }
     const excluded = new Set(surface.excludeProfiles ?? []);
     for (const profileId of releaseProfiles) {
       const filePath = profilePath(appRoot, format, profileId);
@@ -177,9 +209,6 @@ export function checkReleaseAccessTokenEnv(rootDir, { environments = DEFAULT_REL
         failures.push({ profileId: `${surface.id}/${profileId}`, reason: 'SDKWORK_ACCESS_TOKEN is missing or empty' });
         continue;
       }
-      const expectedAppId = surface.accessToken?.appId
-        ?? manifest?.backend?.appId
-        ?? manifest?.app?.key;
       try {
         assertApplicationAccessToken(token, {
           environment: profileId.split('.')[1],

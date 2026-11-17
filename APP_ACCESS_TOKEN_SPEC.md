@@ -93,8 +93,8 @@ Required claims:
 | `token_type` | `access` |
 | `token_version` | `1` |
 | `iss` | `sdkwork-iam-public` |
-| `aud` | the root manifest `backend.appId` |
-| `app_id` | the root manifest `backend.appId` |
+| `aud` | the deployment application anchor, or the root manifest `backend.appId` when the app id is repository-owned (§3.1.1) |
+| `app_id` | the deployment application anchor, or the root manifest `backend.appId` when the app id is repository-owned (§3.1.1) |
 | `tenant_id` | the root manifest `backend.tenantId` |
 | `organization_id` | the root manifest `backend.organizationId` |
 | `login_scope` | `TENANT` when organization is `0`, otherwise `ORGANIZATION` |
@@ -148,6 +148,45 @@ The materializer generates the JWT string from that object and writes the
 string to the profile file. A surface `MUST NOT` store the object in a profile
 file, and a profile file `MUST NOT` store the object under
 `SDKWORK_ACCESS_TOKEN`.
+
+### 3.1.1 Deployment-Injected Application Identity Anchor
+
+When the platform makes the **deploy application** the identity of every access
+token, the application id belongs to the installation, not to the repository. A
+surface `MUST` then source its `app_id`/`aud` from an environment variable
+instead of a compiled-in literal:
+
+```json
+{
+  "accessToken": {
+    "appIdEnv": "SDKWORK_DEPLOY_APPLICATION_ID",
+    "tenantId": "100001",
+    "organizationId": "0",
+    "permissionScope": ["iam:self"]
+  }
+}
+```
+
+Rules:
+
+- `accessToken.appIdEnv` names the variable that carries the anchor. The inline
+  placeholder `"appId": "${SDKWORK_DEPLOY_APPLICATION_ID}"` is equivalent.
+  `accessToken.appId` and `accessToken.appIdEnv` are mutually exclusive.
+- Materialization `MUST` read the anchor from the process environment and
+  `MUST` fail, naming the variable, when it is unset or empty. It `MUST NOT`
+  fall back to a retired or compiled-in app id.
+- A repository `SHOULD` commit the profile placeholder
+  `__SDKWORK_DEPLOY_APPLICATION_ID__` for a surface whose anchor is only known at
+  deployment, so no fabricated identity is committed. Deployment re-runs
+  `materialize-client-env` with the anchor set before building or packaging.
+- Verification gates `MUST` resolve the expected app id with the same
+  `appIdEnv` logic. `check-app-access-token-env.mjs` `MUST` print
+  `skipped: <ENV> not set` and return 0 when the anchor is unavailable on the
+  machine, because it cannot compare against an identity that does not exist
+  there; it `MUST NOT` report a pass that was never evaluated.
+- A surface that still declares a literal `accessToken.appId` while the
+  platform uses a deploy application anchor is a violation in that repository;
+  the application-owned gate fails and names `accessToken.appIdEnv`.
 
 Generate, decode, and verify with the canonical tool:
 

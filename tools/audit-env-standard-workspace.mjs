@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 
 import { auditEnvInheritanceWorkspace } from './audit-env-inheritance-workspace.mjs';
 import { auditAppAccessTokenWorkspace } from './audit-app-access-token-workspace.mjs';
+import { isMissingAppIdEnvironmentError } from './app-access-token.mjs';
 import { validateAccessTokenFiles } from './validate-access-token-files.mjs';
 import { materializeClientEnv } from './materialize-client-env.mjs';
 import { materializeTopologyEnv } from './materialize-topology-env.mjs';
@@ -163,7 +164,14 @@ export function auditEnvStandardWorkspace(workspaceRoot) {
       try {
         materializeClientEnv({ rootDir: repoRoot, check: true });
       } catch (error) {
-        errors.push(`client-env: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`);
+        if (isMissingAppIdEnvironmentError(error)) {
+          // The surface takes its token app id from a deployment anchor that
+          // this machine does not have; freshness cannot be evaluated, and the
+          // gate reports it as skipped rather than inventing an identity.
+          warnings.push(`client-env: skipped: ${error.envName} not set`);
+        } else {
+          errors.push(`client-env: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`);
+        }
       }
     }
 
