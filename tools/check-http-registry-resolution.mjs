@@ -229,6 +229,38 @@ for (const { name, content } of registryResolved) {
   });
 }
 
+// A baseline entry is temporary debt, not a permanent exemption. A stale entry
+// hides a future regression (the site would silently pass again) and misreports
+// the migration status, so the gate fails until the entry is removed in the
+// change that resolves it.
+const staleIdentityBaseline = [];
+for (const name of IDENTITY_BASELINE.keys()) {
+  const full = path.join(workspaceRoot, name);
+  if (!existsSync(full)) {
+    staleIdentityBaseline.push(`${name} (file no longer exists)`);
+    continue;
+  }
+  const content = readFileSync(full, 'utf8');
+  if (
+    content.includes(SERVICE_IDENTITY_MARKER) ||
+    CALLER_IDENTITY_MARKERS.some((marker) => content.includes(marker))
+  ) {
+    staleIdentityBaseline.push(`${name} (declares identity; remove the baseline entry)`);
+  }
+}
+const staleRegistryBaseline = [];
+for (const name of BASELINED) {
+  const full = path.join(workspaceRoot, name);
+  if (!existsSync(full)) {
+    staleRegistryBaseline.push(`${name} (file no longer exists)`);
+    continue;
+  }
+  const content = readFileSync(full, 'utf8');
+  if (REGISTRY_MARKERS.some((marker) => content.includes(marker))) {
+    staleRegistryBaseline.push(`${name} (now resolves through the registry; remove the baseline entry)`);
+  }
+}
+
 const infra = [
   ['sdkwork-utils/packages/sdkwork-utils-rust/src/service_base_url.rs', 'pub trait HttpServiceRegistry'],
   ['sdkwork-utils/packages/sdkwork-utils-rust/src/caller_identity.rs', 'pub struct CallerCredentials'],
@@ -288,6 +320,13 @@ if (missingInfra.length > 0) {
   for (const [file, marker] of missingInfra) {
     console.error(`  - ${file} must contain: ${marker}`);
   }
+  process.exit(1);
+}
+
+if (staleIdentityBaseline.length > 0 || staleRegistryBaseline.length > 0) {
+  console.error('Stale baseline entries hide regressions; remove them in the change that resolved the site:');
+  for (const entry of staleIdentityBaseline) console.error(`  - identity baseline: ${entry}`);
+  for (const entry of staleRegistryBaseline) console.error(`  - registry baseline: ${entry}`);
   process.exit(1);
 }
 
