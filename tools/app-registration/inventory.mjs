@@ -1,0 +1,466 @@
+#!/usr/bin/env node
+
+/**
+ * Registration inventory for every independent SDKWork application surface.
+ *
+ * The unit of registration is one manifest-bearing application root: a
+ * repository root that carries `agent.app.config.json`, or a direct
+ * `apps/<surface>` directory that carries its own manifest. That root is also
+ * the unit the IAM bootstrap rules describe ("a multi-surface repository MUST
+ * discover the repository manifest and each direct manifest-bearing apps/*
+ * root"), and it is the root whose per-scope env files carry the public
+ * application access token.
+ *
+ * The scan is read-only. It answers, for every root:
+ *
+ * - repository and app directory,
+ * - surface id and manifest identity (`app.key`, display name, app type),
+ * - the deploy application slug the registrar would request,
+ * - the declared client surfaces whose token carrier is the
+ *   `etc/client-env.materialization.json` declared profile matrix,
+ * - where each environment's `SDKWORK_DEPLOY_APPLICATION_ID` anchor can be
+ *   written (the authored topology override layer, an authored `.env.<env>`,
+ *   or nowhere), and which committed profile files carry the materialized
+ *   public application token.
+ *
+ * Usage:
+ *   node sdkwork-specs/tools/app-registration/register-applications.mjs \
+ *     --inventory app-registration-inventory.json
+ *
+ * @module app-registration/inventory
+ */
+
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import path from 'node:path';
+
+import {
+  mapManifestAppTypeToApplicationType,
+  slugifyAppKey,
+} from './contract.mjs';
+
+export { mapManifestAppTypeToApplicationType, slugifyAppKey };
+
+/** Manifest file name that makes a directory an application root. */
+export const APP_MANIFEST_FILE = 'agent.app.config.json';
+
+/** Canonical registration environments (`ENVIRONMENT_SPEC` lifecycle names). */
+export const REGISTRATION_ENVIRONMENTS = [
+  'development',
+  'test',
+  'staging',
+  'demo',
+  'production',
+];
+
+/** Deployment profiles every client surface matrix covers. */
+export const REGISTRATION_DEPLOYMENT_PROFILES = ['standalone', 'cloud'];
+
+/** Directories never searched for application manifests. */
+const IGNORED_DIRECTORY_NAMES = new Set([
+  '.git',
+  '.sdkwork',
+  '.turbo',
+  'backup',
+  'build',
+  'dist',
+  'external',
+  'generated',
+  'node_modules',
+  'sdks',
+  'target',
+]);
+
+/** Token carrier layout per declared client surface `format`. */
+const TOKEN_CARRIER_LAYOUTS = {
+  vite: (appRoot, profileId) => path.join(appRoot, `.env.${profileId}`),
+  flutter: (appRoot, profileId) => path.join(appRoot, 'env', `sdkwork.${profileId}.json`),
+  'mini-program': (appRoot, profileId) =>
+    path.join(appRoot, 'config', 'mini-program', `runtime-env.${profileId}.json`),
+  'harmony-native': (appRoot, profileId) =>
+    path.join(appRoot, 'config', 'app', `runtime-env.${profileId}.json`),
+  native: (appRoot, profileId) =>
+    path.join(appRoot, 'config', 'app', `runtime-env.${profileId}.json`),
+};
+
+/** Profile id of a deployment profile plus environment, e.g. `standalone.development`. */
+export function clientProfileId(deploymentProfile, environment) {
+  return `${deploymentProfile}.${environment}`;
+}
+
+function toPosix(relativePath) {
+  return relativePath.split(path.sep).join('/');
+}
+
+function readJson(filePath) {
+  return JSON.parse(readFileSync(filePath, 'utf8').replace(/^\uFEFF/u, ''));
+}
+
+function manifestAppKey(manifest, appDirName) {
+  const key = String(manifest?.app?.key ?? '').trim();
+  if (key) {
+    return key;
+  }
+  const name = String(manifest?.app?.name ?? '').trim();
+  if (name) {
+    return name;
+  }
+  return appDirName;
+}
+
+function manifestAppName(manifest, fallback) {
+  const declared =
+    String(manifest?.app?.displayName ?? '').trim()
+    || String(manifest?.app?.name ?? '').trim()
+    || String(manifest?.name ?? '').trim();
+  return declared || fallback;
+}
+
+function manifestPermissionScope(manifest) {
+  const scope = manifest?.backend?.accessTokenPermissionScope ?? manifest?.backend?.permissionScope;
+  return Array.isArray(scope) ? scope.filter((entry) => typeof entry === 'string') : [];
+}
+
+function manifestEnvironmentDomain(manifest, environment) {
+  const environments = manifest?.environments ?? {};
+  const aliases = {
+    development: ['development', 'dev'],
+    test: ['test'],
+    staging: ['staging'],
+    demo: ['demo'],
+    production: ['production', 'prod'],
+  }[environment] ?? [environment];
+  for (const alias of aliases) {
+    const section = environments[alias];
+    const domain = String(section?.accessUrl ?? section?.deployUrl ?? '').trim();
+    if (domain) {
+      return domain;
+    }
+  }
+  return String(manifest?.backend?.primaryDomain ?? manifest?.backend?.domain ?? '').trim();
+}
+
+/**
+ * Repository root that owns an application root.
+ *
+ * A manifest at the repository root owns itself; a manifest under `apps/` is
+ * owned by its grandparent directory.
+ * @param workspaceRoot - workspace root
+ * @param appRoot - absolute application root that carries the manifest
+ * @returns the absolute repository root
+ */
+export function resolveRepositoryRoot(workspaceRoot, appRoot) {
+  const relative = path.relative(path.resolve(workspaceRoot), path.resolve(appRoot));
+  const segments = relative.split(path.sep).filter(Boolean);
+  if (segments.length >= 2 && segments[segments.length - 2] === 'apps') {
+    return path.join(path.resolve(workspaceRoot), ...segments.slice(0, -2));
+  }
+  return appRoot;
+}
+
+/**
+ * Enumerate the application roots under one workspace.
+ * @param workspaceRoot - directory that contains the `sdkwork-*` repositories
+ * @returns absolute application roots, sorted by workspace-relative path
+ */
+export function discoverApplicationRoots(workspaceRoot) {
+  const root = path.resolve(workspaceRoot);
+  if (!existsSync(root)) {
+    throw new Error(`workspace root does not exist: ${root}`);
+  }
+  const roots = [];
+  for (const repoEntry of readdirSync(root, { withFileTypes: true })) {
+    if (!repoEntry.isDirectory() || IGNORED_DIRECTORY_NAMES.has(repoEntry.name)) {
+      continue;
+    }
+    if (!repoEntry.name.startsWith('sdkwork-')) {
+      continue;
+    }
+    const repoRoot = path.join(root, repoEntry.name);
+    if (existsSync(path.join(repoRoot, APP_MANIFEST_FILE))) {
+      roots.push(repoRoot);
+    }
+    const appsDir = path.join(repoRoot, 'apps');
+    if (!existsSync(appsDir) || !statSync(appsDir).isDirectory()) {
+      continue;
+    }
+    for (const appEntry of readdirSync(appsDir, { withFileTypes: true })) {
+      if (!appEntry.isDirectory() || IGNORED_DIRECTORY_NAMES.has(appEntry.name)) {
+        continue;
+      }
+      const appRoot = path.join(appsDir, appEntry.name);
+      if (existsSync(path.join(appRoot, APP_MANIFEST_FILE))) {
+        roots.push(appRoot);
+      }
+    }
+  }
+  return roots.sort((left, right) =>
+    toPosix(path.relative(root, left)).localeCompare(toPosix(path.relative(root, right))),
+  );
+}
+
+/**
+ * Read the repository's declared client-surface matrix.
+ *
+ * `etc/client-env.materialization.json` is the only declaration of which
+ * surfaces mint a public application token and from which environment variable
+ * they take its `app_id`. A repository without the file declares no client
+ * surface (a server-only repository).
+ * @param repoRoot - absolute repository root
+ * @returns the declaration, or `null` when the repository declares none
+ */
+export function readClientEnvDeclaration(repoRoot) {
+  const configPath = path.join(repoRoot, 'etc', 'client-env.materialization.json');
+  if (!existsSync(configPath)) {
+    return null;
+  }
+  const config = readJson(configPath);
+  const surfaces = Array.isArray(config.surfaces) ? config.surfaces : [];
+  return {
+    configPath,
+    application: String(config.application ?? '').trim(),
+    surfaces: surfaces.map((surface) => ({
+      id: String(surface.id ?? '').trim(),
+      root: String(surface.root ?? '').trim(),
+      format: String(surface.format ?? '').trim(),
+      runtimeTarget: String(surface.runtimeTarget ?? '').trim(),
+      appIdEnv: String(surface.accessToken?.appIdEnv ?? '').trim(),
+      appIdLiteral: String(surface.accessToken?.appId ?? '').trim(),
+      excludeProfiles: Array.isArray(surface.excludeProfiles) ? surface.excludeProfiles : [],
+    })),
+  };
+}
+
+function resolveAnchorSink(repoRoot, environment) {
+  const candidates = REGISTRATION_DEPLOYMENT_PROFILES.map((deploymentProfile) => {
+    const overridePath = path.join(
+      repoRoot,
+      'etc',
+      'topology',
+      'overrides',
+      `${clientProfileId(deploymentProfile, environment)}.env`,
+    );
+    return { deploymentProfile, kind: 'topology-override', filePath: overridePath };
+  }).filter((candidate) => existsSync(candidate.filePath));
+
+  for (const dotEnvName of [`.env.${environment}`, '.env']) {
+    const dotEnvPath = path.join(repoRoot, dotEnvName);
+    if (existsSync(dotEnvPath)) {
+      candidates.push({ deploymentProfile: '', kind: 'dotenv', filePath: dotEnvPath });
+      break;
+    }
+  }
+  return candidates;
+}
+
+function countMaterializedProfiles(appRoot, format) {
+  const layout = TOKEN_CARRIER_LAYOUTS[format];
+  if (!layout) {
+    return { present: [], missing: [] };
+  }
+  const present = [];
+  const missing = [];
+  for (const deploymentProfile of REGISTRATION_DEPLOYMENT_PROFILES) {
+    for (const environment of REGISTRATION_ENVIRONMENTS) {
+      const profileId = clientProfileId(deploymentProfile, environment);
+      const filePath = layout(appRoot, profileId);
+      (existsSync(filePath) ? present : missing).push(profileId);
+    }
+  }
+  return { present, missing };
+}
+
+/**
+ * Describe where one application surface's public token lives today.
+ *
+ * The carrier is resolved at repository granularity: `materialize-client-env.mjs`
+ * runs per repository and bakes one deploy anchor into every declared surface, so
+ * a repository-root application whose client surfaces live under `apps/*` still
+ * owns those tokens even though no declared surface is rooted at the repository
+ * root itself.
+ * @param workspaceRoot - workspace root
+ * @param appRoot - absolute application root
+ * @param declaration - repository client-env declaration, or `null`
+ * @returns carrier facts for the inventory entry
+ */
+function describeTokenCarrier(workspaceRoot, appRoot, declaration) {
+  if (!declaration) {
+    return {
+      kind: 'none',
+      reason: 'repository declares no etc/client-env.materialization.json',
+      configPath: '',
+      surfaces: [],
+      repositorySurfaces: [],
+    };
+  }
+  const relativeAppRoot = toPosix(path.relative(declaration.repoRoot, appRoot)) || '.';
+  const matched = declaration.surfaces.filter((surface) => {
+    const root = surface.root.replace(/\/+$/u, '') || '.';
+    return root === relativeAppRoot;
+  });
+  const surfaces = matched.map((surface) => ({
+    id: surface.id,
+    format: surface.format,
+    runtimeTarget: surface.runtimeTarget,
+    appIdEnv: surface.appIdEnv,
+    appIdLiteral: surface.appIdLiteral,
+    tokenKey: 'SDKWORK_ACCESS_TOKEN',
+    profiles: countMaterializedProfiles(appRoot, surface.format),
+  }));
+  return {
+    kind: declaration.surfaces.length > 0 ? 'client-env-materializer' : 'none',
+    reason:
+      surfaces.length > 0
+        ? ''
+        : `the repository's declared client surfaces are rooted at ${declaration.surfaces
+          .map((surface) => surface.root)
+          .join(', ')}; this application root owns the repository-level anchor they materialize`,
+    configPath: toPosix(path.relative(workspaceRoot, declaration.configPath)),
+    surfaces,
+    repositorySurfaces: declaration.surfaces.map((surface) => ({
+      id: surface.id,
+      root: surface.root,
+      format: surface.format,
+      appIdEnv: surface.appIdEnv,
+    })),
+  };
+}
+
+/**
+ * Build the registration inventory for a workspace.
+ *
+ * Deterministic: the entry order, every path, and every derived slug depend only
+ * on the workspace contents. Re-running on an unchanged workspace produces the
+ * same document, which is what makes the plan (and the deterministic idempotency
+ * keys derived from it) reproducible.
+ * @param options - workspace root and the repositories to scan
+ * @returns the inventory document
+ */
+export function buildRegistrationInventory(options = {}) {
+  const workspaceRoot = path.resolve(options.workspaceRoot ?? process.cwd());
+  const roots = discoverApplicationRoots(workspaceRoot);
+  const declarations = new Map();
+  const entries = [];
+
+  for (const appRoot of roots) {
+    const repoRoot = resolveRepositoryRoot(workspaceRoot, appRoot);
+    const relativeAppDir = toPosix(path.relative(repoRoot, appRoot)) || '.';
+    const appDirName = path.basename(appRoot);
+    const manifestPath = path.join(appRoot, APP_MANIFEST_FILE);
+    let manifest;
+    try {
+      manifest = readJson(manifestPath);
+    } catch (error) {
+      entries.push({
+        id: toPosix(path.relative(workspaceRoot, appRoot)),
+        repo: path.basename(repoRoot),
+        appDir: relativeAppDir,
+        manifestPath: toPosix(path.relative(workspaceRoot, manifestPath)),
+        parseError: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+
+    if (!declarations.has(repoRoot)) {
+      const declaration = readClientEnvDeclaration(repoRoot);
+      declarations.set(
+        repoRoot,
+        declaration ? { ...declaration, repoRoot } : null,
+      );
+    }
+    const declaration = declarations.get(repoRoot);
+
+    const appKey = manifestAppKey(manifest, appDirName);
+    const appName = manifestAppName(manifest, appKey);
+    const permissionScope = manifestPermissionScope(manifest);
+    const slugFromKey = slugifyAppKey(appKey);
+    const slugFromName = slugifyAppKey(manifest?.app?.name ?? '');
+    const slugFromDir = slugifyAppKey(appDirName);
+    const slug = slugFromKey || slugFromName || slugFromDir;
+    const environments = {};
+    for (const environment of REGISTRATION_ENVIRONMENTS) {
+      environments[environment] = {
+        domain: manifestEnvironmentDomain(manifest, environment),
+        anchorSinks: resolveAnchorSink(repoRoot, environment)
+          .map((sink) => ({
+            deploymentProfile: sink.deploymentProfile,
+            kind: sink.kind,
+            path: toPosix(path.relative(workspaceRoot, sink.filePath)),
+          })),
+      };
+    }
+
+    entries.push({
+      id: toPosix(path.relative(workspaceRoot, appRoot)),
+      repo: path.basename(repoRoot),
+      appDir: relativeAppDir,
+      manifestPath: toPosix(path.relative(workspaceRoot, manifestPath)),
+      appKey,
+      appName,
+      displayName: String(manifest?.app?.displayName ?? '').trim(),
+      appType: String(manifest?.app?.appType ?? '').trim(),
+      applicationType: mapManifestAppTypeToApplicationType(manifest?.app?.appType) ?? '',
+      backendAppId: String(manifest?.backend?.appId ?? '').trim(),
+      tenantId: String(manifest?.backend?.tenantId ?? '').trim(),
+      organizationId: String(manifest?.backend?.organizationId ?? '').trim(),
+      permissionScope,
+      permissionScopeCount: permissionScope.length,
+      slug,
+      slugSource: slugFromKey ? 'app.key' : slugFromName ? 'app.name' : 'directory',
+      environments,
+      tokenCarrier: describeTokenCarrier(workspaceRoot, appRoot, declaration),
+    });
+  }
+
+  const slugs = new Map();
+  for (const entry of entries) {
+    if (!entry.slug) {
+      continue;
+    }
+    const bucket = slugs.get(entry.slug) ?? [];
+    bucket.push(entry.id);
+    slugs.set(entry.slug, bucket);
+  }
+  const duplicateSlugs = [...slugs.entries()]
+    .filter(([, ids]) => ids.length > 1)
+    .map(([slug, ids]) => ({ slug, ids }));
+
+  const parsed = entries.filter((entry) => !entry.parseError);
+  return {
+    schemaVersion: 1,
+    kind: 'sdkwork.app-registration-inventory',
+    workspaceRoot: toPosix(workspaceRoot),
+    generatedAt: new Date().toISOString(),
+    environments: REGISTRATION_ENVIRONMENTS,
+    deploymentProfiles: REGISTRATION_DEPLOYMENT_PROFILES,
+    counts: {
+      applicationRoots: entries.length,
+      parsedManifests: parsed.length,
+      parseErrors: entries.length - parsed.length,
+      repositories: new Set(
+        parsed.map((entry) => entry.repo),
+      ).size,
+      repositoriesWithClientEnv: new Set(
+        parsed.filter((entry) => entry.tokenCarrier?.kind === 'client-env-materializer')
+          .map((entry) => entry.repo),
+      ).size,
+      bootstrapReady: parsed.filter(
+        (entry) => entry.permissionScopeCount > 0 && entry.applicationType !== '',
+      ).length,
+      missingPermissionScope: parsed.filter((entry) => entry.permissionScopeCount === 0).length,
+      missingApplicationType: parsed.filter((entry) => entry.applicationType === '').length,
+      withClientTokenCarrier: parsed.filter(
+        (entry) => entry.tokenCarrier?.kind === 'client-env-materializer',
+      ).length,
+      withAnchorSink: parsed.filter((entry) =>
+        Object.values(entry.environments).every((environment) => environment.anchorSinks.length > 0),
+      ).length,
+      duplicateSlugs: duplicateSlugs.length,
+      credentialEntrySurfaces: parsed.reduce(
+        (total, entry) => total + (entry.tokenCarrier?.surfaces?.length ?? 0),
+        0,
+      ),
+    },
+    duplicateSlugs,
+    entries,
+  };
+}

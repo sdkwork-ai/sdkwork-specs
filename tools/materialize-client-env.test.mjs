@@ -8,7 +8,9 @@ import {
   CLIENT_ENV_PROFILE_IDS,
   applyViteSurfaceCloudValues,
   createClientSurfaceValues,
+  filterClientEnvProfileIds,
   materializeClientEnv,
+  parseClientEnvArgs,
   parseClientEnvDotenv,
 } from './materialize-client-env.mjs';
 import { decodeApplicationAccessToken } from './app-access-token.mjs';
@@ -359,4 +361,38 @@ test('check mode detects a stale app overlay output', () => {
   } finally {
     rmSync(root, { force: true, recursive: true });
   }
+});
+
+test('the lifecycle filter keeps both deployment profiles of one environment', () => {
+  assert.deepEqual(
+    filterClientEnvProfileIds(CLIENT_ENV_PROFILE_IDS, ['development']),
+    ['standalone.development', 'cloud.development'],
+  );
+  assert.deepEqual(
+    filterClientEnvProfileIds(CLIENT_ENV_PROFILE_IDS, ['prod']),
+    ['standalone.production', 'cloud.production'],
+  );
+  assert.deepEqual(
+    filterClientEnvProfileIds(CLIENT_ENV_PROFILE_IDS, ['development', 'production']),
+    ['standalone.development', 'standalone.production', 'cloud.development', 'cloud.production'],
+  );
+  assert.deepEqual(
+    filterClientEnvProfileIds(CLIENT_ENV_PROFILE_IDS, []),
+    CLIENT_ENV_PROFILE_IDS,
+    'no filter means the full matrix',
+  );
+  assert.throws(() => filterClientEnvProfileIds(CLIENT_ENV_PROFILE_IDS, ['qa']), /not a lifecycle/u);
+});
+
+test('the CLI accepts --environment as a repeatable or comma-separated filter', () => {
+  assert.deepEqual(parseClientEnvArgs(['--environment', 'development']).environments, ['development']);
+  assert.deepEqual(
+    parseClientEnvArgs(['--environment', 'development,production']).environments,
+    ['development', 'production'],
+  );
+  assert.deepEqual(
+    parseClientEnvArgs(['--environment', 'development', '--environment', 'test']).environments,
+    ['development', 'test'],
+  );
+  assert.throws(() => parseClientEnvArgs(['--unknown']), /Unsupported/u);
 });

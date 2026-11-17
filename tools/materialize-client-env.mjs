@@ -41,16 +41,28 @@ function parseUrlHost(value) {
   }
 }
 
-function parseArgs(argv) {
+export function parseClientEnvArgs(argv) {
   const options = {
     root: process.cwd(),
     config: DEFAULT_CONFIG_PATH,
     check: false,
+    environments: [],
   };
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (token === '--check') {
       options.check = true;
+      continue;
+    }
+    if (token === '--environment') {
+      const value = String(argv[index + 1] ?? '').trim();
+      if (!value) {
+        throw new Error(`${token} requires a value.`);
+      }
+      options.environments.push(
+        ...value.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0),
+      );
+      index += 1;
       continue;
     }
     if (token === '--root' || token === '--config') {
@@ -65,6 +77,48 @@ function parseArgs(argv) {
     throw new Error(`Unsupported client env materialization option: ${token}`);
   }
   return options;
+}
+
+const CLIENT_ENVIRONMENT_ALIASES = new Map([
+  ['dev', 'development'],
+  ['local', 'development'],
+  ['development', 'development'],
+  ['test', 'test'],
+  ['staging', 'staging'],
+  ['demo', 'demo'],
+  ['prod', 'production'],
+  ['production', 'production'],
+]);
+
+/**
+ * Restrict a profile-id list to the requested lifecycles.
+ *
+ * A client profile id is `<deployment-profile>.<environment>`; selecting one
+ * lifecycle keeps both of its deployment profiles and drops every other
+ * environment. The registrar uses this so registering `development` cannot bake
+ * the development anchor into the profile files of another environment — every
+ * environment is a separate deployment with its own deploy application anchor.
+ * @param profileIds - declared or canonical profile ids
+ * @param environments - requested lifecycles (aliases accepted)
+ * @returns the profile ids whose environment was requested
+ * @throws when a requested value is not a lifecycle
+ */
+export function filterClientEnvProfileIds(profileIds, environments = []) {
+  if (!Array.isArray(environments) || environments.length === 0) {
+    return [...profileIds];
+  }
+  const wanted = new Set();
+  for (const raw of environments) {
+    const normalized = CLIENT_ENVIRONMENT_ALIASES.get(String(raw ?? '').trim().toLowerCase());
+    if (!normalized) {
+      throw new Error(
+        `--environment ${JSON.stringify(String(raw ?? ''))} is not a lifecycle `
+        + `(expected one of ${CLIENT_ENVIRONMENTS.join(', ')})`,
+      );
+    }
+    wanted.add(normalized);
+  }
+  return profileIds.filter((profileId) => wanted.has(profileId.slice(profileId.indexOf('.') + 1)));
 }
 
 function ensureInsideRoot(rootDir, candidatePath, label) {
@@ -607,6 +661,7 @@ export function materializeClientEnv({
   rootDir = process.cwd(),
   configPath = DEFAULT_CONFIG_PATH,
   check = false,
+  environments = [],
   env = process.env,
 } = {}) {
   const normalizedRoot = path.resolve(rootDir);
@@ -617,7 +672,16 @@ export function materializeClientEnv({
     config.deploymentConfig ?? 'sdkwork.deployment.config.json',
   );
   const deploymentIndex = readJson(deploymentConfigPath);
-  const profileIds = config.profiles ?? CLIENT_ENV_PROFILE_IDS;
+  const profileIds = filterClientEnvProfileIds(
+    config.profiles ?? CLIENT_ENV_PROFILE_IDS,
+    environments,
+  );
+  if (profileIds.length === 0) {
+    throw new Error(
+      `no client profile matches --environment ${environments.join(',')}; `
+      + `the repository declares ${(config.profiles ?? CLIENT_ENV_PROFILE_IDS).join(', ')}`,
+    );
+  }
   const results = [];
 
   for (const profileId of profileIds) {
@@ -745,13 +809,20 @@ export function materializeClientEnv({
 }
 
 function runCli() {
-  const options = parseArgs(process.argv.slice(2));
+  const options = parseClientEnvArgs(process.argv.slice(2));
   const files = materializeClientEnv({
     rootDir: options.root,
     configPath: options.config,
     check: options.check,
+    environments: options.environments,
   });
-  console.log(`SDKWork client env profiles ${options.check ? 'verified' : 'materialized'}: ${files.length} files.`);
+  const scope = options.environments.length > 0
+    ? ` (environments: ${options.environments.join(', ')})`
+    : '';
+  console.log(
+    `SDKWork client env profiles ${options.check ? 'verified' : 'materialized'}: `
+    + `${files.length} files${scope}.`,
+  );
 }
 
 const entryPath = fileURLToPath(import.meta.url);
