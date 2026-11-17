@@ -1,28 +1,28 @@
 # SDKWork IAM Application Bootstrap Standard
 
-- Version: 1.1
-- Scope: registered application templates, tenant applications, bootstrap orchestration, access credential issuance, manifest mapping, reusable framework package, and application onboarding enforcement
-- Related: `IAM_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `MODULE_SPEC.md`, `API_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `TEST_SPEC.md`, `DATABASE_FRAMEWORK_SPEC.md`
+- Version: 1.2
+- Scope: deploy applications, tenant applications, bootstrap orchestration, access credential issuance, manifest mapping, reusable framework package, and application onboarding enforcement
+- Related: `IAM_SPEC.md`, `APPLICATION_IDENTITY_SPEC.md`, `APP_MANIFEST_SPEC.md`, `APP_SDK_INTEGRATION_SPEC.md`, `MODULE_SPEC.md`, `API_SPEC.md`, `CONFIG_SPEC.md`, `ENVIRONMENT_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `TEST_SPEC.md`, `DATABASE_FRAMEWORK_SPEC.md`
 
-This standard defines the canonical two-layer IAM application model and the reusable bootstrap framework that every new SDKWork application must use.
+This standard defines the canonical deploy-application-first IAM application model and the reusable bootstrap framework that every new SDKWork application must use.
 
 ## 1. Domain Model
 
-SDKWork IAM application provisioning uses two layers. Do not introduce `plus_*` tables, `studio_*` tables, or a separate deployment entity in IAM database ownership.
+SDKWork IAM application onboarding has one installation layer anchored on the deploy application. Do not introduce `plus_*` tables, `studio_*` tables, or a separate deployment entity in IAM database ownership.
 
 | Layer | Database | Meaning |
 | --- | --- | --- |
-| Registered application | `iam_application_template`, `iam_application_template_package` | Platform-wide application definition registered by bootstrap operators |
-| Tenant application | `iam_tenant_application` | Tenant-scoped runtime instance with domain, access permissions, status, and runtime `app_id` |
+| Deploy application | Owned outside IAM (deploy/cloudrouter manifests) | The deployed runtime identity an installation serves; `deployApplicationId` is the anchor |
+| Tenant application | `iam_tenant_application` | Tenant-scoped runtime instance with `deploy_application_id`, domain, access permissions, `application_type`, status, and runtime `app_id` |
 
 Rules:
 
-- Registration creates or updates an application template.
-- Provisioning creates a tenant application bound to a template.
+- Application templates are retired: provisioning no longer registers a template and accepts no `templateId` or `appKey`.
+- Provisioning creates or reconciles one tenant application bound to the deploy application it serves, from explicit attributes (`applicationType`, `instanceKey`, `displayName`, `environment`, `accessPermissions`, `runtimeConfig`).
 - Enable transitions the tenant application to an operable state.
 - Access credential issuance creates delegated `auth_token` and `access_token` only after the tenant application is enabled.
 - Deployment is not a separate IAM table. Deployment behavior is expressed through provision, update, enable, and runtime configuration on the tenant application.
-- Application identity, the deploy-application anchor, and access-token `app_id` binding follow `APPLICATION_IDENTITY_SPEC.md`. This section describes the current two-layer IAM records; where the two disagree, `APPLICATION_IDENTITY_SPEC.md` governs after the consumer migrates.
+- Application identity, the deploy-application anchor, and access-token `app_id` binding follow `APPLICATION_IDENTITY_SPEC.md`.
 
 ## 2. Canonical Backend API Surface
 
@@ -30,7 +30,6 @@ All bootstrap operations live in backend-api only. Static path segments use `low
 
 | Business step | Method | Path | operationId | Auth mode |
 | --- | --- | --- | --- | --- |
-| Register application template | `POST` | `/backend/v3/api/iam/applications/register` | `applications.register` | `bootstrap-body` |
 | Provision tenant application | `POST` | `/backend/v3/api/iam/tenant_applications` | `tenantApplications.create` | `bootstrap-body` |
 | Update tenant application | `PATCH` | `/backend/v3/api/iam/tenant_applications/{tenantApplicationId}` | `tenantApplications.update` | `bootstrap-body` |
 | Enable tenant application | `POST` | `/backend/v3/api/iam/tenant_applications/{tenantApplicationId}/enable` | `tenantApplications.enable` | `bootstrap-body` |
@@ -48,7 +47,6 @@ Rules:
 Required permission codes:
 
 ```text
-iam.applications.register
 iam.tenant_applications.provision
 iam.tenant_applications.update
 iam.tenant_applications.enable
@@ -67,7 +65,7 @@ the canonical tenant application domain service and permission codes:
 | --- | --- | --- | --- | --- |
 | List tenant applications | `GET` | `/backend/v3/api/iam/tenants/{tenantId}/applications` | `tenantApplications.list` | `iam.tenant_applications.update` |
 | Retrieve tenant application summary | `GET` | `/backend/v3/api/iam/tenants/{tenantId}/applications/summary` | `tenantApplications.summary.retrieve` | `iam.tenant_applications.update` |
-| Provision from a registered template | `POST` | `/backend/v3/api/iam/tenants/{tenantId}/applications` | `tenantApplications.management.create` | `iam.tenant_applications.provision` |
+| Provision tenant application | `POST` | `/backend/v3/api/iam/tenants/{tenantId}/applications` | `tenantApplications.management.create` | `iam.tenant_applications.provision` |
 | Update domain and access scope | `PATCH` | `/backend/v3/api/iam/tenants/{tenantId}/applications/{tenantApplicationId}` | `tenantApplications.management.update` | `iam.tenant_applications.update` |
 | Enable tenant application | `POST` | `/backend/v3/api/iam/tenants/{tenantId}/applications/{tenantApplicationId}/enable` | `tenantApplications.management.enable` | `iam.tenant_applications.enable` |
 | Disable tenant application | `POST` | `/backend/v3/api/iam/tenants/{tenantId}/applications/{tenantApplicationId}/disable` | `tenantApplications.management.disable` | `iam.tenant_applications.update` |
@@ -77,8 +75,10 @@ Rules:
 - These operations require the standard backend-admin dual-token request context and tenant
   isolation. Platform operators may target another tenant only through the governed platform
   tenant access rule.
-- Management provisioning accepts an existing `templateId` or `appKey`; it does not register or
-  mutate a global application template.
+- Management provisioning takes the same deploy-application attributes (`deployApplicationId`,
+  `applicationType`, `instanceKey`, `displayName`, `environment`, `accessPermissions`,
+  `runtimeConfig`); it does not register an application template and accepts no `templateId` or
+  `appKey`.
 - Browser applications must use `tenantApplications.management.*` through the generated backend
   SDK or approved IAM service facade. They must not call bootstrap-body operations or handle
   bootstrap credentials.
@@ -103,8 +103,8 @@ apps/sdkwork-iam-common/packages/sdkwork-iam-application-bootstrap
 
 Rules:
 
-- New applications and appbase-derived repositories `MUST` use this package for register → provision → enable → access credential orchestration.
-- Application code `MUST NOT` duplicate manifest mapping, auth merge, env output formatting, or step ordering in local scripts.
+- New applications and appbase-derived repositories `MUST` use this package for provision → enable → access credential orchestration, anchored on the deploy application the installation serves.
+- Application code `MUST NOT` duplicate manifest mapping, auth merge, env output formatting, or step ordering in local scripts. No call registers an application template, and no request body carries `templateId` or `appKey`.
 - CLI/bootstrap scripts `MAY` remain thin wrappers that parse args, load manifest/profile, choose a transport, and call the framework module.
 - The framework `MUST` expose a transport port (`IamApplicationBootstrapClient`) and at least these adapters:
   - `createFetchIamApplicationBootstrapClient(...)` for CLI/tooling environments
@@ -112,18 +112,21 @@ Rules:
   - `createIamApplicationBootstrapClientFromIamService(...)` for `@sdkwork/iam-service` facades
   - `createIamApplicationBootstrapFromIamService(...)` and `createIamApplicationBootstrapFromIamRuntime(...)` for runtime/service composition
 - The framework `MUST` expose:
-  - `bootstrapApplicationFromManifest(...)`
+  - `bootstrapApplicationFromManifest(...)` for manifest-driven onboarding
+  - `bootstrapDeployApplication(...)` for onboarding a complete deploy-application command without a manifest
   - `createIamApplicationBootstrap(...)`
   - optional `updateTenantApplication(...)` on the client port and module facade
-  - manifest mapping helpers
-  - bootstrap auth/env resolution helpers
+  - manifest mapping helpers, including `mapManifestAppTypeToApplicationType(...)`, `resolveDeployApplicationId(...)`, and `deriveProvisioningIdempotencyKey(...)`
+  - command validation (`validateTenantApplicationProvisionCommand(...)`) and bootstrap auth/env resolution helpers
   - env handoff helpers such as `formatBootstrapEnvFile(...)`
+- The provisioning command `MUST` carry `applicationType` (`api` | `h5` | `pc` | `flutter` | `other`) and `deployApplicationId`; the framework `MUST` fail closed naming the missing field instead of sending an incomplete body.
+- Repeated onboarding with the same `provisioningIdempotencyKey` `MUST` be a replay: the framework returns the first outcome and the API reconciles the one tenant application bound to that deploy application.
 
 Forbidden in application-owned bootstrap code:
 
 - raw `fetch`/`axios`/HTTP client calls to bootstrap IAM paths
 - copied manifest-to-command mapping outside the framework unless an approved local narrowing spec documents an exception
-- direct SQL against `iam_application_template` or `iam_tenant_application` from application scripts
+- direct SQL against `iam_tenant_application` from application scripts
 
 ## 4. Manifest Mapping
 
@@ -133,24 +136,27 @@ Minimum manifest fields for IAM bootstrap:
 
 | Manifest field | Bootstrap use |
 | --- | --- |
-| `app.key` | registered template `appKey` |
-| `app.name`, `app.displayName`, `app.appType` | template identity |
-| `app.identifiers.*` | optional template identifiers |
+| `app.name`, `app.displayName` | installation `displayName` |
+| `app.appType` | source of the product-semantic `applicationType` (`APP_HTML`→`h5`, `APP_FLUTTER`→`flutter`, `APP_REACT`/`APP_VUE`/`APP_PC`→`pc`, `APP_API`→`api`, otherwise `other`) |
+| `backend.deployApplicationId` | deploy application anchor the installation serves; falls back to `backend.appId` |
 | `backend.accessTokenPermissionScope` or `backend.permissionScope` | required non-empty default access permissions |
 | `backend.tenantId`, `backend.organizationId` | tenant application scope defaults |
-| `backend.appId` | tenant application runtime `app_id`; must match the PC/H5/mobile auth runtime `appId` and bootstrap `Access-Token` JWT `app_id` claim when the surface uses credential-entry |
+| `backend.appId` | configured runtime identity and deploy-application anchor fallback; must match the PC/H5/mobile auth runtime `appId` and bootstrap `Access-Token` JWT `app_id` claim when the surface uses credential-entry |
 | `backend.primaryDomain` or runtime `--domain` / env | tenant application domain |
-| `artifacts.installConfig.packages[]` | optional template package metadata |
-| `release.notes[]` | template version/channel |
+| `oauth.relyingParty` | `runtimeConfig.oauth.relyingParty`; absent registers no OAuth relying party |
+| `release.notes[]` | optional installation version label |
 
 Rules:
 
 - `backend.accessTokenPermissionScope` `MUST` be a non-empty string array for every new app.
 - Bootstrap `MUST` fail closed when default access permissions are missing.
+- Bootstrap `MUST` fail closed naming `deployApplicationId` when neither the caller nor the manifest supplies it. The anchor comes from configuration only; it is never generated.
+- Bootstrap `MUST` fail closed naming `applicationType` when neither the caller nor `app.appType` supplies it.
+- An empty explicit `accessPermissions` array is a valid choice meaning "no API scope"; it `MUST NOT` be replaced by a default.
 - Manifest content `MUST NOT` contain secrets, live tokens, or bootstrap passwords.
 - Every runnable manifest-bearing application root, including PC, H5/Capacitor, Flutter, native Android, native iOS, native HarmonyOS, mini program, and future client roots, `MUST` declare a non-empty `backend.appId` when it uses credential-entry.
 - `backend.appId` is the sole manifest-derived IAM runtime application identity. Bootstrap and token generation `MUST NOT` infer or append identity segments from `app.key`, `runtime.family`, `runtime.framework`, package platform, runtime target, or client architecture metadata.
-- A multi-surface repository `MUST` discover the repository manifest and each direct manifest-bearing `apps/*` root without hardcoded architecture suffix lists. Each credential-entry surface `MUST` use a unique `backend.appId`, and repeated bootstrap runs `MUST` reconcile the same template and tenant-application rows.
+- A multi-surface repository `MUST` discover the repository manifest and each direct manifest-bearing `apps/*` root without hardcoded architecture suffix lists. Each credential-entry surface `MUST` use a unique `backend.appId`, and repeated bootstrap runs `MUST` reconcile the same tenant-application rows.
 
 ### 4.1 Bootstrap Owner, Default Permissions, And Production Guards
 
@@ -158,7 +164,7 @@ Bootstrap has two different principals and they must not be conflated:
 
 | Principal | Purpose | Allowed lifetime |
 | --- | --- | --- |
-| Bootstrap operator | Registers/provisions/enables the tenant application and issues initial access credentials | Operational action only; credentials come from a secret store or interactive operator auth |
+| Bootstrap operator | Provisions/enables the tenant application and issues initial access credentials | Operational action only; credentials come from a secret store or interactive operator auth |
 | Application bootstrap owner | First tenant/organization owner or invite target for the new application | Runtime subject with ordinary `org_admin` or application-owned owner role, never implicit platform authority |
 
 Rules:
@@ -166,7 +172,7 @@ Rules:
 - Production bootstrap `MUST NOT` create a live `platform_super_admin` user, default password, default API key, or unbounded bootstrap token.
 - Production bootstrap owner creation `MUST` use an explicit owner subject, invitation, or operator-approved binding in the deployment profile. Demo defaults are allowed only in dev/test profiles.
 - `backend.accessTokenPermissionScope` is a bootstrap transport allowlist. It `MUST` be minimal, standard-formatted, and limited to credential-entry/pre-login or explicitly documented bootstrap calls. It must not duplicate entire module catalogs.
-- Application bootstrap scripts `MUST` be idempotent: repeated runs reconcile template, tenant application, owner binding, access credential, and environment handoff by stable keys instead of inserting duplicates.
+- Application bootstrap scripts `MUST` be idempotent: repeated runs reconcile the tenant application, owner binding, access credential, and environment handoff by stable keys instead of inserting duplicates.
 - Default role bindings created by bootstrap `MUST` follow the actor initialization and default grant matrix in `PERMISSION_STANDARD_SPEC.md` and pass the same IMF role assignability and exclusion checks as runtime grants unless a seed-only exception is declared in `IAM_MODULE_MANIFEST_SPEC.md`.
 - Super-admin activation, rotation, and emergency access `MUST` be governed by `PERMISSION_STANDARD_SPEC.md` and `IAM_RBAC_FEDERATION_SPEC.md`, not application-local bootstrap scripts.
 
@@ -200,12 +206,12 @@ unused direct embedded-bootstrap dependency or duplicate that lifecycle locally.
 
 Rules:
 
-- Application repositories `MUST NOT` duplicate manifest mapping, Postgres `search_path` wiring, tenant-application reconcile logic, or raw SQL against `iam_application_template` / `iam_tenant_application`.
+- Application repositories `MUST NOT` duplicate manifest mapping, Postgres `search_path` wiring, tenant-application reconcile logic, or raw SQL against `iam_tenant_application`.
 - Application repositories `MAY` keep a thin adapter crate that supplies additional runtime bindings (for example IM PC + H5) but `MUST` delegate to `ensure_tenant_application_from_app_root` or `ensure_tenant_application_from_app_root_with_env_and_fallback`.
 - `ensure_tenant_application_from_app_root_with_env` without a repository-root fallback `MUST NOT` be used in application adapters; it silently skips provisioning when `SDKWORK_*_APP_ROOT` env vars are unset.
 - `sdkwork-iam-database-host` `MUST` invoke `ensure_tenant_application_from_app_root_if_configured` after IAM migrations when `SDKWORK_APP_ROOT` (or an approved app-root env alias) points at a manifest-bearing application root.
 - Embedded bootstrap `MUST` derive `instance_key` through `tenant_application_instance_key(runtime_app_id, environment)` so tenant applications do not collide with platform defaults such as `default`.
-- Embedded bootstrap `MUST` upsert tenant applications by stable row id and reconcile org-template, runtime app id, and instance-key conflicts before enable.
+- Embedded bootstrap `MUST` upsert tenant applications by stable row id and reconcile the deploy application anchor, runtime app id, and instance-key conflicts before enable.
 
 ### 5.2 Bootstrap Operator Auth Profile
 
@@ -471,6 +477,7 @@ Each embedded IAM repository `MUST` provide `scripts/dev/*-iam-application-boots
 ## 8. New Application Checklist
 
 - [ ] Declare non-empty `backend.accessTokenPermissionScope` in `agent.app.config.json`.
+- [ ] Declare the deploy application anchor in `backend.deployApplicationId` (or `backend.appId`) and a manifest `app.appType`.
 - [ ] Use `@sdkwork/iam-application-bootstrap` for bootstrap orchestration.
 - [ ] Keep CLI/bootstrap scripts thin; no raw bootstrap HTTP in app code.
 - [ ] Wire backend SDK or IAM service adapter for non-CLI environments.
@@ -484,10 +491,11 @@ Each embedded IAM repository `MUST` provide `scripts/dev/*-iam-application-boots
 
 ## 9. Acceptance Checklist
 
-- [ ] Bootstrap flow uses register → provision → enable → access credential only.
-- [ ] No `plus_*`, legacy `iam_application`, or `studio_*` bootstrap ownership remains in IAM appbase paths.
+- [ ] Bootstrap flow uses provision → enable → access credential only; it registers no application template.
+- [ ] No `plus_*`, legacy `iam_application`, `iam_application_template`, or `studio_*` bootstrap ownership remains in IAM appbase paths.
 - [ ] Backend bootstrap paths use `lower_snake_case` static segments.
-- [ ] Generated backend SDK and `@sdkwork/iam-service` expose `iam.applications.register`, `iam.tenantApplications.*`, and `iam.accessCredentials.create`.
+- [ ] Generated backend SDK and `@sdkwork/iam-service` expose `iam.tenantApplications.*` and `iam.accessCredentials.create`, and no retired `iam.applications.register` surface.
+- [ ] Provisioning requests carry `applicationType` and `deployApplicationId`, never `templateId` or `appKey`.
 - [ ] Application-owned scripts import `@sdkwork/iam-application-bootstrap` instead of raw bootstrap HTTP.
 - [ ] Embedded Rust runtimes import `sdkwork-iam-embedded-application-bootstrap` instead of local tenant-application SQL.
 - [ ] Manifest mapping and auth merge live in the framework package.
