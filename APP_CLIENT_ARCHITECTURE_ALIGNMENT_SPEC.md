@@ -173,10 +173,10 @@ apps/sdkwork-<application-code>-<client-arch>/
     capture/
   .sdkwork/
     README.md
-    skills/
-      README.md
     plugins/
       README.md
+  skills/                    # per AGENT_SKILLS_SPEC.md
+    README.md
   config/
     browser/ or app/
     tablet/

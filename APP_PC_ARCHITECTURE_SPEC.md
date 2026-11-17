@@ -51,10 +51,10 @@ use the shorter `apps/<application-code>-pc/` form.
 apps/sdkwork-<application-code>-pc/
   .sdkwork/
     README.md
-    skills/
-      README.md
     plugins/
       README.md
+  skills/                    # per AGENT_SKILLS_SPEC.md
+    README.md
   bin/
     windows/
     linux/
@@ -126,7 +126,7 @@ apps/sdkwork-<application-code>-pc/
 
 Directory rules:
 
-- `.sdkwork/` is required by `SDKWORK_WORKSPACE_SPEC.md` for repository/application skills and plugins. It is not generated SDK output and is not user runtime state.
+- `.sdkwork/` is required by `SDKWORK_WORKSPACE_SPEC.md` for plugins and workspace metadata; agent skills live in the root `skills/` directory. It is not generated SDK output and is not user runtime state.
 - `bin/` contains cross-platform operational scripts for runnable application roots, including server start, stop, restart, status, diagnostics, and desktop launch helpers when applicable.
 - `config/` contains checked-in non-secret config templates grouped by runtime target. Host-local overrides are excluded from source control.
 - `docs/` contains app architecture notes, runbooks, release notes, and local decisions.

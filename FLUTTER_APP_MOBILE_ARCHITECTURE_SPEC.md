@@ -38,10 +38,10 @@ apps/sdkwork-<application-code>-flutter-mobile/
   agent.app.config.json
   .sdkwork/
     README.md
-    skills/
-      README.md
     plugins/
       README.md
+  skills/                    # per AGENT_SKILLS_SPEC.md
+    README.md
   etc/
     README.md
     sdkwork.deployment.config.json

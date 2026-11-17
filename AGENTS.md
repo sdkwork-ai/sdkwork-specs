@@ -46,7 +46,8 @@ This repository is a standards repository, not an SDKWork application. If a futu
 - `docs/`: Canon documentation; see [docs/README.md](docs/README.md), [docs/product/prd/PRD.md](docs/product/prd/PRD.md), and [docs/architecture/tech/TECH_ARCHITECTURE.md](docs/architecture/tech/TECH_ARCHITECTURE.md).
 - `*_SPEC.md`: global platform standards owned by this repository.
 - `SOURCE_CONFIG_SPEC.md`: deployable-root source `etc/`, app manifest/config ownership, runtime materialization, and retired `configs/` migration.
-- `.sdkwork/`: repository-local skills, plugins, and manifests for standards maintenance. Read `.sdkwork/README.md` and only the skill or plugin that matches the task, such as `.sdkwork/skills/sdkwork-standards-review/` for standards changes.
+- `.sdkwork/`: repository-local plugins and manifests for standards maintenance. Read `.sdkwork/README.md` and only the plugin that matches the task.
+- `skills/`: repository-wide agent skills. Read `skills/README.md` and only the skill that matches the task, such as `skills/sdkwork-standards-review/` for standards changes.
 
 ## Spec Resolution Order
 
@@ -64,7 +65,7 @@ This repository maintains global standards only. Use dynamic progressive loading
 
 1. Read this `AGENTS.md` routing material and confirm that this directory is the standards self-root.
 2. Read the applicable `SOUL.md` sections. For standards or entrypoint work, begin with sections 1, 2, 3, and 7.
-3. Read `.sdkwork/README.md`, then only a local skill or plugin whose declared trigger matches the task.
+3. Read `.sdkwork/README.md` and the owning module `skills/README.md`, then only a local skill or plugin whose declared trigger matches the task.
 4. Locate the relevant row or heading in `README.md`; do not load the whole task matrix or unrelated standards catalog.
 5. Read the relevant sections of the task-specific global specs named by that row and the required-spec mapping below.
 6. Read implementation or validation files only after the applicable authority is clear. Use the narrowest relevant verification, and widen the scope only when the change crosses a contract boundary.
@@ -78,6 +79,7 @@ The following are task gates, not a startup bundle. Read the relevant sections o
 | Task | Read before editing | Load when the task reaches the condition |
 | --- | --- | --- |
 | Agent or repository-entry change | `SOUL.md`, `AGENTS_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md`, `DOCUMENTATION_SPEC.md`, `TEST_SPEC.md` | `GOVERNANCE_SPEC.md` when the change is breaking, cross-root, or needs an exception |
+| Agent skill creation, change, or retirement | `AGENT_SKILLS_SPEC.md`, `SDKWORK_WORKSPACE_SPEC.md` §3, `COMPONENT_SPEC.md` §2, `NAMING_SPEC.md` §5.1 | `DOCUMENTATION_SPEC.md` §3/§3.1 for the indexes, `GOVERNANCE_SPEC.md` §3 when a migration window is recorded; verify with `node tools/check-agent-skills.mjs --root .` |
 | Code style or naming change | `CODE_STYLE_SPEC.md`, `NAMING_SPEC.md` | Only the touched language/framework spec: `RUST_CODE_SPEC.md`, `JAVA_CODE_SPEC.md`, `TYPESCRIPT_CODE_SPEC.md`, or `FRONTEND_CODE_SPEC.md`; `PNPM_SCRIPT_SPEC.md` for package command standardization, package scripts, root lifecycle commands, host-family commands, or the pnpm runtime and dependency-install policy |
 | Deletion, move, overwrite, reset, or force-checkout of files, version-control state, database rows, or deployed artifacts | `DESTRUCTIVE_OPERATION_SPEC.md`, `SOUL.md` §5, `CODE_STYLE_SPEC.md` §8 | `PORTABILITY_SPEC.md` and `MODULE_BIN_SPEC.md` for shell/`bin/` scripts, `OPERATIONS_SPEC.md` for deployed state, `GOVERNANCE_SPEC.md` §3 when an exception is requested; verify with `tools/sync-agent-destructive-operation-standard.mjs --check` and `tools/check-destructive-operation-patterns.mjs` |
 | Repair a defect, restore content lost to a revert, or resolve a branch or remote divergence | `ROLLBACK_RESTRICTION_SPEC.md`, `SOUL.md` §5.1, `CODE_STYLE_SPEC.md` §8.1 | `DESTRUCTIVE_OPERATION_SPEC.md` when the recovery deletes or restores files, `CODE_REVIEW_SPEC.md`, `GOVERNANCE_SPEC.md` §3 when a rollback exception is requested; verify with `tools/sync-agent-rollback-restriction-standard.mjs --check` |

@@ -46,6 +46,8 @@ sdkwork-<domain>-<capability>-service
 sdkwork-routes-<capability>-<surface>
 sdkwork-<foundation>-pc-react                         # appbase foundation only
 sdkwork-<domain>-app-api | sdkwork-<domain>-backend-api | sdkwork-<domain>-open-api
+
+<skill-name>                                          # agent skill directory and SKILL.md `name`
 ```
 
 Environment variables:
@@ -668,6 +670,18 @@ Rules:
 - `component.capability` should be a small business or technical capability, not a catch-all such as `common`, `misc`, or `core` unless the owning spec approves it.
 - Components that cross domains must document the composition reason and preserve domain-owned service boundaries.
 
+## 5.1 Agent Skill Naming
+
+`AGENT_SKILLS_SPEC.md` owns skill placement and the `SKILL.md` contract. This section owns the name.
+
+Rules:
+
+- A skill name `MUST` match `^[a-z0-9]+(-[a-z0-9]+)*$`, be 1 to 64 characters, equal its directory name, and equal the `SKILL.md` frontmatter `name`.
+- A skill name `MUST` be unique across the repository or application and every module `skills/` directory. A duplicate is a collision, not a precedence case.
+- A skill owned by a nested module `SHOULD` start with that module token; a repository-wide skill `SHOULD` start with the repository or domain token, such as `cloudrouter-sdk-generation`, `iam-login-bootstrap`, or `drive-upload-contract`.
+- A name `MUST NOT` be a generic word (`skill`, `helper`, `utils`, `common`, `module`, `agent`) or restate only the module name without naming an outcome.
+- Renaming a skill changes its discovery identity and requires updating the owning module `skills/README.md` and every host compatibility entry in the same change.
+
 ## 6. Collision And Migration Rules
 
 Rules:
@@ -707,6 +721,7 @@ Rules:
 - [ ] Edge protocol processes use `sdkwork-<application-code>-<edge-capability>-edge-runtime`,
       declare topology role `edge-runtime`, live under `crates/`, and own no application HTTP API surface.
 - [ ] Commerce sellable-item capabilities use `merchandise`, not retired capability token `product`.
+- [ ] Agent skill names match their directory and frontmatter `name`, are unique per repository, and name an outcome rather than a generic helper (section 5.1).
 - [ ] Client app packages use the required PC, H5, Flutter, mini program, Android native, iOS native, or Harmony native architecture segment and reserved role names.
 - [ ] Component manifests use matching names.
 - [ ] Database identifiers follow `DATABASE_SPEC.md`.

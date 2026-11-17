@@ -122,7 +122,6 @@ function main(argv = process.argv.slice(2)) {
     ['codex-shim', { ok: checkFile(root, 'CODEX.md'), detail: 'CODEX.md' }],
     ['gitignore', { ok: checkFile(root, '.gitignore'), detail: '.gitignore' }],
     ['sdkwork-readme', { ok: checkFile(root, '.sdkwork/README.md'), detail: '.sdkwork/README.md' }],
-    ['sdkwork-skills', { ok: checkFile(root, '.sdkwork/skills/README.md'), detail: '.sdkwork/skills/README.md' }],
     ['sdkwork-plugins', { ok: checkFile(root, '.sdkwork/plugins/README.md'), detail: '.sdkwork/plugins/README.md' }],
     ['sdkwork-gitignore', { ok: checkFile(root, '.sdkwork/.gitignore'), detail: '.sdkwork/.gitignore' }],
     ['forbidden-tracked', checkForbiddenTracked(root)],

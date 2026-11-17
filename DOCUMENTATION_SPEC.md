@@ -17,9 +17,9 @@ Rules:
 - Repository/application `AGENTS.md` is the agent execution entrypoint. It must link to root specs by relative path and must not duplicate root spec bodies.
 - Tool-specific files such as `CLAUDE.md`, `GEMINI.md`, and `CODEX.md` are compatibility shims. They must point to `AGENTS.md` and must not become a second copy of repository rules.
 - `SOUL.md` defines shared agent behavior. Local docs may cite it, but must not replace it with a local agent philosophy.
-- Repository/application `.sdkwork/README.md`, `.sdkwork/skills/README.md`, and
-  `.sdkwork/plugins/README.md` are local documentation entrypoints governed by
-  `SDKWORK_WORKSPACE_SPEC.md`.
+- Repository/application `.sdkwork/README.md` and `.sdkwork/plugins/README.md`, and
+  `skills/README.md` when the root ships agent skills, are local documentation entrypoints governed
+  by `SDKWORK_WORKSPACE_SPEC.md` and, for skills, `AGENT_SKILLS_SPEC.md`.
 - Repository/application README files `MUST` document the active top-level project directories from
   `SDKWORK_WORKSPACE_SPEC.md` when the root omits inactive reserved directories or uses both source
   and generated boundaries such as `apis/` and `sdks/`. README `MUST` link to authoritative specs and
@@ -325,6 +325,7 @@ Every reusable module `MUST` have a README with:
 - Extension points.
 - Verification command.
 - Owner and status.
+- Agent skills: when the module ships `<module-root>/skills/`, the README `MUST` list each skill name, its trigger, and its relative path, and `skills/README.md` `MUST` cite `AGENT_SKILLS_SPEC.md` as its declaration.
 
 Template:
 
@@ -342,6 +343,7 @@ Status: standard
 ## Deployment Profile And Runtime Target Behavior
 ## Security
 ## Extension Points
+## Agent Skills
 ## Verification
 ```
 
@@ -356,8 +358,8 @@ Rules:
 - Tool compatibility shims such as `CLAUDE.md`, `GEMINI.md`, and `CODEX.md`, when present, `MUST` cite the same-root `AGENTS.md` and the relative root `sdkwork-specs/README.md` path.
 - `.sdkwork/README.md` `MUST` explain that the directory stores repository or
   application development metadata, not runtime state.
-- `.sdkwork/skills/README.md` `MUST` explain where common skills live and how
-  a new skill declares its `SKILL.md` entrypoint.
+- `skills/README.md` `MUST` explain where skills live, how a new skill declares its `SKILL.md`
+  entrypoint, and `MUST` cite `AGENT_SKILLS_SPEC.md` for the skill contract.
 - `.sdkwork/plugins/README.md` `MUST` explain where repository/application
   plugins live and when `.codex-plugin/plugin.json` is required.
 - Workspace READMEs `MUST` cite `SDKWORK_WORKSPACE_SPEC.md`.

@@ -282,14 +282,41 @@ Rules:
 - `AGENTS.md` tests `MUST` verify required sections from `AGENTS_SPEC.md`, relative links to `sdkwork-specs/README.md`, `SOUL.md`, and `AGENTS_SPEC.md`, and task-to-spec mappings for on-demand language specs.
 - Compatibility files such as `CLAUDE.md`, `GEMINI.md`, `CODEX.md`, `agent.md`, `AGENT.md`, or `agents.md`, when present, `MUST` point to `AGENTS.md` and must not duplicate a divergent rule body.
 - `AGENTS.md` static scans `MUST` fail when the file copies large root spec bodies instead of linking to relative root specs.
-- Every git repository root `MUST` be checked for `.sdkwork/README.md`,
-  `.sdkwork/skills/README.md`, and `.sdkwork/plugins/README.md`.
-- Every SDKWork application root `MUST` be checked for `.sdkwork/README.md`,
-  `.sdkwork/skills/README.md`, and `.sdkwork/plugins/README.md`.
-- Workspace tests `MUST` fail when `.sdkwork/skills/` or `.sdkwork/plugins/` exists only as an
-  untracked empty directory with no committed placeholder or content.
-- Skill tests `MUST` fail when a real skill directory under `.sdkwork/skills/<skill-name>/` lacks
-  `SKILL.md` or when `<skill-name>` is not lowercase kebab-case.
+- Every git repository root `MUST` be checked for `.sdkwork/README.md` and
+  `.sdkwork/plugins/README.md`.
+- Every SDKWork application root `MUST` be checked for `.sdkwork/README.md` and
+  `.sdkwork/plugins/README.md`.
+- Workspace tests `MUST` fail when `.sdkwork/plugins/` exists only as an untracked empty directory
+  with no committed placeholder or content.
+- Skill tests `MUST` enforce `AGENT_SKILLS_SPEC.md` for every owning module:
+  `<module-root>/skills/<skill-name>/`, including the repository/application root module.
+- Skill tests `MUST` fail when a real skill directory under `<module-root>/skills/<skill-name>/`
+  lacks `SKILL.md` or when `<skill-name>` is not lowercase kebab-case.
+- Skill tests `MUST` fail when `SKILL.md` has missing, malformed, or non-flat frontmatter, when its
+  `name` differs from the directory name, when its `description` lacks a `Use when` trigger, or when
+  a required body section (`When to use`, `Inputs`, `Workflow`, `Rules`, `Verification`, `Output`) is
+  absent.
+- Skill tests `MUST` fail when `SKILL.md` exceeds 500 lines or 32 KiB.
+- Skill tests `MUST` fail when two skills share a name across module `skills/` directories.
+- Skill tests `MUST` report a warning when a `skills/` directory holds `SKILL.md` entries but its
+  `skills/README.md` does not cite `AGENT_SKILLS_SPEC.md`; that directory is read as product data,
+  not agent skills.
+- Skill tests `MUST` fail when a declared `skills/` directory contains no `<skill-name>/SKILL.md`
+  entries.
+- Skill tests `MUST` fail when a declared `skills/README.md` omits a skill.
+- Skill tests `MUST` report `.sdkwork/skills/` as a warning during the migration window and fail
+  under `--strict`.
+- Skill tests `MUST` fail when a `skills/` directory exists under a root that is not an authored
+  module.
+- Skill tests `MUST` fail when a host discovery compatibility entry under `.agents/skills/`,
+  `agent/skills/`, or `.claude/skills/` orphans its authoritative skill or disagrees with its
+  frontmatter when the verifier runs with `--host-layer`; a full duplicated body is a warning by
+  default and an error under `--strict` after the recorded migration window closes.
+- Skill tests `MUST` fail when a skill contains secrets or machine-absolute paths, or when a skill
+  package contains a `node_modules`, `dist`, `build`, `target`, `generated`, `coverage`, or `.cache`
+  directory.
+- Skill verification command:
+  `node <sdkwork-specs>/tools/check-agent-skills.mjs --root .` or `--workspace <workspace-root>`.
 - Plugin tests `MUST` fail when an installable plugin under `.sdkwork/plugins/<plugin-name>/` lacks
   `.codex-plugin/plugin.json` or when `<plugin-name>` is not lowercase kebab-case.
 - Static scans `MUST` fail when source-controlled `.sdkwork/` contains obvious secrets, auth tokens,
@@ -1636,7 +1663,8 @@ Rules:
 - [ ] Engineering workflow checkpoints, review evidence, and quality gate evidence are recorded when work crosses a planning, merge, release, migration, or exception boundary.
 - [ ] Release, migration, and supply-chain evidence checks pass when package versions, artifacts, rollout/rollback, compatibility windows, dependencies, build inputs, generated artifacts, SBOM/provenance/signing/checksums/attestations, or publication policy are touched.
 - [ ] Code style, naming, identity lattice terminology (`tools/check-identity-naming.mjs`), and only relevant language-specific checks pass when authored code is touched.
-- [ ] Repository/application `.sdkwork/skills/` and `.sdkwork/plugins/` checks pass when a repository root or application root is created or maintained.
+- [ ] Repository/application `.sdkwork/plugins/` and `skills/` checks pass when a repository root or application root is created or maintained.
+- [ ] Skill package checks pass for both scopes via `tools/check-agent-skills.mjs` when a workspace or module skill is created, changed, renamed, or retired.
 - [ ] Standard top-level directory checks pass when a repository root or application root is created or maintained.
 - [ ] Generated-state layout checks prove `.runtime/` is absent and tool/OS-native state placement is used.
 - [ ] Read-only upstream source checks, public-facade integration tests, dependency-graph/native-link checks, and packaged provenance evidence pass when `external/`, `third_party/`, or `vendor/` is consumed.

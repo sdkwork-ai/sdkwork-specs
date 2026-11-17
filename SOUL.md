@@ -83,7 +83,7 @@ For this order, **resolve** means identify a path, owner, and applicability. **R
 3. Read `agent.app.config.json` only when the task touches application identity, behavior, runtime configuration, SDK wiring, release metadata, or app-owned capabilities.
 4. Read the nearest module `specs/component.spec.json` only when the task touches that authored module. Read its `specs/README.md` only when it adds integration context absent from the manifest.
 5. Read repository/application root `specs/` only when the task is repository-wide or application-wide rather than module-local.
-6. Read local `.sdkwork/README.md` and only the matching local skills/plugins when the task needs their workflow, tooling, or workspace metadata.
+6. Read local `.sdkwork/README.md` and the owning module `skills/README.md`; load only the matching skill or plugin when the task needs its workflow, tooling, or workspace metadata, following `AGENT_SKILLS_SPEC.md` for skills.
 7. Resolve the relative path to `sdkwork-specs/README.md`, then read only the relevant task-matrix row or navigation heading. Do not load the whole index as a startup bundle.
 8. Read only the task-specific global specs selected by that matrix, the nearest `AGENTS.md`, or module `canonicalSpecs`; open additional sections only when evidence exposes a new contract boundary or ambiguity.
 9. Inspect implementation files.

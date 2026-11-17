@@ -18,8 +18,8 @@ Rules:
 - Local app standards may extend global standards, but must not contradict them.
 - `SOUL.md` defines shared SDKWork agent behavior. Local agent instructions may narrow execution for a repository, but they must not weaken the soul principles.
 - `AGENTS_SPEC.md` defines `AGENTS.md` and compatibility shims such as `CLAUDE.md`, `GEMINI.md`, and `CODEX.md`. Local agent entrypoints must link to root standards instead of becoming competing standards.
-- Repository/application `.sdkwork/` skills and plugins may automate or explain standards, but they
-  must not become competing standards. They follow `SDKWORK_WORKSPACE_SPEC.md`.
+- Repository/application `skills/` and `.sdkwork/plugins/` may automate or explain standards, but they
+  must not become competing standards. Skills follow `AGENT_SKILLS_SPEC.md`; plugins follow `SDKWORK_WORKSPACE_SPEC.md`.
 - If two specs conflict, the more specific root spec wins for its domain.
 - If root specs conflict, the conflict must be fixed before implementation continues.
 
@@ -63,6 +63,7 @@ removal_plan: regenerate app SDK with sdkwork-v3 profile
 - Reusable module compatibility follows `MODULE_SPEC.md`.
 - App manifest compatibility follows `APP_MANIFEST_SPEC.md`.
 - Repository/application workspace compatibility follows `SDKWORK_WORKSPACE_SPEC.md`.
+- Agent skill compatibility follows `AGENT_SKILLS_SPEC.md`; a skill may narrow a workflow but cannot weaken a standard, move an authoritative skill to a host discovery path, or duplicate a skill body as a second standard.
 - Repository baseline compatibility follows `REPOSITORY_BASELINE_SPEC.md`.
 - Agent entrypoint compatibility follows `AGENTS_SPEC.md`.
 - Code style compatibility follows `CODE_STYLE_SPEC.md` and the relevant language-specific spec only for touched languages.
@@ -88,7 +89,8 @@ UI architecture boundary exceptions are breaking architecture exceptions. They m
 - [ ] Architecture decisions were recorded or superseded when boundaries, ownership, runtime topology, or cross-client alignment changed.
 - [ ] Composable architecture closure evidence was updated when module ports, dependency SDK composition, permission inheritance, route ownership, frontend package boundaries, Rust crate boundaries, or resolver behavior changed.
 - [ ] `SOUL.md`, `AGENTS_SPEC.md`, `CODE_STYLE_SPEC.md`, and `NAMING_SPEC.md` were updated or cited when agent behavior, execution entrypoints, code structure, or public naming changed.
-- [ ] Repository/application `.sdkwork/` skills or plugins do not contradict root standards.
+- [ ] Repository/application `skills/` or `.sdkwork/` plugins do not contradict root standards.
+- [ ] Agent skills follow `AGENT_SKILLS_SPEC.md` in every module, are declared and indexed, and host compatibility entries remain pointers rather than competing copies.
 - [ ] Repository/application `AGENTS.md` files do not contradict root standards or copy stale spec bodies.
 - [ ] Tool compatibility files such as `CLAUDE.md`, `GEMINI.md`, and `CODEX.md` point to `AGENTS.md` and do not become competing standards.
 - [ ] Changes do not create conflicting standards.

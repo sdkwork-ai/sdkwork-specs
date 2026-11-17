@@ -86,11 +86,12 @@ Canonical SDKWORK specs path from this repository:
 1. Current or nearest `AGENTS.md`.
 2. `agent.app.config.json` when present.
 3. Nearest module `specs/README.md` and `specs/component.spec.json` when the task touches an authored module.
-4. Repository/application root `specs/` when the task is repository-wide or application-wide.
-5. Local `.sdkwork/README.md`, `.sdkwork/skills/`, and `.sdkwork/plugins/` when relevant.
-6. Global `sdkwork-specs/README.md` through the declared relative path.
-7. Task-specific global specs referenced by the task matrix, nearest `AGENTS.md`, or module `canonicalSpecs`.
-8. Implementation files.
+4. Nearest module `skills/` when the task touches that module's agent workflow.
+5. Repository/application root `specs/` when the task is repository-wide or application-wide.
+6. Local `.sdkwork/README.md` and `.sdkwork/plugins/` when relevant.
+7. Global `sdkwork-specs/README.md` through the declared relative path.
+8. Task-specific global specs referenced by the task matrix, nearest `AGENTS.md`, or module `canonicalSpecs`.
+9. Implementation files.
 
 Local files may narrow the task, but global `sdkwork-specs` remain authoritative.
 
@@ -107,10 +108,10 @@ Rules:
   by the current task.
 - Agents `MUST NOT` eagerly load all language, runtime, UI, deployment, or SDK
   specs for unrelated work.
-- `agent.app.config.json`, local `specs/`, and local `.sdkwork/` are loaded
-  when the task touches the application identity, component contract, local
-  skills/plugins, runtime, SDK wiring, release, or packaging behavior they
-  govern. They are not a reason to scan the entire repository first.
+- `agent.app.config.json`, local `specs/`, local `skills/`, and local `.sdkwork/` are loaded
+  when the task touches the application identity, component contract, local skills/plugins, runtime,
+  SDK wiring, release, or packaging behavior they govern. They are not a reason to scan the entire
+  repository first.
 - Durable local rules belong in module `specs/`, repository/application `specs/`, README/runbooks, manifests, or
   task-specific documentation. `AGENTS.md` `MUST NOT` keep an "Existing Local
   Guidance" block or preserved legacy command list that competes with global
@@ -175,7 +176,8 @@ Language specs are on-demand. Do not require agents to load Rust, Java, TypeScri
 - `AGENTS.md`: agent execution rules and relative spec entrypoint.
 - `agent.app.config.json`: application identity, app metadata, release surfaces, and owned capabilities.
 - `etc/`: safe source-controlled deployment/runtime configuration for independently deployable roots; load it for environment, Base URL, bind, topology, or packaging-input work.
-- `.sdkwork/`: local skills, plugins, manifests, and repository/application AI workspace metadata.
+- `.sdkwork/`: local plugins, manifests, and repository/application AI workspace metadata. It does not store agent skills.
+- `<module-root>/skills/`: agent skills owned by the module; the repository/application root module holds repository-wide skills. Loaded only when the task reaches that module, per `AGENT_SKILLS_SPEC.md`.
 - `specs/`: module-local spec systems (`README.md`, `component.spec.json`, optional narrowing extensions) for authored apps, packages, crates, services, and SDK families; repository/application root `specs/` for cross-module machine contracts such as topology manifests.
 - `docs/`: repository/application documentation layout; Canon entrypoints are `docs/product/prd/PRD.md` and `docs/architecture/tech/TECH_ARCHITECTURE.md`.
 - `sdks/`: SDK families, family manifests, OpenAPI authorities, derived generator inputs, route manifests, and generated outputs. Generated SDK output is produced by `../sdkwork-sdk-generator/bin/sdkgen.js` (`@sdkwork/sdk-generator`) and `MUST NOT` be hand-edited; fix the generation chain and regenerate instead.
@@ -204,7 +206,8 @@ Read `agent.app.config.json` for application identity, registration, SDK/API inv
 ## Local Dictionary Structure
 
 - `AGENTS.md`: agent execution rules.
-- `.sdkwork/`: local skills, plugins, and manifests.
+- `.sdkwork/`: local plugins and manifests; agent skills do not live here.
+- `skills/`: agent skills for this module (repository-wide at the repository/application root); load only for work inside the owning module.
 - `specs/`: module-local spec systems for authored packages, crates, services, and SDK families; repository/application root `specs/` for cross-module machine contracts.
 - `docs/`: Canon documentation at `docs/product/prd/PRD.md` and `docs/architecture/tech/TECH_ARCHITECTURE.md`.
 - `sdks/`: OpenAPI authorities and SDK generation artifacts. Generated output is generator-owned (`../sdkwork-sdk-generator`); never hand-edit it.

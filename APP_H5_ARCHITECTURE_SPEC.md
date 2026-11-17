@@ -56,10 +56,10 @@ apps/sdkwork-<application-code>-h5/
   agent.app.config.json
   .sdkwork/
     README.md
-    skills/
-      README.md
     plugins/
       README.md
+  skills/                    # per AGENT_SKILLS_SPEC.md
+    README.md
   bin/
     ios/
     android/
@@ -168,7 +168,7 @@ apps/sdkwork-<application-code>-h5/
 Directory rules:
 
 - The root name `apps/sdkwork-<application-code>-h5` and package segment `h5` are canonical for H5/Capacitor application roots.
-- `.sdkwork/` is required by `SDKWORK_WORKSPACE_SPEC.md` for repository/application skills and plugins. It is not generated SDK output and is not user runtime state.
+- `.sdkwork/` is required by `SDKWORK_WORKSPACE_SPEC.md` for plugins and workspace metadata; agent skills live in the root `skills/` directory. It is not generated SDK output and is not user runtime state.
 - `bin/` contains cross-platform operational scripts for build, install, run, diagnostics, and mobile host helper commands when the H5 root is runnable outside a larger workspace.
 - `config/browser/` owns public browser-visible runtime config for H5. It is named `browser` to align with PC and other browser renderers.
 - `config/host/` owns Capacitor platform templates, permission metadata, URL scheme/app link references, native capability flags, and signing reference metadata. It must not contain secrets.

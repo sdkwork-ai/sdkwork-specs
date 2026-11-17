@@ -14,7 +14,7 @@ The canonical SDK generator is defined by `SDK_SPEC.md`: workspace sibling repos
 
 If this file appears to conflict with `SDK_SPEC.md`, follow `SDK_SPEC.md` for SDK semantics and package/client behavior. Use this file for repository layout and generation artifact placement only when consistent with `SDK_SPEC.md`.
 
-Repository/application root `.sdkwork/` skills and plugins are defined by `SDKWORK_WORKSPACE_SPEC.md`. The generated SDK output `.sdkwork/sdkwork-generator-*.json` files described here are a separate `sdkgen` control plane and must not be used as repository workspace metadata.
+Module `skills/` and `.sdkwork/plugins/` are defined by `AGENT_SKILLS_SPEC.md` and `SDKWORK_WORKSPACE_SPEC.md`. The generated SDK output `.sdkwork/sdkwork-generator-*.json` files described here are a separate `sdkgen` control plane and must not be used as repository workspace metadata.
 
 ## 1. Principles
 
@@ -23,14 +23,14 @@ Rules:
 - `SDK_SPEC.md` is the primary SDK standard. This file operationalizes its workspace and generation requirements for repositories and CI.
 - API contract authoring may start in the project-root `apis/` directory. SDK generation authority, derived generator inputs, and generated output still live in `sdks/`.
 - Every application that owns generated SDKs `MUST` create `sdks/` under the application root.
-- Every application root that owns generated SDKs also `MUST` satisfy `SDKWORK_WORKSPACE_SPEC.md` by providing root `.sdkwork/skills/` and `.sdkwork/plugins/`; those directories live beside `sdks/`, not inside generated SDK output.
+- Every application root that owns generated SDKs also `MUST` satisfy `SDKWORK_WORKSPACE_SPEC.md` by providing `.sdkwork/plugins/` and, when it ships agent skills, `skills/`; those directories live beside `sdks/`, not inside generated SDK output.
 - The `sdks/` directory `MUST` be organized by SDK family directories. API authority documents live inside the owning SDK family; API authority names are not top-level SDK family directories.
 - OpenAPI 3.x documents are the authority for HTTP SDK generation.
 - HTTP SDK generation `MUST` call `../sdkwork-sdk-generator/bin/sdkgen.js` or the equivalent package-managed `sdkgen` executable.
 - RPC SDK generation is separate and `MUST` follow `RPC_SDK_WORKSPACE_SPEC.md`. Existing HTTP SDK generation commands MUST NOT require proto roots, RPC manifests, Buf, protoc, or RPC-specific flags.
 - Generated SDK output `MUST NOT` be hand-edited. Fix the runtime API, OpenAPI authority, generator profile, or composed facade, then regenerate. When generated or compiled output fails a contract or standard, repair the generation chain (authored contract, route manifest, authority OpenAPI, derived inputs, generator profile, or `custom/` build scripts) and rerun the standard generation command; do not patch generated files in place.
 - Generated HTTP SDK output `MUST` retain the `sdkgen` control plane: `sdkwork-sdk.json`, `.sdkwork/sdkwork-generator-manifest.json`, `.sdkwork/sdkwork-generator-changes.json`, `.sdkwork/sdkwork-generator-report.json`, and the regeneration-safe `custom/` root.
-- Generated output `.sdkwork/` directories are generator-owned. They `MUST NOT` contain repository/application skills, plugins, root workspace manifests, local caches, runtime databases, logs, or secrets.
+- Generated output `.sdkwork/` directories are generator-owned. They `MUST NOT` contain module skills, plugins, root workspace manifests, local caches, runtime databases, logs, or secrets.
 - Generated HTTP SDK files under `generated/server-openapi` `MUST` remain canonical `sdkgen` output. SDK ownership and dependency standard fields such as `sdkOwner`, `apiAuthority`, `sdkFamily`, `generationInputSpec`, `sdkDependencies`, `dependencyApiExports`, `dependencyApiSurfaces`, `ownerOnlyOperationCount`, `standardProfile`, and `standardVersion` belong in family-root `sdk-manifest.json`, `specs/component.spec.json`, or approved wrapper/composed package metadata outside `generated/server-openapi`; they `MUST NOT` be synced into generated `sdkwork-sdk.json`, generated `package.json`, generated `sdk-manifest.json`, generator `.sdkwork/*` reports, or generated source `sdkMetadata`. Parallel SDK registries are forbidden.
 - Handwritten extensions belong only in generated `custom/` roots or approved `composed/` facades outside generated ownership.
 - SDK family wrapper scripts `MUST` fail fast when the canonical generator is missing. Stub generators are allowed only as isolated tooling fixtures, not as official SDK family output producers.
@@ -56,10 +56,10 @@ Recommended application-root shape:
 <application-root>/
   .sdkwork/
     README.md
-    skills/
-      README.md
     plugins/
       README.md
+  skills/                    # optional; authoritative agent skill container
+    README.md
   apis/
     open-api/
     app-api/
@@ -648,8 +648,8 @@ Every SDK family change should verify the relevant subset:
   under the owning SDK family in `sdks/`.
 - `apis/` contains no generated SDK transport output, SDK family directories, or generated SDK
   control-plane `.sdkwork/` files.
-- Application-root `.sdkwork/skills/` and `.sdkwork/plugins/` validate under
-  `SDKWORK_WORKSPACE_SPEC.md`.
+- Application-root `skills/` and `.sdkwork/plugins/` validate under
+  `SDKWORK_WORKSPACE_SPEC.md` and, for skills, `AGENT_SKILLS_SPEC.md`.
 - HTTP SDK generation uses `@sdkwork/sdk-generator` / `sdkgen` from `..\sdkwork-sdk-generator`.
 - No official SDK generation command, manifest, README, or CI job uses copied generator code, local stubs, generic OpenAPI generators, application-local aliases, or an independent `sdkwork-code-generator`. `sdkwork-code-generator` is only an alias/wrapper name for the canonical `..\sdkwork-sdk-generator\bin\sdkgen.js` entrypoint.
 - The application root has no forbidden SDK family directories matching `sdks/sdkwork-<domain>-open-api`, `sdks/sdkwork-<domain>-app-api`, `sdks/sdkwork-<domain>-backend-api`, `sdks/<domain>-open-sdk`, `sdks/<domain>-app-sdk`, or `sdks/<domain>-backend-sdk`.
@@ -719,7 +719,7 @@ node .\sdks\sdkwork-<domain>-backend-sdk\bin\verify-sdk.mjs
 - [ ] `<application-root>/sdks/` exists.
 - [ ] `<application-root>/apis/` exists when the application authors API contracts, and its contents
   trace to the materialized SDK family authority OpenAPI when SDK generation is required.
-- [ ] `<application-root>/.sdkwork/skills/` and `<application-root>/.sdkwork/plugins/` exist and follow `SDKWORK_WORKSPACE_SPEC.md`.
+- [ ] `<application-root>/.sdkwork/plugins/` exists, and `<application-root>/skills/README.md` exists when the application ships agent skills, following `SDKWORK_WORKSPACE_SPEC.md`.
 - [ ] HTTP SDK generation uses the canonical `@sdkwork/sdk-generator` / `sdkgen` from `..\sdkwork-sdk-generator`.
 - [ ] Authority OpenAPI declares section 15.4 operation patterns, `SdkWorkApiResponse` success schemas, section 14 list/search input for business open-api operations, and `ProblemDetail` errors; wire field `requestId` is absent.
 - [ ] Authority OpenAPI, derived `sdkgen` inputs, and generated transport pass `node <sdkwork-specs>/tools/check-pagination.mjs --workspace <workspace-root>` for canonical `page_size`, `PageInfo.mode`, and forbidden alias checks.

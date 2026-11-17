@@ -4,9 +4,9 @@
 - Scope: standard project root directory dictionary, read-only upstream source boundaries, and source-controlled `.sdkwork/` workspace metadata at every git repository root and every SDKWork application root
 - Related: `README.md`, `SOUL.md`, `AGENTS_SPEC.md`, `DEPENDENCY_MANAGEMENT_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md`, `PNPM_SCRIPT_SPEC.md`, `APPLICATION_SPEC.md`, `APP_PAD_ARCHITECTURE_SPEC.md`, `COMPONENT_SPEC.md`, `DOCUMENTATION_SPEC.md`, `GOVERNANCE_SPEC.md`, `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `RPC_SDK_WORKSPACE_SPEC.md`, `RUNTIME_DIRECTORY_SPEC.md`, `SECURITY_SPEC.md`, `TEST_SPEC.md`
 
-This standard defines the repository/application root directory dictionary and the `.sdkwork/` directory. `.sdkwork/` is the local knowledge and extension workspace for SDKWork development. It stores reusable skills, repository-local plugins, and optional machine-readable workspace manifests that help agents, developers, and CI use the same standards.
+This standard defines the repository/application root directory dictionary and the `.sdkwork/` directory. `.sdkwork/` is the local knowledge and extension workspace for SDKWork development. It stores repository-local plugins and optional machine-readable workspace manifests that help agents, developers, and CI use the same standards. Agent skills live in the module `skills/` directory, not in `.sdkwork/`.
 
-Every SDKWork git repository root and every SDKWork application root `MUST` contain `AGENTS.md`, `.sdkwork/skills/`, and `.sdkwork/plugins/`. SDKWork-managed roots that support tool-specific compatibility also `MUST` contain shim files such as `CLAUDE.md`, `GEMINI.md`, or `CODEX.md` that point to `AGENTS.md`. Empty directories are not enough unless the repository has a tracked placeholder such as `README.md` or `.gitkeep`.
+Every SDKWork git repository root and every SDKWork application root `MUST` contain `AGENTS.md` and `.sdkwork/` with `.sdkwork/plugins/`. A root that ships agent skills also contains `skills/` and its `skills/README.md`. SDKWork-managed roots that support tool-specific compatibility also `MUST` contain shim files such as `CLAUDE.md`, `GEMINI.md`, or `CODEX.md` that point to `AGENTS.md`. Empty directories are not enough unless the repository has a tracked placeholder such as `README.md` or `.gitkeep`.
 
 ## 1. Directory Meanings
 
@@ -14,7 +14,7 @@ There are four different SDKWork path families that must not be mixed:
 
 | Path family | Owner | Purpose | Governing spec |
 | --- | --- | --- | --- |
-| `<repo-or-application-root>/.sdkwork/` | repository/application maintainers | Source-controlled workspace metadata, common skills, local plugins, optional manifests | this file |
+| `<repo-or-application-root>/.sdkwork/` | repository/application maintainers | Source-controlled workspace metadata, local plugins, optional manifests | this file |
 | `<generated-sdk-output>/.sdkwork/sdkwork-generator-*.json` | `sdkgen` | Generated SDK control-plane reports and manifests; required for HTTP/OpenAPI output and optional for RPC release, CI, audit, or migration evidence | `SDK_SPEC.md`, `SDK_WORKSPACE_GENERATION_SPEC.md`, `RPC_SDK_WORKSPACE_SPEC.md` |
 | `~/.sdkwork/<application-code>` or `%USERPROFILE%\.sdkwork\<application-code>` | runtime user/process | User-private runtime config, data, cache, logs, secrets, temp files | `RUNTIME_DIRECTORY_SPEC.md` |
 | `<repo-or-application-root>/{external,third_party,vendor}/` | upstream project or vendor | Optional pinned source consumed read-only through native build tools | `DEPENDENCY_MANAGEMENT_SPEC.md`, `SUPPLY_CHAIN_SECURITY_SPEC.md` |
@@ -180,6 +180,7 @@ Directory meanings:
 | `jobs/` | Job definitions, schedules, queue bindings, batch descriptors, maintenance runbooks, and non-Rust job packages | Non-request/response jobs are scheduled, configured, operated, or packaged |
 | `tools/` | Developer, validation, generation, migration, and operator tools that are not shipped as app runtime code | Repository-local reusable tooling is authored |
 | `plugins/` | Application/runtime plugin source packages, marketplace plugin implementations, or extension packages | Application or runtime plugins are authored |
+| `skills/` | Agent skills owned by the repository/application root module: `<root>/skills/<skill-name>/SKILL.md`, the `skills/README.md` declaration index, and optional `references/`, `scripts/`, and `assets/` | The root ships repository-wide agent workflows per `AGENT_SKILLS_SPEC.md` |
 | `examples/` | Runnable examples, integration examples, sample configs, and SDK/API usage examples | Examples are needed for consumers or verification |
 | `etc/` | Source-controlled safe deployment/runtime profiles, browser bootstrap inputs, service/gateway templates, and secret-file references per `SOURCE_CONFIG_SPEC.md` | The root is independently deployable or owns deployable configuration |
 | `deployments/` | Infrastructure descriptors, packaging handoff files, installers, rollout/rollback assets, and deployment documentation | The repository ships, deploys, or documents deployable artifacts |
@@ -395,6 +396,7 @@ Capability activation signals:
 | `jobs/` | A cron schedule, queue consumer binding, batch job, maintenance task, or job runbook is owned |
 | `tools/` | Reusable validators, generators, migration tools, parsers, CLIs, or operator utilities are authored |
 | `plugins/` | Application/runtime installable extension source is authored |
+| `skills/` | The root module ships repository-wide agent workflows, or a nested module ships its own `skills/` |
 | `examples/` | Consumer-facing runnable or copyable examples are maintained |
 | `etc/` | A deployable root owns safe runtime/deployment profiles, browser bootstrap inputs, or service/gateway templates |
 | `deployments/` | Docker, Kubernetes, systemd, nginx, installer, release handoff, rollout/rollback, or deployment runbook content is owned |
@@ -676,13 +678,6 @@ Every git repository root and every SDKWork application root `MUST` have:
   .sdkwork/
     README.md
     .gitignore
-    skills/
-      README.md
-      <skill-name>/
-        SKILL.md
-        references/        # optional
-        scripts/           # optional
-        assets/            # optional
     plugins/
       README.md
       <plugin-name>/
@@ -697,6 +692,13 @@ Every git repository root and every SDKWork application root `MUST` have:
     tmp/                   # ignored when present
     cache/                 # ignored when present
     secrets/               # ignored when present
+  skills/                  # optional; authoritative agent skill container for the root module
+    README.md              # required when skills/ exists
+    <skill-name>/
+      SKILL.md
+      references/          # optional
+      scripts/             # optional
+      assets/              # optional
 ```
 
 Rules:
@@ -706,21 +708,26 @@ Rules:
 - `AGENTS.md` `MUST` follow `AGENTS_SPEC.md`, cite `SOUL.md`, and declare the relative path to root `sdkwork-specs/README.md`.
 - Tool compatibility shims such as `CLAUDE.md`, `GEMINI.md`, and `CODEX.md`, when present, `MUST` point to `AGENTS.md`; they must not copy or override root standards.
 - `.sdkwork/README.md` `MUST` explain the workspace purpose, owner, and which directories are authoritative.
-- `.sdkwork/skills/README.md` `MUST` explain how to add repository/application skills.
+- `<root>/skills/README.md` `MUST` explain how to add repository/application skills when the root ships them.
 - `.sdkwork/plugins/README.md` `MUST` explain how to add repository/application plugins.
 - `.sdkwork/.gitignore` `MUST` ignore local-only state when those paths may be created.
-- `.sdkwork/skills/` and `.sdkwork/plugins/` `MUST` be committed or otherwise represented by tracked files.
-- A monorepo root `.sdkwork/` contains shared repository skills/plugins. An application root inside that monorepo still needs its own `.sdkwork/` when it is independently built, distributed, launched, or represented by `agent.app.config.json`.
-- Application-root `.sdkwork/` may reference repository-root skills/plugins, but it must not rely on user-global skills as its only project knowledge.
+- `<root>/skills/` (when present) and `.sdkwork/plugins/` `MUST` be committed or otherwise represented by tracked files.
+- A monorepo root `skills/` contains repository-wide skills and its `.sdkwork/` contains shared plugins. An application root inside that monorepo still needs its own `.sdkwork/` and `skills/` when it is independently built, distributed, launched, or represented by `agent.app.config.json`.
+- An application root `skills/` may reference repository-root skills, but it must not rely on user-global skills as its only project knowledge.
 
 ## 3. Skills Directory
 
-`.sdkwork/skills/` stores reusable agent/operator workflows for the repository or application.
+`<repo-or-application-root>/skills/` stores the repository-wide or application-wide agent workflows. A
+repository root and an application root are themselves authored modules, so this is the root module's
+own skill container; a nested module keeps its own `skills/` directory.
+
+`AGENT_SKILLS_SPEC.md` owns the skill package shape, `SKILL.md` frontmatter and body contract, naming,
+declaration, discovery, host compatibility, migration, and verification.
 
 Skill directory shape:
 
 ```text
-.sdkwork/skills/<skill-name>/
+<repo-or-application-root>/skills/<skill-name>/
   SKILL.md
   references/
   scripts/
@@ -729,9 +736,18 @@ Skill directory shape:
 
 Rules:
 
-- `<skill-name>` `MUST` be lowercase kebab-case.
+- `skills/` is optional. When present, `skills/README.md` `MUST` cite `AGENT_SKILLS_SPEC.md` and list
+  every skill with its trigger and relative path.
+- A workflow owned by a nested authored module lives at `<module-root>/skills/` and `MUST NOT` be
+  duplicated in the root container.
+- `<skill-name>` `MUST` be lowercase kebab-case, `MUST` equal the skill frontmatter `name`, and
+  `MUST` be unique across the root and every module `skills/` directory.
 - A real skill `MUST` have `SKILL.md` as its entrypoint.
-- `SKILL.md` `MUST` state when to use the skill, what inputs it expects, what files or commands it may touch, and which root specs it follows.
+- `SKILL.md` `MUST` carry the flat YAML frontmatter and the six required sections defined by
+  `AGENT_SKILLS_SPEC.md` §4, and `MUST` state when to use the skill, what inputs it expects, what
+  files or commands it may touch, and which root specs it follows.
+- `.sdkwork/` `MUST NOT` contain agent skills. `.sdkwork/skills/` is retired; each skill migrates to
+  the owning module's `skills/` directory.
 - Common skills should cite canonical specs instead of copying them. For example, an SDK generation skill cites `SDK_SPEC.md` and `SDK_WORKSPACE_GENERATION_SPEC.md`.
 - Skills may include scripts only when the scripts are deterministic, documented, and safe to run from the declared root.
 - Skills may include references or assets only when they are needed by the skill workflow.
@@ -768,7 +784,7 @@ Rules:
 - `<plugin-name>` `MUST` be lowercase kebab-case.
 - Installable plugins `MUST` declare `.codex-plugin/plugin.json`.
 - Plugin manifests `MUST` identify the plugin name, version, owner, description, and contributed skills/tools/apps when the plugin framework supports those fields.
-- Plugin skills follow the same rules as `.sdkwork/skills/`.
+- Plugin skills follow the same rules as `<module-root>/skills/`, but stay inside the plugin package.
 - Plugins may contain MCP server definitions, app definitions, scripts, or bundled assets only when they are repository/application-specific and documented.
 - Plugins `MUST NOT` vendor unrelated external toolchains, generated SDK outputs, secrets, runtime databases, caches, logs, or user-private data.
 - A plugin that wraps build, SDK generation, or deployment commands `MUST` call the canonical commands defined by the relevant specs. It must not silently substitute local stubs or incompatible generators.
@@ -786,7 +802,7 @@ Recommended workspace manifest shape:
   "rootType": "repository",
   "name": "sdkwork-example",
   "applicationCode": null,
-  "skillsDir": ".sdkwork/skills",
+  "skillsDir": "skills",
   "pluginsDir": ".sdkwork/plugins",
   "canonicalSpecs": ["specs/README.md"]
 }
@@ -797,7 +813,7 @@ Rules:
 - `kind` `MUST` be `sdkwork.workspace`.
 - `rootType` `MUST` be `repository` or `application`.
 - `canonicalSpecs` should include the repository/application relative path to the root standards entrypoint, such as `../sdkwork-specs/README.md`, when the workspace follows central SDKWork standards.
-- `skillsDir` and `pluginsDir` `MUST` point to the required local directories.
+- `skillsDir` and `pluginsDir` `MUST` point to the local directories that exist, and `MUST NOT` point into generated SDK output.
 - Optional manifests must not become a second source of truth for API, SDK, database, security, runtime, or component contracts.
 - Optional manifests `MUST NOT` redeclare SDKWork source dependency paths. Those paths remain owned by `pnpm-workspace.yaml`, root `Cargo.toml`, and root `pubspec.yaml` as defined in `DEPENDENCY_MANAGEMENT_SPEC.md`.
 
@@ -842,7 +858,7 @@ Rules:
 
 Rules:
 
-- `.sdkwork/README.md`, `.sdkwork/skills/README.md`, `.sdkwork/plugins/README.md`, approved skills, approved plugins, and optional non-secret manifests should be committed.
+- `.sdkwork/README.md`, `.sdkwork/plugins/README.md`, `<root>/skills/README.md` when the root ships skills, approved skills, approved plugins, and optional non-secret manifests should be committed.
 - `.sdkwork/local/`, `.sdkwork/tmp/`, `.sdkwork/cache/`, `.sdkwork/secrets/`, local install state, generated transient outputs, and any secret-bearing files `MUST` be ignored.
 - Repository-local skills and plugins may reference private repository paths, but they `MUST NOT` embed private credentials or machine-specific absolute paths unless the path is a documented SDKWork canonical path.
 - Any script under `.sdkwork/` that contacts external services `MUST` document the service, credential source, dry-run behavior when available, and verification command.
@@ -864,19 +880,21 @@ Recommended discovery order:
 1. Nearest `AGENTS.md`.
 2. Current application root `agent.app.config.json` when present.
 3. Nearest module `specs/` when the task touches an authored module.
-4. Current repository/application root `specs/` when the task is repository-wide or application-wide.
-5. Current application root `.sdkwork/`.
-6. Enclosing git repository root `AGENTS.md` and `.sdkwork/`.
-7. Global `sdkwork-specs/` standards referenced by relative path.
-8. User-global skills or plugins.
+4. Nearest module `skills/` when the task touches that module's agent workflow.
+5. Current repository/application root `specs/` when the task is repository-wide or application-wide.
+6. Current application root `.sdkwork/`.
+7. Enclosing git repository root `AGENTS.md` and `.sdkwork/`.
+8. Global `sdkwork-specs/` standards referenced by relative path.
+9. User-global skills or plugins.
 
 Rules:
 
 - `AGENTS.md` provides the first execution index, but it must not duplicate or override global specs.
 - Closer `.sdkwork/` content may add application-specific guidance, but it must not contradict repository-root specs or global `sdkwork-specs` standards.
 - Module-local `specs/` define integration boundaries for one module; repository/application root `specs/` define cross-module machine contracts. Neither layer replaces global standards.
-- If two skills have the same name, the application-local skill may specialize the repository skill only when it explicitly cites the repository skill or canonical specs it extends.
-- User-global skills and plugins are optional conveniences. They cannot replace the checked-in repository/application `.sdkwork/` standard content.
+- Module-scope skills keep the full discovery, precedence, and conflict rules in `AGENT_SKILLS_SPEC.md` §7. They apply only inside their module and must not override repository-wide skills.
+- A skill name is unique across the repository or application and its module-scope skills. A same-name skill must be renamed with a module or domain token per `AGENT_SKILLS_SPEC.md` §3; it is not declared as a specialization of another skill.
+- User-global skills and plugins are optional conveniences. They cannot replace the checked-in `skills/` content and `.sdkwork/plugins/`.
 
 ## 8. Verification
 
@@ -886,10 +904,14 @@ Repository/application workspace verification `MUST` check:
 - Every SDKWork application root has `AGENTS.md`.
 - `AGENTS.md` resolves the relative path to `sdkwork-specs/README.md`, `SOUL.md`, and `AGENTS_SPEC.md`.
 - Tool compatibility shims such as `CLAUDE.md`, `GEMINI.md`, and `CODEX.md`, when present, resolve the same-root `AGENTS.md` and the relative path to `sdkwork-specs/README.md`.
-- Every git repository root has `.sdkwork/`, `.sdkwork/skills/`, and `.sdkwork/plugins/`.
-- Every application root has `.sdkwork/`, `.sdkwork/skills/`, and `.sdkwork/plugins/`.
+- Every git repository root has `.sdkwork/` and `.sdkwork/plugins/`.
+- Every application root has `.sdkwork/` and `.sdkwork/plugins/`.
 - Required directories are represented by tracked files such as `README.md` when they are otherwise empty.
-- Real skills have `.sdkwork/skills/<skill-name>/SKILL.md`.
+- A root that ships agent skills has `<root>/skills/<skill-name>/SKILL.md` and `<root>/skills/README.md`.
+- Nested modules that ship agent skills have `<module-root>/skills/<skill-name>/SKILL.md` and `<module-root>/skills/README.md`.
+- `.sdkwork/skills/` is absent. It is a retired location; the verifier reports it during migration.
+- Skill packages, names, declarations, indexes, and host compatibility entries pass
+  `tools/check-agent-skills.mjs` per `AGENT_SKILLS_SPEC.md` §10.
 - Installable plugins have `.sdkwork/plugins/<plugin-name>/.codex-plugin/plugin.json`.
 - `.sdkwork/` does not contain obvious secret-bearing files, runtime database files, generated SDK transport outputs, or `sdkgen` generated control-plane reports outside generated SDK output.
 - Repository/application `.gitignore` files `MUST` ignore root and nested `.runtime/` as defense
@@ -930,9 +952,9 @@ Repository/application workspace verification `MUST` check:
 - [ ] Git repository root has `AGENTS.md` that follows `AGENTS_SPEC.md`.
 - [ ] Git repository root has tool compatibility shims, such as `CLAUDE.md`, `GEMINI.md`, or `CODEX.md`, when those tool entrypoints are required.
 - [ ] Git repository root has `.sdkwork/README.md`.
-- [ ] Git repository root has `.sdkwork/skills/README.md`.
+- [ ] Git repository root does not contain `.sdkwork/skills/`; when it ships agent skills it has `skills/README.md`.
 - [ ] Git repository root has `.sdkwork/plugins/README.md`.
-- [ ] Each application root has its own `AGENTS.md`, `.sdkwork/README.md`, `.sdkwork/skills/README.md`, and `.sdkwork/plugins/README.md`.
+- [ ] Each application root has its own `AGENTS.md`, `.sdkwork/README.md`, `.sdkwork/plugins/README.md`, and `skills/README.md` when it ships agent skills.
 - [ ] Each tool-compatible application root has shim files such as `CLAUDE.md`, `GEMINI.md`, or `CODEX.md` pointing to its own `AGENTS.md`.
 - [ ] `AGENTS.md` uses valid relative links to root `sdkwork-specs`.
 - [ ] `.sdkwork/.gitignore` ignores local, temp, cache, and secret-bearing state.

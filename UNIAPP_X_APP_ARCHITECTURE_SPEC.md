@@ -105,10 +105,10 @@ apps/sdkwork-<application-code>-uniappx/
   agent.app.config.json
   .sdkwork/
     README.md
-    skills/
-      README.md
     plugins/
       README.md
+  skills/                    # per AGENT_SKILLS_SPEC.md
+    README.md
   assets/
     README.md
     resources/

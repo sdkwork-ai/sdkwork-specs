@@ -1,4 +1,4 @@
-﻿# Component Specs Standard
+# Component Specs Standard
 
 - Version: 1.2
 - Scope: local `specs/` directories for apps, reusable packages, language modules, SDK families, services, host adapters, and componentized integration units under `apps/`
@@ -7,6 +7,8 @@
 This standard defines the local specification boundary for every authored SDKWork module. Global standards live in `sdkwork-specs/*_SPEC.md`; each module owns an independent local spec system under `<module-root>/specs/` that makes the module discoverable, maintainable, and safe to integrate without reading its internals first.
 
 Repository roots and application roots also carry the checked-in `.sdkwork/` workspace required by `SDKWORK_WORKSPACE_SPEC.md`. Component roots do not need their own `.sdkwork/` unless the component root is also a git repository root or an independently built/distributed application root.
+
+A component that ships agent workflows owns `<component-root>/skills/` per `AGENT_SKILLS_SPEC.md`. That directory is module-local agent knowledge, not a `.sdkwork/` workspace, and it never substitutes for the module spec system.
 
 ## 1. Authority Chain
 
@@ -18,7 +20,7 @@ Rules:
 - Module-local specs must not contradict global specs.
 - If a module needs an exception, record it according to `GOVERNANCE_SPEC.md`.
 - Generated language outputs should not each maintain independent standards; the SDK family root owns the module spec unless a generated output becomes a hand-maintained composed package.
-- Module-local specs may reference repository/application `.sdkwork/skills` or `.sdkwork/plugins` for workflows, but they must not redefine those workspace rules.
+- Module-local specs may reference repository/application `.sdkwork/plugins` or the module's own `skills/` for workflows, but they must not redefine those workspace or skill rules. Skill package shape, `SKILL.md` contract, naming, and verification follow `AGENT_SKILLS_SPEC.md`.
 - Module-local `AGENTS.md`, when present, must follow `AGENTS_SPEC.md` and use relative paths to global `sdkwork-specs`.
 
 ## 2. Required Local Directory
@@ -30,12 +32,20 @@ Every authored module `MUST` contain:
   specs/
     component.spec.json
     README.md                 # optional human index; recommended
+  skills/                     # optional; required when the module ships agent workflows
+    README.md                 # required when skills/ exists
+    <skill-name>/
+      SKILL.md
 ```
 
 Rules:
 
 - `component.spec.json` is the machine-readable contract used by validators and `MUST` exist.
 - `README.md` is the optional human index for the module spec system. It `MUST NOT` duplicate global spec bodies or replace `component.spec.json`.
+- `skills/` is optional. When a module ships agent workflows it declares them in `skills/README.md`
+  citing `AGENT_SKILLS_SPEC.md`, and the directory follows that standard's sections 2 through 6. A
+  `skills/` directory used as product data — a builtin skill catalog, preset pack, or marketplace
+  asset tree — is not governed by that spec and needs no declaration.
 - Local extension files such as `FRONTEND_SPEC.md`, `RUST_SPEC.md`, `DART_SPEC.md`, `I18N_SPEC.md`, or `RELEASE_SPEC.md` may be added only when the module has extra rules beyond global specs.
 - Do not copy global `sdkwork-specs/*_SPEC.md` files into module folders.
 
@@ -411,7 +421,7 @@ Rules:
 
 - [ ] Component has `specs/README.md`.
 - [ ] Component has `specs/component.spec.json`.
-- [ ] If the component root is also a git repository root or application root, it has `.sdkwork/skills/` and `.sdkwork/plugins/` according to `SDKWORK_WORKSPACE_SPEC.md`.
+- [ ] If the component root is also a git repository root or application root, it has `.sdkwork/plugins/`, and `skills/README.md` when it ships agent skills, according to `SDKWORK_WORKSPACE_SPEC.md`.
 - [ ] Manifest links to root canonical specs.
 - [ ] Manifest includes `CODE_STYLE_SPEC.md`, `NAMING_SPEC.md`, and only the language-specific specs required by `component.languages`.
 - [ ] UI component manifests link to `UI_ARCHITECTURE_SPEC.md` and exactly one architecture-specific UI spec.

@@ -56,8 +56,8 @@ Every git repository root `MUST` contain:
   .sdkwork/
     README.md
     .gitignore
-    skills/README.md
     plugins/README.md
+  skills/README.md          # when the repository ships agent skills, per AGENT_SKILLS_SPEC.md
 ```
 
 Rules:

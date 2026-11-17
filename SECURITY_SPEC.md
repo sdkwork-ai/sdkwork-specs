@@ -161,15 +161,16 @@ The source-controlled repository/application `.sdkwork/` workspace is governed b
 
 Rules:
 
-- `.sdkwork/skills/`, `.sdkwork/plugins/`, approved manifests, and their README files may be
-  committed when they contain reusable development knowledge only.
+- `<module-root>/skills/`, `.sdkwork/plugins/`, approved manifests, and their README files may be
+  committed when they contain reusable development knowledge only, following `AGENT_SKILLS_SPEC.md`
+  and `SDKWORK_WORKSPACE_SPEC.md`.
 - `.sdkwork/local/`, `.sdkwork/tmp/`, `.sdkwork/cache/`, `.sdkwork/secrets/`, local install state,
   runtime databases, logs, generated transient outputs, and secret-bearing files `MUST` be ignored.
 - `.sdkwork/` `MUST NOT` contain API keys, auth tokens, passwords, private certificates, private
   keys, provider credentials, local user data, runtime database files, generated SDK transport
   output, or copied `~/.sdkwork/<application-code>` runtime state.
 - Generated SDK output `.sdkwork/sdkwork-generator-*.json` files are valid only below generated SDK
-  output and are not repository workspace secrets or skills.
+  output and are not repository workspace secrets or agent skills.
 
 ## 6.2 TLS Trust And Self-Signed Development Certificates
 

@@ -213,7 +213,7 @@ Rules:
 
 Rules:
 
-- Generated protobuf output is generator-owned and MUST NOT contain SDKWork repository skills, plugins, secrets, runtime state, or app-private files.
+- Generated protobuf output is generator-owned and MUST NOT contain SDKWork module skills, plugins, secrets, runtime state, or app-private files.
 - Normal generated RPC SDK source output MUST NOT require committed `.sdkwork/sdkwork-generator-*`
   files. The authoritative source evidence is the RPC SDK family root, RPC manifest, proto source
   reference, generated language workspace name, and native package manifest.

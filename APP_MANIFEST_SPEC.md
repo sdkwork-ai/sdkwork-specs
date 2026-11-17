@@ -31,7 +31,8 @@ media/store projection validator, but they must not replace this deployment/prof
 second manifest authority. Each real app directory uses the unsuffixed canonical filename above.
 
 The same `<app-root>` `MUST` contain the source-controlled `.sdkwork/` workspace required by
-`SDKWORK_WORKSPACE_SPEC.md`, including `.sdkwork/skills/` and `.sdkwork/plugins/`.
+`SDKWORK_WORKSPACE_SPEC.md`, including `.sdkwork/plugins/`; an app root that ships agent skills also
+contains `skills/` and `skills/README.md` per `AGENT_SKILLS_SPEC.md`.
 The same `<app-root>` `MUST` contain the governed `assets/` root required by
 `APP_ASSETS_SPEC.md`: catalog and store media source bytes, type resources, and the
 capture configuration when the application ships a UI or authored content.
@@ -48,7 +49,7 @@ When the application is independently deployable, the same root `MUST` contain s
   `environments.*.accessUrl`, `environments.*.deployUrl`, or per-environment Base URL maps under
   `envBindings`. Legacy readers may consume those fields only during an explicit migration and
   must name the canonical `etc/` replacement.
-- `.sdkwork/` is the source-controlled workspace metadata directory for the same application root. It stores local skills and plugins; it does not store manifest release payloads, runtime state, generated SDK transport output, or user-private data.
+- `.sdkwork/` is the source-controlled workspace metadata directory for the same application root. It stores local plugins, manifests, and workspace metadata; it does not store agent skills, manifest release payloads, runtime state, generated SDK transport output, or user-private data. Agent skills live in the root `skills/` directory per `AGENT_SKILLS_SPEC.md`.
 - `platform_app` is the database projection, not a second independent source.
 - App icons, covers, screenshots, posters, and preview assets are governed data, not loose files. Source bytes live under the application `assets/` root per `APP_ASSETS_SPEC.md`; SDKWork-owned media bytes must be stored through Drive, represented as `MediaResource` where app APIs expose them, and projected into `platform_app.config.media`.
 - Backend enum names are used verbatim. Do not invent aliases such as `DESKTOP_UBUNTU`; use `DESKTOP_LINUX` plus package metadata for the Linux distribution.
@@ -779,7 +780,7 @@ The schema and validators must stay aligned with this standard:
 ## 16. New App Checklist
 
 - [ ] Create `agent.app.config.json` from the v3 full example.
-- [ ] Create `.sdkwork/README.md`, `.sdkwork/skills/README.md`, and `.sdkwork/plugins/README.md` for the same app root.
+- [ ] Create `.sdkwork/README.md` and `.sdkwork/plugins/README.md`, and `skills/README.md` when the app ships agent skills, for the same app root per `AGENT_SKILLS_SPEC.md`.
 - [ ] Choose one immutable `app.key`.
 - [ ] Use backend enum names exactly.
 - [ ] Fill platform and package matrix before registration.

@@ -93,10 +93,10 @@ apps/sdkwork-<application-code>-pad/
   agent.app.config.json
   .sdkwork/
     README.md
-    skills/
-      README.md
     plugins/
       README.md
+  skills/                    # per AGENT_SKILLS_SPEC.md
+    README.md
   .env.<deployment-profile>.<environment>
   assets/
     README.md
