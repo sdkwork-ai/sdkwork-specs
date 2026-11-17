@@ -15,7 +15,7 @@ Exactly one word per concept. A word listed in the third column `MUST NOT` be us
 | --- | --- | --- |
 | Deploy application | The runtime identity anchor: the deployed, running application of one tenant | product identity, OAuth client, installation record |
 | Installation | One tenant's installed instance of a product, bound one-to-one to a deploy application | the product itself, the OAuth client |
-| Blueprint | The runtime and identity definition (OAuth relying party, scopes, domains, packages) | a commerce listing, a scaffold |
+| Blueprint | The identity slice of one product version: OAuth relying party metadata, scopes, domains, packages, frozen at install time | a standalone third application definition, a commerce listing, a scaffold |
 | Product application | The cross-tenant product identity that is developed and published | a tenant installation, a deployed unit |
 | Listing | The commerce and distribution surface, including price | the runtime or identity definition |
 | SKU | One independently describable, deliverable variant of a product | a version number, an optimistic-lock column |
@@ -23,6 +23,8 @@ Exactly one word per concept. A word listed in the third column `MUST NOT` be us
 | Client credential | The OAuth client id and secret of one installation | the application identity |
 
 Terms `template`, `app`, and `version` are retired as application-identity vocabulary. Where they survive as physical names, they refer to the specific subordinate concept above and `MUST` be documented as such.
+
+A `template` `MUST NOT` name a first-class application definition in a new contract. The only surviving template concept is the design-time scaffold (§1 Scaffold), which is a generator input rather than an application definition.
 
 ## 2. Identity Anchor
 
@@ -36,7 +38,7 @@ Terms `template`, `app`, and `version` are retired as application-identity vocab
 | --- | --- | --- |
 | Installation ↔ deploy application | exactly 1:1 | one install record per anchor, one anchor per install record |
 | Product application ↔ deploy application | exactly 1:1 per tenant | a tenant's copy of a product has one anchor |
-| Blueprint ↔ installation | 1:N | one blueprint version serves many installs, frozen per install |
+| Product version ↔ installation | 1:N | one immutable version serves many installs; the install freezes the identity slice it was created from |
 
 Rules:
 
@@ -44,6 +46,7 @@ Rules:
 - Name, slug, or display-text matching `MUST NOT` be used to resolve an application across modules.
 - A nullable or list-valued link `MAY` exist only during a dated migration, `MUST` carry an owner and an exit milestone, and `MUST NOT` be read as the authority.
 - Cross-module links `MUST` be stored in a normalized relation owned by the anchor's module, with the linked module's prefix absent from the table name only when the relation is anchor-owned (see §7).
+- A standalone blueprint table `MUST NOT` be introduced. The identity slice belongs to the product version (the definition that is authored and published) and to the installation (the resolved domain and the client credential created at install time); a third copy is a third source of truth.
 
 ## 4. Access Token Binding
 
@@ -93,9 +96,9 @@ Retired: using the OAuth client id as the token `app_id`, and using an `iam_*` t
 
 | Concept | Owner prefix |
 | --- | --- |
-| deploy application, anchor relation, marketplace template | `deploy_` |
-| installation, blueprint, client credential | `iam_` |
-| product application, version, SKU, listing, price, scaffold | `appstore_` |
+| deploy application, anchor relation, build recipe | `deploy_` |
+| installation, client credential | `iam_` |
+| product application, version (including its identity slice), SKU, listing, price, scaffold | `appstore_` |
 
 - A new prefix `MUST` be registered in `tools/database-module-registry.json` before first use; borrowing a prefix that belongs to another module `MUST NOT` be used as a shortcut.
 
@@ -114,6 +117,9 @@ Pre-launch, a breaking change `MUST` still satisfy:
 This standard supersedes the following behaviours once a consumer migrates:
 
 - `iam_tenant_application.app_id` acting as both runtime identity and OAuth client id.
+- `iam_application_template` / `iam_application_template_package` acting as a third application definition beside the product and the installation.
+- `deploy_app_template` / `deploy_app_template_version` / `deploy_app_template_category` acting as a second commerce authority beside the product listing and its price.
+- `deploy_build_template` being read as an application template; it is a build recipe (toolchain, commands, artifact outputs, quality gates).
 - A free-form JSON document (for example a deployment application's `metadata`) acting as the authority for cross-system application links.
 - Display-name or slug matching used to resolve one module's application to another's.
 - Commerce price fields held in more than one module.
