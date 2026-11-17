@@ -7,16 +7,80 @@ profile's public application token carries it.
 
 ```text
 sdkwork-specs/tools/register-applications.mjs            CLI entrypoint
+sdkwork-specs/tools/bootstrap-credentials.mjs            dual-token bootstrap entrypoint
 sdkwork-specs/tools/app-registration/
   inventory.mjs                 workspace scan -> registration inventory
   contract.mjs                  identities, domains, deterministic keys, fail-closed settings
   http-fingerprint.mjs          X-Content-SHA256 body digest + Retry-After parsing
   deploy-client.mjs             Deploy app-api client (list / retrieve / create)
   iam-client.mjs                IAM bootstrap-body client + installation-environment client
+  bootstrap-credentials.mjs     operator -> deploy app-api pair -> IAM management session
   env-anchor.mjs                anchor read/write for env configuration
   register.mjs                  sequence, retry, concurrency, verification, environment hand-off
-  tests/                        node --test suites + loopback Deploy/IAM fake
+  tests/                        node --test suites + loopback Deploy/IAM fakes
 ```
+
+## Credential bootstrap
+
+Neither credential the registrar needs is printed by `sdkwork-iam-db init/seed`.
+`bootstrap-credentials.mjs` performs the two-step chain once and emits the
+environment assignments:
+
+```text
+operator username + password
+      │
+      ├─ POST /backend/v3/api/iam/access_credentials            (bootstrap-body)
+      │     tenantId + organizationId + appId + username + password
+      │     → { accessToken, authToken }      ⇒ SDKWORK_DEPLOY_BACKEND_ACCESS_TOKEN/_AUTH_TOKEN
+      │
+      └─ POST /app/v3/api/auth/sessions                         (credential-entry-bootstrap)
+            Access-Token: the credential above, plus grantType/username/password/deviceId
+            → { accessToken, authToken }      ⇒ SDKWORK_IAM_MANAGEMENT_ACCESS_TOKEN/_AUTH_TOKEN
+```
+
+Two details are load-bearing, not decoration:
+
+- `appId` is the **deploy application anchor** of the issuing installation
+  (`iam_application_installation.deploy_application_id`), never the IAM runtime
+  `app_id`; the default `sdkwork-iam` is the anchor IAM self-registers when its
+  own gateway bootstraps from `SDKWORK_APP_ROOT`, so it exists before any
+  registration run.
+- the login must carry a distinct `deviceId`. A login revokes every live session
+  of the same `(tenant, user, app_id, device_id)`
+  (`sdkwork-routes-iam-app-api/src/tokens.rs`
+  `revoke_active_sessions_for_user_app_device`), and the credential minted by
+  `access_credentials` is a session of the same application with no device id —
+  an unscoped login therefore kills the Deploy pair before it is used.
+  `--device-id` defaults to `sdkwork-app-registration`, and
+  `tests/fake-bootstrap-iam.mjs` models the collision so the suite fails if that
+  device scoping is dropped.
+
+```sh
+node sdkwork-specs/tools/bootstrap-credentials.mjs \
+  --iam-base-url http://127.0.0.1:3901 \
+  --deploy-base-url http://127.0.0.1:3900 \
+  --username operator --password "$SDKWORK_IAM_OPERATOR_PASSWORD" \
+  --out .run/registration.env --report .run/bootstrap.report.json
+```
+
+Inputs resolve from flags first, then the environment:
+`SDKWORK_IAM_BACKEND_API_BASE_URL` (alias `SDKWORK_BACKEND_BASE_URL`),
+`SDKWORK_IAM_BOOTSTRAP_OPERATOR_USERNAME` +
+`SDKWORK_IAM_BOOTSTRAP_OPERATOR_PASSWORD` (or
+`SDKWORK_IAM_BOOTSTRAP_OPERATOR_AUTH_TOKEN`), `SDKWORK_IAM_BOOTSTRAP_APP_ID`,
+`SDKWORK_TENANT_ID`, `SDKWORK_ORGANIZATION_ID`, `SDKWORK_REGISTRATION_DEVICE_ID`.
+Every missing value is named before a request is attempted.
+
+Output: the assignments go to stdout, or to `--out`, which is written `0600`
+(POSIX) and owner-only through `icacls` on Windows.
+`SDKWORK_DEPLOY_BACKEND_API_BASE_URL` is emitted only when `--deploy-base-url`
+is supplied — a guessed port would silently talk to whatever listens there.
+`--report` writes a redacted JSON document (routes, status codes, token facts:
+anchor, audience, session id, expiry) and **never** a token value.
+
+Exit codes: `0` both pairs minted, `1` a link of the chain failed (the message
+names the stage, route, HTTP status/problem code, and variable to fix), `2`
+configuration is unusable.
 
 ## Identity model
 
