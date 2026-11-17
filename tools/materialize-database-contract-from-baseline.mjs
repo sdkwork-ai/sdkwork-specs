@@ -345,11 +345,13 @@ function main() {
    * ordered independently — each keeps its own authored sequence.
    */
   const orderedTableNames = [
-    ...existingSchema.tableBlocks.keys(),
+    ...[...existingSchema.tableBlocks.keys()].filter((name) => tableNames.includes(name)),
     ...tableNames.filter((name) => !existingSchema.tableBlocks.has(name)),
   ];
   const registryTableNames = [
-    ...(existingTableRegistry?.tables ?? []).map((entry) => entry.table_name),
+    ...(existingTableRegistry?.tables ?? [])
+      .map((entry) => entry.table_name)
+      .filter((name) => tableNames.includes(name)),
     ...tableNames.filter(
       (name) => !(existingTableRegistry?.tables ?? []).some((entry) => entry.table_name === name),
     ),
