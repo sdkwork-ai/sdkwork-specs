@@ -11,6 +11,7 @@ function parseArgs(argv) {
     owner: '',
     tablePrefix: '',
     prefixes: [],
+    engines: 'postgres',
   };
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
@@ -28,6 +29,9 @@ function parseArgs(argv) {
       index += 1;
     } else if (token === '--owner') {
       args.owner = argv[index + 1] ?? '';
+      index += 1;
+    } else if (token === '--engines') {
+      args.engines = argv[index + 1] ?? 'postgres';
       index += 1;
     } else if (token === '--table-prefix') {
       args.tablePrefix = argv[index + 1] ?? '';
@@ -67,6 +71,30 @@ function readMigrationsOnlyDdl(root, migrationsRelativeDir) {
 }
 
 /**
+ * A `baseline-plus-migrations` root reaches its end state by applying the
+ * baseline and then every ordered post-baseline migration. Materializing from
+ * the baseline alone therefore publishes the schema *before* the module's own
+ * forward changes: a rename, a new table, or an approved retirement expressed in
+ * a migration would never reach the contract, and the contract would silently
+ * disagree with the code that already reads the new names.
+ *
+ * Appending the ordered `.up.sql` set reproduces the fresh-install end state; the
+ * table collector already applies `CREATE`, `ALTER ... RENAME`, and `DROP` in
+ * order, so no additional interpretation is needed here.
+ */
+function appendMigrationsAfterBaseline(root, engine) {
+  const migrationsDir = path.join(root, 'database/migrations', engine);
+  if (!fs.existsSync(migrationsDir)) {
+    return '';
+  }
+  const upFiles = fs
+    .readdirSync(migrationsDir)
+    .filter((name) => name.endsWith('.up.sql'))
+    .sort();
+  return upFiles.map((name) => fs.readFileSync(path.join(migrationsDir, name), 'utf8')).join('\n');
+}
+
+/**
  * Resolve the table names a fresh install ends up with, by replaying the DDL in
  * order: `CREATE TABLE` adds a name, `ALTER TABLE ... RENAME TO ...` replaces it,
  * `DROP TABLE` removes it.
@@ -80,9 +108,15 @@ function readMigrationsOnlyDdl(root, migrationsRelativeDir) {
 function collectTableNames(sql) {
   const order = [];
   const present = new Set();
+  // Comments are prose, not DDL. A documented example such as
+  // "folded into the CREATE TABLE definitions below" would otherwise
+  // materialize a table named `definitions` that no migration creates.
+  const ddlOnly = sql
+    .replace(/\/\*[\s\S]*?\*\//gu, ' ')
+    .replace(/--[^\n]*/gu, ' ');
   const statement =
     /CREATE TABLE(?: IF NOT EXISTS)?\s+([a-z0-9_]+)|ALTER TABLE(?: IF EXISTS)?\s+([a-z0-9_]+)\s+RENAME TO\s+([a-z0-9_]+)|DROP TABLE(?: IF EXISTS)?\s+([a-z0-9_]+)/gi;
-  for (const match of sql.matchAll(statement)) {
+  for (const match of ddlOnly.matchAll(statement)) {
     const [, created, renamedFrom, renamedTo, dropped] = match;
     if (created) {
       if (!present.has(created)) {
@@ -185,10 +219,10 @@ function mergeRegistryEntry(existing, generated) {
   if (!existing) {
     return { ...generated };
   }
-  const merged = {};
-  for (const [key, value] of Object.entries(existing)) {
-    merged[key] = Object.hasOwn(generated, key) ? generated[key] : value;
-  }
+  // Authored values win. The generated document only supplies keys the entry
+  // does not declare yet, so a module-owned `owner` or `lifecycle_status` is not
+  // flattened back to the module default on every run.
+  const merged = { ...existing };
   for (const [key, value] of Object.entries(generated)) {
     if (!Object.hasOwn(merged, key)) {
       merged[key] = value;
@@ -268,7 +302,7 @@ function main() {
   }
 
   const sql = args.baseline
-    ? fs.readFileSync(path.join(args.root, args.baseline), 'utf8')
+    ? `${fs.readFileSync(path.join(args.root, args.baseline), 'utf8')}\n${appendMigrationsAfterBaseline(args.root, args.engines)}`
     : readMigrationsOnlyDdl(args.root, args.migrations);
   const tableNames = collectTableNames(sql);
   const prefixes =
