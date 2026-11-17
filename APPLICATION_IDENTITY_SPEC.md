@@ -57,22 +57,27 @@ An access token issued for an application instance `MUST` carry:
 | `sub` | subject: user or service account |
 | `tid` | tenant |
 | `oid` | organization, when the session is organization-scoped |
-| `app_id` | **deploy application identity** |
-| `aud` | equal to `app_id` |
-| `azp` | OAuth client id of the installation credential |
+| `app_id` | **deploy application identity**, in every token family |
+| `aud` | equal to `app_id` for deployment credentials; equal to the authorized client id for OAuth authorization-server tokens |
+| `azp` | OAuth authorization-server tokens: the authorized client id. Deployment session tokens omit it, because `IAM_SPEC` §5.2 admits a closed claim list that does not include it |
 | `env`, `dlv` | environment and deployment mode |
-| `scp` | granted scopes |
+| `scp` | granted scopes (resolved server side; `IAM_SPEC` §5.2 forbids signing permission scope) |
 | `sid`, `jti`, `iat`, `exp`, `kid` | session, token, and signing metadata |
 
 Invariants:
 
-1. `aud` `MUST` equal `app_id`. A token `MUST NOT` be accepted by another application.
+1. `aud` `MUST` equal `app_id` for a deployment credential, and `MUST` equal the authorized client id for an OAuth authorization-server token. In both families `app_id` is the anchor and a token `MUST NOT` be accepted by another application.
 2. The anchor named by `app_id` `MUST` belong to `tid`. Issuance and validation `MUST` both prove this.
 3. Data-plane queries `MUST` filter by `(tenant_id, app_id)`. Cross-tenant access `MUST` require an explicit platform scope.
 4. A token `MUST NOT` carry a second installation claim beside `app_id`: the installation is one-to-one with the anchor, so a second claim can only disagree with it.
 5. A token `MUST NOT` be issued for a client id that is not bound to an enabled installation.
 
 Retired: using the OAuth client id as the token `app_id`, and using an `iam_*` tenant-application row as the application identity. Both `MUST NOT` appear in new contracts.
+
+Two token families share the anchor but not the audience:
+
+- **Deployment credential** (local session and access tokens): `aud = app_id`, `azp` omitted.
+- **OAuth authorization-server token** (authorization code and refresh grants): `app_id =` the deployment anchor, `aud = azp =` the authorized client id. A deployment that presents such a token to another application is rejected by the audience check that compares `aud` against its own client identifiers.
 
 ## 5. Cross-Module References
 
