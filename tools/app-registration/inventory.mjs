@@ -18,6 +18,12 @@
  * - the deploy application slug the registrar would request,
  * - the declared client surfaces whose token carrier is the
  *   `etc/client-env.materialization.json` declared profile matrix,
+ * - whether the root must declare `backend.accessTokenPermissionScope`
+ *   (`permissionScopeRequirement`): the requirement follows the client token
+ *   carrier, so a server-only root is `notApplicable` (`serversOnly`), a root with
+ *   client directories but no materialization declaration is
+ *   `missingClientEnvConfiguration`, and only a root that actually mints a public
+ *   client token is required to declare the scope,
  * - where each environment's `SDKWORK_DEPLOY_APPLICATION_ID` anchor can be
  *   written (the authored topology override layer, an authored `.env.<env>`,
  *   or nowhere), and which committed profile files carry the materialized
@@ -86,6 +92,35 @@ const TOKEN_CARRIER_LAYOUTS = {
 export function clientProfileId(deploymentProfile, environment) {
   return `${deploymentProfile}.${environment}`;
 }
+
+/**
+ * Why a manifest root must (or must not) declare `backend.accessTokenPermissionScope`.
+ *
+ * `accessTokenPermissionScope` is the default permission scope IAM stamps on the
+ * **public application access token** a *client* surface presents. A root that
+ * mints no such token has nothing to scope, so demanding the field from it asks
+ * for a permission set that no runtime can ever use. The requirement therefore
+ * follows the client token carrier, never the mere presence of a manifest:
+ *
+ * - `materialized` — a client token carrier exists: the repository's materializer
+ *   declares an `accessToken` surface, or the app root carries materialized
+ *   profile files. The scope is REQUIRED; an empty one is a defect.
+ * - `declared` — no carrier exists, but the manifest already declares its own
+ *   scope. Registration proceeds; the absent materialization is reported as a
+ *   note, never as a scope defect.
+ * - `missingClientEnvConfiguration` — client application directories exist under
+ *   `apps/` but the repository declares no materialization, so the scope cannot
+ *   be derived or honoured. Blocking: configure the materialization first.
+ * - `notApplicable` — no carrier, no client surface, no declared scope: a
+ *   server-only root (`serversOnly`). The requirement does not apply, and the
+ *   registrar skips it instead of inventing a public token scope.
+ */
+export const PERMISSION_SCOPE_REQUIREMENTS = Object.freeze({
+  MATERIALIZED: 'materialized',
+  DECLARED: 'declared',
+  MISSING_CLIENT_ENV_CONFIGURATION: 'missingClientEnvConfiguration',
+  NOT_APPLICABLE: 'notApplicable',
+});
 
 function toPosix(relativePath) {
   return relativePath.split(path.sep).join('/');
@@ -244,15 +279,23 @@ export function readClientEnvDeclaration(repoRoot) {
   return {
     configPath,
     application: String(config.application ?? '').trim(),
-    surfaces: surfaces.map((surface) => ({
-      id: String(surface.id ?? '').trim(),
-      root: String(surface.root ?? '').trim(),
-      format: String(surface.format ?? '').trim(),
-      runtimeTarget: String(surface.runtimeTarget ?? '').trim(),
-      appIdEnv: String(surface.accessToken?.appIdEnv ?? '').trim(),
-      appIdLiteral: String(surface.accessToken?.appId ?? '').trim(),
-      excludeProfiles: Array.isArray(surface.excludeProfiles) ? surface.excludeProfiles : [],
-    })),
+    surfaces: surfaces.map((surface) => {
+      const appIdEnv = String(surface.accessToken?.appIdEnv ?? '').trim();
+      const appIdLiteral = String(surface.accessToken?.appId ?? '').trim();
+      return {
+        id: String(surface.id ?? '').trim(),
+        root: String(surface.root ?? '').trim(),
+        format: String(surface.format ?? '').trim(),
+        runtimeTarget: String(surface.runtimeTarget ?? '').trim(),
+        appIdEnv,
+        appIdLiteral,
+        // A surface is a *token* carrier only when it names the public token's
+        // `app_id`; a server-profile surface (`format: none`) materializes runtime
+        // env and mints no client token, so it never implies a permission scope.
+        hasAccessToken: appIdEnv !== '' || appIdLiteral !== '',
+        excludeProfiles: Array.isArray(surface.excludeProfiles) ? surface.excludeProfiles : [],
+      };
+    }),
   };
 }
 
@@ -296,6 +339,149 @@ function countMaterializedProfiles(appRoot, format) {
 }
 
 /**
+ * Materialized profile files that already exist under one application root.
+ *
+ * A repository that carries profile files but no `etc/client-env.materialization.json`
+ * still holds a client token carrier in the only place that matters: the tracked
+ * profile file the app reads at runtime. Detecting them keeps such a repository on
+ * the "scope required" side instead of misreading it as server-only.
+ * @param workspaceRoot - workspace root (for workspace-relative reporting)
+ * @param appRoot - absolute application root
+ * @returns the carrier files that exist, with their format and profile id
+ */
+function findProfileCarrierFiles(workspaceRoot, appRoot) {
+  const found = [];
+  for (const [format, layout] of Object.entries(TOKEN_CARRIER_LAYOUTS)) {
+    for (const deploymentProfile of REGISTRATION_DEPLOYMENT_PROFILES) {
+      for (const environment of REGISTRATION_ENVIRONMENTS) {
+        const profileId = clientProfileId(deploymentProfile, environment);
+        const filePath = layout(appRoot, profileId);
+        if (existsSync(filePath)) {
+          found.push({ format, profileId, path: toPosix(path.relative(workspaceRoot, filePath)) });
+        }
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * Client application directories directly under one repository's `apps/`.
+ *
+ * These are the directories a public client token would be delivered to, whether
+ * or not they carry a manifest today: a repository that ships `apps/<surface>`
+ * directories has a client face even when the surface is still empty scaffolding.
+ * @param repoRoot - absolute repository root
+ * @returns repository-relative `apps/<surface>` paths, sorted
+ */
+export function listClientAppDirectories(repoRoot) {
+  const appsDir = path.join(repoRoot, 'apps');
+  if (!existsSync(appsDir) || !statSync(appsDir).isDirectory()) {
+    return [];
+  }
+  return readdirSync(appsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !IGNORED_DIRECTORY_NAMES.has(entry.name))
+    .map((entry) => `apps/${entry.name}`)
+    .sort();
+}
+
+/**
+ * Decide whether one manifest root must declare `backend.accessTokenPermissionScope`.
+ *
+ * The decision is scoped to the client surface, not to the manifest: a server-only
+ * root gets `notApplicable` (never a defect), a root whose client env was never
+ * configured gets its own `missingClientEnvConfiguration` classification instead of
+ * a scope defect, and only a root that actually mints a public client token is
+ * required to declare the scope.
+ * @param facts - one root's client surface facts
+ * @param facts.workspaceRoot - workspace root (for workspace-relative carrier paths)
+ * @param facts.appRoot - absolute application root
+ * @param facts.declaration - repository client-env declaration, or `null`
+ * @param facts.permissionScope - the scope the manifest declares (may be empty)
+ * @param facts.clientAppDirectories - repository-relative `apps/<surface>` paths
+ * @returns the requirement facts recorded on the inventory entry
+ */
+export function describePermissionScopeRequirement(facts) {
+  const {
+    workspaceRoot,
+    appRoot,
+    declaration,
+    permissionScope,
+    clientAppDirectories,
+  } = facts;
+  const declaredSurfaces = declaration?.surfaces ?? [];
+  const accessTokenSurfaces = declaredSurfaces.filter((surface) => surface.hasAccessToken);
+  const profileFiles = findProfileCarrierFiles(workspaceRoot, appRoot);
+  const clientSurface = {
+    kind: clientAppDirectories.length > 0 ? 'apps-directories' : 'none',
+    directories: clientAppDirectories,
+    materializationDeclared: Boolean(declaration),
+  };
+  const carrier = {
+    materializationSurfaces: accessTokenSurfaces.map((surface) => surface.id),
+    profileFiles,
+  };
+  const base = {
+    requiresPermissionScope: false,
+    requiresClientEnvMaterialization: false,
+    serversOnly: false,
+    clientSurface,
+    carrier,
+    notes: [],
+  };
+
+  if (accessTokenSurfaces.length > 0 || profileFiles.length > 0) {
+    const origin = accessTokenSurfaces.length > 0
+      ? `etc/client-env.materialization.json surface(s) ${accessTokenSurfaces.map((surface) => surface.id).join(', ')} declare accessToken`
+      : `profile carrier file(s) ${profileFiles.map((entry) => entry.path).join(', ')} exist`;
+    return {
+      ...base,
+      kind: PERMISSION_SCOPE_REQUIREMENTS.MATERIALIZED,
+      requiresPermissionScope: true,
+      reason: `${origin}; the root mints a public client token, so backend.accessTokenPermissionScope is required`,
+    };
+  }
+
+  if (permissionScope.length > 0) {
+    if (clientSurface.kind === 'apps-directories') {
+      base.notes.push(
+        `client application directories (${clientAppDirectories.join(', ')}) exist but the repository `
+        + 'declares no etc/client-env.materialization.json accessToken carrier, so no public token is '
+        + 'minted for them; registration is not blocked by that gap',
+      );
+    }
+    return {
+      ...base,
+      kind: PERMISSION_SCOPE_REQUIREMENTS.DECLARED,
+      reason:
+        'no client token carrier exists, but the manifest declares backend.accessTokenPermissionScope '
+        + 'itself, so the requirement is satisfied by declaration',
+    };
+  }
+
+  if (clientSurface.kind === 'apps-directories') {
+    return {
+      ...base,
+      kind: PERMISSION_SCOPE_REQUIREMENTS.MISSING_CLIENT_ENV_CONFIGURATION,
+      requiresClientEnvMaterialization: true,
+      reason:
+        `client application directories (${clientAppDirectories.join(', ')}) exist but the repository `
+        + 'declares no etc/client-env.materialization.json, so neither a public token nor its '
+        + 'permission scope can be derived; configure the client env materialization first',
+    };
+  }
+
+  return {
+    ...base,
+    kind: PERMISSION_SCOPE_REQUIREMENTS.NOT_APPLICABLE,
+    serversOnly: true,
+    reason:
+      'server-only root: no client application directories, no accessToken carrier, and no declared '
+      + 'scope, so no public token exists for accessTokenPermissionScope to bound',
+  };
+}
+
+/**
  * Describe where one application surface's public token lives today.
  *
  * The carrier is resolved at repository granularity: `materialize-client-env.mjs`
@@ -312,6 +498,8 @@ function describeTokenCarrier(workspaceRoot, appRoot, declaration) {
   if (!declaration) {
     return {
       kind: 'none',
+      mintsPublicToken: false,
+      accessTokenSurfaceIds: [],
       reason: 'repository declares no etc/client-env.materialization.json',
       configPath: '',
       surfaces: [],
@@ -329,11 +517,20 @@ function describeTokenCarrier(workspaceRoot, appRoot, declaration) {
     runtimeTarget: surface.runtimeTarget,
     appIdEnv: surface.appIdEnv,
     appIdLiteral: surface.appIdLiteral,
+    hasAccessToken: surface.hasAccessToken,
     tokenKey: 'SDKWORK_ACCESS_TOKEN',
     profiles: countMaterializedProfiles(appRoot, surface.format),
   }));
+  // A declared surface only implies a public client token when it carries an
+  // `accessToken` identity; `format: none` server surfaces materialize runtime env
+  // and never mint one, so the repository is still server-only for registration.
+  const accessTokenSurfaceIds = declaration.surfaces
+    .filter((surface) => surface.hasAccessToken)
+    .map((surface) => surface.id);
   return {
     kind: declaration.surfaces.length > 0 ? 'client-env-materializer' : 'none',
+    mintsPublicToken: accessTokenSurfaceIds.length > 0,
+    accessTokenSurfaceIds,
     reason:
       surfaces.length > 0
         ? ''
@@ -365,6 +562,7 @@ export function buildRegistrationInventory(options = {}) {
   const workspaceRoot = path.resolve(options.workspaceRoot ?? process.cwd());
   const roots = discoverApplicationRoots(workspaceRoot);
   const declarations = new Map();
+  const clientAppDirectories = new Map();
   const entries = [];
 
   for (const appRoot of roots) {
@@ -394,10 +592,22 @@ export function buildRegistrationInventory(options = {}) {
       );
     }
     const declaration = declarations.get(repoRoot);
+    if (!clientAppDirectories.has(repoRoot)) {
+      clientAppDirectories.set(repoRoot, listClientAppDirectories(repoRoot));
+    }
+    const appDirectories = clientAppDirectories.get(repoRoot);
 
     const appKey = manifestAppKey(manifest, appDirName);
     const appName = manifestAppName(manifest, appKey);
     const permissionScope = manifestPermissionScope(manifest);
+    const tokenCarrier = describeTokenCarrier(workspaceRoot, appRoot, declaration);
+    const permissionScopeRequirement = describePermissionScopeRequirement({
+      workspaceRoot,
+      appRoot,
+      declaration,
+      permissionScope,
+      clientAppDirectories: appDirectories,
+    });
     const slugFromKey = slugifyAppKey(appKey);
     const slugFromName = slugifyAppKey(manifest?.app?.name ?? '');
     const slugFromDir = slugifyAppKey(appDirName);
@@ -432,10 +642,13 @@ export function buildRegistrationInventory(options = {}) {
       organizationId: String(manifest?.backend?.organizationId ?? '').trim(),
       permissionScope,
       permissionScopeCount: permissionScope.length,
+      permissionScopeRequirement,
+      clientSurface: permissionScopeRequirement.clientSurface,
+      serversOnly: permissionScopeRequirement.serversOnly,
       slug,
       slugSource: slugFromKey ? 'app.key' : slugFromName ? 'app.name' : 'directory',
       environments,
-      tokenCarrier: describeTokenCarrier(workspaceRoot, appRoot, declaration),
+      tokenCarrier,
     });
   }
 
@@ -474,10 +687,38 @@ export function buildRegistrationInventory(options = {}) {
       bootstrapReady: parsed.filter(
         (entry) => entry.permissionScopeCount > 0 && entry.applicationType !== '',
       ).length,
+      // Raw declaration count: how many manifests carry the field at all. It is a
+      // fact about the manifest, not a defect count — see
+      // `missingPermissionScopeRequired` for the roots that actually need one.
       missingPermissionScope: parsed.filter((entry) => entry.permissionScopeCount === 0).length,
+      missingPermissionScopeRequired: parsed.filter(
+        (entry) => entry.permissionScopeRequirement?.requiresPermissionScope
+          && entry.permissionScopeCount === 0,
+      ).length,
+      missingClientEnvConfiguration: parsed.filter(
+        (entry) => entry.permissionScopeRequirement?.kind === 'missingClientEnvConfiguration',
+      ).length,
+      serversOnly: parsed.filter((entry) => entry.permissionScopeRequirement?.serversOnly).length,
+      scopeRequirement: {
+        materialized: parsed.filter(
+          (entry) => entry.permissionScopeRequirement?.kind === 'materialized',
+        ).length,
+        declared: parsed.filter(
+          (entry) => entry.permissionScopeRequirement?.kind === 'declared',
+        ).length,
+        missingClientEnvConfiguration: parsed.filter(
+          (entry) => entry.permissionScopeRequirement?.kind === 'missingClientEnvConfiguration',
+        ).length,
+        notApplicable: parsed.filter(
+          (entry) => entry.permissionScopeRequirement?.kind === 'notApplicable',
+        ).length,
+      },
       missingApplicationType: parsed.filter((entry) => entry.applicationType === '').length,
       withClientTokenCarrier: parsed.filter(
         (entry) => entry.tokenCarrier?.kind === 'client-env-materializer',
+      ).length,
+      withPublicTokenCarrier: parsed.filter(
+        (entry) => entry.tokenCarrier?.mintsPublicToken === true,
       ).length,
       withAnchorSink: parsed.filter((entry) =>
         Object.values(entry.environments).every((environment) => environment.anchorSinks.length > 0),

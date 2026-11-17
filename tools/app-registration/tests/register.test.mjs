@@ -37,6 +37,9 @@ function createWorkspace(options = {}) {
         'utf8',
       );
     }
+    for (const appDir of repo.apps ?? []) {
+      mkdirSync(path.join(repoRoot, appDir), { recursive: true });
+    }
     const overrides = path.join(repoRoot, 'etc', 'topology', 'overrides');
     mkdirSync(overrides, { recursive: true });
     for (const environment of ['development', 'production']) {
@@ -617,6 +620,154 @@ test('a manifest without a permission scope fails instead of being skipped', asy
     workspace.cleanup();
   }
 });
+
+test('a server-only root is skipped with its reason instead of failing on a scope it cannot have', async () => {
+  const workspace = createWorkspace({
+    repositories: [{
+      name: 'sdkwork-notes',
+      manifest: manifest({
+        app: { key: 'sdkwork-notes', name: 'SDKWork Notes' },
+        backend: { accessTokenPermissionScope: [] },
+      }),
+    }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const inventory = buildRegistrationInventory({ workspaceRoot: workspace.root });
+    assert.equal(inventory.entries[0].permissionScopeRequirement.kind, 'notApplicable');
+
+    const dryRun = await registerApplications(
+      { workspaceRoot: workspace.root, environment: 'development', dryRun: true },
+      { inventory, sleep: async () => {} },
+    );
+    assert.equal(dryRun.counts.planned, 1);
+    assert.equal(dryRun.counts.invalid, 0, 'a server-only root is not a scope defect');
+    assert.equal(dryRun.counts.skipped, 1);
+    const dryEntry = dryRun.entries[0];
+    assert.equal(dryEntry.status, 'skipped');
+    assert.equal(dryEntry.skipKind, 'serversOnly');
+    assert.match(dryEntry.skipReason, /skipped as server-only/u);
+    assert.match(dryEntry.skipReason, /--include-servers-only/u);
+    assert.equal(dryEntry.serversOnly, true);
+    assert.deepEqual(dryEntry.defects, []);
+
+    const real = await runRegistration({ workspaceRoot: workspace.root, stack });
+    assert.equal(real.report.counts.skipped, 1);
+    assert.equal(real.report.counts.failed, 0, 'nothing was attempted, so nothing failed');
+    const entry = real.report.entries[0];
+    assert.equal(entry.status, 'skipped');
+    assert.equal(entry.skipKind, 'serversOnly');
+    assert.equal(entry.materialize.status, 'skipped');
+    assert.equal(entry.deployApplicationId, '');
+    assert.equal(stack.requests.length, 0, 'a skipped root must not reach Deploy or IAM');
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('--include-servers-only registers a server-only root on purpose', async () => {
+  const workspace = createWorkspace({
+    repositories: [{
+      name: 'sdkwork-notes',
+      manifest: manifest({
+        app: { key: 'sdkwork-notes', name: 'SDKWork Notes' },
+        backend: { accessTokenPermissionScope: [] },
+      }),
+    }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({
+      workspaceRoot: workspace.root,
+      stack,
+      overrides: { includeServersOnly: true },
+    });
+    assert.equal(report.counts.skipped, 0);
+    assert.equal(
+      report.entries[0].status,
+      'failed',
+      'the explicit override restores the historical scope requirement',
+    );
+    assert.match(report.entries[0].error, /accessTokenPermissionScope is empty/u);
+    assert.equal(stack.requests.length, 0);
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('a client face without a materialization fails on that configuration, not on a scope', async () => {
+  const workspace = createWorkspace({
+    repositories: [{
+      name: 'sdkwork-doctor',
+      manifest: manifest({
+        app: { key: 'sdkwork-doctor', name: 'SDKWork Doctor' },
+        backend: { accessTokenPermissionScope: [] },
+      }),
+      apps: ['apps/sdkwork-doctor-pc', 'apps/sdkwork-doctor-h5'],
+    }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const inventory = buildRegistrationInventory({ workspaceRoot: workspace.root });
+    assert.equal(inventory.entries[0].permissionScopeRequirement.kind, 'missingClientEnvConfiguration');
+
+    const dryRun = await registerApplications(
+      { workspaceRoot: workspace.root, environment: 'development', dryRun: true },
+      { inventory, sleep: async () => {} },
+    );
+    assert.equal(dryRun.counts.invalid, 1);
+    assert.equal(dryRun.counts.skipped, 0, 'a client face is not a server-only skip');
+    const dryEntry = dryRun.entries[0];
+    assert.equal(dryEntry.status, 'invalid');
+    assert.equal(dryEntry.permissionScopeRequirement, 'missingClientEnvConfiguration');
+    assert.equal(dryEntry.defects.length, 1);
+    assert.match(dryEntry.defects[0], /client-env\.materialization\.json/u);
+    assert.match(dryEntry.defects[0], /missing client env configuration/u);
+    assert.doesNotMatch(
+      dryEntry.defects[0],
+      /accessTokenPermissionScope is empty/u,
+      'the scope error would point the operator at the wrong file',
+    );
+
+    const real = await runRegistration({ workspaceRoot: workspace.root, stack });
+    assert.equal(real.report.counts.failed, 1);
+    assert.equal(real.report.entries[0].errorKind, 'plan');
+    assert.match(real.report.entries[0].error, /client-env\.materialization\.json/u);
+    assert.equal(stack.requests.length, 0);
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('a client face that declares a scope still registers', async () => {
+  const workspace = createWorkspace({
+    repositories: [{
+      name: 'sdkwork-drama',
+      manifest: manifest({ app: { key: 'sdkwork-drama', name: 'SDKWork Drama' } }),
+      apps: ['apps/sdkwork-drama-h5'],
+    }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({ workspaceRoot: workspace.root, stack });
+    assert.equal(report.counts.failed, 0, JSON.stringify(report.entries[0]?.error));
+    assert.equal(report.counts.created, 1);
+    const entry = report.entries[0];
+    assert.equal(entry.permissionScopeRequirement, 'declared');
+    assert.equal(
+      entry.materialize.status,
+      'not-applicable',
+      'no materialization declaration means no client token is minted, which does not block the run',
+    );
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
 
 test('the default scope registers one anchor per repository', async () => {
   const workspace = createWorkspace({

@@ -20,9 +20,14 @@
  *
  * 1. **Plan** —derive the deploy slug, the IAM application type, the permission
  *    scope, the primary domain, the deterministic idempotency keys, and the
- *    anchor sinks. A plan defect (no slug, no `app.appType`, no permission scope,
- *    no primary domain source) is reported as a failure instead of being skipped:
- *    an item that cannot be anchored or enabled must not reach Deploy or IAM.
+ *    anchor sinks. A plan defect (no slug, no `app.appType`, no permission scope
+ *    where one is required, missing client env configuration, no primary domain
+ *    source) is reported as a failure instead of being skipped: an item that
+ *    cannot be anchored or enabled must not reach Deploy or IAM. A **server-only**
+ *    root — no client application directories, no `accessToken` carrier, and no
+ *    declared scope — is the one planned skip: it mints no public client token, so
+ *    there is no scope for it to declare, and the report records the reason
+ *    (`--include-servers-only` registers it anyway).
  * 2. **Deploy ensure** —resolve the application by exact slug through
  *    `apps.list`, otherwise `apps.create` with
  *    `Idempotency-Key: sdkwork-app-register:<environment>:<slug>` and
@@ -54,8 +59,8 @@
  *
  * Failure of one item is recorded and the run continues; the exit code reflects
  * the failure count. Nothing is ever skipped silently: every item ends as
- * `created`, `reused`, or `failed`, and every failure carries a diagnostic naming
- * the route or the variable.
+ * `created`, `reused`, `failed`, or `skipped` (with its reason recorded), and
+ * every failure carries a diagnostic naming the route or the variable.
  *
  * @module app-registration/register
  */
@@ -87,6 +92,7 @@ import {
 import { DeployApiError, createDeployApplicationClient, findAppBySlug } from './deploy-client.mjs';
 import { IamApiError, createIamApplicationClient } from './iam-client.mjs';
 import { readRecordedAnchor, writeAnchorEnv } from './env-anchor.mjs';
+import { PERMISSION_SCOPE_REQUIREMENTS } from './inventory.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TOOLS_DIR = path.resolve(__dirname, '..');
@@ -246,10 +252,11 @@ function resolveSinkPaths(entry, environment, deploymentProfile) {
  * @param allEntries - entries taking part in this run (slug collision scope)
  * @param environment - canonical environment
  * @param options - deployment profile, anchor overrides
- * @returns the plan plus its defects
+ * @returns the plan, its defects, and the skip verdict when the root has no client surface
  */
 export function planRegistrationItem(entry, allEntries, environment, options = {}) {
   const defects = [];
+  const scopeRequirement = entry.permissionScopeRequirement ?? null;
   const plan = {
     id: entry.id,
     repo: entry.repo,
@@ -258,6 +265,13 @@ export function planRegistrationItem(entry, allEntries, environment, options = {
     environment,
     applicationType: trim(entry.applicationType),
     permissionScope: Array.isArray(entry.permissionScope) ? [...entry.permissionScope] : [],
+    permissionScopeRequirement: trim(scopeRequirement?.kind),
+    permissionScopeRequirementReason: trim(scopeRequirement?.reason),
+    permissionScopeRequirementNotes: Array.isArray(scopeRequirement?.notes)
+      ? [...scopeRequirement.notes]
+      : [],
+    clientSurface: scopeRequirement?.clientSurface ?? { kind: 'none', directories: [] },
+    serversOnly: scopeRequirement?.serversOnly === true,
     tenantId: trim(options.tenantId) || trim(entry.tenantId) || '100001',
     organizationId: trim(options.organizationId) || trim(entry.organizationId) || '0',
     primaryDomain: '',
@@ -267,7 +281,26 @@ export function planRegistrationItem(entry, allEntries, environment, options = {
     deployCreateIdempotencyKey: '',
     deployCreateBody: null,
     anchorOverrides: {},
+    sinkPaths: [],
   };
+
+  // A server-only root mints no public client token, so there is no
+  // `accessTokenPermissionScope` for the registration to carry. Skipping it is an
+  // explicit, reported outcome with its reason — never a silent drop — and
+  // `--include-servers-only` re-enables registering it anyway.
+  if (plan.serversOnly && options.includeServersOnly !== true) {
+    return {
+      plan,
+      defects,
+      skip: {
+        kind: 'serversOnly',
+        reason:
+          `${entry.id}: skipped as server-only — ${plan.permissionScopeRequirementReason}. `
+          + 'No public client token exists for backend.accessTokenPermissionScope to bound. '
+          + 'Pass --include-servers-only to register it anyway.',
+      },
+    };
+  }
 
   if (plan.applicationType === '') {
     defects.push(
@@ -275,7 +308,27 @@ export function planRegistrationItem(entry, allEntries, environment, options = {
       + 'product-semantic applicationType',
     );
   }
-  if (plan.permissionScope.length === 0) {
+  if (plan.permissionScopeRequirement === PERMISSION_SCOPE_REQUIREMENTS.MISSING_CLIENT_ENV_CONFIGURATION) {
+    // Kept separate from the scope defect on purpose: this root's client env was
+    // never configured, so asking for a scope tells the operator to edit the wrong
+    // file. The actionable prerequisite is the materialization declaration.
+    defects.push(
+      `${entry.id}: ${plan.permissionScopeRequirementReason}. This needs an `
+      + 'etc/client-env.materialization.json that declares the client surface(s) and their '
+      + 'accessToken before the root can be registered; it is a missing client env configuration, '
+      + 'not an empty backend.accessTokenPermissionScope.',
+    );
+  } else if (
+    plan.permissionScope.length === 0
+    // IAM bootstrap refuses *any* application it provisions without a default
+    // access permission list, so the scope is required for every root this plan
+    // actually registers: one whose client surface mints a token, one registered
+    // through --include-servers-only, and one whose inventory carried no
+    // classification facts (a caller-supplied inventory keeps the strict default).
+    && (scopeRequirement === null
+      || scopeRequirement.requiresPermissionScope === true
+      || plan.serversOnly)
+  ) {
     defects.push(
       `${entry.id}: backend.accessTokenPermissionScope is empty; IAM application bootstrap refuses `
       + 'a manifest with no default access permissions (an explicit empty array is only valid when '
@@ -674,6 +727,11 @@ async function registerOne(context, plan) {
     slugSource: plan.slugSource,
     applicationType: plan.applicationType,
     permissionScopeCount: plan.permissionScope.length,
+    permissionScopeRequirement: plan.permissionScopeRequirement,
+    permissionScopeRequirementReason: plan.permissionScopeRequirementReason,
+    permissionScopeRequirementNotes: plan.permissionScopeRequirementNotes,
+    clientSurface: plan.clientSurface,
+    serversOnly: plan.serversOnly,
     primaryDomain: plan.primaryDomain,
     primaryDomainSource: plan.primaryDomainSource,
     status: 'failed',
@@ -773,7 +831,7 @@ async function runEnvironmentHandoff(context, entries, planByItemId) {
   const { options, runNodeScript } = context;
   const repositories = new Map();
   for (const result of entries) {
-    if (result.status === 'failed') {
+    if (result.status === 'failed' || result.status === 'skipped') {
       continue;
     }
     const plan = planByItemId.get(result.id);
@@ -989,7 +1047,7 @@ export async function registerApplications(options = {}, dependencies = {}) {
     // Slug collisions are resolved against every parsed manifest in the
     // workspace, not only the selected subset, so `--scope surfaces` and
     // `--scope all` derive the same slug for the same application.
-    const { plan, defects } = planRegistrationItem(
+    const { plan, defects, skip } = planRegistrationItem(
       entry,
       inventory.entries.filter((candidate) => !candidate.parseError),
       environment,
@@ -999,6 +1057,7 @@ export async function registerApplications(options = {}, dependencies = {}) {
         deploymentProfile: explicitDeploymentProfile,
         anchorOverrides,
         primaryDomainPattern: options.primaryDomainPattern,
+        includeServersOnly: options.includeServersOnly === true,
       },
     );
     plan.repoAbsoluteRoot = repoRoot;
@@ -1033,7 +1092,7 @@ export async function registerApplications(options = {}, dependencies = {}) {
           ? 'prod'
           : environment}`;
     plan.defects = defects;
-    plans.push({ entry, plan });
+    plans.push({ entry, plan, skip });
   }
 
   markDuplicatePrimaryDomains(plans);
@@ -1041,8 +1100,8 @@ export async function registerApplications(options = {}, dependencies = {}) {
   const planByItemId = new Map(plans.map((entry) => [entry.plan.id, entry.plan]));
 
   if (options.dryRun) {
-    for (const { plan } of plans) {
-      report.entries.push({
+    for (const { plan, skip } of plans) {
+      const shared = {
         id: plan.id,
         repo: plan.repo,
         appDir: plan.appDir,
@@ -1053,8 +1112,27 @@ export async function registerApplications(options = {}, dependencies = {}) {
         slugDisambiguated: Boolean(plan.slugDisambiguated),
         applicationType: plan.applicationType,
         permissionScopeCount: plan.permissionScope.length,
+        permissionScopeRequirement: plan.permissionScopeRequirement,
+        permissionScopeRequirementReason: plan.permissionScopeRequirementReason,
+        clientSurface: plan.clientSurface,
+        serversOnly: plan.serversOnly,
         primaryDomain: plan.primaryDomain,
         primaryDomainSource: plan.primaryDomainSource,
+        notes: plan.permissionScopeRequirementNotes,
+      };
+      if (skip) {
+        report.entries.push({
+          ...shared,
+          status: 'skipped',
+          skipKind: skip.kind,
+          skipReason: skip.reason,
+          plan: null,
+          defects: [],
+        });
+        continue;
+      }
+      report.entries.push({
+        ...shared,
         status: plan.defects.length > 0 ? 'invalid' : 'planned',
         plan: {
           deployLookup: { kind: 'slug', slug: plan.slug },
@@ -1148,8 +1226,9 @@ export async function registerApplications(options = {}, dependencies = {}) {
     runNodeScript,
   };
 
-  const invalid = plans.filter(({ plan }) => plan.defects.length > 0);
-  const runnable = plans.filter(({ plan }) => plan.defects.length === 0);
+  const invalid = plans.filter(({ plan, skip }) => !skip && plan.defects.length > 0);
+  const skipped = plans.filter(({ skip }) => Boolean(skip));
+  const runnable = plans.filter(({ plan, skip }) => !skip && plan.defects.length === 0);
   const invalidEntries = invalid.map(({ plan }) => ({
     id: plan.id,
     repo: plan.repo,
@@ -1158,6 +1237,10 @@ export async function registerApplications(options = {}, dependencies = {}) {
     environment: plan.environment,
     slug: plan.slug,
     applicationType: plan.applicationType,
+    permissionScopeCount: plan.permissionScope.length,
+    permissionScopeRequirement: plan.permissionScopeRequirement,
+    clientSurface: plan.clientSurface,
+    serversOnly: plan.serversOnly,
     primaryDomain: plan.primaryDomain,
     primaryDomainSource: plan.primaryDomainSource,
     status: 'failed',
@@ -1170,15 +1253,42 @@ export async function registerApplications(options = {}, dependencies = {}) {
     anchor: { written: [], outcomes: [], skipped: '' },
     materialize: { status: 'skipped', reason: 'item failed before registration' },
   }));
+  const skippedEntries = skipped.map(({ plan, skip }) => ({
+    id: plan.id,
+    repo: plan.repo,
+    appDir: plan.appDir,
+    label: plan.label,
+    environment: plan.environment,
+    slug: plan.slug,
+    applicationType: plan.applicationType,
+    permissionScopeCount: plan.permissionScope.length,
+    permissionScopeRequirement: plan.permissionScopeRequirement,
+    permissionScopeRequirementReason: plan.permissionScopeRequirementReason,
+    clientSurface: plan.clientSurface,
+    serversOnly: plan.serversOnly,
+    primaryDomain: '',
+    primaryDomainSource: '',
+    status: 'skipped',
+    skipKind: skip.kind,
+    skipReason: skip.reason,
+    notes: plan.permissionScopeRequirementNotes,
+    deployApplicationId: '',
+    deployApplicationUuid: '',
+    iam: {},
+    installationEnvironment: { envKey: plan.environment, status: '', primaryDomain: '' },
+    anchor: { written: [], outcomes: [], skipped: skip.reason },
+    materialize: { status: 'skipped', reason: 'server-only root skipped before registration' },
+  }));
 
   const registered = await runWithConcurrency(runnable, concurrency, ({ plan }) =>
     registerOne(context, plan));
-  // Keep the plan order in the report: plan defects and registration results are
-  // merged back by the plan they belong to.
+  // Keep the plan order in the report: plan defects, skips, and registration
+  // results are merged back by the plan they belong to.
   const resultById = new Map(registered.map((entry) => [entry.id, entry]));
   const invalidById = new Map(invalidEntries.map((entry) => [entry.id, entry]));
+  const skippedById = new Map(skippedEntries.map((entry) => [entry.id, entry]));
   for (const { plan } of plans) {
-    const entry = invalidById.get(plan.id) ?? resultById.get(plan.id);
+    const entry = invalidById.get(plan.id) ?? skippedById.get(plan.id) ?? resultById.get(plan.id);
     if (entry) {
       report.entries.push(entry);
     }
@@ -1198,6 +1308,10 @@ function summarizeCounts(entries, planned) {
     reused: count('reused'),
     failed: count('failed'),
     invalid: count('invalid'),
+    // A `serversOnly` root is skipped on purpose: no public client token exists,
+    // so the registration has no accessTokenPermissionScope to carry. The count is
+    // reported so the skip is visible and auditable.
+    skipped: count('skipped'),
     environmentsActive: entries.filter(
       (entry) => (entry.installationEnvironment?.status ?? '').toLowerCase() === 'active',
     ).length,

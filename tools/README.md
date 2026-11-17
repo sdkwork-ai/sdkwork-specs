@@ -64,8 +64,14 @@ Rules:
   fails closed on a missing credential variable or an unresolvable anchor,
   retries `429`/`5xx` with `Retry-After`-aware jittered backoff, registers items
   with bounded concurrency, records every item as created/reused/failed, and
-  reflects the failure count in its exit code. `--inventory <path>` writes the
-  scan without touching anything; `--dry-run` prints the plan;
+  reflects the failure count in its exit code. `backend.accessTokenPermissionScope`
+  is required only where the root mints a public client token: a root with no
+  `accessToken` carrier and no `apps/*` client directory is `serversOnly` and is
+  skipped with its reason recorded (opt in with `--include-servers-only`), a root
+  with client directories but no `etc/client-env.materialization.json` is reported
+  as `missingClientEnvConfiguration` and fails plan time naming that file, and a
+  root that declares its own scope registers without one. `--inventory <path>`
+  writes the scan without touching anything; `--dry-run` prints the plan;
   `--report <path>` writes the per-item report.
 - `check-source-config-standard.mjs` validates deployable-root `etc/`
   ownership, canonical `standalone|cloud` x

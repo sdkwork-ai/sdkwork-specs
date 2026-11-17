@@ -79,6 +79,11 @@ Execution:
   --no-record-deploy-uuid    Do not write SDKWORK_DEPLOY_APPLICATION_UUID bookkeeping
   --no-regenerate-topology   Do not re-run materialize-topology-env.mjs after writing the anchor
   --no-materialize           Do not re-run materialize-client-env.mjs (no profile token update)
+  --include-servers-only     Also register roots classified as server-only. Such a root mints no
+                             public client token (no accessToken carrier, no client application
+                             directories, no declared scope), so by default it is skipped with the
+                             reason recorded in the report instead of being failed for a missing
+                             backend.accessTokenPermissionScope.
   --help                     Show this help
 
 Environment (required unless --dry-run / --inventory):
@@ -130,6 +135,7 @@ export function parseArgs(argv) {
     recordDeployUuid: true,
     regenerateTopologyEnv: true,
     materialize: true,
+    includeServersOnly: false,
     help: false,
   };
   const valueOf = (index, name) => {
@@ -222,6 +228,9 @@ export function parseArgs(argv) {
       case '--no-materialize':
         options.materialize = false;
         break;
+      case '--include-servers-only':
+        options.includeServersOnly = true;
+        break;
       case '--help':
       case '-h':
         options.help = true;
@@ -282,6 +291,10 @@ function writeReport(filePath, report) {
 
 function printItemLines(report) {
   for (const entry of report.entries) {
+    if (entry.status === 'skipped') {
+      console.log(`[skipped] ${entry.label} (${entry.skipKind ?? 'serversOnly'}) ${entry.skipReason ?? ''}`.trim());
+      continue;
+    }
     if (entry.status === 'planned' || entry.status === 'invalid') {
       const defects = entry.defects?.length ? `  defects=${entry.defects.length}` : '';
       const domain = entry.primaryDomain ? ` domain=${entry.primaryDomain}` : '';
@@ -325,8 +338,15 @@ async function main(argv) {
     console.log(
       `inventory: ${inventory.counts.applicationRoots} application root(s) in `
       + `${inventory.counts.repositories} repository(ies); `
-      + `${inventory.counts.withClientTokenCarrier} with a client token carrier; `
+      + `${inventory.counts.withPublicTokenCarrier} mints a public client token; `
       + `${inventory.counts.duplicateSlugs} slug collision group(s)`,
+    );
+    console.log(
+      `scope requirement: materialized=${inventory.counts.scopeRequirement.materialized} `
+      + `declared=${inventory.counts.scopeRequirement.declared} `
+      + `missingClientEnvConfiguration=${inventory.counts.missingClientEnvConfiguration} `
+      + `notApplicable=${inventory.counts.scopeRequirement.notApplicable}`
+      + ` (${inventory.counts.missingPermissionScopeRequired} required scope(s) still empty)`,
     );
     console.log(`inventory written: ${options.inventoryPath}`);
     return 0;
@@ -379,7 +399,8 @@ async function main(argv) {
     const counts = report.counts;
     console.log(
       `\nregister-applications ${environment}: planned=${counts.planned} created=${counts.created} `
-      + `reused=${counts.reused} failed=${counts.failed}${counts.invalid ? ` invalid=${counts.invalid}` : ''} `
+      + `reused=${counts.reused} failed=${counts.failed}${counts.invalid ? ` invalid=${counts.invalid}` : ''}`
+      + `${counts.skipped ? ` skipped=${counts.skipped}` : ''} `
       + `environmentsActive=${counts.environmentsActive}`
       + `${counts.environmentsSkipped ? ` environmentsSkipped=${counts.environmentsSkipped}` : ''}`
       + `${counts.environmentsDeduplicated ? ` environmentsDeduplicated=${counts.environmentsDeduplicated}` : ''} `

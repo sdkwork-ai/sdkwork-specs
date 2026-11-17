@@ -138,6 +138,14 @@ test('the inventory records surfaces, environments, sinks, and token carriers', 
     );
     assert.equal(repoEntry.tokenCarrier.surfaces.length, 0, 'no surface is rooted at the repo root');
     assert.equal(repoEntry.tokenCarrier.repositorySurfaces.length, 1);
+    assert.equal(
+      repoEntry.tokenCarrier.mintsPublicToken,
+      true,
+      'the declared surface carries accessToken, so a public client token is minted',
+    );
+    assert.equal(repoEntry.permissionScopeRequirement.kind, 'materialized');
+    assert.equal(repoEntry.permissionScopeRequirement.requiresPermissionScope, true);
+    assert.equal(repoEntry.serversOnly, false);
 
     const surfaceEntry = inventory.entries.find((entry) => entry.id === 'sdkwork-im/apps/sdkwork-im-pc');
     assert.equal(surfaceEntry.tokenCarrier.kind, 'client-env-materializer');
@@ -226,5 +234,148 @@ test('a malformed manifest is listed with its parse error instead of aborting', 
     assert.equal(inventory.counts.parseErrors, 1);
     const broken = inventory.entries.find((entry) => entry.repo === 'sdkwork-broken');
     assert.match(broken.parseError, /JSON/u);
+  });
+});
+
+test('the scope requirement follows the client token carrier, not the manifest', () => {
+  createWorkspace((root) => {
+    // materialized: the materializer declares an accessToken surface.
+    writeJson(path.join(root, 'sdkwork-materialized', 'agent.app.config.json'), manifest({
+      app: { key: 'sdkwork-materialized' },
+    }));
+    writeJson(
+      path.join(root, 'sdkwork-materialized', 'etc', 'client-env.materialization.json'),
+      {
+        schemaVersion: 1,
+        kind: 'sdkwork.client-env-materialization',
+        application: 'sdkwork-materialized',
+        surfaces: [{
+          id: 'sdkwork-materialized',
+          root: '.',
+          format: 'vite',
+          runtimeTarget: 'browser',
+          accessToken: { appIdEnv: 'SDKWORK_DEPLOY_APPLICATION_ID' },
+        }],
+      },
+    );
+    // declared: no carrier at all, but the manifest states its own scope.
+    writeJson(path.join(root, 'sdkwork-declared', 'agent.app.config.json'), manifest({
+      app: { key: 'sdkwork-declared' },
+    }));
+    // missingClientEnvConfiguration: client dirs, no materialization, no scope.
+    writeJson(path.join(root, 'sdkwork-clientface', 'agent.app.config.json'), manifest({
+      app: { key: 'sdkwork-clientface' },
+      backend: { accessTokenPermissionScope: [] },
+    }));
+    mkdirSync(path.join(root, 'sdkwork-clientface', 'apps', 'sdkwork-clientface-pc'), { recursive: true });
+    // notApplicable: no client dirs, no carrier, no scope.
+    writeJson(path.join(root, 'sdkwork-server', 'agent.app.config.json'), manifest({
+      app: { key: 'sdkwork-server' },
+      backend: { accessTokenPermissionScope: [] },
+    }));
+    // A server-profile materialization (format none, no accessToken) mints no
+    // public token, so it is still server-only for the scope requirement.
+    writeJson(path.join(root, 'sdkwork-serverprofile', 'agent.app.config.json'), manifest({
+      app: { key: 'sdkwork-serverprofile' },
+      backend: { accessTokenPermissionScope: [] },
+    }));
+    writeJson(
+      path.join(root, 'sdkwork-serverprofile', 'etc', 'client-env.materialization.json'),
+      {
+        schemaVersion: 1,
+        kind: 'sdkwork.client-env-materialization',
+        application: 'sdkwork-serverprofile',
+        surfaces: [{ id: 'sdkwork-serverprofile', root: '.', format: 'none', runtimeTarget: 'server' }],
+      },
+    );
+
+    const inventory = buildRegistrationInventory({ workspaceRoot: root });
+    const byId = new Map(inventory.entries.map((entry) => [entry.id, entry]));
+
+    const materialized = byId.get('sdkwork-materialized');
+    assert.equal(materialized.permissionScopeRequirement.kind, 'materialized');
+    assert.equal(materialized.permissionScopeRequirement.requiresPermissionScope, true);
+    assert.equal(materialized.serversOnly, false);
+
+    const declared = byId.get('sdkwork-declared');
+    assert.equal(declared.permissionScopeRequirement.kind, 'declared');
+    assert.equal(
+      declared.permissionScopeRequirement.requiresPermissionScope,
+      false,
+      'a manifest that states its own scope is not asked for one because of a carrier it lacks',
+    );
+    assert.equal(declared.serversOnly, false);
+
+    const clientFace = byId.get('sdkwork-clientface');
+    assert.equal(clientFace.permissionScopeRequirement.kind, 'missingClientEnvConfiguration');
+    assert.equal(
+      clientFace.permissionScopeRequirement.requiresClientEnvMaterialization,
+      true,
+      'the actionable prerequisite is the materialization declaration',
+    );
+    assert.deepEqual(clientFace.clientSurface.directories, ['apps/sdkwork-clientface-pc']);
+    assert.equal(clientFace.serversOnly, false, 'a client face is not a server-only root');
+
+    const server = byId.get('sdkwork-server');
+    assert.equal(server.permissionScopeRequirement.kind, 'notApplicable');
+    assert.equal(server.serversOnly, true);
+    assert.equal(server.permissionScopeRequirement.requiresPermissionScope, false);
+
+    const serverProfile = byId.get('sdkwork-serverprofile');
+    assert.equal(
+      serverProfile.permissionScopeRequirement.kind,
+      'notApplicable',
+      'a format:none server surface carries no accessToken, so it requires no scope',
+    );
+    assert.equal(serverProfile.tokenCarrier.mintsPublicToken, false);
+
+    assert.deepEqual(inventory.counts.scopeRequirement, {
+      materialized: 1,
+      declared: 1,
+      missingClientEnvConfiguration: 1,
+      notApplicable: 2,
+    });
+    assert.equal(inventory.counts.missingClientEnvConfiguration, 1);
+    assert.equal(inventory.counts.serversOnly, 2);
+    assert.equal(
+      inventory.counts.missingPermissionScopeRequired,
+      0,
+      'an empty scope is only a defect where a public token is actually minted',
+    );
+  });
+});
+
+test('a client face that declares its own scope keeps a note instead of a defect', () => {
+  createWorkspace((root) => {
+    writeJson(path.join(root, 'sdkwork-clientface', 'agent.app.config.json'), manifest({
+      app: { key: 'sdkwork-clientface' },
+    }));
+    mkdirSync(path.join(root, 'sdkwork-clientface', 'apps', 'sdkwork-clientface-h5'), { recursive: true });
+    const inventory = buildRegistrationInventory({ workspaceRoot: root });
+    const entry = inventory.entries[0];
+    assert.equal(entry.permissionScopeRequirement.kind, 'declared');
+    assert.equal(entry.permissionScopeRequirement.requiresClientEnvMaterialization, false);
+    assert.equal(entry.permissionScopeRequirement.notes.length, 1);
+    assert.match(entry.permissionScopeRequirement.notes[0], /client-env\.materialization\.json/u);
+  });
+});
+
+test('a profile carrier file alone keeps the scope requirement, without a declaration', () => {
+  createWorkspace((root) => {
+    writeJson(path.join(root, 'sdkwork-carrier', 'agent.app.config.json'), manifest({
+      app: { key: 'sdkwork-carrier' },
+    }));
+    writeText(
+      path.join(root, 'sdkwork-carrier', '.env.standalone.development'),
+      'SDKWORK_ACCESS_TOKEN=header.payload.signature\n',
+    );
+    const inventory = buildRegistrationInventory({ workspaceRoot: root });
+    const entry = inventory.entries[0];
+    assert.equal(entry.permissionScopeRequirement.kind, 'materialized');
+    assert.equal(entry.permissionScopeRequirement.requiresPermissionScope, true);
+    assert.deepEqual(
+      entry.permissionScopeRequirement.carrier.profileFiles.map((file) => file.profileId),
+      ['standalone.development'],
+    );
   });
 });

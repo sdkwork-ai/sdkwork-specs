@@ -38,6 +38,39 @@ client boundary and fails the item when the field is missing or not decimal; the
 anchor is never synthesized from the slug, never taken from another surface, and
 never silently substituted by the uuid.
 
+## When `backend.accessTokenPermissionScope` is required
+
+`accessTokenPermissionScope` bounds the **public application access token** a
+client surface presents. A root that mints no such token has nothing to scope, so
+demanding the field from it asks for a permission set no runtime can use — that is
+a false positive, not a defect. The inventory therefore classifies every manifest
+root from its client token carrier
+(`permissionScopeRequirement.kind`, mirrored as `serversOnly` and
+`clientSurface` on the entry):
+
+| Client token carrier | `apps/` client directories | Declared `backend.accessTokenPermissionScope` | `permissionScopeRequirement` | Registrar behaviour |
+| --- | --- | --- | --- | --- |
+| materialization surface with `accessToken`, or a materialized profile file under the root | either | any | `materialized` — scope **required** | registers; an empty scope is a plan defect naming the manifest |
+| none | yes | non-empty | `declared` | registers; a note records that no public token is minted, which does not block |
+| none | yes | empty | `missingClientEnvConfiguration` | plan fails: the root needs `etc/client-env.materialization.json` **first**; the diagnostic names that file, never a scope |
+| none | no | empty | `notApplicable` (`serversOnly`) | skipped with its reason in the report; `--include-servers-only` registers it anyway |
+
+Carrier detection is deliberately explicit: a declared materialization surface
+counts only when it names `accessToken.appId`/`accessToken.appIdEnv`, so a
+`format: none` / `runtimeTarget: server` surface (appbase, feeds,
+github-workflow) materializes runtime env without minting a client token and
+stays out of the requirement. A root that already carries materialized profile
+files (`.env.<profile>`, `env/sdkwork.<profile>.json`,
+`config/{app,mini-program}/runtime-env.<profile>.json`) still requires the scope
+even without a declaration.
+
+The four states are reported in `counts.scopeRequirement`, `counts.serversOnly`,
+`counts.missingClientEnvConfiguration`, and
+`counts.missingPermissionScopeRequired` (roots that mint a token but left the
+scope empty — always `0` in a healthy workspace). `counts.missingPermissionScope`
+stays a raw declaration count: a manifest may legitimately omit the field when it
+mints no public token.
+
 ## One installation, one row per lifecycle
 
 A deploy application is **environment-independent** (`uk_deploy_app_tenant_slug`
@@ -96,9 +129,12 @@ instead of one of them losing a mid-batch `409` based on completion order.
 ## Sequence per application × environment
 
 1. **Plan** — slug, application type (`app.appType` → `h5|pc|flutter|api|other`),
-   manifest permission scope, primary domain, deterministic keys, anchor sinks. A
-   plan defect (no slug, no application type, no permission scope, no domain
-   source, duplicate domain) is a recorded failure, not a skip.
+   permission scope, primary domain, deterministic keys, anchor sinks. A plan
+   defect (no slug, no application type, no permission scope **where the client
+   surface requires one**, missing client env configuration, no domain source,
+   duplicate domain) is a recorded failure, not a skip. The one planned skip is a
+   `serversOnly` root, reported as `status: "skipped"` with `skipKind` and
+   `skipReason`; `--include-servers-only` registers it instead.
 2. **Deploy ensure** — `GET /app/v3/api/apps?keyword=<slug>` and an exact slug
    comparison; when absent, `POST /app/v3/api/apps` with
    `Idempotency-Key: sdkwork-app-register:<environment>:<slug>` **and**
@@ -155,6 +191,10 @@ node sdkwork-specs/tools/register-applications.mjs \
 # One application, with an explicit anchor
 node sdkwork-specs/tools/register-applications.mjs \
   --environment development --only sdkwork-im --anchor-map anchors.json
+
+# Also register server-only roots (skipped by default, with a recorded reason)
+node sdkwork-specs/tools/register-applications.mjs \
+  --environment development --include-servers-only
 ```
 
 Required environment when not running `--dry-run`/`--inventory` (every missing
@@ -184,7 +224,9 @@ provision/enable routes, so the client authenticates it as follows:
 
 Exit codes: `0` every selected item created or reused and the hand-off succeeded,
 `1` at least one failure (count reported), `2` unusable configuration, `3` no
-application matched the selection.
+application matched the selection. A `skipped` item is neither a success nor a
+failure: it is counted in `counts.skipped` and carries `skipKind`/`skipReason`, so
+a server-only root never looks registered and never hides behind an invalid item.
 
 ## Selection scope
 
@@ -219,8 +261,9 @@ over the others.
 - Items are registered with bounded concurrency (`--concurrency`, default 2,
   1..8); a full workspace is 80+ applications and the backend rate limiter trips
   when they are fired at once. Results keep the plan order.
-- Every item ends as `created`, `reused`, or `failed`; a failed item carries a
-  diagnostic naming the route, the status, and the variable to fix.
+- Every item ends as `created`, `reused`, `failed`, or `skipped`; a failed item
+  carries a diagnostic naming the route, the status, and the variable to fix, and
+  a skipped item carries the reason it was skipped.
 - Writing an unchanged anchor leaves the env file byte-identical, so a repeated
   run produces no diff.
 
@@ -237,11 +280,15 @@ created and the reused deploy response, refusal of a response whose
 `deployApplicationId` is missing or not decimal, deterministic idempotency keys
 (including a framework known-vector for the provisioning key), anchor conflict
 refusal, unverified binding refusal, dry-run isolation, env-file write
-idempotency, the inventory scan and its domain sources, one installation across
-two lifecycles with one row each, the environment row being written before
-enable, plan-time refusal of a missing/duplicate/invalid domain, `--primary-domain`
-placeholder expansion, per-installation row deduplication, `Retry-After`-aware
-retry, and the dual-token-credential failure path.
+idempotency, the inventory scan and its domain sources, the four
+`permissionScopeRequirement` classifications (materialized carrier, declared
+scope, missing client env configuration, server-only, including the `format: none`
+and profile-carrier cases), the `serversOnly` skip with its recorded reason,
+`--include-servers-only`, one installation across two lifecycles with one row
+each, the environment row being written before enable, plan-time refusal of a
+missing/duplicate/invalid domain, `--primary-domain` placeholder expansion,
+per-installation row deduplication, `Retry-After`-aware retry, and the
+dual-token-credential failure path.
 
 ## Known contract gaps
 
