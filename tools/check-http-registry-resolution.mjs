@@ -171,10 +171,6 @@ const IDENTITY_BASELINE = new Map([
     'image provider uses a process API key; thread the caller pair to the provider boundary and keep the key only for the background poller',
   ],
   [
-    'sdkwork-knowledgebase/crates/sdkwork-knowledgebase-agent-provider/src/cloud_router.rs',
-    'user chat turn uses the process cloudrouter key; build the client per turn from the caller pair and keep the key on the embedding path',
-  ],
-  [
     'sdkwork-voice/crates/sdkwork-voice-embedded-bootstrap/src/bootstrap.rs',
     'voice speech generation uses a process API key; carry the caller pair once the route is wired',
   ],
