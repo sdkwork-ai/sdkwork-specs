@@ -96,9 +96,11 @@ Retired: using the OAuth client id as the token `app_id`, and using an `iam_*` t
 
 | Concept | Owner prefix |
 | --- | --- |
-| deploy application, anchor relation, build recipe | `deploy_` |
+| deploy application, anchor relation, scaffold, build recipe | `deploy_` |
 | installation, client credential | `iam_` |
-| product application, version (including its identity slice), SKU, listing, price, scaffold | `appstore_` |
+| product application, version (including its identity slice), SKU, listing, price | `appstore_` |
+
+The scaffold family is owned by the module that owns the deploy application. Exactly one scaffold family `MUST` exist in the platform; a second scaffold in another module `MUST NOT` be introduced.
 
 - A new prefix `MUST` be registered in `tools/database-module-registry.json` before first use; borrowing a prefix that belongs to another module `MUST NOT` be used as a shortcut.
 
@@ -120,6 +122,7 @@ This standard supersedes the following behaviours once a consumer migrates:
 - `iam_application_template` / `iam_application_template_package` acting as a third application definition beside the product and the installation.
 - `deploy_app_template` / `deploy_app_template_version` / `deploy_app_template_category` acting as a second commerce authority beside the product listing and its price.
 - `deploy_build_template` being read as an application template; it is a build recipe (toolchain, commands, artifact outputs, quality gates).
+- `appstore_app_template` / `appstore_app_template_version` / `appstore_app_template_usage` acting as a second scaffold beside the deploy-owned scaffold.
 - A free-form JSON document (for example a deployment application's `metadata`) acting as the authority for cross-system application links.
 - Display-name or slug matching used to resolve one module's application to another's.
 - Commerce price fields held in more than one module.
