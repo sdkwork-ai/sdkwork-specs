@@ -28,7 +28,7 @@ const DEFAULT_RELEASE_ENVIRONMENTS = ['test', 'staging', 'demo', 'production'];
 const PROFILE_PATTERN = /^(?:standalone|cloud)\.(development|test|staging|demo|production)$/u;
 
 function parseArgs(argv) {
-  const options = { root: process.cwd(), profiles: [], json: false, allowNoSurfaces: false };
+  const options = { root: process.cwd(), profiles: [], json: false, allowNoSurfaces: false, requireAnchor: false };
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (token === '--json') {
@@ -37,6 +37,12 @@ function parseArgs(argv) {
     }
     if (token === '--allow-no-surfaces') {
       options.allowNoSurfaces = true;
+      continue;
+    }
+    // Packaging passes this so a missing anchor is a release failure; a source
+    // checkout has no anchor yet, so the check reports it and skips.
+    if (token === '--require-anchor') {
+      options.requireAnchor = true;
       continue;
     }
     if (token === '--root') {
@@ -111,7 +117,7 @@ function readSurfaces(root) {
 
 export function checkReleaseAccessTokenEnv(
   rootDir,
-  { environments = DEFAULT_RELEASE_ENVIRONMENTS, allowNoSurfaces = false, env = process.env } = {},
+  { environments = DEFAULT_RELEASE_ENVIRONMENTS, allowNoSurfaces = false, requireAnchor = false, env = process.env } = {},
 ) {
   const root = path.resolve(rootDir);
   const deploymentPath = path.join(root, 'etc', 'sdkwork.deployment.config.json');
@@ -130,6 +136,7 @@ export function checkReleaseAccessTokenEnv(
   });
   const surfaces = readSurfaces(root);
   const checked = [];
+  const skippedSurfaces = [];
   const failures = [];
 
   if (!surfaces || surfaces.length === 0) {
@@ -176,10 +183,15 @@ export function checkReleaseAccessTokenEnv(
         expectedAppId = resolveApplicationAccessTokenAppId(surface.accessToken, env).appId;
       } catch (error) {
         if (isMissingAppIdEnvironmentError(error)) {
-          failures.push({
+          const entry = {
             profileId: surface.id,
             reason: `${error.envName} is required to verify this release surface's public application token`,
-          });
+          };
+          if (requireAnchor) {
+            failures.push(entry);
+          } else {
+            skippedSurfaces.push(entry);
+          }
           continue;
         }
         failures.push({
@@ -225,13 +237,13 @@ export function checkReleaseAccessTokenEnv(
     }
   }
 
-  if (checked.length === 0 && failures.length === 0) {
+  if (checked.length === 0 && failures.length === 0 && skippedSurfaces.length === 0) {
     failures.push({
       profileId: '<matrix>',
       reason: `no client surface covers ${environments.join(', ')}`,
     });
   }
-  return { root, checked, failures };
+  return { root, checked, skippedSurfaces, failures };
 }
 
 function main() {
@@ -242,12 +254,16 @@ function main() {
   const result = checkReleaseAccessTokenEnv(options.root, {
     environments,
     allowNoSurfaces: options.allowNoSurfaces,
+    requireAnchor: options.requireAnchor,
   });
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
   } else {
     if (result.failures.length === 0) {
       console.log(`release access-token preflight passed: ${result.checked.length} surface/profile pair(s)`);
+      for (const skip of result.skippedSurfaces ?? []) {
+        console.log(`  - skipped ${skip.profileId}: ${skip.reason}`);
+      }
     } else {
       console.error('release access-token preflight failed:');
       for (const failure of result.failures) {
