@@ -163,10 +163,6 @@ const IDENTITY_BASELINE = new Map([
     'device speech turn uses the process cloudrouter key; carry the device session identity (tenant/organization/user) in SpeechTurnInput and apply the caller pair',
   ],
   [
-    'sdkwork-course/crates/sdkwork-course-embedded-bootstrap/src/adapters/drive_sdk.rs',
-    'drive app-api call sets only a process SDKWORK_ACCESS_TOKEN (no Authorization); add the caller pair to CourseServiceContext and drop the env requirement',
-  ],
-  [
     'sdkwork-deployments/crates/sdkwork-deploy-web-port/src/lib.rs',
     'deployment web port uses a process API key; decide caller identity vs declared service identity and declare it explicitly',
   ],
@@ -177,10 +173,6 @@ const IDENTITY_BASELINE = new Map([
   [
     'sdkwork-knowledgebase/crates/sdkwork-knowledgebase-agent-provider/src/cloud_router.rs',
     'user chat turn uses the process cloudrouter key; build the client per turn from the caller pair and keep the key on the embedding path',
-  ],
-  [
-    'sdkwork-notes/crates/sdkwork-api-notes-assembly/src/service/drive_http_adapter.rs',
-    'drive app-api call sets only a process SDKWORK_ACCESS_TOKEN (no Authorization); thread CallerCredentials from the notes write handler and build the client per call',
   ],
   [
     'sdkwork-voice/crates/sdkwork-voice-embedded-bootstrap/src/bootstrap.rs',
