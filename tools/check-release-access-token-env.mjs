@@ -28,6 +28,8 @@ import {
   decodeApplicationAccessToken,
   isApplicationAccessTokenPendingAppId,
   isMissingAppIdEnvironmentError,
+  resolveApplicationOwnershipScope,
+  resolveApplicationOwnerUserId,
   surfaceApplicationTokenEnvName,
 } from './app-access-token.mjs';
 import {
@@ -206,6 +208,26 @@ export function checkReleaseAccessTokenEnv(
     const usesAnchor = surface.accessToken
       && typeof surface.accessToken === 'object'
       && !Array.isArray(surface.accessToken);
+    // The release scope is resolved the way the materializer resolves it
+    // (`SDKWORK_APPLICATION_OWNERSHIP_SCOPE`, then `accessToken.ownershipScope`,
+    // then `TENANT`), so a packaged token must carry the installation's scope
+    // (`APP_ACCESS_TOKEN_SPEC.md` §3.2.1).
+    let ownershipScope;
+    let ownerUserId = '';
+    if (usesAnchor) {
+      try {
+        ({ ownershipScope } = resolveApplicationOwnershipScope(surface.accessToken, env));
+        if (ownershipScope === 'USER') {
+          ({ userId: ownerUserId } = resolveApplicationOwnerUserId(surface.accessToken, env));
+        }
+      } catch (error) {
+        failures.push({
+          profileId: surfaceId,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
+    }
     // A legacy surface without an `accessToken` input has no deployment anchor;
     // its manifest identity is compared instead.
     const manifestAppId = manifest?.backend?.appId ?? manifest?.app?.key;
@@ -294,6 +316,14 @@ export function checkReleaseAccessTokenEnv(
           environment,
           deploymentProfile,
           ...(appId ? { appId } : {}),
+          // The materializer derives `organization_id` from the surface
+          // declaration, so the release gate compares the same value instead of
+          // assuming a tenant-level (0) token.
+          ...(usesAnchor
+            ? { organizationId: String(surface.accessToken.organizationId ?? '0').trim() }
+            : {}),
+          ...(ownershipScope ? { ownershipScope } : {}),
+          ...(ownerUserId ? { ownerUserId } : {}),
         });
         checked.push(`${surfaceId}/${profileId}`);
       } catch (error) {

@@ -18,6 +18,7 @@ import {
   createApplicationAccessToken,
   PUBLIC_APP_ACCESS_TOKEN_KEY,
   resolveApplicationAccessTokenAppId,
+  resolveApplicationAccessTokenScope,
   resolveApplicationAccessTokenEnvName,
   surfaceApplicationTokenEnvName,
 } from './app-access-token.mjs';
@@ -576,6 +577,44 @@ function identityValues(surface, profile) {
   return values;
 }
 
+/**
+ * Build one surface's public application access token for a profile.
+ *
+ * The deployment anchor resolves the app id, and the release scope resolves the
+ * `ownership_scope` claim (process environment
+ * `SDKWORK_APPLICATION_OWNERSHIP_SCOPE`, then `accessToken.ownershipScope`, then
+ * `TENANT`). A `USER` surface additionally requires its owner user id
+ * (`SDKWORK_APPLICATION_OWNER_USER_ID` or `accessToken.ownerUserId`), so a
+ * personal installation never emits a token IAM would reject for carrying no
+ * user (`APP_ACCESS_TOKEN_SPEC.md` §3.2.1,
+ * `APPLICATION_IDENTITY_SPEC.md` §4.1).
+ * @param surface - declared client surface
+ * @param profile - deployment profile and environment
+ * @param env - process environment bag
+ * @param sourceValues - resolved deployment profile values, for the anchor
+ * @returns the JWT compact serialization
+ */
+function createSurfaceApplicationAccessToken(surface, profile, env, sourceValues) {
+  const spec = surface.accessToken;
+  const { appId } = resolveApplicationAccessTokenAppId(
+    spec,
+    surfaceAnchorEnvironment(surface, env, sourceValues),
+  );
+  const { ownershipScope, userId } = resolveApplicationAccessTokenScope(spec, env);
+  return createApplicationAccessToken({
+    appId,
+    tenantId: String(spec.tenantId ?? '100001').trim(),
+    organizationId: String(spec.organizationId ?? '0').trim(),
+    accessScope: spec.scope,
+    environment: profile.environment,
+    deploymentProfile: profile.deploymentProfile,
+    runtimeTarget: surface.runtimeTarget,
+    permissionScope: spec.permissionScope,
+    ownershipScope,
+    userId,
+  });
+}
+
 function applicationAccessTokenValues(surface, profile, env = process.env, sourceValues = {}) {
   const spec = surface.accessToken;
   if (!spec || typeof spec !== 'object') {
@@ -586,21 +625,13 @@ function applicationAccessTokenValues(surface, profile, env = process.env, sourc
   // compiled-in app id (`APP_ACCESS_TOKEN_SPEC.md` §3.1.1). A surface that owns
   // its own deployment anchor records it under the surface-scoped variable, so
   // `surfaceAnchorEnvironment` resolves that one first.
-  const { appId } = resolveApplicationAccessTokenAppId(
-    spec,
-    surfaceAnchorEnvironment(surface, env, sourceValues),
-  );
   return {
-    [PUBLIC_APP_ACCESS_TOKEN_KEY]: createApplicationAccessToken({
-      appId,
-      tenantId: String(spec.tenantId ?? '100001').trim(),
-      organizationId: String(spec.organizationId ?? '0').trim(),
-      accessScope: spec.scope,
-      environment: profile.environment,
-      deploymentProfile: profile.deploymentProfile,
-      runtimeTarget: surface.runtimeTarget,
-      permissionScope: spec.permissionScope,
-    }),
+    [PUBLIC_APP_ACCESS_TOKEN_KEY]: createSurfaceApplicationAccessToken(
+      surface,
+      profile,
+      env,
+      sourceValues,
+    ),
   };
 }
 
@@ -893,21 +924,16 @@ export function materializeClientEnv({
             `${surface.id} must declare accessToken.appIdEnv (a deployment anchor env var) or accessToken.appId.`,
           );
         }
-        const appId = resolveSurfaceAccessTokenAppId(surface, env, sourceProfile.values);
         existing.environment = sourceProfile.profile.environment;
         existing.deploymentProfile = sourceProfile.profile.deploymentProfile;
         existing.profileId = profileId;
         existing.runtimeTarget = surface.runtimeTarget;
-        existing[PUBLIC_APP_ACCESS_TOKEN_KEY] = createApplicationAccessToken({
-          appId,
-          tenantId: String(spec.tenantId ?? '100001').trim(),
-          organizationId: String(spec.organizationId ?? '0').trim(),
-          accessScope: spec.scope,
-          environment: sourceProfile.profile.environment,
-          deploymentProfile: sourceProfile.profile.deploymentProfile,
-          runtimeTarget: surface.runtimeTarget,
-          permissionScope: spec.permissionScope,
-        });
+        existing[PUBLIC_APP_ACCESS_TOKEN_KEY] = createSurfaceApplicationAccessToken(
+          surface,
+          sourceProfile.profile,
+          env,
+          sourceProfile.values,
+        );
         const content = `${JSON.stringify(existing, null, 2)}\n`;
         if (check) {
           const actual = readFileSync(outputPath, 'utf8');

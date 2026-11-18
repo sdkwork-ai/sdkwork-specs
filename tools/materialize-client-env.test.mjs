@@ -695,3 +695,221 @@ test('only env-sourced surfaces get a per-surface anchor variable', () => {
     'the inline placeholder form is an equivalent env source',
   );
 });
+
+const LANGUAGE_ANCHOR_ENV = 'SDKWORK_DEPLOY_APPLICATION_ID';
+
+const LANGUAGE_PROFILE_FILES = {
+  vite: 'apps/pc/.env.standalone.development',
+  flutter: 'apps/flutter/env/sdkwork.standalone.development.json',
+  'mini-program': 'apps/mp/config/mini-program/runtime-env.standalone.development.json',
+  'harmony-native': 'apps/harmony/config/app/runtime-env.standalone.development.json',
+};
+
+function createLanguageMatrixRoot(accessToken = {}) {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-client-env-languages-'));
+  writeFixture(root, 'etc/sdkwork.deployment.config.json', JSON.stringify({
+    profiles: {
+      'standalone.development': { config: 'topology/standalone.development.env' },
+    },
+  }, null, 2));
+  writeFixture(root, 'etc/topology/standalone.development.env', [
+    'SDKWORK_IM_DEPLOYMENT_PROFILE=standalone',
+    'SDKWORK_IM_ENVIRONMENT=development',
+    'SDKWORK_IM_PROFILE_ID=standalone.development',
+    `${LANGUAGE_ANCHOR_ENV}=9001`,
+    '',
+  ].join('\n'));
+  const surface = (id, rootPath, format, runtimeTarget) => ({
+    id,
+    root: rootPath,
+    format,
+    runtimeTarget,
+    accessToken: {
+      appIdEnv: LANGUAGE_ANCHOR_ENV,
+      tenantId: '100001',
+      organizationId: '0',
+      permissionScope: ['iam:self'],
+      ...accessToken,
+    },
+  });
+  writeFixture(root, 'etc/client-env.materialization.json', JSON.stringify({
+    schemaVersion: 1,
+    kind: 'sdkwork.client-env-materialization',
+    command: 'materialize',
+    profiles: ['standalone.development'],
+    sourceIdentity: {
+      deploymentProfileKeys: ['SDKWORK_IM_DEPLOYMENT_PROFILE'],
+      environmentKeys: ['SDKWORK_IM_ENVIRONMENT'],
+      profileIdKeys: ['SDKWORK_IM_PROFILE_ID'],
+    },
+    surfaces: [
+      surface('demo-pc', 'apps/pc', 'vite', 'browser'),
+      surface('demo-flutter', 'apps/flutter', 'flutter', 'flutter-android'),
+      surface('demo-mp', 'apps/mp', 'mini-program', 'mini-program'),
+      surface('demo-harmony', 'apps/harmony', 'harmony-native', 'harmony-native'),
+    ],
+  }, null, 2));
+  // Harmony runtime config is a hand-authored template the materializer edits
+  // in place; it must exist before the first run.
+  writeFixture(
+    root,
+    LANGUAGE_PROFILE_FILES['harmony-native'],
+    JSON.stringify({ app: { name: 'demo' } }, null, 2),
+  );
+  return root;
+}
+
+function readLanguageToken(root, format) {
+  const filePath = path.join(root, LANGUAGE_PROFILE_FILES[format]);
+  const text = readFileSync(filePath, 'utf8');
+  const token = format === 'vite'
+    ? parseClientEnvDotenv(text).SDKWORK_ACCESS_TOKEN
+    : JSON.parse(text).SDKWORK_ACCESS_TOKEN;
+  return decodeApplicationAccessToken(token);
+}
+
+function assertEveryLanguageCarries(root, expected) {
+  for (const format of Object.keys(LANGUAGE_PROFILE_FILES)) {
+    const { payload } = readLanguageToken(root, format);
+    assert.equal(payload.ownership_scope, expected.ownershipScope, `${format} ownership_scope`);
+    assert.equal(payload.user_id, expected.userId, `${format} user_id`);
+    assert.equal(payload.organization_id, expected.organizationId, `${format} organization_id`);
+  }
+}
+
+test('the release scope reaches every language form', () => {
+  const root = createLanguageMatrixRoot({ ownershipScope: 'USER', ownerUserId: 'user-42' });
+  try {
+    materializeClientEnv({
+      rootDir: root,
+      env: { [LANGUAGE_ANCHOR_ENV]: '9001' },
+    });
+    assertEveryLanguageCarries(root, {
+      ownershipScope: 'USER',
+      userId: 'user-42',
+      organizationId: '0',
+    });
+    // The harmony template keeps its authored shape and receives the same token.
+    const harmony = JSON.parse(readFileSync(
+      path.join(root, LANGUAGE_PROFILE_FILES['harmony-native']),
+      'utf8',
+    ));
+    assert.equal(harmony.app.name, 'demo');
+    assert.equal(harmony.profileId, 'standalone.development');
+    assert.equal(harmony.SDKWORK_ACCESS_TOKEN.split('.').length, 3);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('the process environment overrides a declared release scope', () => {
+  const root = createLanguageMatrixRoot({ ownershipScope: 'TENANT' });
+  try {
+    materializeClientEnv({
+      rootDir: root,
+      env: {
+        [LANGUAGE_ANCHOR_ENV]: '9001',
+        SDKWORK_APPLICATION_OWNERSHIP_SCOPE: 'USER',
+        SDKWORK_APPLICATION_OWNER_USER_ID: 'user-9',
+      },
+    });
+    assertEveryLanguageCarries(root, {
+      ownershipScope: 'USER',
+      userId: 'user-9',
+      organizationId: '0',
+    });
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('a surface without a declaration or override defaults to TENANT', () => {
+  const values = createClientSurfaceValues({
+    surface: accessTokenSurface({ appId: 'demo-app' }),
+    sourceValues: {},
+    profile: CLOUD_PRODUCTION_PROFILE,
+    env: {},
+  });
+  const { payload } = decodeApplicationAccessToken(values.SDKWORK_ACCESS_TOKEN);
+  assert.equal(payload.ownership_scope, 'TENANT');
+  assert.equal(payload.user_id, '0');
+});
+
+test('an organization surface stamps its organization claim', () => {
+  const values = createClientSurfaceValues({
+    surface: {
+      id: 'demo-org',
+      format: 'vite',
+      runtimeTarget: 'browser',
+      accessToken: {
+        appId: 'demo-app',
+        tenantId: '100001',
+        organizationId: '42',
+        ownershipScope: 'ORGANIZATION',
+        permissionScope: ['iam:self'],
+      },
+    },
+    sourceValues: {},
+    profile: CLOUD_PRODUCTION_PROFILE,
+    env: {},
+  });
+  const { payload } = decodeApplicationAccessToken(values.SDKWORK_ACCESS_TOKEN);
+  assert.equal(payload.ownership_scope, 'ORGANIZATION');
+  assert.equal(payload.organization_id, '42');
+  assert.equal(payload.login_scope, 'ORGANIZATION');
+});
+
+test('a USER surface fails naming the missing owner user id source', () => {
+  const surface = {
+    id: 'demo-user',
+    format: 'vite',
+    runtimeTarget: 'browser',
+    accessToken: {
+      appId: 'demo-app',
+      tenantId: '100001',
+      organizationId: '0',
+      ownershipScope: 'USER',
+      permissionScope: ['iam:self'],
+    },
+  };
+  assert.throws(
+    () => createClientSurfaceValues({
+      surface,
+      sourceValues: {},
+      profile: CLOUD_PRODUCTION_PROFILE,
+      env: {},
+    }),
+    /ownership_scope=USER requires the owner user id.*accessToken\.ownerUserId.*SDKWORK_APPLICATION_OWNER_USER_ID/u,
+  );
+  assert.throws(
+    () => createClientSurfaceValues({
+      surface,
+      sourceValues: {},
+      profile: CLOUD_PRODUCTION_PROFILE,
+      env: { SDKWORK_APPLICATION_OWNER_USER_ID: '0' },
+    }),
+    /SDKWORK_APPLICATION_OWNER_USER_ID must not be the tenant sentinel 0/u,
+  );
+});
+
+test('an ORGANIZATION surface without a non-zero organization fails generation', () => {
+  assert.throws(
+    () => createClientSurfaceValues({
+      surface: {
+        id: 'demo-org',
+        format: 'vite',
+        runtimeTarget: 'browser',
+        accessToken: {
+          appId: 'demo-app',
+          tenantId: '100001',
+          organizationId: '0',
+          ownershipScope: 'ORGANIZATION',
+        },
+      },
+      sourceValues: {},
+      profile: CLOUD_PRODUCTION_PROFILE,
+      env: {},
+    }),
+    /ownership_scope=ORGANIZATION requires a non-zero organization_id/u,
+  );
+});

@@ -96,14 +96,15 @@ Required claims:
 | `aud` | the deployment application anchor, or the root manifest `backend.appId` when the app id is repository-owned (§3.1.1) |
 | `app_id` | the deployment application anchor, or the root manifest `backend.appId` when the app id is repository-owned (§3.1.1) |
 | `tenant_id` | the root manifest `backend.tenantId` |
-| `organization_id` | the root manifest `backend.organizationId` |
-| `login_scope` | `TENANT` when organization is `0`, otherwise `ORGANIZATION` |
+| `organization_id` | the root manifest `backend.organizationId`, subject to §3.2.1 (`0` unless the installation is `ORGANIZATION`) |
+| `login_scope` | `TENANT` when `organization_id` is `0`, otherwise `ORGANIZATION` |
+| `ownership_scope` | the installation's release scope: `TENANT` (default), `ORGANIZATION`, or `USER` (§3.2.1) |
 | `environment` | the profile environment (`development`, `test`, `staging`, `demo`, `production`) |
 | `deployment_profile` | `standalone` or `cloud` |
 | `deployment_mode` | `private` for standalone, `saas` for cloud |
 | `runtime_target` | the surface runtime target |
 | `session_id` | `bootstrap-public-<app_id>-<profile-id>` |
-| `user_id` | `0` |
+| `user_id` | `0` for `TENANT`/`ORGANIZATION`; the installation owner's user id for `USER` (§3.2.1) |
 | `permission_scope` | `["iam:self"]` |
 | `iat` | fixed generation instant |
 | `exp` | far-future rotation deadline |
@@ -111,7 +112,13 @@ Required claims:
 Rules:
 
 - The token `MUST NOT` carry a live user id, user handle, email, phone, or
-  tenant selection supplied by a client.
+  tenant selection supplied by a client. The only user identity a token may
+  carry is the installation owner's `user_id` for a `USER` release (§3.2.1),
+  and it is resolved at materialization, never supplied by a request.
+- The token `MUST` carry `ownership_scope` with the installation's release
+  scope. The vocabulary, the `TENANT` default, and the immutability rule are
+  owned by `APPLICATION_IDENTITY_SPEC.md` §4.1; §3.2.1 fixes the generation
+  rules. IAM rejects a token whose claim does not match the installation.
 - `alg:none` is allowed **only** for `token_class: application`; session and
   operator credentials `MUST` remain signed per `IAM_SPEC.md`.
 - The generator `MUST` be deterministic: the same app, profile, manifest
@@ -247,6 +254,10 @@ The token scope is explicit and is derived from `organization_id`:
 | Tenant-level | `0` | `TENANT` | the application token can resolve tenant-wide operations for its `tenant_id` |
 | Organization-level | non-zero | `ORGANIZATION` | the same token is bound to one organization inside the tenant |
 
+The organization context above is not the installation's release scope: a `USER` release is
+tenant-level in organization terms (`organization_id = 0`, `login_scope = TENANT`) and is
+identified only by its `ownership_scope` claim (§3.2.1).
+
 Rules:
 
 - The generator `MUST` derive `login_scope` from `organization_id`; it `MUST NOT`
@@ -282,14 +293,84 @@ node <sdkwork-specs>/tools/app-access-token.mjs generate \
   --runtime-target browser
 ```
 
+### 3.2.1 Release Scope Claim And Ownership Claims
+
+One source tree produces different deployments, and the release scope is what tells them apart.
+Every application access token `MUST` carry the scope of the installation it serves. The
+vocabulary, the `TENANT` default, and the immutability rule are owned by
+`APPLICATION_IDENTITY_SPEC.md` §4.1; this section fixes how `tools/app-access-token.mjs` and
+`tools/materialize-client-env.mjs` stamp it.
+
+| Release scope | `ownership_scope` | `organization_id` | `user_id` | `login_scope` |
+| --- | --- | --- | --- | --- |
+| Tenant (default) | `TENANT` | `0` | `0` | `TENANT` |
+| Organization | `ORGANIZATION` | the installation's non-zero organization id | `0` | `ORGANIZATION` |
+| Personal | `USER` | `0` | the installation owner's user id | `TENANT` |
+
+Generation rules:
+
+- The value resolves, highest precedence first:
+  1. the process environment variable `SDKWORK_APPLICATION_OWNERSHIP_SCOPE`;
+  2. the materialization surface declaration `accessToken.ownershipScope` in
+     `etc/client-env.materialization.json`;
+  3. the default `TENANT`.
+
+  A deployment-provided value outranks the committed declaration because the scope belongs to
+  the installation, not to the repository (`APPLICATION_IDENTITY_SPEC.md` §4.1 rule 3).
+- `ORGANIZATION` `MUST` carry a non-zero `organization_id`; `TENANT` and `USER` `MUST` carry `0`,
+  because a personal release is tenant-level in organization terms and only `ownership_scope`
+  distinguishes it from a tenant release (rule 7). A contradiction fails materialization and
+  names the claim.
+- `USER` `MUST` carry its owner in the existing `user_id` claim. The owner resolves from the
+  process environment variable `SDKWORK_APPLICATION_OWNER_USER_ID`, then the surface declaration
+  `accessToken.ownerUserId`. When neither supplies a non-zero value, generation fails and names
+  both the claim and the missing source; a synthetic id (`0`) is never substituted.
+- The claim reaches every language form the materializer serves (vite, Flutter, mini program,
+  Harmony native), because all of them are produced by the same token builder.
+- An unknown value `MUST` fail generation and decoding instead of being mapped to the default.
+  A token whose claim contradicts its `organization_id`, or a `USER` token without a non-zero
+  `user_id`, is rejected on decode before any identity comparison.
+
+Validation rules:
+
+- `check-app-access-token-env.mjs` and `check-release-access-token-env.mjs` resolve the expected
+  scope exactly as the materializer does (environment, declaration, default) and compare it with
+  the committed token's claim.
+- An absent claim is the legacy derivation: `TENANT` when `organization_id` is `0`, otherwise
+  `ORGANIZATION`, never `USER`. It is accepted only for an expected `TENANT` surface. An
+  `ORGANIZATION` or `USER` surface requires the explicit claim and fails with
+  `missing claim ownership_scope=<scope>`; a `USER` token must also carry a non-zero `user_id`,
+  and the owner is compared whenever one is resolvable.
+- `assertApplicationAccessToken(token, expected)` accepts `ownershipScope` and `ownerUserId`, so
+  an application gate can assert both claims against its own declaration.
+
+```bash
+# organization-scoped installation
+node <sdkwork-specs>/tools/app-access-token.mjs generate \
+  --app-id sdkwork-im-pc --tenant-id 100001 --organization-id 42 \
+  --ownership-scope ORGANIZATION --environment production \
+  --deployment-profile cloud --runtime-target browser
+
+# personal installation (the owner is the installation's user_id)
+node <sdkwork-specs>/tools/app-access-token.mjs generate \
+  --app-id sdkwork-im-pc --tenant-id 100001 --organization-id 0 \
+  --ownership-scope USER --user-id <owner-user-id> --environment production \
+  --deployment-profile cloud --runtime-target browser
+```
+
+Without `--ownership-scope`, the command keeps the legacy derivation from `--organization-id`
+(`0` = `TENANT`, non-zero = `ORGANIZATION`, never `USER`); that is why an organization-level
+direct generation still names the organization id.
+
 ## 4. Start And Build Gate
 
 - `dev`, `start`, `serve`, `build`, `package`, and `dist` `MUST` validate the
   selected profile file before spawning the runtime, compiler, or renderer.
 - The validation `MUST` check: file exists, key present, value parses as a
   three-part JWT, and `app_id`, `tenant_id`, `organization_id`,
-  `environment`, `deployment_profile`, and `runtime_target` match the selected
-  root and profile.
+  `ownership_scope`, `environment`, `deployment_profile`, and `runtime_target`
+  match the selected root and profile. An absent `ownership_scope` is the
+  legacy derivation and is accepted only for a `TENANT` surface (§3.2.1).
 - A failure `MUST` be non-zero and name the failing app root, profile file,
   profile id, and the repair command
   `node <sdkwork-specs>/tools/materialize-client-env.mjs --root <repository>`.
@@ -369,6 +450,8 @@ node <sdkwork-specs>/tools/adopt-app-access-token-files.mjs --workspace <workspa
 - [ ] Every manifest-bearing `apps/*` root has all ten profile files.
 - [ ] Every profile file carries exactly one non-empty `SDKWORK_ACCESS_TOKEN`.
 - [ ] Every token matches its manifest identity and profile claims.
+- [ ] Every token carries the installation's `ownership_scope`; `ORGANIZATION` names a non-zero
+  organization and `USER` carries its owner's `user_id`.
 - [ ] No session, auth, refresh, API-key, OAuth, or signing secret is committed.
 - [ ] `dev`, `start`, and `build` fail closed when the selected token is absent.
 - [ ] Generated files are deterministic and reviewed as a normal diff.

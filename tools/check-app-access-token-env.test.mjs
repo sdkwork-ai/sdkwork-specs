@@ -55,16 +55,29 @@ function createToken(appId, {
   environment = 'development',
   deploymentProfile = 'standalone',
   runtimeTarget = 'browser',
+  organizationId = '0',
+  ownershipScope,
+  userId,
 } = {}) {
   return createApplicationAccessToken({
     appId,
     tenantId: '100001',
-    organizationId: '0',
+    organizationId,
     environment,
     deploymentProfile,
     runtimeTarget,
     permissionScope: ['iam:self'],
+    ...(ownershipScope ? { ownershipScope } : {}),
+    ...(userId ? { userId } : {}),
   });
+}
+
+function withoutOwnershipScope(token) {
+  const [header, payload, signature] = token.split('.');
+  const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+  delete claims.ownership_scope;
+  const encoded = Buffer.from(JSON.stringify(claims), 'utf8').toString('base64url');
+  return `${header}.${encoded}.${signature}`;
 }
 
 function viteSurface(id, rootPath, appIdEnv = ANCHOR_ENV) {
@@ -393,6 +406,129 @@ test('--require-anchor fails when no layer carries the anchor', () => {
       }),
       /SDKWORK_DEPLOY_APPLICATION_ID_DEMO_PC \(or SDKWORK_DEPLOY_APPLICATION_ID\) is required/u,
     );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('a USER surface verifies the personal release claim and its owner', () => {
+  const surface = {
+    ...viteSurface('demo-pc', 'apps/pc'),
+    accessToken: {
+      appIdEnv: ANCHOR_ENV,
+      ownershipScope: 'USER',
+      ownerUserId: 'user-7',
+    },
+  };
+  const root = createSurfaceRoot({
+    surfaces: [surface],
+    files: {
+      'apps/pc/.env.standalone.development':
+        `SDKWORK_ACCESS_TOKEN=${createToken('app-pc', { ownershipScope: 'USER', userId: 'user-7' })}\n`,
+    },
+  });
+  try {
+    const result = checkAppAccessTokenEnv({
+      root,
+      profileId: 'standalone.development',
+      env: { [ANCHOR_ENV]: 'app-pc' },
+    });
+    assert.equal(result.checked, 1);
+    assert.equal(result.skipped, undefined);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('a tenant token fails a USER surface that requires the personal claim', () => {
+  const surface = {
+    ...viteSurface('demo-pc', 'apps/pc'),
+    accessToken: {
+      appIdEnv: ANCHOR_ENV,
+      ownershipScope: 'USER',
+      ownerUserId: 'user-7',
+    },
+  };
+  const root = createSurfaceRoot({
+    surfaces: [surface],
+    files: {
+      'apps/pc/.env.standalone.development':
+        `SDKWORK_ACCESS_TOKEN=${createToken('app-pc', { ownershipScope: 'TENANT' })}\n`,
+    },
+  });
+  try {
+    assert.throws(
+      () => checkAppAccessTokenEnv({
+        root,
+        profileId: 'standalone.development',
+        env: { [ANCHOR_ENV]: 'app-pc' },
+      }),
+      /claim ownership_scope=TENANT does not match USER/u,
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('an ORGANIZATION surface requires the explicit claim', () => {
+  const surface = {
+    ...viteSurface('demo-pc', 'apps/pc'),
+    accessToken: {
+      appIdEnv: ANCHOR_ENV,
+      organizationId: '42',
+      ownershipScope: 'ORGANIZATION',
+    },
+  };
+  const token = createToken('app-pc', { ownershipScope: 'ORGANIZATION', organizationId: '42' });
+  const root = createSurfaceRoot({
+    surfaces: [surface],
+    files: {
+      'apps/pc/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${token}\n`,
+    },
+  });
+  try {
+    const result = checkAppAccessTokenEnv({
+      root,
+      profileId: 'standalone.development',
+      env: { [ANCHOR_ENV]: 'app-pc' },
+    });
+    assert.equal(result.checked, 1);
+
+    // Same claims, but the legacy token omits the claim: only a TENANT surface
+    // may accept that derivation.
+    writeFixture(
+      root,
+      'apps/pc/.env.standalone.development',
+      `SDKWORK_ACCESS_TOKEN=${withoutOwnershipScope(token)}\n`,
+    );
+    assert.throws(
+      () => checkAppAccessTokenEnv({
+        root,
+        profileId: 'standalone.development',
+        env: { [ANCHOR_ENV]: 'app-pc' },
+      }),
+      /missing claim ownership_scope=ORGANIZATION; an absent claim is only valid for TENANT/u,
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('a legacy tenant token without the claim still verifies a TENANT surface', () => {
+  const root = createSurfaceRoot({
+    surfaces: [viteSurface('demo-pc', 'apps/pc')],
+    files: {
+      'apps/pc/.env.standalone.development':
+        `SDKWORK_ACCESS_TOKEN=${withoutOwnershipScope(createToken('app-pc'))}\n`,
+    },
+  });
+  try {
+    const result = checkAppAccessTokenEnv({
+      root,
+      profileId: 'standalone.development',
+      env: { [ANCHOR_ENV]: 'app-pc' },
+    });
+    assert.equal(result.checked, 1);
   } finally {
     rmSync(root, { force: true, recursive: true });
   }

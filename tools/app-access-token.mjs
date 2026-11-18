@@ -196,6 +196,172 @@ export function resolveApplicationAccessTokenAppId(accessTokenSpec = {}, env = p
   );
 }
 
+/**
+ * Release-scope claim carried by every public application access token.
+ *
+ * `APPLICATION_IDENTITY_SPEC.md` §4.1 owns the vocabulary, the default, and the
+ * immutable-installation rule; IAM stamps the same claim on every deployment
+ * credential. The public token `MUST` declare it: IAM compares it against the
+ * installation, and an absent claim can only derive `TENANT` or `ORGANIZATION`,
+ * never `USER`, so a personal installation rejects a token that omits it.
+ */
+export const PUBLIC_APP_ACCESS_TOKEN_OWNERSHIP_SCOPE_CLAIM = 'ownership_scope';
+export const APPLICATION_OWNERSHIP_SCOPES = Object.freeze(['TENANT', 'ORGANIZATION', 'USER']);
+export const DEFAULT_APPLICATION_OWNERSHIP_SCOPE = 'TENANT';
+
+/**
+ * Process environment variable that overrides the materialized release scope.
+ *
+ * The scope belongs to the installation, not to the repository: one source tree
+ * produces several deployments, so a deployment-provided value outranks the
+ * committed surface declaration (`APPLICATION_IDENTITY_SPEC.md` §4.1 rule 3).
+ */
+export const APPLICATION_OWNERSHIP_SCOPE_ENV = 'SDKWORK_APPLICATION_OWNERSHIP_SCOPE';
+
+/**
+ * Process environment variable naming the owner of a `USER`-scoped release.
+ *
+ * The claim it feeds is the existing `user_id`; it is read only when the
+ * resolved scope is `USER`, so a tenant or organization profile is never
+ * affected by this variable.
+ */
+export const APPLICATION_OWNER_USER_ID_ENV = 'SDKWORK_APPLICATION_OWNER_USER_ID';
+
+/**
+ * `accessToken` field declaring the release scope
+ * (`etc/client-env.materialization.json`).
+ */
+export const APP_ACCESS_TOKEN_OWNERSHIP_SCOPE_FIELD = 'ownershipScope';
+
+/**
+ * `accessToken` field declaring the owner user id of a `USER`-scoped release.
+ */
+export const APP_ACCESS_TOKEN_OWNER_USER_ID_FIELD = 'ownerUserId';
+
+/**
+ * Normalize and validate one release-scope value.
+ *
+ * The accepted spelling is the canonical upper-case vocabulary of
+ * `APPLICATION_IDENTITY_SPEC.md` §4.1; an unknown value fails closed instead of
+ * being mapped to the default, matching IAM's claim parser.
+ * @param value - declared or claimed scope.
+ * @param label - what the caller is validating, for the error message.
+ * @returns the canonical upper-case scope.
+ * @throws when the value is empty or not one of the three scopes.
+ */
+export function normalizeApplicationOwnershipScope(value, label = 'ownershipScope') {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  if (!normalized) {
+    throw new Error(`${label} is required; expected one of ${APPLICATION_OWNERSHIP_SCOPES.join(', ')}.`);
+  }
+  if (!APPLICATION_OWNERSHIP_SCOPES.includes(normalized)) {
+    throw new Error(
+      `${label}=${String(value)} is not a release scope; expected one of `
+      + `${APPLICATION_OWNERSHIP_SCOPES.join(', ')}.`,
+    );
+  }
+  return normalized;
+}
+
+/**
+ * Resolve a surface's declared release scope with deployment precedence.
+ *
+ * Precedence, highest first:
+ *   1. the process environment (`SDKWORK_APPLICATION_OWNERSHIP_SCOPE`) — the
+ *      installation that is being materialized owns the scope;
+ *   2. the materialization surface declaration
+ *      (`accessToken.ownershipScope`);
+ *   3. `TENANT`, the only default in `APPLICATION_IDENTITY_SPEC.md` §4.1.
+ * @param accessTokenSpec - materialization `accessToken` input object.
+ * @param env - environment bag to read the override from.
+ * @returns the resolved scope plus its source (`environment`, `declaration`, `default`).
+ */
+export function resolveApplicationOwnershipScope(accessTokenSpec = {}, env = process.env) {
+  const spec = accessTokenSpec && typeof accessTokenSpec === 'object' ? accessTokenSpec : {};
+  const fromEnvironment = String(env?.[APPLICATION_OWNERSHIP_SCOPE_ENV] ?? '').trim();
+  if (fromEnvironment) {
+    return {
+      ownershipScope: normalizeApplicationOwnershipScope(
+        fromEnvironment,
+        APPLICATION_OWNERSHIP_SCOPE_ENV,
+      ),
+      source: 'environment',
+    };
+  }
+  const declared = String(spec[APP_ACCESS_TOKEN_OWNERSHIP_SCOPE_FIELD] ?? '').trim();
+  if (declared) {
+    return {
+      ownershipScope: normalizeApplicationOwnershipScope(
+        declared,
+        `accessToken.${APP_ACCESS_TOKEN_OWNERSHIP_SCOPE_FIELD}`,
+      ),
+      source: 'declaration',
+    };
+  }
+  return { ownershipScope: DEFAULT_APPLICATION_OWNERSHIP_SCOPE, source: 'default' };
+}
+
+/**
+ * Resolve the owner user id of a `USER`-scoped surface, if one is declared.
+ *
+ * Precedence matches the scope: process environment
+ * (`SDKWORK_APPLICATION_OWNER_USER_ID`), then
+ * `accessToken.ownerUserId`. The resolver never invents a value, so a caller
+ * that needs one can name the missing source instead of writing a synthetic id.
+ * @param accessTokenSpec - materialization `accessToken` input object.
+ * @param env - environment bag to read the override from.
+ * @returns the owner user id (`''` when none is declared) plus its source.
+ */
+export function resolveApplicationOwnerUserId(accessTokenSpec = {}, env = process.env) {
+  const spec = accessTokenSpec && typeof accessTokenSpec === 'object' ? accessTokenSpec : {};
+  const fromEnvironment = String(env?.[APPLICATION_OWNER_USER_ID_ENV] ?? '').trim();
+  if (fromEnvironment) {
+    return { userId: fromEnvironment, source: 'environment' };
+  }
+  const declared = String(spec[APP_ACCESS_TOKEN_OWNER_USER_ID_FIELD] ?? '').trim();
+  if (declared) {
+    return { userId: declared, source: 'declaration' };
+  }
+  return { userId: '', source: 'none' };
+}
+
+/**
+ * Resolve the release-scope claims one surface's public token must carry.
+ *
+ * `TENANT` and `ORGANIZATION` keep `user_id = 0`
+ * (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §8). A `USER` release is one
+ * person's deployment, so its token carries the owner's user id and generation
+ * fails, naming the missing source, when neither the environment nor the
+ * surface declaration supplies one.
+ * @param accessTokenSpec - materialization `accessToken` input object.
+ * @param env - environment bag.
+ * @returns the scope, the user-id claim value, and both sources.
+ * @throws when the scope is `USER` and no usable owner user id is available.
+ */
+export function resolveApplicationAccessTokenScope(accessTokenSpec = {}, env = process.env) {
+  const { ownershipScope, source } = resolveApplicationOwnershipScope(accessTokenSpec, env);
+  if (ownershipScope !== 'USER') {
+    return { ownershipScope, source, userId: '0', userIdSource: 'not-applicable' };
+  }
+  const owner = resolveApplicationOwnerUserId(accessTokenSpec, env);
+  if (!owner.userId) {
+    throw new Error(
+      'ownership_scope=USER requires the owner user id for the token user_id claim: declare '
+      + `accessToken.${APP_ACCESS_TOKEN_OWNER_USER_ID_FIELD} or set ${APPLICATION_OWNER_USER_ID_ENV}.`,
+    );
+  }
+  if (owner.userId === '0') {
+    const origin = owner.source === 'environment'
+      ? APPLICATION_OWNER_USER_ID_ENV
+      : `accessToken.${APP_ACCESS_TOKEN_OWNER_USER_ID_FIELD}`;
+    throw new Error(
+      `${origin} must not be the tenant sentinel 0 for ownership_scope=USER: a personal release `
+      + 'carries its owner user id.',
+    );
+  }
+  return { ownershipScope, source, userId: owner.userId, userIdSource: owner.source };
+}
+
 export const PUBLIC_APP_ACCESS_TOKEN_ISS = 'sdkwork-iam-public';
 export const PUBLIC_APP_ACCESS_TOKEN_SIGNATURE = 'public';
 export const PUBLIC_APP_ACCESS_TOKEN_CLASS = 'application';
@@ -275,6 +441,64 @@ function assertLoginScope(loginScope, organizationId, label = 'loginScope') {
   }
 }
 
+/**
+ * Owner user id claim of one token.
+ *
+ * `TENANT` and `ORGANIZATION` releases keep the `0` sentinel; a `USER` release
+ * carries its owner, because a personal installation's isolation key ends in
+ * `user_id` (`APPLICATION_IDENTITY_SPEC.md` §4.1 rule 7).
+ * @param ownershipScope - resolved release scope.
+ * @param userId - declared owner user id.
+ * @returns the `user_id` claim value.
+ */
+function resolveOwnerUserIdClaim(ownershipScope, userId) {
+  if (ownershipScope !== 'USER') {
+    return '0';
+  }
+  const normalized = normalizeText(userId);
+  if (!normalized || normalized === '0') {
+    throw new Error(
+      'ownership_scope=USER requires the owner user id for the token user_id claim: declare '
+      + `accessToken.${APP_ACCESS_TOKEN_OWNER_USER_ID_FIELD} or set ${APPLICATION_OWNER_USER_ID_ENV}.`,
+    );
+  }
+  return normalized;
+}
+
+/**
+ * Refuse a release scope whose organization or user claims contradict it.
+ *
+ * The rules are IAM's (`APPLICATION_IDENTITY_SPEC.md` §4.1 rule 7,
+ * `IAM_SPEC.md` §5.2): `ORGANIZATION` requires a non-zero `organization_id`,
+ * while `TENANT` and `USER` are tenant-level in organization terms and require
+ * `organization_id = 0`; a `USER` release additionally requires its owner.
+ * @param ownershipScope - resolved release scope.
+ * @param organizationId - `organization_id` claim value.
+ * @param userId - resolved `user_id` claim value.
+ */
+function assertOwnershipScopeClaims(ownershipScope, organizationId, userId) {
+  if (ownershipScope === 'ORGANIZATION') {
+    if (!organizationId || organizationId === '0') {
+      throw new Error(
+        'ownership_scope=ORGANIZATION requires a non-zero organization_id; declare '
+        + 'accessToken.organizationId (or pass --organization-id) for an organization-scoped installation.',
+      );
+    }
+    return;
+  }
+  if (organizationId !== '0') {
+    throw new Error(
+      `ownership_scope=${ownershipScope} is a tenant-level release, so organization_id must be 0; `
+      + `got ${organizationId}. Declare ownershipScope=ORGANIZATION for an organization-scoped installation.`,
+    );
+  }
+  if (ownershipScope === 'USER' && (!userId || userId === '0')) {
+    throw new Error(
+      `ownership_scope=USER requires user_id to name the installation owner; got ${userId || '(empty)'}.`,
+    );
+  }
+}
+
 function resolveSessionId(appId, deploymentProfile, environment) {
   return `bootstrap-public-${appId}-${deploymentProfile}.${environment}`;
 }
@@ -288,6 +512,18 @@ export function createApplicationAccessToken(options = {}) {
   const appId = requireText(options.appId, 'appId');
   const tenantId = requireText(options.tenantId, 'tenantId');
   const organizationId = normalizeText(options.organizationId) || '0';
+  // An explicit scope wins; without one the historical derivation from
+  // `organization_id` applies (`TENANT` for 0, `ORGANIZATION` otherwise, never
+  // `USER`), which is IAM's legacy rule and keeps a direct generator call with a
+  // non-zero organization coherent. Materialization always passes the resolved
+  // value, so an undeclared surface gets `TENANT` and an organization id
+  // without a scope is refused there (`APP_ACCESS_TOKEN_SPEC.md` §3.2.1).
+  const ownershipScope = normalizeApplicationOwnershipScope(
+    options.ownershipScope ?? resolveLoginScope(organizationId),
+    'ownershipScope',
+  );
+  const userId = resolveOwnerUserIdClaim(ownershipScope, options.userId);
+  assertOwnershipScopeClaims(ownershipScope, organizationId, userId);
   assertAccessScope(options.accessScope, organizationId);
   assertLoginScope(options.loginScope, organizationId);
   const environment = assertEnvironment(options.environment);
@@ -319,6 +555,7 @@ export function createApplicationAccessToken(options = {}) {
     iss: PUBLIC_APP_ACCESS_TOKEN_ISS,
     login_scope: resolveLoginScope(organizationId),
     organization_id: organizationId,
+    ownership_scope: ownershipScope,
     permission_scope: permissionScope,
     runtime_target: runtimeTarget,
     session_id: normalizeText(options.sessionId) || resolveSessionId(appId, deploymentProfile, environment),
@@ -326,7 +563,7 @@ export function createApplicationAccessToken(options = {}) {
     token_class: PUBLIC_APP_ACCESS_TOKEN_CLASS,
     token_type: 'access',
     token_version: PUBLIC_APP_ACCESS_TOKEN_VERSION,
-    user_id: '0',
+    user_id: userId,
   };
 
   return `${base64urlJson(header)}.${base64urlJson(payload)}.${PUBLIC_APP_ACCESS_TOKEN_SIGNATURE}`;
@@ -367,6 +604,34 @@ export function decodeApplicationAccessToken(token) {
       + `organization_id=${organizationId}; expected ${expectedLoginScope}.`,
     );
   }
+  // An absent claim is the legacy derivation, never `USER`
+  // (`APPLICATION_IDENTITY_SPEC.md` §4.1 rule 6). `USER` can only be declared,
+  // and it is the one scope that must carry the owner as `user_id`.
+  const declaredOwnershipScope = String(payload.ownership_scope ?? '').trim();
+  const ownershipScope = declaredOwnershipScope
+    ? normalizeApplicationOwnershipScope(declaredOwnershipScope, 'ownership_scope')
+    : expectedLoginScope;
+  if (ownershipScope === 'ORGANIZATION' && organizationId === '0') {
+    throw new Error(
+      'Public application access token ownership_scope=ORGANIZATION requires a non-zero '
+      + `organization_id; got ${organizationId || '(empty)'}.`,
+    );
+  }
+  if (ownershipScope !== 'ORGANIZATION' && organizationId !== '0') {
+    throw new Error(
+      `Public application access token ownership_scope=${ownershipScope} requires organization_id=0; `
+      + `got ${organizationId}.`,
+    );
+  }
+  if (ownershipScope === 'USER') {
+    const userId = String(payload.user_id ?? '').trim();
+    if (!userId || userId === '0') {
+      throw new Error(
+        'Public application access token ownership_scope=USER must carry the installation owner in its '
+        + `user_id claim; got ${userId || '(empty)'}.`,
+      );
+    }
+  }
   return { header, payload };
 }
 
@@ -391,6 +656,37 @@ export function assertApplicationAccessToken(token, expected = {}) {
   for (const [claim, value] of checks) {
     if (value !== undefined && String(payload[claim] ?? '') !== String(value)) {
       throw new Error(`Public application access token claim ${claim}=${payload[claim]} does not match ${value}.`);
+    }
+  }
+  if (expected.ownershipScope !== undefined) {
+    const wanted = normalizeApplicationOwnershipScope(expected.ownershipScope, 'expected ownershipScope');
+    // Decode already proved the claim/pointer agreement, so an absent claim is
+    // the legacy `login_scope` derivation. It is accepted only for a `TENANT`
+    // surface: an organization or personal surface must declare the claim so a
+    // stale token cannot pass through the legacy fallback.
+    const declared = String(payload.ownership_scope ?? '').trim();
+    if (!declared && wanted !== DEFAULT_APPLICATION_OWNERSHIP_SCOPE) {
+      throw new Error(
+        `Public application access token is missing claim `
+        + `${PUBLIC_APP_ACCESS_TOKEN_OWNERSHIP_SCOPE_CLAIM}=${wanted}; an absent claim is only valid `
+        + `for ${DEFAULT_APPLICATION_OWNERSHIP_SCOPE} (APP_ACCESS_TOKEN_SPEC.md §3.2.1).`,
+      );
+    }
+    const effective = declared
+      ? normalizeApplicationOwnershipScope(declared, 'ownership_scope')
+      : resolveLoginScope(String(payload.organization_id ?? '0'));
+    if (effective !== wanted) {
+      throw new Error(
+        `Public application access token claim ownership_scope=${declared || effective} does not match ${wanted}.`,
+      );
+    }
+  }
+  if (expected.ownerUserId !== undefined) {
+    const wanted = String(expected.ownerUserId).trim();
+    if (wanted && String(payload.user_id ?? '').trim() !== wanted) {
+      throw new Error(
+        `Public application access token claim user_id=${payload.user_id ?? ''} does not match ${wanted}.`,
+      );
     }
   }
   return payload;
@@ -424,7 +720,9 @@ function printHelp() {
 
 Generate options:
   --organization-id <id>       default 0; 0 = tenant-level token, non-zero = organization-level token
-  --scope <tenant|organization> explicit scope guard; must agree with --organization-id
+  --scope <tenant|organization> explicit login-scope guard; must agree with --organization-id
+  --ownership-scope <TENANT|ORGANIZATION|USER>  release scope claim, default TENANT
+  --user-id <id>               owner user id; required for --ownership-scope USER, otherwise 0
   --permission-scope <list>    comma-separated, default iam:self
   --session-id <id>            default bootstrap-public-<app>-<profile>.<environment>
   --issued-at <epoch-seconds>  default 1767225600
@@ -460,6 +758,8 @@ function runCli() {
       deploymentProfile: options['deployment-profile'],
       runtimeTarget: options['runtime-target'],
       loginScope: scope === 'tenant' ? 'TENANT' : scope === 'organization' ? 'ORGANIZATION' : undefined,
+      ownershipScope: options['ownership-scope'],
+      ownerUserId: options['user-id'],
     });
     console.log(JSON.stringify({ valid: true, payload }, null, 2));
     return;
@@ -475,6 +775,8 @@ function runCli() {
     environment: options.environment,
     deploymentProfile: options['deployment-profile'],
     runtimeTarget: options['runtime-target'],
+    ownershipScope: options['ownership-scope'],
+    userId: options['user-id'],
     permissionScope: options['permission-scope']
       ? options['permission-scope'].split(',').map((entry) => entry.trim()).filter(Boolean)
       : undefined,

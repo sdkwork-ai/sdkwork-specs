@@ -48,16 +48,29 @@ function createToken(appId, {
   environment = 'production',
   deploymentProfile = 'cloud',
   runtimeTarget = 'browser',
+  organizationId = '0',
+  ownershipScope,
+  userId,
 } = {}) {
   return createApplicationAccessToken({
     appId,
     tenantId: '100001',
-    organizationId: '0',
+    organizationId,
     environment,
     deploymentProfile,
     runtimeTarget,
     permissionScope: ['iam:self'],
+    ...(ownershipScope ? { ownershipScope } : {}),
+    ...(userId ? { userId } : {}),
   });
+}
+
+function withoutOwnershipScope(token) {
+  const [header, payload, signature] = token.split('.');
+  const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+  delete claims.ownership_scope;
+  const encoded = Buffer.from(JSON.stringify(claims), 'utf8').toString('base64url');
+  return `${header}.${encoded}.${signature}`;
 }
 
 function viteSurface(id, rootPath) {
@@ -269,6 +282,98 @@ test('no anchor at all keeps the release check a skip, not a failure', () => {
     const strict = checkReleaseAccessTokenEnv(root, { env: {}, requireAnchor: true });
     assert.equal(strict.failures.length, 1);
     assert.match(strict.failures[0].reason, /is required to verify/u);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('a release USER surface verifies the personal claim and its owner', () => {
+  const surface = {
+    ...viteSurface('demo-pc', 'apps/pc'),
+    accessToken: {
+      appIdEnv: ANCHOR_ENV,
+      ownershipScope: 'USER',
+      ownerUserId: 'user-7',
+    },
+  };
+  const root = createSurfaceRoot({
+    surfaces: [surface],
+    files: {
+      'apps/pc/.env.cloud.production':
+        `SDKWORK_ACCESS_TOKEN=${createToken('app-pc', { ownershipScope: 'USER', userId: 'user-7' })}\n`,
+    },
+  });
+  try {
+    const result = checkReleaseAccessTokenEnv(root, { env: { [ANCHOR_ENV]: 'app-pc' } });
+    assert.deepEqual(result.failures, []);
+    assert.deepEqual(result.checked, ['demo-pc/cloud.production']);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('a release tenant token fails a USER surface', () => {
+  const surface = {
+    ...viteSurface('demo-pc', 'apps/pc'),
+    accessToken: {
+      appIdEnv: ANCHOR_ENV,
+      ownershipScope: 'USER',
+      ownerUserId: 'user-7',
+    },
+  };
+  const root = createSurfaceRoot({
+    surfaces: [surface],
+    files: {
+      'apps/pc/.env.cloud.production':
+        `SDKWORK_ACCESS_TOKEN=${createToken('app-pc', { ownershipScope: 'TENANT' })}\n`,
+    },
+  });
+  try {
+    const result = checkReleaseAccessTokenEnv(root, { env: { [ANCHOR_ENV]: 'app-pc' } });
+    assert.equal(result.failures.length, 1);
+    assert.match(result.failures[0].reason, /claim ownership_scope=TENANT does not match USER/u);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('a release ORGANIZATION surface refuses a token without the explicit claim', () => {
+  const surface = {
+    ...viteSurface('demo-pc', 'apps/pc'),
+    accessToken: {
+      appIdEnv: ANCHOR_ENV,
+      organizationId: '42',
+      ownershipScope: 'ORGANIZATION',
+    },
+  };
+  const token = createToken('app-pc', { ownershipScope: 'ORGANIZATION', organizationId: '42' });
+  const root = createSurfaceRoot({
+    surfaces: [surface],
+    files: {
+      'apps/pc/.env.cloud.production': `SDKWORK_ACCESS_TOKEN=${withoutOwnershipScope(token)}\n`,
+    },
+  });
+  try {
+    const result = checkReleaseAccessTokenEnv(root, { env: { [ANCHOR_ENV]: 'app-pc' } });
+    assert.equal(result.failures.length, 1);
+    assert.match(result.failures[0].reason, /missing claim ownership_scope=ORGANIZATION/u);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('a legacy tenant release token without the claim is accepted', () => {
+  const root = createSurfaceRoot({
+    surfaces: [viteSurface('demo-pc', 'apps/pc')],
+    files: {
+      'apps/pc/.env.cloud.production':
+        `SDKWORK_ACCESS_TOKEN=${withoutOwnershipScope(createToken('app-pc'))}\n`,
+    },
+  });
+  try {
+    const result = checkReleaseAccessTokenEnv(root, { env: { [ANCHOR_ENV]: 'app-pc' } });
+    assert.deepEqual(result.failures, []);
+    assert.deepEqual(result.checked, ['demo-pc/cloud.production']);
   } finally {
     rmSync(root, { force: true, recursive: true });
   }

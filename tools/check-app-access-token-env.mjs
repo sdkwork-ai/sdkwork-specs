@@ -13,6 +13,8 @@ import {
   isApplicationAccessTokenPendingAppId,
   isMissingAppIdEnvironmentError,
   resolveApplicationAccessTokenEnvName,
+  resolveApplicationOwnershipScope,
+  resolveApplicationOwnerUserId,
   surfaceApplicationTokenEnvName,
 } from './app-access-token.mjs';
 import {
@@ -183,6 +185,21 @@ export function checkAppAccessTokenEnv({
     const accessToken = surface.accessToken;
     const baseEnvName = resolveApplicationAccessTokenEnvName(accessToken);
     const surfaceEnvName = surfaceApplicationTokenEnvName(baseEnvName, surfaceId);
+    // The expected release scope is resolved exactly as the materializer
+    // resolves it, so the gate and the generator cannot disagree: process
+    // environment `SDKWORK_APPLICATION_OWNERSHIP_SCOPE`, then the surface
+    // declaration, then `TENANT` (`APP_ACCESS_TOKEN_SPEC.md` §3.2.1).
+    let ownershipScope;
+    let ownerUserId = '';
+    try {
+      ({ ownershipScope } = resolveApplicationOwnershipScope(accessToken, env));
+      if (ownershipScope === 'USER') {
+        ({ userId: ownerUserId } = resolveApplicationOwnerUserId(accessToken, env));
+      }
+    } catch (error) {
+      failures.push(`${surfaceId}: ${error instanceof Error ? error.message : String(error)}`);
+      continue;
+    }
     const excluded = new Set(Array.isArray(surface.excludeProfiles) ? surface.excludeProfiles : []);
     const anchors = [];
     let verified = 0;
@@ -275,6 +292,8 @@ export function checkAppAccessTokenEnv({
           environment: profile.environment,
           deploymentProfile: profile.deploymentProfile,
           runtimeTarget: surface.runtimeTarget,
+          ownershipScope,
+          ...(ownerUserId ? { ownerUserId } : {}),
         });
       } catch (error) {
         failures.push(`${surfaceId}: ${relativePath}: ${error instanceof Error ? error.message : String(error)}`);
