@@ -120,11 +120,22 @@ sdkwork_backup_create() {
   # 2. database --------------------------------------------------------------
   if [[ "${with_db}" == "1" ]]; then
     local script
-    script="$(sdkwork_backup_db_script dump "${env_file}" "${set_dir}/database.dump")"
-    if sdkwork_remote "${SDKWORK_BIN_HOST}" bash -lc "${script}"; then
+    # A module may run its database inside a dependency container with no host
+    # port (embedded mode); it then supplies its own dump command. Otherwise
+    # the shared host-side pg_dump runs with the module's env prefix.
+    if declare -F sdkwork_module_backup_db_dump_script >/dev/null 2>&1; then
+      script="$(sdkwork_module_backup_db_dump_script "${env_file}" "${set_dir}/database.dump")"
+    else
+      script="$(sdkwork_backup_db_script dump "${env_file}" "${set_dir}/database.dump")"
+    fi
+    # An empty dump is a silent restore point failure, so it is rejected here
+    # instead of being checksummed and kept (OPERATIONS_SPEC.md §5).
+    if sdkwork_remote "${SDKWORK_BIN_HOST}" bash -lc "${script}" \
+       && sdkwork_remote "${SDKWORK_BIN_HOST}" bash -lc "test -s $(printf '%q' "${set_dir}/database.dump")"; then
       sdkwork_backup_checksum "${set_dir}" "database.dump"
     else
-      sdkwork_warn "database dump failed or was skipped; the set stays usable for configuration and volumes"
+      sdkwork_remote "${SDKWORK_BIN_HOST}" bash -lc "rm -f -- $(printf '%q' "${set_dir}/database.dump") $(printf '%q' "${set_dir}/database.dump").sha256" || true
+      sdkwork_warn "database dump failed, was skipped, or produced an empty file; the set stays usable for configuration and volumes"
     fi
   fi
 
@@ -353,14 +364,22 @@ sdkwork_backup_restore() {
     all|database)
       if sdkwork_remote_capture "${SDKWORK_BIN_HOST}" test -f "${set_dir}/database.dump" >/dev/null 2>&1; then
         local script
-        script="$(sdkwork_backup_db_script restore "${env_file}" "${set_dir}/database.dump")"
+        if declare -F sdkwork_module_backup_db_restore_script >/dev/null 2>&1; then
+          script="$(sdkwork_module_backup_db_restore_script "${env_file}" "${set_dir}/database.dump")"
+        else
+          script="$(sdkwork_backup_db_script restore "${env_file}" "${set_dir}/database.dump")"
+        fi
         sdkwork_remote "${SDKWORK_BIN_HOST}" bash -lc "${script}" \
           && sdkwork_log "database restored from ${set_dir}/database.dump" \
           || sdkwork_warn "database restore failed; resolve it before starting the stack"
       elif sdkwork_remote_capture "${SDKWORK_BIN_HOST}" test -f "${set_dir}/database.dump.age" >/dev/null 2>&1; then
         local dump_plain script
         dump_plain="$(sdkwork_backup_decrypt_component "${set_dir}" "database.dump")"
-        script="$(sdkwork_backup_db_script restore "${env_file}" "${dump_plain}")"
+        if declare -F sdkwork_module_backup_db_restore_script >/dev/null 2>&1; then
+          script="$(sdkwork_module_backup_db_restore_script "${env_file}" "${dump_plain}")"
+        else
+          script="$(sdkwork_backup_db_script restore "${env_file}" "${dump_plain}")"
+        fi
         if sdkwork_remote "${SDKWORK_BIN_HOST}" bash -lc "${script}"; then
           sdkwork_log "database restored from ${set_dir}/database.dump.age"
         else
