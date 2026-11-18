@@ -18,6 +18,8 @@ import {
   createApplicationAccessToken,
   PUBLIC_APP_ACCESS_TOKEN_KEY,
   resolveApplicationAccessTokenAppId,
+  resolveApplicationAccessTokenEnvName,
+  surfaceApplicationTokenEnvName,
 } from './app-access-token.mjs';
 
 export const CLIENT_ENV_DEPLOYMENT_PROFILES = ['standalone', 'cloud'];
@@ -47,6 +49,7 @@ export function parseClientEnvArgs(argv) {
     config: DEFAULT_CONFIG_PATH,
     check: false,
     environments: [],
+    surfaces: [],
   };
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
@@ -54,12 +57,13 @@ export function parseClientEnvArgs(argv) {
       options.check = true;
       continue;
     }
-    if (token === '--environment') {
+    if (token === '--environment' || token === '--surface') {
       const value = String(argv[index + 1] ?? '').trim();
       if (!value) {
         throw new Error(`${token} requires a value.`);
       }
-      options.environments.push(
+      const key = token === '--environment' ? 'environments' : 'surfaces';
+      options[key].push(
         ...value.split(',').map((entry) => entry.trim()).filter((entry) => entry.length > 0),
       );
       index += 1;
@@ -127,6 +131,157 @@ function ensureInsideRoot(rootDir, candidatePath, label) {
     throw new Error(`${label} must stay inside ${rootDir}.`);
   }
   return candidatePath;
+}
+
+function surfaceIdOf(surface) {
+  return String(surface?.id ?? '').trim();
+}
+
+/**
+ * The declared anchor variable of one surface, plus its surface-scoped form.
+ *
+ * Every shipped surface registers as its own deploy application
+ * (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §5), so one repository may hold one
+ * anchor per surface. The declaration keeps naming the base variable; the
+ * per-surface record and the materializer use `<base>_<SURFACE>` for a surface
+ * that has its own deployment anchor.
+ * @param surface - declared client surface.
+ * @returns the base and surface-scoped variable names (`''` when not env-sourced)
+ */
+export function surfaceAnchorEnvNames(surface) {
+  const base = resolveApplicationAccessTokenEnvName(surface?.accessToken);
+  if (!base) {
+    return { baseEnvName: '', surfaceEnvName: '' };
+  }
+  return {
+    baseEnvName: base,
+    surfaceEnvName: surfaceApplicationTokenEnvName(base, surfaceIdOf(surface)),
+  };
+}
+
+/**
+ * Fail when two declared surfaces would read the same anchor variable.
+ *
+ * Two surfaces sharing one anchor variable cannot carry independent deployment
+ * anchors, and a filtered run would silently use the other surface's value. The
+ * collision is a declaration defect, so it is refused instead of guessed.
+ * @param surfaces - declared client surfaces
+ */
+function assertDistinctSurfaceAnchorEnvNames(surfaces) {
+  const byEnvName = new Map();
+  for (const surface of surfaces) {
+    const id = surfaceIdOf(surface);
+    const { surfaceEnvName } = surfaceAnchorEnvNames(surface);
+    if (!surfaceEnvName) {
+      continue;
+    }
+    const bucket = byEnvName.get(surfaceEnvName) ?? [];
+    bucket.push(id || '(surface without id)');
+    byEnvName.set(surfaceEnvName, bucket);
+  }
+  for (const [envName, ids] of byEnvName) {
+    if (ids.length > 1) {
+      throw new Error(
+        `${envName} would be the anchor variable of ${ids.join(' and ')}; surface ids must derive `
+        + 'distinct anchor variables so each surface can carry its own deployment anchor',
+      );
+    }
+  }
+}
+
+/**
+ * Restrict the declared client surfaces to the requested surface ids.
+ *
+ * A selected surface keeps its declaration order, and the surface anchor
+ * variables are validated across the whole declaration (not only the selection),
+ * because a filtered run is exactly where a shared variable would silently pick
+ * up another surface's anchor.
+ * @param surfaces - declared client surfaces
+ * @param surfaceIds - requested surface ids (empty means every surface)
+ * @returns the selected surfaces, in declaration order
+ * @throws when a requested id is not declared or two surfaces share an anchor variable
+ */
+export function filterClientEnvSurfaces(surfaces, surfaceIds = []) {
+  const declared = Array.isArray(surfaces) ? surfaces : [];
+  if (!Array.isArray(surfaceIds) || surfaceIds.length === 0) {
+    return [...declared];
+  }
+  const wanted = [...new Set(surfaceIds.map((value) => String(value ?? '').trim()).filter(Boolean))];
+  const known = new Set(declared.map(surfaceIdOf));
+  const unknown = wanted.filter((id) => !known.has(id));
+  if (unknown.length > 0) {
+    throw new Error(
+      `--surface ${unknown.join(', ')} is not declared in etc/client-env.materialization.json; `
+      + `declared surface(s): ${[...known].join(', ')}`,
+    );
+  }
+  assertDistinctSurfaceAnchorEnvNames(declared);
+  const selected = wanted.filter((id) => known.has(id));
+  return declared.filter((surface) => selected.includes(surfaceIdOf(surface)));
+}
+
+/**
+ * Environment one surface resolves its deployment anchor from.
+ *
+ * Precedence, highest first:
+ *   1. the per-surface anchor variable in the process environment
+ *      (`<base>_<SURFACE>`) — the registrar passes it when it materializes one
+ *      surface, and a deployment may inject it;
+ *   2. the same variable in the resolved deployment profile, which is where the
+ *      registration records the surface's anchor
+ *      (`etc/topology/<profile>.<environment>.env`);
+ *   3. the declared base variable (`SDKWORK_DEPLOY_APPLICATION_ID`), the
+ *      one-anchor-per-repository behavior every existing profile relies on.
+ *
+ * Only a surface whose `accessToken` is environment-sourced takes part; a literal
+ * `appId` surface is repository-owned and reads nothing.
+ * @param surface - declared client surface
+ * @param env - process environment bag
+ * @param sourceValues - resolved deployment profile values
+ * @returns the environment bag with the resolved anchor under the base name
+ */
+export function surfaceAnchorEnvironment(surface, env = process.env, sourceValues = {}) {
+  const { baseEnvName, surfaceEnvName } = surfaceAnchorEnvNames(surface);
+  if (!surfaceEnvName) {
+    return env;
+  }
+  const explicit = String(env?.[surfaceEnvName] ?? '').trim();
+  const recorded = String(sourceValues?.[surfaceEnvName] ?? '').trim();
+  const value = explicit || recorded;
+  if (!value) {
+    return env;
+  }
+  let projected;
+  try {
+    projected = { ...env };
+  } catch {
+    projected = {};
+  }
+  projected[baseEnvName] = value;
+  return projected;
+}
+
+/**
+ * Resolve one surface's public token `app_id` from its deployment anchor.
+ * @param surface - declared client surface
+ * @param env - process environment bag
+ * @param sourceValues - resolved deployment profile values
+ * @returns the app id
+ * @throws {MissingAppIdEnvironmentError} when the anchor is absent everywhere
+ */
+export function resolveSurfaceAccessTokenAppId(surface, env = process.env, sourceValues = {}) {
+  const spec = surface?.accessToken;
+  if (!spec || typeof spec !== 'object') {
+    throw new Error(
+      `${surfaceIdOf(surface) || 'surface'} must declare accessToken.appIdEnv (a deployment anchor `
+      + 'env var) or accessToken.appId.',
+    );
+  }
+  const { appId } = resolveApplicationAccessTokenAppId(
+    spec,
+    surfaceAnchorEnvironment(surface, env, sourceValues),
+  );
+  return appId;
 }
 
 function readJson(filePath) {
@@ -421,15 +576,20 @@ function identityValues(surface, profile) {
   return values;
 }
 
-function applicationAccessTokenValues(surface, profile, env = process.env) {
+function applicationAccessTokenValues(surface, profile, env = process.env, sourceValues = {}) {
   const spec = surface.accessToken;
   if (!spec || typeof spec !== 'object') {
     return {};
   }
   // `appIdEnv` reads the deployment anchor from the environment; a missing
   // variable fails generation here and names it. Never fall back to a
-  // compiled-in app id (`APP_ACCESS_TOKEN_SPEC.md` §3.1.1).
-  const { appId } = resolveApplicationAccessTokenAppId(spec, env);
+  // compiled-in app id (`APP_ACCESS_TOKEN_SPEC.md` §3.1.1). A surface that owns
+  // its own deployment anchor records it under the surface-scoped variable, so
+  // `surfaceAnchorEnvironment` resolves that one first.
+  const { appId } = resolveApplicationAccessTokenAppId(
+    spec,
+    surfaceAnchorEnvironment(surface, env, sourceValues),
+  );
   return {
     [PUBLIC_APP_ACCESS_TOKEN_KEY]: createApplicationAccessToken({
       appId,
@@ -479,7 +639,7 @@ export function createClientSurfaceValues({ surface, sourceValues, profile, env 
     values[key] = String(value);
   }
   Object.assign(values, identityValues(surface, profile));
-  Object.assign(values, applicationAccessTokenValues(surface, profile, env));
+  Object.assign(values, applicationAccessTokenValues(surface, profile, env, sourceValues));
 
   const expectedNamespace = surface.format === 'vite' ? 'VITE_' : 'SDKWORK_';
   for (const key of Object.keys(values)) {
@@ -662,6 +822,7 @@ export function materializeClientEnv({
   configPath = DEFAULT_CONFIG_PATH,
   check = false,
   environments = [],
+  surfaces = [],
   env = process.env,
 } = {}) {
   const normalizedRoot = path.resolve(rootDir);
@@ -682,6 +843,16 @@ export function materializeClientEnv({
       + `the repository declares ${(config.profiles ?? CLIENT_ENV_PROFILE_IDS).join(', ')}`,
     );
   }
+  // A surface filter writes only the selected surfaces' profile files, so a
+  // registration that anchors each surface separately cannot bake one surface's
+  // anchor into another surface's carrier. No filter keeps the full matrix.
+  const selectedSurfaces = filterClientEnvSurfaces(config.surfaces, surfaces);
+  if (selectedSurfaces.length === 0) {
+    throw new Error(
+      `no client surface matches --surface ${surfaces.join(',')}; the repository declares `
+      + `${config.surfaces.map((surface) => surfaceIdOf(surface)).join(', ')}`,
+    );
+  }
   const results = [];
 
   for (const profileId of profileIds) {
@@ -698,7 +869,7 @@ export function materializeClientEnv({
       sourceProfile.profile,
       normalizedRoot,
     );
-    for (const surface of config.surfaces) {
+    for (const surface of selectedSurfaces) {
       // Server-only repositories declare a "none" surface: they keep the
       // profile vocabulary validated by loadSourceProfile but materialize no
       // client artifacts.
@@ -722,7 +893,7 @@ export function materializeClientEnv({
             `${surface.id} must declare accessToken.appIdEnv (a deployment anchor env var) or accessToken.appId.`,
           );
         }
-        const { appId } = resolveApplicationAccessTokenAppId(spec, env);
+        const appId = resolveSurfaceAccessTokenAppId(surface, env, sourceProfile.values);
         existing.environment = sourceProfile.profile.environment;
         existing.deploymentProfile = sourceProfile.profile.deploymentProfile;
         existing.profileId = profileId;
@@ -815,13 +986,15 @@ function runCli() {
     configPath: options.config,
     check: options.check,
     environments: options.environments,
+    surfaces: options.surfaces,
   });
-  const scope = options.environments.length > 0
-    ? ` (environments: ${options.environments.join(', ')})`
-    : '';
+  const scope = [
+    options.environments.length > 0 ? `environments: ${options.environments.join(', ')}` : '',
+    options.surfaces.length > 0 ? `surfaces: ${options.surfaces.join(', ')}` : '',
+  ].filter(Boolean).join('; ');
   console.log(
     `SDKWork client env profiles ${options.check ? 'verified' : 'materialized'}: `
-    + `${files.length} files${scope}.`,
+    + `${files.length} files${scope ? ` (${scope})` : ''}.`,
   );
 }
 

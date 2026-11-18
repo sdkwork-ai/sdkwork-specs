@@ -27,7 +27,13 @@
  * - where each environment's `SDKWORK_DEPLOY_APPLICATION_ID` anchor can be
  *   written (the authored topology override layer, an authored `.env.<env>`,
  *   or nowhere), and which committed profile files carry the materialized
- *   public application token.
+ *   public application token,
+ * - the per-surface anchor sink of every declared surface rooted at the
+ *   application root (`surfaceAnchors`): the surface's own anchor variable
+ *   (`<base>_<SURFACE>`) and the profile files that carry its token. That is the
+ *   registration granularity the factory standard requires — one deploy
+ *   application, one anchor, and one token carrier per surface
+ *   (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §5, §11).
  *
  * Usage:
  *   node sdkwork-specs/tools/app-registration/register-applications.mjs \
@@ -39,6 +45,10 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
+import {
+  resolveApplicationAccessTokenEnvName,
+  surfaceApplicationTokenEnvName,
+} from '../app-access-token.mjs';
 import {
   mapManifestAppTypeToApplicationType,
   slugifyAppKey,
@@ -266,6 +276,19 @@ export function discoverApplicationRoots(workspaceRoot) {
  * surfaces mint a public application token and from which environment variable
  * they take its `app_id`. A repository without the file declares no client
  * surface (a server-only repository).
+ *
+ * Each surface also carries its *anchor sink* facts here, because every shipped
+ * surface is an independent deploy application with its own anchor
+ * (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §5):
+ *
+ * - `baseAnchorEnvName` — the variable the declaration names (today
+ *   `SDKWORK_DEPLOY_APPLICATION_ID`), which the one-anchor-per-repository mode
+ *   writes;
+ * - `surfaceAnchorEnvName` — the derived per-surface variable
+ *   (`<base>_<SURFACE>`), which a per-surface registration writes and the
+ *   materializer reads for that surface only;
+ * - `profileFiles` — the surface's own profile carrier files, one per profile,
+ *   excluding profiles the declaration excludes.
  * @param repoRoot - absolute repository root
  * @returns the declaration, or `null` when the repository declares none
  */
@@ -282,10 +305,16 @@ export function readClientEnvDeclaration(repoRoot) {
     surfaces: surfaces.map((surface) => {
       const appIdEnv = String(surface.accessToken?.appIdEnv ?? '').trim();
       const appIdLiteral = String(surface.accessToken?.appId ?? '').trim();
+      const id = String(surface.id ?? '').trim();
+      const format = String(surface.format ?? '').trim();
+      const baseAnchorEnvName = resolveApplicationAccessTokenEnvName(surface.accessToken);
+      const excludeProfiles = Array.isArray(surface.excludeProfiles)
+        ? surface.excludeProfiles.map((profileId) => String(profileId).trim())
+        : [];
       return {
-        id: String(surface.id ?? '').trim(),
+        id,
         root: String(surface.root ?? '').trim(),
-        format: String(surface.format ?? '').trim(),
+        format,
         runtimeTarget: String(surface.runtimeTarget ?? '').trim(),
         appIdEnv,
         appIdLiteral,
@@ -293,10 +322,52 @@ export function readClientEnvDeclaration(repoRoot) {
         // `app_id`; a server-profile surface (`format: none`) materializes runtime
         // env and mints no client token, so it never implies a permission scope.
         hasAccessToken: appIdEnv !== '' || appIdLiteral !== '',
-        excludeProfiles: Array.isArray(surface.excludeProfiles) ? surface.excludeProfiles : [],
+        excludeProfiles,
+        baseAnchorEnvName,
+        surfaceAnchorEnvName: surfaceApplicationTokenEnvName(baseAnchorEnvName, id),
+        profileFiles: surfaceProfileFiles(repoRoot, {
+          format,
+          root: String(surface.root ?? '').trim(),
+          excludeProfiles,
+        }),
       };
     }),
   };
+}
+
+/**
+ * Profile carrier files a declared surface owns.
+ *
+ * These files are the surface's token carrier and therefore its anchor sink: one
+ * profile per `<deployment-profile>.<environment>`, in the format's own layout
+ * (`apps/<surface>/.env.<profile>` for vite, `env/sdkwork.<profile>.json` for
+ * Flutter, the runtime-env documents for mini program and Harmony). A profile the
+ * declaration excludes is not a sink, because the materializer never writes it.
+ * @param repoRoot - absolute repository root
+ * @param surface - declared surface facts (`format`, `root`, `excludeProfiles`)
+ * @returns repo-relative profile file descriptors, sorted by profile id
+ */
+export function surfaceProfileFiles(repoRoot, surface) {
+  const layout = TOKEN_CARRIER_LAYOUTS[surface.format];
+  if (!layout) {
+    return [];
+  }
+  const appRoot = path.resolve(repoRoot, surface.root || '.');
+  const excluded = new Set(surface.excludeProfiles ?? []);
+  const files = [];
+  for (const deploymentProfile of REGISTRATION_DEPLOYMENT_PROFILES) {
+    for (const environment of REGISTRATION_ENVIRONMENTS) {
+      const profileId = clientProfileId(deploymentProfile, environment);
+      if (excluded.has(profileId)) {
+        continue;
+      }
+      files.push({
+        profileId,
+        path: toPosix(path.relative(repoRoot, layout(appRoot, profileId))),
+      });
+    }
+  }
+  return files;
 }
 
 function resolveAnchorSink(repoRoot, environment) {
@@ -482,6 +553,39 @@ export function describePermissionScopeRequirement(facts) {
 }
 
 /**
+ * Surface anchors owned by one application root.
+ *
+ * The registration granularity is the surface
+ * (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §5, §11): an `apps/<surface>` manifest
+ * root is one surface, so its anchor may only reach that surface's own profile
+ * files. A repository-root manifest owns the surfaces rooted at `.` — usually
+ * none, because the inner surfaces are their own manifest roots.
+ * @param appRoot - absolute application root
+ * @param declaration - repository client-env declaration, or `null`
+ * @returns one anchor record per surface rooted at this application root
+ */
+function describeOwnSurfaceAnchors(appRoot, declaration) {
+  if (!declaration) {
+    return [];
+  }
+  const relativeAppRoot = toPosix(path.relative(declaration.repoRoot, appRoot)) || '.';
+  return declaration.surfaces
+    .filter((surface) => (surface.root.replace(/\/+$/u, '') || '.') === relativeAppRoot)
+    .map((surface) => ({
+      id: surface.id,
+      root: surface.root,
+      format: surface.format,
+      runtimeTarget: surface.runtimeTarget,
+      baseAnchorEnvName: surface.baseAnchorEnvName,
+      surfaceAnchorEnvName: surface.surfaceAnchorEnvName,
+      profileFiles: surface.profileFiles.map((file) => ({
+        ...file,
+        present: existsSync(path.join(declaration.repoRoot, file.path)),
+      })),
+    }));
+}
+
+/**
  * Describe where one application surface's public token lives today.
  *
  * The carrier is resolved at repository granularity: `materialize-client-env.mjs`
@@ -543,7 +647,15 @@ function describeTokenCarrier(workspaceRoot, appRoot, declaration) {
       id: surface.id,
       root: surface.root,
       format: surface.format,
+      runtimeTarget: surface.runtimeTarget,
       appIdEnv: surface.appIdEnv,
+      hasAccessToken: surface.hasAccessToken,
+      baseAnchorEnvName: surface.baseAnchorEnvName,
+      surfaceAnchorEnvName: surface.surfaceAnchorEnvName,
+      profileFiles: surface.profileFiles.map((file) => ({
+        ...file,
+        present: existsSync(path.join(declaration.repoRoot, file.path)),
+      })),
     })),
   };
 }
@@ -601,6 +713,7 @@ export function buildRegistrationInventory(options = {}) {
     const appName = manifestAppName(manifest, appKey);
     const permissionScope = manifestPermissionScope(manifest);
     const tokenCarrier = describeTokenCarrier(workspaceRoot, appRoot, declaration);
+    const surfaceAnchors = describeOwnSurfaceAnchors(appRoot, declaration);
     const permissionScopeRequirement = describePermissionScopeRequirement({
       workspaceRoot,
       appRoot,
@@ -649,6 +762,10 @@ export function buildRegistrationInventory(options = {}) {
       slugSource: slugFromKey ? 'app.key' : slugFromName ? 'app.name' : 'directory',
       environments,
       tokenCarrier,
+      // Per-surface registration facts: each record is one surface this root
+      // registered with its own deploy application, its own anchor variable, and
+      // its own profile carrier files.
+      surfaceAnchors,
     });
   }
 
@@ -722,6 +839,15 @@ export function buildRegistrationInventory(options = {}) {
       ).length,
       withAnchorSink: parsed.filter((entry) =>
         Object.values(entry.environments).every((environment) => environment.anchorSinks.length > 0),
+      ).length,
+      // Surface anchors: every surface that registers as its own deploy
+      // application owns an anchor variable and a profile file set.
+      surfaceAnchors: parsed.reduce(
+        (total, entry) => total + (entry.surfaceAnchors?.length ?? 0),
+        0,
+      ),
+      entriesWithSurfaceAnchor: parsed.filter(
+        (entry) => (entry.surfaceAnchors?.length ?? 0) > 0,
       ).length,
       duplicateSlugs: duplicateSlugs.length,
       credentialEntrySurfaces: parsed.reduce(

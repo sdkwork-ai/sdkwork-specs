@@ -123,3 +123,48 @@ test('the reader tolerates export prefixes, quotes, and BOMs', () => {
     },
   );
 });
+
+test('two surface anchors coexist in one authored layer without overwriting each other', () => {
+  withTempFile('SDKWORK_ENVIRONMENT=development\n', ({ filePath }) => {
+    const pcKey = `${DEPLOY_APPLICATION_ID_ENV}_SDKWORK_IM_PC`;
+    const h5Key = `${DEPLOY_APPLICATION_ID_ENV}_SDKWORK_IM_H5`;
+    const pc = writeAnchorEnv({
+      sinkPaths: [filePath],
+      anchor: '5001',
+      uuid: 'uuid-pc',
+      key: pcKey,
+      uuidKey: `${DEPLOY_APPLICATION_UUID_ENV}_SDKWORK_IM_PC`,
+    });
+    const h5 = writeAnchorEnv({
+      sinkPaths: [filePath],
+      anchor: '5002',
+      uuid: 'uuid-h5',
+      key: h5Key,
+      uuidKey: `${DEPLOY_APPLICATION_UUID_ENV}_SDKWORK_IM_H5`,
+    });
+    assert.deepEqual(pc.map((entry) => entry.outcome), ['updated']);
+    assert.deepEqual(h5.map((entry) => entry.outcome), ['updated']);
+    const content = readFileSync(filePath, 'utf8');
+    assert.match(content, new RegExp(`^${pcKey}=5001$`, 'mu'));
+    assert.match(content, new RegExp(`^${h5Key}=5002$`, 'mu'));
+    assert.match(content, /^SDKWORK_DEPLOY_APPLICATION_UUID_SDKWORK_IM_PC=uuid-pc$/mu);
+    assert.equal(
+      readEnvFileValue(filePath, DEPLOY_APPLICATION_ID_ENV),
+      '',
+      'the repository-level anchor is not invented by a surface-scoped write',
+    );
+    assert.equal(readRecordedAnchor([filePath], pcKey).value, '5001');
+    assert.equal(readRecordedAnchor([filePath], h5Key).value, '5002');
+    assert.deepEqual(readRecordedAnchor([filePath], pcKey).conflict, []);
+
+    const repeat = writeAnchorEnv({
+      sinkPaths: [filePath],
+      anchor: '5001',
+      uuid: 'uuid-pc',
+      key: pcKey,
+      uuidKey: `${DEPLOY_APPLICATION_UUID_ENV}_SDKWORK_IM_PC`,
+    });
+    assert.deepEqual(repeat.map((entry) => entry.outcome), ['unchanged']);
+    assert.equal(readFileSync(filePath, 'utf8'), content, 'a repeated write changes no byte');
+  });
+});

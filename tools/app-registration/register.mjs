@@ -52,10 +52,16 @@
  * 6. **Enable + verify** —enable only after the environment row exists; the
  *    installation must report `enabled` and echo the same anchor. A response that
  *    cannot prove the binding is refused (see `--allow-unverified-iam-binding`).
- * 7. **Environment hand-off** —write `SDKWORK_DEPLOY_APPLICATION_ID` into the
- *    authored env layer, regenerate the generated topology profile, and re-run
- *    the client-env materializer so each profile's public token carries the
- *    anchor.
+ * 7. **Environment hand-off** —write the anchor into the authored env layer,
+ *    regenerate the generated topology profile, and re-run the client-env
+ *    materializer so each profile's public token carries the anchor. The
+ *    granularity follows the registration granularity: a **surface-scoped** run
+ *    (`--scope all` / `--scope surfaces`) writes the surface-scoped anchor
+ *    variable `<SDKWORK_DEPLOY_APPLICATION_ID>_<SURFACE>` and materializes only
+ *    that surface (`--surface`), so several surfaces of one repository keep
+ *    independent anchors; a **repository-scoped** run (`--scope repository`,
+ *    the default) keeps the one-anchor-per-repository behavior the committed
+ *    profiles were materialized with.
  *
  * Failure of one item is recorded and the run continues; the exit code reflects
  * the failure count. Nothing is ever skipped silently: every item ends as
@@ -91,7 +97,7 @@ import {
 } from './contract.mjs';
 import { DeployApiError, createDeployApplicationClient, findAppBySlug } from './deploy-client.mjs';
 import { IamApiError, createIamApplicationClient } from './iam-client.mjs';
-import { readRecordedAnchor, writeAnchorEnv } from './env-anchor.mjs';
+import { readRecordedAnchor, writeAnchorEnv, DEPLOY_APPLICATION_UUID_ENV } from './env-anchor.mjs';
 import { PERMISSION_SCOPE_REQUIREMENTS } from './inventory.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -169,11 +175,11 @@ export function selectTargets(inventory, options = {}) {
     return selected;
   }
   // One registration per repository: the repository-root manifest when it
-  // exists, otherwise the first surface manifest. The client-env materializer
-  // bakes exactly one deploy anchor per repository (every surface resolves
-  // `appIdEnv` from the same process environment), so a per-surface anchor
-  // cannot survive materialization; `--scope all` registers every manifest root
-  // for deployments that generate tokens per surface by another route.
+  // exists, otherwise the first surface manifest. This is the legacy
+  // one-anchor-per-repository mode the committed profiles were materialized
+  // with. `--scope all` / `--scope surfaces` register each manifest root — and
+  // therefore each surface — with its own deploy application and its own anchor
+  // (see `resolveAnchorGroup`).
   const primaryByRepo = new Map();
   for (const entry of selected) {
     const current = primaryByRepo.get(entry.repo);
@@ -234,6 +240,104 @@ function markDuplicatePrimaryDomains(plans) {
   }
 }
 
+/** Scopes that register every manifest root as its own deploy application. */
+const SURFACE_SCOPES = new Set(['all', 'surfaces']);
+
+/**
+ * Anchor granularity of one planned item.
+ *
+ * `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §5 makes one endpoint surface one
+ * deploy application with its own `app_id`; §11 repeats the runbook per surface.
+ * A scope that selects every manifest root therefore anchors each surface
+ * separately: its anchor may only reach that surface's own profile files. The
+ * default `repository` scope keeps the legacy one-anchor-per-repository behavior
+ * (the anchor the committed profiles were materialized with), and so does a
+ * repository whose only manifest is the repository root — it has no surface
+ * manifest to register one by one.
+ *
+ * The decision is taken from the repository inventory, never from the selected
+ * subset: `--only <root>` must not let one repository-root manifest overwrite the
+ * anchors of surfaces it did not register.
+ * @param scope - selected registration scope
+ * @param repoEntries - every parsed inventory entry of the same repository
+ * @returns `surface` or `repository`
+ */
+export function resolveAnchorGroup(scope, repoEntries) {
+  const selected = trim(scope) || 'repository';
+  if (!SURFACE_SCOPES.has(selected)) {
+    return 'repository';
+  }
+  if (selected === 'surfaces') {
+    return 'surface';
+  }
+  const hasSurfaceManifest = (repoEntries ?? []).some(
+    (candidate) => trim(candidate.appDir) !== '' && candidate.appDir !== '.',
+  );
+  return hasSurfaceManifest ? 'surface' : 'repository';
+}
+
+/**
+ * Anchor and uuid bookkeeping keys for one recorded identity.
+ *
+ * A surface-scoped anchor keeps the suffix of its variable, so
+ * `SDKWORK_DEPLOY_APPLICATION_ID_SDKWORK_IM_PC` pairs with
+ * `SDKWORK_DEPLOY_APPLICATION_UUID_SDKWORK_IM_PC`; the repository-level anchor
+ * keeps the canonical names.
+ * @param anchorEnvName - surface-scoped anchor variable, or `''` for the repository
+ * @param baseAnchorEnvName - the variable named by the declaration
+ * @returns the anchor key and the uuid bookkeeping key
+ */
+export function anchorRecordKeys(anchorEnvName, baseAnchorEnvName = DEPLOY_APPLICATION_ID_ENV) {
+  const surfaceKey = trim(anchorEnvName);
+  const base = trim(baseAnchorEnvName) || DEPLOY_APPLICATION_ID_ENV;
+  if (!surfaceKey || surfaceKey === base || !surfaceKey.startsWith(base)) {
+    return { anchorKey: base, uuidKey: DEPLOY_APPLICATION_UUID_ENV };
+  }
+  return {
+    anchorKey: surfaceKey,
+    uuidKey: `${DEPLOY_APPLICATION_UUID_ENV}${surfaceKey.slice(base.length)}`,
+  };
+}
+
+/**
+ * The surfaces one planned item may anchor and materialize.
+ *
+ * A `surface` group materializes only the surfaces rooted at this application
+ * root (its own surfaces); a `repository` group materializes every declared
+ * surface of the repository, which is what one anchor per repository means.
+ * Declared `format: none` surfaces materialize no client artifact and are
+ * recorded separately instead of being handed to the materializer.
+ * @param anchorGroup - `surface` or `repository`
+ * @param entry - inventory entry
+ * @returns the materializable surface records plus the excluded surface ids
+ */
+function planSurfaceGroup(anchorGroup, entry) {
+  const declared = anchorGroup === 'surface'
+    ? (entry.surfaceAnchors ?? [])
+    : (entry.tokenCarrier?.repositorySurfaces ?? []);
+  const surfaces = [];
+  const excluded = [];
+  for (const surface of declared) {
+    if (surface.format === 'none') {
+      excluded.push(surface.id);
+      continue;
+    }
+    const keys = anchorRecordKeys(surface.surfaceAnchorEnvName, surface.baseAnchorEnvName);
+    surfaces.push({
+      id: surface.id,
+      root: surface.root,
+      format: surface.format,
+      runtimeTarget: surface.runtimeTarget,
+      baseAnchorEnvName: trim(surface.baseAnchorEnvName),
+      surfaceAnchorEnvName: trim(surface.surfaceAnchorEnvName),
+      anchorKey: keys.anchorKey,
+      uuidKey: keys.uuidKey,
+      profileFiles: (surface.profileFiles ?? []).map((file) => file.path),
+    });
+  }
+  return { mode: anchorGroup, surfaces, excluded };
+}
+
 function resolveSinkPaths(entry, environment, deploymentProfile) {
   const sinks = entry.environments?.[environment]?.anchorSinks ?? [];
   return sinks
@@ -244,6 +348,56 @@ function resolveSinkPaths(entry, environment, deploymentProfile) {
       return sink.deploymentProfile === '' || sink.deploymentProfile === deploymentProfile;
     })
     .map((sink) => ({ ...sink }));
+}
+
+/**
+ * Read the anchor a plan's environment configuration already records.
+ *
+ * A `repository` group reads the repository-level anchor variable. A `surface`
+ * group reads each owned surface's own variable: two surfaces of one repository
+ * hold independent anchors, so reading the shared variable would report another
+ * surface's identity as a conflict. Surfaces that share one deploy application
+ * (one manifest root owning several surfaces) must agree, so disagreeing values
+ * are still surfaced as a conflict.
+ * @param plan - planned item
+ * @returns recorded value, source path, identity label, and conflicts
+ */
+export function readPlanRecordedAnchor(plan) {
+  const sinkPaths = (plan.sinkPaths ?? []).map((sink) => sink.absolutePath);
+  if (plan.anchorGroup !== 'surface' || (plan.surfaceGroup?.surfaces ?? []).length === 0) {
+    const recorded = readRecordedAnchor(sinkPaths);
+    return {
+      ...recorded,
+      keyLabel: DEPLOY_APPLICATION_ID_ENV,
+      key: DEPLOY_APPLICATION_ID_ENV,
+    };
+  }
+  const perSurface = (plan.surfaceGroup?.surfaces ?? []).map((surface) => ({
+    surfaceId: surface.id,
+    key: surface.anchorKey,
+    ...readRecordedAnchor(sinkPaths, surface.anchorKey),
+  }));
+  const recorded = perSurface.filter((entry) => entry.value !== '');
+  const distinct = new Set(recorded.map((entry) => entry.value));
+  const conflict = distinct.size > 1
+    ? perSurface.flatMap((entry) => entry.all.map((item) => ({ ...item, surfaceId: entry.surfaceId })))
+    : [];
+  return {
+    value: recorded[0]?.value ?? '',
+    path: recorded[0]?.path ?? '',
+    key: recorded[0]?.key ?? '',
+    keyLabel: recorded.length > 1
+      ? `surface anchor variables (${recorded.map((entry) => entry.key).join(', ')})`
+      : (recorded[0]?.key ?? perSurface[0]?.key ?? DEPLOY_APPLICATION_ID_ENV),
+    all: recorded.flatMap((entry) => entry.all),
+    surfaces: perSurface.map((entry) => ({
+      surfaceId: entry.surfaceId,
+      key: entry.key,
+      value: entry.value,
+      path: entry.path,
+    })),
+    conflict,
+  };
 }
 
 /**
@@ -282,6 +436,12 @@ export function planRegistrationItem(entry, allEntries, environment, options = {
     deployCreateBody: null,
     anchorOverrides: {},
     sinkPaths: [],
+    // `surface` anchors each surface separately (one deploy application per
+    // manifest root); `repository` keeps the legacy one-anchor-per-repository
+    // materialization.
+    anchorGroup: 'repository',
+    surfaceGroup: { mode: 'repository', surfaces: [], excluded: [] },
+    surfaces: [],
   };
 
   // A server-only root mints no public client token, so there is no
@@ -389,6 +549,43 @@ export function planRegistrationItem(entry, allEntries, environment, options = {
   plan.sinkPaths = resolveSinkPaths(entry, environment, deploymentProfile);
   if (plan.sinkPaths.length === 0) {
     plan.defectsAnchorSink = true;
+  }
+  // Anchor granularity: one deploy application per manifest root means one
+  // anchor per surface, so each surface keeps its own anchor variable and its own
+  // profile carrier files. `repository` keeps the legacy single-anchor behavior.
+  const anchorGroup = options.anchorGroup === 'surface' ? 'surface' : 'repository';
+  plan.anchorGroup = anchorGroup;
+  plan.surfaceGroup = planSurfaceGroup(anchorGroup, entry);
+  plan.surfaces = plan.surfaceGroup.surfaces.map((surface) => surface.id);
+  if (anchorGroup === 'surface') {
+    const declared = entry.tokenCarrier?.repositorySurfaces ?? [];
+    const byAnchorEnvName = new Map();
+    for (const surface of declared) {
+      const name = trim(surface.surfaceAnchorEnvName);
+      if (!name) {
+        continue;
+      }
+      byAnchorEnvName.set(name, [...(byAnchorEnvName.get(name) ?? []), surface.id]);
+    }
+    for (const [name, ids] of byAnchorEnvName) {
+      if (ids.length > 1) {
+        defects.push(
+          `${entry.id}: declared surfaces ${ids.join(', ')} would share the anchor variable ${name}; `
+          + 'each surface that registers with its own deploy application needs its own anchor '
+          + 'variable, so their surface ids must derive distinct names',
+        );
+      }
+    }
+    for (const surface of plan.surfaceGroup.surfaces) {
+      const envSourced = trim(surface.baseAnchorEnvName) !== '';
+      if (envSourced && !surface.surfaceAnchorEnvName) {
+        defects.push(
+          `${entry.id}: surface ${surface.id} declares its anchor variable `
+          + `${surface.baseAnchorEnvName} but no surface-scoped name can be derived from its id; `
+          + 'rename the surface id so the per-surface anchor variable is readable',
+        );
+      }
+    }
   }
   const override = options.anchorOverrides?.[`${entry.id}@${environment}`]
     ?? options.anchorOverrides?.[entry.id]
@@ -734,6 +931,11 @@ async function registerOne(context, plan) {
     serversOnly: plan.serversOnly,
     primaryDomain: plan.primaryDomain,
     primaryDomainSource: plan.primaryDomainSource,
+    // Registration granularity: `surface` means this manifest root is one
+    // endpoint surface with its own deploy application, anchor, and token
+    // carrier; `repository` is the legacy one-anchor-per-repository mode.
+    anchorGroup: plan.anchorGroup,
+    surfaces: [...plan.surfaces],
     status: 'failed',
     deployApplicationId: '',
     deployApplicationUuid: '',
@@ -741,7 +943,7 @@ async function registerOne(context, plan) {
     anchorSource: '',
     iam: {},
     installationEnvironment: { envKey: plan.environment, status: '', primaryDomain: plan.primaryDomain },
-    anchor: { written: [], outcomes: [], skipped: '' },
+    anchor: { mode: plan.anchorGroup, written: [], outcomes: [], surfaces: [], skipped: '' },
     materialize: { status: 'pending' },
     attempts: 0,
     error: '',
@@ -827,131 +1029,267 @@ function nodeRunnerDefault() {
     });
 }
 
-async function runEnvironmentHandoff(context, entries, planByItemId) {
+/**
+ * Write the anchor records one item owns.
+ *
+ * A `surface` group writes one surface-scoped variable per owned surface, so two
+ * surfaces of one repository never overwrite each other's record even though they
+ * share the authored env layer. A `repository` group — and a surface group this
+ * manifest root owns no surface of (the repository-root manifest of a
+ * multi-surface repository) — writes the canonical repository-level variable,
+ * which is the server identity that layer already carries.
+ * @param context - options and the runner
+ * @param result - item result being filled
+ * @param plan - planned item
+ */
+function writePlanAnchorRecords(context, result, plan) {
+  const { options } = context;
+  const sinkPaths = plan.sinkPaths.map((sink) => sink.absolutePath);
+  const anchor = result.deployApplicationId;
+  result.anchor.mode = plan.anchorGroup;
+  if (sinkPaths.length === 0) {
+    result.anchor.skipped = 'no authored environment configuration for this application';
+    return;
+  }
+  if (!options.writeAnchor) {
+    result.anchor.skipped = 'anchor writing disabled (--no-write-anchor)';
+    return;
+  }
+  const surfaces = plan.surfaceGroup.surfaces;
+  const targets = (plan.anchorGroup === 'surface' && surfaces.length > 0
+    ? surfaces.map((surface) => ({
+      surfaceId: surface.id,
+      anchorKey: surface.anchorKey,
+      uuidKey: surface.uuidKey,
+    }))
+    : [{
+      surfaceId: '',
+      anchorKey: DEPLOY_APPLICATION_ID_ENV,
+      uuidKey: DEPLOY_APPLICATION_UUID_ENV,
+    }]);
+  if (!anchor) {
+    result.anchor.skipped = 'the deploy application reported no anchor to write';
+    return;
+  }
+  for (const target of targets) {
+    const outcomes = writeAnchorEnv({
+      sinkPaths,
+      anchor,
+      uuid: result.deployApplicationUuid,
+      recordUuid: options.recordDeployUuid,
+      key: target.anchorKey,
+      uuidKey: target.uuidKey,
+    });
+    result.anchor.surfaces.push({
+      id: target.surfaceId,
+      anchorVariable: target.anchorKey,
+      outcomes: outcomes.map((outcome) => ({
+        path: outcome.path,
+        outcome: outcome.outcome,
+      })),
+    });
+    for (const outcome of outcomes) {
+      result.anchor.outcomes.push({
+        surfaceId: target.surfaceId,
+        anchorVariable: target.anchorKey,
+        path: outcome.path,
+        outcome: outcome.outcome,
+      });
+      if (outcome.outcome === 'updated' || outcome.outcome === 'created') {
+        result.anchor.written.push(outcome.path);
+      }
+    }
+  }
+  result.anchor.written = [...new Set(result.anchor.written)];
+}
+
+/**
+ * Regenerate the generated topology profiles that received an anchor record.
+ *
+ * The generated `etc/topology/<profile>.<environment>.env` is the file the
+ * materializer reads, so a recorded anchor must reach it. Several surfaces of one
+ * repository share those files, and items are registered concurrently, so the run
+ * is deduplicated per `(repository, profile)`: one writer, one result, every item
+ * reads the same outcome.
+ * @param context - options and the runner
+ * @param active - registered items with their plans
+ */
+async function regenerateTopologyProfiles(context, active) {
   const { options, runNodeScript } = context;
-  const repositories = new Map();
+  const runs = new Map();
+  for (const { result, plan } of active) {
+    if (result.anchor.skipped || !result.deployApplicationId) {
+      continue;
+    }
+    const topologySinks = plan.sinkPaths.filter((sink) => sink.kind === 'topology-override');
+    if (topologySinks.length === 0) {
+      continue;
+    }
+    const byRepo = new Map();
+    for (const sink of topologySinks) {
+      if (!sink.deploymentProfile) {
+        continue;
+      }
+      const repoRoot = sink.absoluteRepoRoot ?? plan.repoAbsoluteRoot ?? '';
+      if (!repoRoot) {
+        continue;
+      }
+      const profiles = byRepo.get(repoRoot) ?? new Set();
+      profiles.add(sink.deploymentProfile);
+      byRepo.set(repoRoot, profiles);
+    }
+    for (const [repoRoot, profiles] of byRepo.entries()) {
+      for (const deploymentProfile of profiles) {
+        const profileId = `${deploymentProfile}.${result.environment}`;
+        const cacheKey = `${repoRoot}::${profileId}`;
+        let run = runs.get(cacheKey);
+        if (!run) {
+          run = runNodeScript({
+            script: path.join(TOOLS_DIR, 'materialize-topology-env.mjs'),
+            args: ['--root', repoRoot, '--profile', profileId],
+            cwd: repoRoot,
+            env: { ...process.env },
+            timeoutMs: 120_000,
+          });
+          runs.set(cacheKey, run);
+        }
+        let outcome;
+        try {
+          outcome = await run;
+        } catch (error) {
+          outcome = { code: 1, error: error instanceof Error ? error.message : String(error) };
+        }
+        result.anchor.topologyRegenerated = result.anchor.topologyRegenerated ?? [];
+        result.anchor.topologyRegenerated.push({
+          repoRoot,
+          profileId,
+          code: outcome.code,
+        });
+        if (outcome.code !== 0) {
+          result.anchor.topologyRegenerationFailed = true;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Re-run the client-env materializer for one registered item.
+ *
+ * The surface filter is the whole point: a surface group passes `--surface` plus
+ * that surface's own anchor variable, so the materializer rewrites only the
+ * selected surfaces' profile files. The repository group keeps the historical
+ * full-matrix run with the repository anchor.
+ * @param context - options and the runner
+ * @param result - item result being filled
+ * @param plan - planned item
+ */
+async function materializePlan(context, result, plan) {
+  const { options, runNodeScript } = context;
+  const surfaces = plan.surfaceGroup.surfaces;
+  const common = {
+    repoRoot: plan.repoAbsoluteRoot ?? '',
+    mode: plan.anchorGroup,
+    anchor: result.deployApplicationId ?? '',
+    surfaces: plan.surfaces,
+  };
+  if (!options.materialize) {
+    result.materialize = {
+      ...common,
+      status: 'skipped',
+      reason: 'materialization disabled (--no-materialize)',
+    };
+    return;
+  }
+  if (!plan.hasClientEnv) {
+    result.materialize = {
+      ...common,
+      status: 'not-applicable',
+      reason: 'repository declares no etc/client-env.materialization.json',
+    };
+    return;
+  }
+  if (surfaces.length === 0) {
+    result.materialize = {
+      ...common,
+      status: 'not-applicable',
+      reason: plan.anchorGroup === 'surface'
+        ? 'this repository registers each surface as its own deploy application '
+          + '(one anchor per surface), and this manifest root owns none of the declared surfaces; '
+          + 'register the apps/<surface> manifest root to materialize its tokens'
+        : 'the repository declares no materializable client surface',
+    };
+    return;
+  }
+  if (!common.repoRoot || !common.anchor) {
+    result.materialize = {
+      ...common,
+      status: 'failed',
+      reason: 'cannot resolve the repository root or the anchor for materialization',
+    };
+    return;
+  }
+  // One environment per run: every environment is a separate deployment with its
+  // own anchor, so materializing the whole profile matrix would bake this run's
+  // anchor into another environment's profile files.
+  const args = ['--root', common.repoRoot, '--environment', result.environment];
+  let env = { ...process.env };
+  if (plan.anchorGroup === 'surface') {
+    for (const surface of surfaces) {
+      args.push('--surface', surface.id);
+      // The per-surface anchor variable is what the materializer resolves first
+      // for that surface; the repository-level variable is never overwritten, so
+      // the other surfaces keep their own identity.
+      env[surface.anchorKey] = common.anchor;
+    }
+  } else {
+    env[DEPLOY_APPLICATION_ID_ENV] = common.anchor;
+  }
+  const run = await runNodeScript({
+    script: path.join(TOOLS_DIR, 'materialize-client-env.mjs'),
+    args,
+    cwd: common.repoRoot,
+    env,
+    timeoutMs: 180_000,
+  });
+  result.materialize = {
+    ...common,
+    status: run.code === 0 ? 'materialized' : 'failed',
+    code: run.code,
+    args,
+    anchorVariables: plan.anchorGroup === 'surface'
+      ? surfaces.map((surface) => surface.anchorKey)
+      : [DEPLOY_APPLICATION_ID_ENV],
+  };
+}
+
+async function runEnvironmentHandoff(context, entries, planByItemId) {
+  const { options } = context;
+  const active = [];
   for (const result of entries) {
     if (result.status === 'failed' || result.status === 'skipped') {
       continue;
     }
     const plan = planByItemId.get(result.id);
-    const sinkPaths = plan.sinkPaths.map((sink) => sink.absolutePath);
-    if (sinkPaths.length === 0) {
-      result.anchor.skipped = 'no authored environment configuration for this application';
-    } else if (options.writeAnchor) {
-      const outcomes = writeAnchorEnv({
-        sinkPaths,
-        anchor: result.deployApplicationId,
-        uuid: result.deployApplicationUuid,
-        recordUuid: options.recordDeployUuid,
-      });
-      result.anchor.outcomes = outcomes.map((outcome) => ({
-        path: outcome.path,
-        outcome: outcome.outcome,
-      }));
-      result.anchor.written = outcomes
-        .filter((outcome) => outcome.outcome === 'updated' || outcome.outcome === 'created')
-        .map((outcome) => outcome.path);
-      const topologySinks = plan.sinkPaths.filter((sink) => sink.kind === 'topology-override');
-      if (options.regenerateTopologyEnv && topologySinks.length > 0) {
-        const byRepo = new Map();
-        for (const sink of topologySinks) {
-          const key = sink.absoluteRepoRoot ?? plan.repoAbsoluteRoot ?? '';
-          const bucket = byRepo.get(key) ?? new Set();
-          bucket.add(sink.deploymentProfile);
-          byRepo.set(key, bucket);
-        }
-        for (const [repoRoot, profiles] of byRepo.entries()) {
-          if (!repoRoot) {
-            continue;
-          }
-          for (const deploymentProfile of profiles) {
-            if (!deploymentProfile) {
-              continue;
-            }
-            const run = await runNodeScript({
-              script: path.join(TOOLS_DIR, 'materialize-topology-env.mjs'),
-              args: ['--root', repoRoot, '--profile', `${deploymentProfile}.${result.environment}`],
-              cwd: repoRoot,
-              env: { ...process.env },
-              timeoutMs: 120_000,
-            });
-            result.anchor.topologyRegenerated = result.anchor.topologyRegenerated ?? [];
-            result.anchor.topologyRegenerated.push({
-              repoRoot,
-              profileId: `${deploymentProfile}.${result.environment}`,
-              code: run.code,
-            });
-            if (run.code !== 0) {
-              result.anchor.topologyRegenerationFailed = true;
-            }
-          }
-        }
-      }
-    } else {
-      result.anchor.skipped = 'anchor writing disabled (--no-write-anchor)';
+    if (!plan) {
+      continue;
     }
-    const repoKey = plan.repoAbsoluteRoot ?? result.repo;
-    const bucket = repositories.get(repoKey) ?? {
-      repoRoot: plan.repoAbsoluteRoot ?? '',
-      hasClientEnv: Boolean(plan.hasClientEnv),
-      items: [],
-      anchors: new Set(),
-    };
-    bucket.items.push(result);
-    bucket.anchors.add(result.deployApplicationId);
-    repositories.set(repoKey, bucket);
+    active.push({ result, plan });
   }
 
-  for (const bucket of repositories.values()) {
-    for (const result of bucket.items) {
-      if (!options.materialize) {
-        result.materialize = { status: 'skipped', reason: 'materialization disabled (--no-materialize)' };
-        continue;
-      }
-      if (!bucket.hasClientEnv) {
-        result.materialize = {
-          status: 'not-applicable',
-          reason: 'repository declares no etc/client-env.materialization.json',
-        };
-        continue;
-      }
-      if (bucket.anchors.size > 1) {
-        result.materialize = {
-          status: 'conflict',
-          reason:
-            'this repository has several distinct deploy anchors in the run and the client-env '
-            + 'materializer bakes one anchor per repository; materialize each surface group '
-            + 'separately',
-          anchors: [...bucket.anchors],
-        };
-        continue;
-      }
-      const [anchor] = [...bucket.anchors];
-      if (!bucket.repoRoot || !anchor) {
-        result.materialize = {
-          status: 'failed',
-          reason: 'cannot resolve the repository root or the anchor for materialization',
-        };
-        continue;
-      }
-      const run = await runNodeScript({
-        script: path.join(TOOLS_DIR, 'materialize-client-env.mjs'),
-        // One environment per run: every environment is a separate deployment
-        // with its own anchor, so materializing the whole profile matrix would
-        // bake this run's anchor into another environment's profile files.
-        args: ['--root', bucket.repoRoot, '--environment', result.environment],
-        cwd: bucket.repoRoot,
-        env: { ...process.env, [DEPLOY_APPLICATION_ID_ENV]: anchor },
-        timeoutMs: 180_000,
-      });
-      result.materialize = {
-        status: run.code === 0 ? 'materialized' : 'failed',
-        code: run.code,
-        repoRoot: bucket.repoRoot,
-        anchor,
-      };
-    }
+  // 1. Anchor records: one surface-scoped variable per surface, or the
+  //    repository-level variable when this root anchors the whole repository.
+  for (const { result, plan } of active) {
+    writePlanAnchorRecords(context, result, plan);
+  }
+  // 2. The generated topology profiles are the materializer's input, so the
+  //    records must reach them before materialization reads them.
+  if (options.writeAnchor && options.regenerateTopologyEnv) {
+    await regenerateTopologyProfiles(context, active);
+  }
+  // 3. Materialization, scoped to what each item owns.
+  for (const { result, plan } of active) {
+    await materializePlan(context, result, plan);
   }
 }
 
@@ -1044,6 +1382,10 @@ export async function registerApplications(options = {}, dependencies = {}) {
     const appRoot = entry.appDir === '.'
       ? repoRoot
       : path.resolve(repoRoot, entry.appDir);
+    const repoEntries = inventory.entries.filter(
+      (candidate) => !candidate.parseError && candidate.repo === entry.repo,
+    );
+    const anchorGroup = resolveAnchorGroup(trim(options.scope) || 'repository', repoEntries);
     // Slug collisions are resolved against every parsed manifest in the
     // workspace, not only the selected subset, so `--scope surfaces` and
     // `--scope all` derive the same slug for the same application.
@@ -1058,28 +1400,31 @@ export async function registerApplications(options = {}, dependencies = {}) {
         anchorOverrides,
         primaryDomainPattern: options.primaryDomainPattern,
         includeServersOnly: options.includeServersOnly === true,
+        anchorGroup,
       },
     );
     plan.repoAbsoluteRoot = repoRoot;
     plan.appAbsoluteRoot = appRoot;
     plan.displayName = trim(entry.displayName) || trim(entry.appName);
     plan.hasClientEnv = entry.tokenCarrier?.kind === 'client-env-materializer';
-    plan.surfaces = (entry.tokenCarrier?.surfaces ?? []).map((surface) => surface.id);
     for (const sink of plan.sinkPaths) {
       // Inventory sink paths are workspace-relative; the writer needs the
       // absolute path under the repository that owns the env configuration.
       sink.absolutePath = path.resolve(workspaceRoot, sink.path);
       sink.absoluteRepoRoot = repoRoot;
     }
-    const recorded = readRecordedAnchor(plan.sinkPaths.map((sink) => sink.absolutePath));
+    const recorded = readPlanRecordedAnchor(plan);
     if (recorded.conflict.length > 0) {
       defects.push(
-        `${entry.id}: conflicting ${DEPLOY_APPLICATION_ID_ENV} values across environment `
-        + `configuration: ${recorded.conflict.map((item) => `${item.path}=${item.value}`).join(', ')}`,
+        `${entry.id}: conflicting ${recorded.keyLabel} values across environment `
+        + `configuration: ${recorded.conflict
+          .map((item) => `${item.path}#${item.key}=${item.value}`)
+          .join(', ')}`,
       );
     }
     plan.recordedAnchor = recorded.value;
     plan.recordedAnchorPath = recorded.path;
+    plan.recordedAnchorKey = recorded.key;
     // The instance key is derived from the anchor (decimal deploy application id),
     // never from the slug: the registrar and the embedded/Node bootstrap must
     // derive the same `tenant_application_instance_key` for one installation.
@@ -1118,6 +1463,7 @@ export async function registerApplications(options = {}, dependencies = {}) {
         serversOnly: plan.serversOnly,
         primaryDomain: plan.primaryDomain,
         primaryDomainSource: plan.primaryDomainSource,
+        anchorGroup: plan.anchorGroup,
         notes: plan.permissionScopeRequirementNotes,
       };
       if (skip) {
@@ -1171,8 +1517,20 @@ export async function registerApplications(options = {}, dependencies = {}) {
             deploymentProfile: sink.deploymentProfile,
             path: sink.path,
           })),
-          materialize: plan.hasClientEnv
-            ? { repoRoot: path.relative(workspaceRoot, plan.repoAbsoluteRoot), surfaces: plan.surfaces }
+          surfaces: plan.surfaceGroup.surfaces.map((surface) => ({
+            id: surface.id,
+            format: surface.format,
+            anchorVariable: surface.anchorKey,
+            profileFiles: surface.profileFiles,
+          })),
+          excludedSurfaces: plan.surfaceGroup.excluded,
+          materialize: plan.hasClientEnv && plan.surfaceGroup.surfaces.length > 0
+            ? {
+              repoRoot: path.relative(workspaceRoot, plan.repoAbsoluteRoot),
+              mode: plan.anchorGroup,
+              surfaces: plan.surfaces,
+              anchorVariables: plan.surfaceGroup.surfaces.map((surface) => surface.anchorKey),
+            }
             : 'not-applicable',
         },
         defects: plan.defects,
@@ -1243,6 +1601,8 @@ export async function registerApplications(options = {}, dependencies = {}) {
     serversOnly: plan.serversOnly,
     primaryDomain: plan.primaryDomain,
     primaryDomainSource: plan.primaryDomainSource,
+    anchorGroup: plan.anchorGroup,
+    surfaces: [...plan.surfaces],
     status: 'failed',
     error: plan.defects.join('; '),
     errorKind: 'plan',
@@ -1250,7 +1610,7 @@ export async function registerApplications(options = {}, dependencies = {}) {
     deployApplicationUuid: '',
     iam: {},
     installationEnvironment: { envKey: plan.environment, status: '', primaryDomain: plan.primaryDomain },
-    anchor: { written: [], outcomes: [], skipped: '' },
+    anchor: { mode: plan.anchorGroup, written: [], outcomes: [], surfaces: [], skipped: '' },
     materialize: { status: 'skipped', reason: 'item failed before registration' },
   }));
   const skippedEntries = skipped.map(({ plan, skip }) => ({
@@ -1268,6 +1628,8 @@ export async function registerApplications(options = {}, dependencies = {}) {
     serversOnly: plan.serversOnly,
     primaryDomain: '',
     primaryDomainSource: '',
+    anchorGroup: plan.anchorGroup,
+    surfaces: [...plan.surfaces],
     status: 'skipped',
     skipKind: skip.kind,
     skipReason: skip.reason,
@@ -1276,7 +1638,7 @@ export async function registerApplications(options = {}, dependencies = {}) {
     deployApplicationUuid: '',
     iam: {},
     installationEnvironment: { envKey: plan.environment, status: '', primaryDomain: '' },
-    anchor: { written: [], outcomes: [], skipped: skip.reason },
+    anchor: { mode: plan.anchorGroup, written: [], outcomes: [], surfaces: [], skipped: skip.reason },
     materialize: { status: 'skipped', reason: 'server-only root skipped before registration' },
   }));
 
@@ -1328,7 +1690,24 @@ function summarizeCounts(entries, planned) {
     }).length,
     materialized: entries.filter((entry) => entry.materialize?.status === 'materialized').length,
     materializeFailed: entries.filter((entry) => entry.materialize?.status === 'failed').length,
+    // Retained for report compatibility: since every surface materializes only
+    // its own carrier files, two anchors of one repository can no longer collide
+    // inside one materializer run, so this count stays 0.
     materializeConflict: entries.filter((entry) => entry.materialize?.status === 'conflict').length,
+    // Registration granularity evidence: items registered as their own surface
+    // (one deploy application per manifest root) and the surface-scoped anchors
+    // they recorded.
+    surfaceScoped: entries.filter((entry) => entry.anchorGroup === 'surface').length,
+    surfaceMaterialized: entries.filter(
+      (entry) => entry.materialize?.status === 'materialized' && entry.materialize?.mode === 'surface',
+    ).length,
+    surfaceAnchorsWritten: entries.filter((entry) =>
+      entry.anchor?.mode === 'surface'
+      && (entry.anchor?.surfaces ?? []).some((surface) =>
+        surface.id !== ''
+        && (surface.outcomes ?? []).some((outcome) =>
+          outcome.outcome === 'updated' || outcome.outcome === 'created')),
+    ).length,
   };
 }
 
