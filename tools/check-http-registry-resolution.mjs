@@ -173,10 +173,6 @@ const IDENTITY_BASELINE = new Map([
     'device speech turn uses the process cloudrouter key; carry the device session identity (tenant/organization/user) in SpeechTurnInput and apply the caller pair',
   ],
   [
-    'sdkwork-image/crates/sdkwork-image-generation-provider-adapter/src/adapter.rs',
-    'image provider uses a process API key; thread the caller pair to the provider boundary and keep the key only for the background poller',
-  ],
-  [
     'sdkwork-voice/crates/sdkwork-voice-embedded-bootstrap/src/bootstrap.rs',
     'voice speech generation uses a process API key; carry the caller pair once the route is wired',
   ],
