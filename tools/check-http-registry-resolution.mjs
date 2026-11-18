@@ -169,10 +169,6 @@ const REGISTRY_CALL =
 // that fixes the site. Never add an entry without a date and a removal plan.
 const IDENTITY_BASELINE = new Map([
   [
-    'sdkwork-aiot/crates/sdkwork-aiot-intelligence-bridge/src/cloud_router.rs',
-    'device speech turn uses the process cloudrouter key; carry the device session identity (tenant/organization/user) in SpeechTurnInput and apply the caller pair',
-  ],
-  [
     'sdkwork-voice/crates/sdkwork-voice-embedded-bootstrap/src/bootstrap.rs',
     'voice speech generation uses a process API key; carry the caller pair once the route is wired',
   ],
