@@ -47,10 +47,13 @@ Selection:
                              (default: ${DEFAULT_WORKSPACE_ROOT})
   --environment <name>       ${REGISTRATION_ENVIRONMENTS.join('|')} (aliases: dev, local, prod)
   --scope repository|all|repo-root|surfaces
-                             repository (default): one anchor per repository — the root
-                             manifest, else the first surface manifest. The client-env
-                             materializer bakes one anchor per repository, so per-surface
-                             anchors cannot survive materialization. all: every manifest root.
+                             repository (default): one deploy application and one anchor
+                             per repository — the root manifest, else the first surface
+                             manifest — materialized into every declared surface.
+                             all: every manifest root is its own deploy application, so
+                             each surface gets its own anchor and only its own profile
+                             files are materialized (--surface); surfaces: the same
+                             surface-scoped registration, surface manifests only.
   --filter <regex>           Restrict by app id, app key, app name, or slug
   --only <id>                Register one application root (repeatable)
   --deployment-profile <p>   standalone|cloud override for env-file selection
@@ -309,9 +312,15 @@ function printItemLines(report) {
     const env = envKey ? ` env=${envKey}:${envStatus}` : '';
     const written = (entry.anchor?.written ?? []).length;
     const materialized = entry.materialize?.status ?? '-';
-    const line = `[${entry.status}] ${entry.label} anchor=${anchor} uuid=${
+    const surfaceScoped = entry.materialize?.mode === 'surface'
+      && (entry.materialize?.surfaces ?? []).length > 0
+      ? ` surfaces=${entry.materialize.surfaces.join(',')}`
+      : '';
+    const line = `[${entry.status}] ${entry.label} group=${entry.anchorGroup ?? 'repository'} anchor=${
+      anchor
+    } uuid=${
       entry.deployApplicationUuid || '-'
-    } ${iam}${env} anchorFiles=${written} materialize=${materialized}`;
+    } ${iam}${env} anchorFiles=${written} materialize=${materialized}${surfaceScoped}`;
     console.log(entry.status === 'failed' ? `${line}\n    error: ${entry.error}` : line);
   }
 }
@@ -406,7 +415,8 @@ async function main(argv) {
       + `${counts.environmentsDeduplicated ? ` environmentsDeduplicated=${counts.environmentsDeduplicated}` : ''} `
       + `anchorWritten=${counts.anchorWritten} materialized=${counts.materialized}`
       + `${counts.materializeFailed ? ` materializeFailed=${counts.materializeFailed}` : ''}`
-      + `${counts.materializeConflict ? ` materializeConflict=${counts.materializeConflict}` : ''}`,
+      + `${counts.materializeConflict ? ` materializeConflict=${counts.materializeConflict}` : ''}`
+      + ` surfaceScoped=${counts.surfaceScoped} surfaceMaterialized=${counts.surfaceMaterialized}`,
     );
     console.log(
       `selection: scope=${report.scope} deploymentProfile=${report.deploymentProfile} `

@@ -21,6 +21,12 @@
  * - `.env.<environment>` / `.env` — a repository that keeps a single authored
  *   env file per lifecycle.
  *
+ * Two identities can be recorded in those sinks: the repository-level
+ * `SDKWORK_DEPLOY_APPLICATION_ID` (one anchor for every surface of the
+ * repository) and the surface-scoped `<that variable>_<SURFACE>` a per-surface
+ * registration writes, so several surfaces of one repository hold independent
+ * anchors in the same layer without overwriting each other.
+ *
  * Writes are atomic (temporary file + rename) and idempotent (the same value
  * leaves the file untouched, so repeated runs produce no diff).
  *
@@ -76,15 +82,21 @@ export function readEnvValue(text, key) {
 
 /**
  * Collect every anchor recorded in the environment's sinks.
+ *
+ * The key selects the identity being read: the repository-level
+ * `SDKWORK_DEPLOY_APPLICATION_ID` for a one-anchor-per-repository registration,
+ * or the surface-scoped `<base>_<SURFACE>` variable for a surface that registers
+ * as its own deploy application.
  * @param sinkPaths - absolute env file paths for one application × environment
+ * @param key - anchor variable to read (defaults to the repository-level anchor)
  * @returns recorded value, its source, and every conflicting value
  */
-export function readRecordedAnchor(sinkPaths) {
+export function readRecordedAnchor(sinkPaths, key = DEPLOY_APPLICATION_ID_ENV) {
   const found = [];
   for (const filePath of sinkPaths) {
-    const value = readEnvFileValue(filePath, DEPLOY_APPLICATION_ID_ENV);
+    const value = readEnvFileValue(filePath, key);
     if (value) {
-      found.push({ path: filePath, value });
+      found.push({ path: filePath, key, value });
     }
   }
   const distinct = new Set(found.map((entry) => entry.value));
@@ -194,8 +206,11 @@ function writeAtomically(filePath, content) {
  *
  * A sink that already carries the same value is reported as `unchanged` and is
  * not rewritten, so a repeated registration produces no diff and keeps file
- * modes.
- * @param input - sinks, anchor, and optional uuid
+ * modes. `key`/`uuidKey` select which identity is written: the repository-level
+ * anchor by default, or a surface-scoped anchor when one surface registers as its
+ * own deploy application (so two surfaces of one repository never overwrite each
+ * other's record).
+ * @param input - sinks, anchor, optional uuid, and the identity keys
  * @returns per-sink outcome
  */
 export function writeAnchorEnv(input) {
@@ -203,6 +218,9 @@ export function writeAnchorEnv(input) {
   if (!anchor) {
     throw new Error('cannot write an empty deploy application anchor');
   }
+  const key = String(input.key ?? DEPLOY_APPLICATION_ID_ENV).trim() || DEPLOY_APPLICATION_ID_ENV;
+  const uuidKey = String(input.uuidKey ?? DEPLOY_APPLICATION_UUID_ENV).trim()
+    || DEPLOY_APPLICATION_UUID_ENV;
   const uuid = String(input.uuid ?? '').trim();
   const recordUuid = input.recordUuid !== false && uuid.length > 0;
   const results = [];
@@ -215,9 +233,9 @@ export function writeAnchorEnv(input) {
     const before = existsSync(absolutePath)
       ? readFileSync(absolutePath, 'utf8').replace(/^\uFEFF/u, '')
       : '';
-    let after = upsertKey(before, DEPLOY_APPLICATION_ID_ENV, anchor);
+    let after = upsertKey(before, key, anchor);
     if (recordUuid) {
-      after = upsertKey(after, DEPLOY_APPLICATION_UUID_ENV, uuid);
+      after = upsertKey(after, uuidKey, uuid);
     }
     if (before === after) {
       results.push({ path: absolutePath, outcome: 'unchanged' });

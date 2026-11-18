@@ -5,6 +5,14 @@ and IAM, wires each lifecycle as an IAM installation-environment row, and hands
 the returned deploy-application anchor to the client-env materializers so every
 profile's public application token carries it.
 
+The **registration granularity is the surface**
+(`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §5): one endpoint surface is one deploy
+application with its own anchor, its own IAM installation, and its own token
+carrier. `--scope all` therefore registers each `apps/<surface>` manifest root as
+its own deploy application and materializes only that surface's profile files, so
+two surfaces of one repository never fight over one anchor. The default
+`--scope repository` keeps the historical one-anchor-per-repository behavior.
+
 ```text
 sdkwork-specs/tools/register-applications.mjs            CLI entrypoint
 sdkwork-specs/tools/bootstrap-credentials.mjs            dual-token bootstrap entrypoint
@@ -86,11 +94,12 @@ configuration is unusable.
 
 | Value | Where it comes from | Used for |
 | --- | --- | --- |
-| deploy application `id` (decimal) | `AppResponse.deployApplicationId` (int64 string), the anchor; value is `deploy_app.id` | `iam_tenant_application.deploy_application_id`, token `app_id`/`aud`, `SDKWORK_DEPLOY_APPLICATION_ID` |
+| deploy application `id` (decimal) | `AppResponse.deployApplicationId` (int64 string), the anchor; value is `deploy_app.id` | `iam_tenant_application.deploy_application_id`, token `app_id`/`aud`, `SDKWORK_DEPLOY_APPLICATION_ID` (repository mode) or its surface-scoped form (surface mode) |
 | deploy application `uuid` | `AppResponse.id`, the addressable id | `GET/PATCH /app/v3/api/apps/{appId}`, registrar bookkeeping |
 | slug | `app.key` (fallback `app.name`, then the directory) | `apps.create`, `uk_deploy_app_tenant_slug` |
 | environment key | lifecycle name (`development`, `production`, ...) | `iam_application_installation_environment.env_key` |
 | primary domain | `--primary-domain` pattern, then manifest sources (below) | installation + environment `primary_domain` |
+| surface anchor variable | `<declared anchor variable>_<SURFACE>` (`SDKWORK_DEPLOY_APPLICATION_ID_SDKWORK_IM_PC`) | the surface's own anchor record and the materializer input that rewrites only that surface |
 
 The two deploy identifiers are different facts and are recorded separately in
 every result (`deployApplicationId`, `deployApplicationUuid`). Both are read from
@@ -161,6 +170,59 @@ Several manifest roots that resolve to one deploy slug are one installation and
 one row: the upsert is cached per `(installation, env_key)` in a run, so a second
 surface awaits the first write instead of creating a duplicate.
 
+## Registration granularity: one anchor per surface
+
+`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §5 requires every shipped endpoint
+surface (H5, PC, mini program, Flutter, native, API service) to be its own deploy
+application with its own `app_id`, and §11 repeats the runbook per surface. The
+registrar follows that granularity:
+
+| Scope | Deploy applications | Anchor per | Anchor record | Materializer call |
+| --- | --- | --- | --- | --- |
+| `repository` (default), `repo-root` | one per repository | repository | `SDKWORK_DEPLOY_APPLICATION_ID` | `<repo>` + `--environment <env>` (full declared matrix) |
+| `all`, `surfaces` | one per manifest root (so one per surface) | surface | `SDKWORK_DEPLOY_APPLICATION_ID_<SURFACE>` | `--environment <env> --surface <surface>` |
+
+**Anchor sink determination.** For each manifest root the registrar resolves the
+surfaces the declaration roots at that root
+(`etc/client-env.materialization.json` `surfaces[].root`):
+
+- an `apps/<surface>` manifest root owns exactly that surface — its sink is the
+  surface's own profile carrier files (`.env.<profile>`, `env/sdkwork.<profile>.json`,
+  `config/{mini-program,app}/runtime-env.<profile>.json`, minus `excludeProfiles`)
+  plus the surface-scoped anchor key in the repository's authored env layer(s)
+  (`etc/topology/overrides/<profile>.<environment>.env`, else
+  `.env.<environment>`/`.env`);
+- a repository-root manifest owns only surfaces declared with `root: "."`. In a
+  multi-surface repository that is usually none, so it records the
+  repository-level identity (the server anchor) and materializes nothing — it
+  never rewrites another surface's carrier. A repository whose only manifest is
+  the root keeps the repository mode described above;
+- a surface declared `format: none` (server profile) carries no token and is
+  reported as excluded instead of being materialized.
+
+The decision to use surface granularity is read from the repository inventory, not
+from the selected subset: `--only <root>` cannot make one root manifest overwrite
+the anchors of surfaces it did not register.
+
+**Resolution precedence in the materializer.** A surface's anchor is read, highest
+first, from (1) the surface-scoped variable in the process environment (the
+registrar passes it, and a deployment may inject it), (2) the same variable in the
+resolved deployment profile `etc/topology/<profile>.<environment>.env` (where the
+registration records it), (3) the declared base variable
+`SDKWORK_DEPLOY_APPLICATION_ID` (the one-anchor-per-repository behavior). A surface
+whose declaration uses a literal `appId` reads no variable. Two surface ids that
+would derive the same anchor variable are refused rather than sharing one anchor.
+
+`node <sdkwork-specs>/tools/materialize-client-env.mjs --root <repo> --environment
+<env> --surface <id>[,<id>]` writes only the selected surfaces, so a registration
+can never bake one surface's anchor into another surface's carrier. Without
+`--surface` the whole declared matrix is materialized exactly as before.
+
+Migration of an existing repository: its committed profiles still carry the
+repository anchor. Running the registrar with `--scope all` adds the per-surface
+records and rewrites each surface's carrier with its own anchor; a repeated run
+creates nothing, changes no byte, and reports every anchor as already present.
+
 ## Primary domain
 
 IAM enable refuses an installation whose `primary_domain` is blank
@@ -225,17 +287,30 @@ instead of one of them losing a mid-batch `409` based on completion order.
    The installation must report `enabled` and echo the same anchor; a response
    that cannot prove the binding is refused unless
    `--allow-unverified-iam-binding` is passed explicitly.
-7. **Hand-off** — `SDKWORK_DEPLOY_APPLICATION_ID` (plus
-   `SDKWORK_DEPLOY_APPLICATION_UUID` bookkeeping) is written into every authored
-   env layer of the lifecycle: `etc/topology/overrides/<profile>.<environment>.env`
-   for each deployment profile that declares one, else an authored
-   `.env.<environment>`/`.env`. Generated
-   `etc/topology/<profile>.<environment>.env` files are never hand-edited; they
-   are regenerated by `materialize-topology-env.mjs`. Then
-   `materialize-client-env.mjs --environment <environment>` runs with the anchor in
-   its environment, so both profiles of *that* lifecycle carry `app_id`/`aud` =
-   anchor. Other lifecycles share the same anchor through their own rows and
-   their own materialization run.
+7. **Hand-off** — the anchor is recorded with the identity key of the
+   registration granularity, then the generated topology profile is regenerated,
+   then the client-env materializer runs:
+
+   - **surface mode** (`--scope all`/`surfaces`): the surface-scoped variable
+     `<SDKWORK_DEPLOY_APPLICATION_ID>_<SURFACE>` (plus
+     `SDKWORK_DEPLOY_APPLICATION_UUID_<SURFACE>` bookkeeping) is written into every
+     authored env layer of the lifecycle, and
+     `materialize-client-env.mjs --environment <environment> --surface <id>` runs
+     with the anchor in that surface's variable, so only that surface's profile
+     files are rewritten. A root manifest that owns no surface records the
+     repository-level `SDKWORK_DEPLOY_APPLICATION_ID` instead and materializes
+     nothing;
+   - **repository mode** (`--scope repository`, default): `SDKWORK_DEPLOY_APPLICATION_ID`
+     (plus `SDKWORK_DEPLOY_APPLICATION_UUID`) is written into every authored env
+     layer of the lifecycle, and `materialize-client-env.mjs --environment
+     <environment>` runs with the anchor in its environment, so both deployment
+     profiles of *that* lifecycle carry `app_id`/`aud` = anchor.
+
+   Generated `etc/topology/<profile>.<environment>.env` files are never
+   hand-edited; they are regenerated by `materialize-topology-env.mjs`, once per
+   `(repository, profile)` per run even when several surfaces record an anchor in
+   the same layer. Other lifecycles share the same anchor through their own rows
+   and their own materialization run.
 
 ## Usage
 
@@ -295,14 +370,18 @@ a server-only root never looks registered and never hides behind an invalid item
 ## Selection scope
 
 `--scope repository` (default) registers one application per repository: the
-repository-root manifest when it exists, otherwise the first surface manifest.
-This is the granularity the token pipeline supports — `materialize-client-env.mjs`
-resolves `appIdEnv` for every declared surface from the same process environment,
-so one repository carries one deploy anchor. `--scope all` (or `surfaces`)
-registers every manifest root; surfaces that resolve to one installation share
-one environment row, while a repository whose surfaces then need several anchors
-is reported as a materializer conflict instead of silently baking the last anchor
-over the others.
+repository-root manifest when it exists, otherwise the first surface manifest. One
+deploy application then anchors every declared surface of that repository, which is
+what the committed profiles of most repositories were materialized with.
+
+`--scope all` (or `surfaces`) registers every manifest root, and that is the
+registration granularity the factory standard requires: each surface gets its own
+deploy application, its own anchor, and its own profile carriers, and the
+hand-off is scoped with `--surface`, so a repository with several surfaces no
+longer reports a materializer conflict. A repository whose only manifest is the
+repository root has no surface manifest to register one by one and keeps the
+repository behavior; `--scope surfaces` selects only the `apps/<surface>`
+manifests.
 
 ## Idempotency, retries, and failure semantics
 
@@ -335,6 +414,7 @@ over the others.
 
 ```sh
 node --test "sdkwork-specs/tools/app-registration/tests/*.test.mjs"
+node --test sdkwork-specs/tools/materialize-client-env.test.mjs
 ```
 
 The suites cover created/reused/failure-retry flows against a loopback fake of
@@ -353,6 +433,20 @@ each, the environment row being written before enable, plan-time refusal of a
 missing/duplicate/invalid domain, `--primary-domain` placeholder expansion,
 per-installation row deduplication, `Retry-After`-aware retry, and the
 dual-token-credential failure path.
+
+Surface-granular registration (`tests/surface-registration.test.mjs`) is covered
+against the real materializer in-process: `--scope all` on a repository shaped
+like `sdkwork-im` registers one deploy application per surface with distinct
+anchors, each surface carrier carries its own `app_id`, the authored env layer
+holds one surface-scoped record per surface next to the repository-level record,
+the topological regeneration happens once per `(repository, profile)`, a repeated
+run creates nothing and leaves every file byte-identical, a single-surface
+repository keeps the repository-level hand-off without `--surface`, a `429` on a
+create is retried after `Retry-After`, and two surface ids that would share one
+anchor variable fail at plan time. The materializer suites cover the `--surface`
+filter itself (only the selected carriers are written, a per-surface variable
+never overwrites another surface, the recorded variable feeds the token without an
+exported anchor, and the no-filter default still writes the whole matrix).
 
 ## Known contract gaps
 
@@ -376,3 +470,9 @@ dual-token-credential failure path.
   registered to another environment of the tenant is still refused by IAM with
   `409` naming the conflicting environment. The plan-time duplicate check only
   covers the items of one run.
+- Surface-scoped anchors add `<base>_<SURFACE>` variables to the repository's
+  tracked override layer. They are anchor records, not secrets; the base variable
+  keeps naming the repository identity and a surface-scoped write never invents or
+  rewrites it. A deployment that reads client anchors from those keys must export
+  them (or let the resolved topology profile carry them); the materializer accepts
+  either source and still fails closed when no anchor is available.

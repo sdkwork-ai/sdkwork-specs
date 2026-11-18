@@ -179,11 +179,31 @@ Rules:
   `__SDKWORK_DEPLOY_APPLICATION_ID__` for a surface whose anchor is only known at
   deployment, so no fabricated identity is committed. Deployment re-runs
   `materialize-client-env` with the anchor set before building or packaging.
-- Verification gates `MUST` resolve the expected app id with the same
-  `appIdEnv` logic. `check-app-access-token-env.mjs` `MUST` print
-  `skipped: <ENV> not set` and return 0 when the anchor is unavailable on the
-  machine, because it cannot compare against an identity that does not exist
-  there; it `MUST NOT` report a pass that was never evaluated.
+- Verification gates `MUST` resolve the expected app id per surface with the
+  same `appIdEnv` logic, highest precedence first:
+  1. the surface-scoped variable `<appIdEnv>_<SURFACE>` in the process
+     environment;
+  2. the same variable recorded in that profile's env layer — the resolved
+     profile file named by `etc/sdkwork.deployment.config.json`
+     (`etc/topology/<profile>.<environment>.env`), then the authored
+     `etc/topology/overrides/<profile>.<environment>.env`;
+  3. the declared repository-level variable `<appIdEnv>`.
+  The surface-scoped name `MUST` reuse `surfaceApplicationTokenEnvName`
+  (`tools/app-access-token.mjs`), the same normalization the materializer uses,
+  so a gate and the generator cannot disagree.
+  `check-app-access-token-env.mjs` and `check-release-access-token-env.mjs`
+  accept `--surface <id>[,<id>]` to limit the check to surfaces materialized
+  separately, and each profile is compared against the anchor resolved for its
+  own surface, so one surface's token is never judged against another surface's
+  anchor.
+- When no layer carries an anchor for a checked surface, the gate `MUST` print
+  `skipped: <ENV> not set` for that surface and return 0 when nothing was
+  verified, because it cannot compare against an identity that does not exist
+  there; it `MUST NOT` report a pass that was never evaluated. `--require-anchor`,
+  used by the packaging/release preflight, turns a missing anchor into a failure
+  and also refuses a token that still carries the committed
+  `__SDKWORK_DEPLOY_APPLICATION_ID__` placeholder; without that flag a
+  placeholder is reported as needing materialization.
 - A surface that still declares a literal `accessToken.appId` while the
   platform uses a deploy application anchor is a violation in that repository;
   the application-owned gate fails and names `accessToken.appIdEnv`.
@@ -283,6 +303,10 @@ node <sdkwork-specs>/tools/app-access-token.mjs generate \
 - Packaging and deployment `MUST` fail before the build/deploy phase when a
   release profile token is missing, empty, or has mismatched
   `environment`/`deployment_profile`/`app_id` claims.
+- The release preflight resolves each surface's anchor per §3.1.1 and packaging
+  runs it with `--require-anchor`, so a multi-surface repository passes when
+  every surface carries its own anchor and fails when any checked surface has
+  none or still carries the committed placeholder.
 - The reusable package and verify workflows run
   `scripts/check-release-access-token-env.mjs` immediately after
   `validate-config`. The check is not bypassable.

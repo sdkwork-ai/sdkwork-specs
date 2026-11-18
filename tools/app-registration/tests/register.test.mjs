@@ -798,7 +798,7 @@ test('the default scope registers one anchor per repository', async () => {
   }
 });
 
-test('scope=all registers every manifest root and reports the materializer conflict', async () => {
+test('scope=all anchors each surface separately instead of reporting a materializer conflict', async () => {
   const workspace = createWorkspace({
     repositories: [
       {
@@ -820,7 +820,7 @@ test('scope=all registers every manifest root and reports the materializer confl
   });
   const stack = await startFakeStack();
   try {
-    const { report } = await runRegistration({
+    const { report, runner } = await runRegistration({
       workspaceRoot: workspace.root,
       stack,
       overrides: { scope: 'all' },
@@ -830,13 +830,31 @@ test('scope=all registers every manifest root and reports the materializer confl
     assert.equal(report.counts.created, 2, 'both manifest roots are registered');
     const anchors = new Set(report.entries.map((entry) => entry.deployApplicationId));
     assert.equal(anchors.size, 2, 'each manifest root owns its own deploy application');
-    const conflicts = report.entries.filter((entry) => entry.materialize.status === 'conflict');
-    assert.equal(
-      conflicts.length,
-      2,
-      'one repository cannot bake two anchors in one materializer run; the conflict is reported',
+    // The commit that made registration surface-granular removed the whole-repo
+    // materializer conflict: the surface root materializes only its own surface,
+    // and the h5 root owns no declared surface, so neither can bake the other's
+    // anchor into a carrier.
+    assert.equal(report.counts.materializeConflict, 0);
+    const root = report.entries.find((entry) => entry.appDir === '.');
+    const h5 = report.entries.find((entry) => entry.appDir === 'apps/sdkwork-demo-h5');
+    assert.equal(root.anchorGroup, 'surface');
+    assert.equal(root.materialize.status, 'materialized');
+    assert.deepEqual(
+      root.materialize.surfaces,
+      ['sdkwork-demo-pc'],
+      'the root-owned surface is the one it materializes',
     );
-    assert.equal(report.counts.materializeConflict, 2);
+    assert.equal(h5.materialize.status, 'not-applicable');
+    assert.match(h5.materialize.reason, /owns none of the declared surfaces/u);
+    const materializeArgs = runner.calls
+      .filter((call) => call.script === 'materialize-client-env.mjs')
+      .map((call) => call.args);
+    assert.equal(materializeArgs.length, 1, 'one materializer run, for the one owned surface');
+    assert.deepEqual(materializeArgs[0], [
+      '--root', path.join(workspace.root, 'sdkwork-demo'),
+      '--environment', 'development',
+      '--surface', 'sdkwork-demo-pc',
+    ]);
   } finally {
     await stack.close();
     workspace.cleanup();

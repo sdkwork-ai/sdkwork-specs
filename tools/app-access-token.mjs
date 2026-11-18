@@ -17,6 +17,37 @@ export const PUBLIC_APP_ACCESS_TOKEN_KEY = 'SDKWORK_ACCESS_TOKEN';
 export const PUBLIC_APP_ACCESS_TOKEN_KID = 'public-app-token';
 
 /**
+ * Committed app id placeholder for a surface whose anchor is known only at
+ * deployment (`APP_ACCESS_TOKEN_SPEC.md` §3.1.1,
+ * `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §8).
+ *
+ * A repository commits this value instead of a fabricated identity, and a
+ * verification gate reports it as needing materialization rather than as a claim
+ * mismatch. A packaging gate that requires the anchor refuses it.
+ */
+export const PUBLIC_APP_ACCESS_TOKEN_PENDING_APP_ID = '__SDKWORK_DEPLOY_APPLICATION_ID__';
+
+/**
+ * True when a token claim still carries the committed app id placeholder.
+ *
+ * The canonical placeholder is `__SDKWORK_DEPLOY_APPLICATION_ID__`; the
+ * `<ENV_VAR>`-derived form is accepted too, so a surface that declares a
+ * different anchor variable keeps the same signal.
+ * @param appId - token `app_id` or `aud` claim.
+ * @param envName - declared anchor variable, when known.
+ * @returns true when the value is a pending materialization placeholder.
+ */
+export function isApplicationAccessTokenPendingAppId(appId, envName = '') {
+  const value = String(appId ?? '').trim();
+  if (!value) {
+    return false;
+  }
+  const name = String(envName ?? '').trim();
+  return value === PUBLIC_APP_ACCESS_TOKEN_PENDING_APP_ID
+    || (name ? value === `__${name}__` : false);
+}
+
+/**
  * `accessToken` field naming the environment variable that carries the app id.
  *
  * A deployment that makes the deploy application the identity of every access
@@ -67,6 +98,66 @@ function resolveAppIdFromEnvironment(envName, env) {
     throw new MissingAppIdEnvironmentError(envName);
   }
   return { appId: value, source: 'env', envName };
+}
+
+/**
+ * Environment variable a surface takes its deployment anchor from, if any.
+ *
+ * Returns the declared `accessToken.appIdEnv` name, or the variable named by an
+ * inline `${ENV_VAR}` placeholder in `accessToken.appId`. A plain literal
+ * `appId` is repository-owned, so it has no environment source and yields `''`.
+ * @param accessTokenSpec - materialization `accessToken` input object.
+ * @returns the environment variable name, or `''`.
+ */
+export function resolveApplicationAccessTokenEnvName(accessTokenSpec = {}) {
+  const spec = accessTokenSpec && typeof accessTokenSpec === 'object' ? accessTokenSpec : {};
+  const envField = String(spec[APP_ACCESS_TOKEN_APP_ID_ENV_FIELD] ?? '').trim();
+  if (envField) {
+    return envField;
+  }
+  const placeholder = APP_ID_ENV_PLACEHOLDER_PATTERN.exec(String(spec.appId ?? '').trim());
+  return placeholder?.[1] ?? '';
+}
+
+/**
+ * Env-name suffix that identifies one surface inside a deployment anchor name.
+ *
+ * Every surface of a repository deploys as its own application
+ * (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §5), so the anchor variable is
+ * surface-scoped: `<declared anchor variable>_<SURFACE>`. The suffix is derived
+ * from the surface id only, so two runs of the same declaration always name the
+ * same variable.
+ * @param surfaceId - declared client surface id.
+ * @returns the upper-snake suffix, or `''` when the id has no name characters.
+ */
+export function surfaceAnchorEnvSuffix(surfaceId) {
+  return String(surfaceId ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/gu, '_')
+    .replace(/^_+/u, '')
+    .replace(/_+$/u, '');
+}
+
+/**
+ * Per-surface anchor variable derived from a declared anchor variable.
+ *
+ * `SDKWORK_DEPLOY_APPLICATION_ID` + `sdkwork-im-pc` yields
+ * `SDKWORK_DEPLOY_APPLICATION_ID_SDKWORK_IM_PC`. The declaration keeps naming the
+ * base variable, so a repository that materialized one anchor for all surfaces
+ * keeps working; a registration that anchors each surface writes the derived
+ * name and the materializer reads it for that surface only.
+ * @param baseEnvName - the declared anchor variable (`accessToken.appIdEnv`).
+ * @param surfaceId - declared client surface id.
+ * @returns the surface-scoped variable name, or `''` when it cannot be derived.
+ */
+export function surfaceApplicationTokenEnvName(baseEnvName, surfaceId) {
+  const base = String(baseEnvName ?? '').trim();
+  const suffix = surfaceAnchorEnvSuffix(surfaceId);
+  if (!base || !suffix) {
+    return '';
+  }
+  return `${base}_${suffix}`;
 }
 
 /**

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import process from 'node:process';
 import test from 'node:test';
 
 import {
@@ -9,9 +10,12 @@ import {
   applyViteSurfaceCloudValues,
   createClientSurfaceValues,
   filterClientEnvProfileIds,
+  filterClientEnvSurfaces,
   materializeClientEnv,
   parseClientEnvArgs,
   parseClientEnvDotenv,
+  surfaceAnchorEnvironment,
+  surfaceAnchorEnvNames,
 } from './materialize-client-env.mjs';
 import { decodeApplicationAccessToken } from './app-access-token.mjs';
 
@@ -395,4 +399,299 @@ test('the CLI accepts --environment as a repeatable or comma-separated filter', 
     ['development', 'test'],
   );
   assert.throws(() => parseClientEnvArgs(['--unknown']), /Unsupported/u);
+});
+
+test('the CLI accepts --surface as a repeatable or comma-separated filter', () => {
+  assert.deepEqual(parseClientEnvArgs([]).surfaces, [], 'no filter means every surface');
+  assert.deepEqual(parseClientEnvArgs(['--surface', 'demo-pc']).surfaces, ['demo-pc']);
+  assert.deepEqual(
+    parseClientEnvArgs(['--surface', 'demo-pc,demo-h5']).surfaces,
+    ['demo-pc', 'demo-h5'],
+  );
+  assert.deepEqual(
+    parseClientEnvArgs([
+      '--surface', 'demo-pc',
+      '--surface', 'demo-h5',
+      '--environment', 'development',
+    ]),
+    {
+      root: process.cwd(),
+      config: 'etc/client-env.materialization.json',
+      check: false,
+      environments: ['development'],
+      surfaces: ['demo-pc', 'demo-h5'],
+    },
+  );
+  assert.throws(() => parseClientEnvArgs(['--surface']), /requires a value/u);
+});
+
+function createSurfaceFilterRoot() {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-client-env-surfaces-'));
+  writeFixture(root, 'etc/sdkwork.deployment.config.json', JSON.stringify({
+    profiles: {
+      'standalone.development': { config: 'topology/standalone.development.env' },
+    },
+  }, null, 2));
+  writeFixture(root, 'etc/topology/standalone.development.env', [
+    'SDKWORK_IM_DEPLOYMENT_PROFILE=standalone',
+    'SDKWORK_IM_ENVIRONMENT=development',
+    'SDKWORK_IM_PROFILE_ID=standalone.development',
+    'SDKWORK_DEMO_HTTP_URL=http://127.0.0.1:10240',
+    'SDKWORK_DEPLOY_APPLICATION_ID=1001',
+    '',
+  ].join('\n'));
+  writeFixture(root, 'etc/client-env.materialization.json', JSON.stringify({
+    schemaVersion: 1,
+    kind: 'sdkwork.client-env-materialization',
+    command: 'materialize',
+    profiles: ['standalone.development'],
+    sourceIdentity: {
+      deploymentProfileKeys: ['SDKWORK_IM_DEPLOYMENT_PROFILE'],
+      environmentKeys: ['SDKWORK_IM_ENVIRONMENT'],
+      profileIdKeys: ['SDKWORK_IM_PROFILE_ID'],
+    },
+    surfaces: [
+      {
+        id: 'demo-pc',
+        root: 'apps/demo-pc',
+        format: 'vite',
+        runtimeTarget: 'browser',
+        identityPrefixes: ['VITE_SDKWORK_DEMO'],
+        accessToken: {
+          appIdEnv: 'SDKWORK_DEPLOY_APPLICATION_ID',
+          tenantId: '100001',
+          organizationId: '0',
+          permissionScope: ['iam:self'],
+        },
+        bindings: {
+          VITE_SDKWORK_DEMO_HTTP_URL: 'SDKWORK_DEMO_HTTP_URL',
+        },
+      },
+      {
+        id: 'demo-flutter',
+        root: 'apps/demo-flutter',
+        format: 'flutter',
+        runtimeTarget: 'flutter-android',
+        identityPrefixes: ['SDKWORK_DEMO'],
+        accessToken: {
+          appIdEnv: 'SDKWORK_DEPLOY_APPLICATION_ID',
+          tenantId: '100001',
+          organizationId: '0',
+          permissionScope: ['iam:self'],
+        },
+        bindings: {
+          SDKWORK_DEMO_HTTP_URL: 'SDKWORK_DEMO_HTTP_URL',
+        },
+      },
+    ],
+  }, null, 2));
+  return root;
+}
+
+function readSurfaceAppId(root, surfaceFile) {
+  const filePath = path.join(root, surfaceFile);
+  const text = readFileSync(filePath, 'utf8');
+  const token = surfaceFile.endsWith('.json')
+    ? JSON.parse(text).SDKWORK_ACCESS_TOKEN
+    : parseClientEnvDotenv(text).SDKWORK_ACCESS_TOKEN;
+  return decodeApplicationAccessToken(token).payload.app_id;
+}
+
+test('--surface materializes only the selected surface profile files', () => {
+  const root = createSurfaceFilterRoot();
+  try {
+    const written = materializeClientEnv({
+      rootDir: root,
+      environments: ['development'],
+      surfaces: ['demo-pc'],
+      env: { SDKWORK_DEPLOY_APPLICATION_ID: '5001' },
+    });
+    assert.deepEqual(written.map((file) => path.relative(root, file).replaceAll('\\', '/')), [
+      'apps/demo-pc/.env.standalone.development',
+    ]);
+    assert.equal(readSurfaceAppId(root, 'apps/demo-pc/.env.standalone.development'), '5001');
+    assert.equal(
+      existsSync(path.join(root, 'apps/demo-flutter/env/sdkwork.standalone.development.json')),
+      false,
+      'an unselected surface is not written',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a per-surface anchor variable never overwrites another surface carrier', () => {
+  const root = createSurfaceFilterRoot();
+  try {
+    materializeClientEnv({
+      rootDir: root,
+      environments: ['development'],
+      surfaces: ['demo-pc'],
+      env: { SDKWORK_DEPLOY_APPLICATION_ID_DEMO_PC: '6001' },
+    });
+    const before = readFileSync(path.join(root, 'apps/demo-pc/.env.standalone.development'), 'utf8');
+    assert.equal(readSurfaceAppId(root, 'apps/demo-pc/.env.standalone.development'), '6001');
+
+    materializeClientEnv({
+      rootDir: root,
+      environments: ['development'],
+      surfaces: ['demo-flutter'],
+      // The repository-level variable still names the other surface's anchor;
+      // the selected surface takes its own variable, so the first carrier is
+      // neither read nor rewritten.
+      env: {
+        SDKWORK_DEPLOY_APPLICATION_ID: '1001',
+        SDKWORK_DEPLOY_APPLICATION_ID_DEMO_FLUTTER: '6002',
+      },
+    });
+    assert.equal(
+      readSurfaceAppId(root, 'apps/demo-flutter/env/sdkwork.standalone.development.json'),
+      '6002',
+    );
+    assert.equal(readSurfaceAppId(root, 'apps/demo-pc/.env.standalone.development'), '6001');
+    assert.equal(
+      readFileSync(path.join(root, 'apps/demo-pc/.env.standalone.development'), 'utf8'),
+      before,
+      'the other surface carrier is byte-identical after the second run',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the default materialization keeps one repository anchor for every surface', () => {
+  const root = createSurfaceFilterRoot();
+  try {
+    const written = materializeClientEnv({
+      rootDir: root,
+      environments: ['development'],
+      env: { SDKWORK_DEPLOY_APPLICATION_ID: '7001' },
+    });
+    assert.equal(written.length, 2, 'no --surface filter writes the whole declared matrix');
+    assert.equal(readSurfaceAppId(root, 'apps/demo-pc/.env.standalone.development'), '7001');
+    assert.equal(
+      readSurfaceAppId(root, 'apps/demo-flutter/env/sdkwork.standalone.development.json'),
+      '7001',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('--surface refuses an undeclared surface id instead of writing nothing', () => {
+  const root = createSurfaceFilterRoot();
+  try {
+    assert.throws(
+      () => materializeClientEnv({ rootDir: root, surfaces: ['demo-h5'] }),
+      /--surface demo-h5 is not declared .*demo-pc, demo-flutter/u,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the per-surface anchor variable wins over the repository anchor', () => {
+  const surface = {
+    id: 'demo-pc',
+    format: 'vite',
+    runtimeTarget: 'browser',
+    accessToken: { appIdEnv: 'SDKWORK_DEPLOY_APPLICATION_ID' },
+  };
+  assert.deepEqual(surfaceAnchorEnvNames(surface), {
+    baseEnvName: 'SDKWORK_DEPLOY_APPLICATION_ID',
+    surfaceEnvName: 'SDKWORK_DEPLOY_APPLICATION_ID_DEMO_PC',
+  });
+  const resolved = surfaceAnchorEnvironment(
+    surface,
+    {
+      SDKWORK_DEPLOY_APPLICATION_ID: '1001',
+      SDKWORK_DEPLOY_APPLICATION_ID_DEMO_PC: '2002',
+    },
+    {},
+  );
+  assert.equal(resolved.SDKWORK_DEPLOY_APPLICATION_ID, '2002');
+  assert.equal(
+    surfaceAnchorEnvironment(surface, { SDKWORK_DEPLOY_APPLICATION_ID: '1001' }, {})
+      .SDKWORK_DEPLOY_APPLICATION_ID,
+    '1001',
+    'a surface without its own variable keeps the repository anchor',
+  );
+});
+
+test('a surface anchor recorded in the resolved profile feeds the token without an exported anchor', () => {
+  const root = createSurfaceFilterRoot();
+  try {
+    // The registration records the surface anchor in the deployment profile; the
+    // materializer must then be able to regenerate that surface's token without
+    // the variable being exported into the process environment.
+    writeFixture(root, 'etc/topology/standalone.development.env', [
+      'SDKWORK_IM_DEPLOYMENT_PROFILE=standalone',
+      'SDKWORK_IM_ENVIRONMENT=development',
+      'SDKWORK_IM_PROFILE_ID=standalone.development',
+      'SDKWORK_DEMO_HTTP_URL=http://127.0.0.1:10240',
+      'SDKWORK_DEPLOY_APPLICATION_ID=1001',
+      'SDKWORK_DEPLOY_APPLICATION_ID_DEMO_PC=8001',
+      '',
+    ].join('\n'));
+    materializeClientEnv({
+      rootDir: root,
+      environments: ['development'],
+      surfaces: ['demo-pc'],
+      env: {},
+    });
+    assert.equal(readSurfaceAppId(root, 'apps/demo-pc/.env.standalone.development'), '8001');
+    // The process environment still wins over the recorded value.
+    materializeClientEnv({
+      rootDir: root,
+      environments: ['development'],
+      surfaces: ['demo-pc'],
+      env: { SDKWORK_DEPLOY_APPLICATION_ID_DEMO_PC: '8002' },
+    });
+    assert.equal(readSurfaceAppId(root, 'apps/demo-pc/.env.standalone.development'), '8002');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('two surface ids deriving one anchor variable are refused', () => {
+  const surfaces = [
+    {
+      id: 'demo-pc',
+      format: 'vite',
+      runtimeTarget: 'browser',
+      accessToken: { appIdEnv: 'SDKWORK_DEPLOY_APPLICATION_ID' },
+    },
+    {
+      id: 'demo_pc',
+      format: 'vite',
+      runtimeTarget: 'browser',
+      accessToken: { appIdEnv: 'SDKWORK_DEPLOY_APPLICATION_ID' },
+    },
+  ];
+  assert.throws(
+    () => filterClientEnvSurfaces(surfaces, ['demo-pc']),
+    /SDKWORK_DEPLOY_APPLICATION_ID_DEMO_PC would be the anchor variable of demo-pc and demo_pc/u,
+  );
+});
+
+test('only env-sourced surfaces get a per-surface anchor variable', () => {
+  assert.deepEqual(
+    surfaceAnchorEnvNames({
+      id: 'demo-pc',
+      accessToken: { appId: 'sdkwork-demo-pc' },
+    }),
+    { baseEnvName: '', surfaceEnvName: '' },
+    'a literal appId is repository-owned and reads no variable',
+  );
+  assert.deepEqual(
+    surfaceAnchorEnvNames({
+      id: 'demo-pc',
+      accessToken: { appId: '${SDKWORK_DEPLOY_APPLICATION_ID}' },
+    }),
+    {
+      baseEnvName: 'SDKWORK_DEPLOY_APPLICATION_ID',
+      surfaceEnvName: 'SDKWORK_DEPLOY_APPLICATION_ID_DEMO_PC',
+    },
+    'the inline placeholder form is an equivalent env source',
+  );
 });

@@ -5,9 +5,14 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { checkAppAccessTokenEnv } from './check-app-access-token-env.mjs';
-import { createApplicationAccessToken } from './app-access-token.mjs';
+import {
+  PUBLIC_APP_ACCESS_TOKEN_PENDING_APP_ID,
+  createApplicationAccessToken,
+} from './app-access-token.mjs';
 
 const ANCHOR_ENV = 'SDKWORK_DEPLOY_APPLICATION_ID';
+const PC_ANCHOR_ENV = `${ANCHOR_ENV}_DEMO_PC`;
+const H5_ANCHOR_ENV = `${ANCHOR_ENV}_DEMO_H5`;
 
 function writeFixture(root, relativePath, contents) {
   const filePath = path.join(root, relativePath);
@@ -43,6 +48,52 @@ function createRoot({ accessToken, tokenAppId = 'demo-app' }) {
       }),
     }, null, 2),
   );
+  return root;
+}
+
+function createToken(appId, {
+  environment = 'development',
+  deploymentProfile = 'standalone',
+  runtimeTarget = 'browser',
+} = {}) {
+  return createApplicationAccessToken({
+    appId,
+    tenantId: '100001',
+    organizationId: '0',
+    environment,
+    deploymentProfile,
+    runtimeTarget,
+    permissionScope: ['iam:self'],
+  });
+}
+
+function viteSurface(id, rootPath, appIdEnv = ANCHOR_ENV) {
+  return {
+    id,
+    root: rootPath,
+    format: 'vite',
+    runtimeTarget: 'browser',
+    accessToken: { appIdEnv },
+  };
+}
+
+function createSurfaceRoot({ surfaces, files = {}, deploymentProfiles = ['standalone.development'] }) {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-access-token-surface-'));
+  writeFixture(root, 'etc/client-env.materialization.json', JSON.stringify({
+    schemaVersion: 1,
+    kind: 'sdkwork.client-env-materialization',
+    deploymentConfig: 'sdkwork.deployment.config.json',
+    surfaces,
+  }, null, 2));
+  writeFixture(root, 'etc/sdkwork.deployment.config.json', JSON.stringify({
+    profiles: Object.fromEntries(deploymentProfiles.map((profileId) => [
+      profileId,
+      { config: `topology/${profileId}.env` },
+    ])),
+  }, null, 2));
+  for (const [relativePath, contents] of Object.entries(files)) {
+    writeFixture(root, relativePath, contents);
+  }
   return root;
 }
 
@@ -134,6 +185,214 @@ test('excluded profiles are not compared against this surface identity', () => {
       env: { [ANCHOR_ENV]: 'app-anchor-1' },
     });
     assert.equal(result.checked, 0);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('each surface resolves its own surface-scoped anchor', () => {
+  const root = createSurfaceRoot({
+    surfaces: [viteSurface('demo-pc', 'apps/pc'), viteSurface('demo-h5', 'apps/h5')],
+    files: {
+      'apps/pc/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${createToken('app-pc')}\n`,
+      'apps/h5/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${createToken('app-h5')}\n`,
+    },
+  });
+  try {
+    const result = checkAppAccessTokenEnv({
+      root,
+      profileId: 'standalone.development',
+      env: { [PC_ANCHOR_ENV]: 'app-pc', [H5_ANCHOR_ENV]: 'app-h5' },
+    });
+    assert.equal(result.checked, 2);
+    assert.equal(result.skipped, undefined);
+    assert.deepEqual(
+      result.surfaceAnchors.map((surface) => [surface.surfaceId, surface.anchors[0].appId, surface.anchors[0].source]),
+      [['demo-pc', 'app-pc', 'environment'], ['demo-h5', 'app-h5', 'environment']],
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('a surface verified against another surface anchor fails', () => {
+  const root = createSurfaceRoot({
+    surfaces: [viteSurface('demo-pc', 'apps/pc'), viteSurface('demo-h5', 'apps/h5')],
+    files: {
+      'apps/pc/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${createToken('app-h5')}\n`,
+      'apps/h5/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${createToken('app-h5')}\n`,
+    },
+  });
+  try {
+    assert.throws(
+      () => checkAppAccessTokenEnv({
+        root,
+        profileId: 'standalone.development',
+        env: { [PC_ANCHOR_ENV]: 'app-pc', [H5_ANCHOR_ENV]: 'app-h5' },
+      }),
+      /demo-pc: apps\/pc\/\.env\.standalone\.development: Public application access token claim app_id=app-h5 does not match app-pc/u,
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('the resolved profile layer records each surface anchor', () => {
+  const root = createSurfaceRoot({
+    surfaces: [viteSurface('demo-pc', 'apps/pc'), viteSurface('demo-h5', 'apps/h5')],
+    files: {
+      'apps/pc/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${createToken('app-pc')}\n`,
+      'apps/h5/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${createToken('app-h5')}\n`,
+      'etc/topology/standalone.development.env': [
+        `${PC_ANCHOR_ENV}=app-pc`,
+        `${H5_ANCHOR_ENV}=app-h5`,
+      ].join('\n'),
+    },
+  });
+  try {
+    const result = checkAppAccessTokenEnv({
+      root,
+      profileId: 'standalone.development',
+      env: {},
+    });
+    assert.equal(result.checked, 2);
+    assert.equal(result.skipped, undefined);
+    for (const surface of result.surfaceAnchors) {
+      assert.equal(surface.anchors[0].source, 'recorded');
+      assert.equal(surface.anchors[0].file, 'etc/topology/standalone.development.env');
+    }
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('the authored override layer records a surface anchor without a deployment index file', () => {
+  const root = createSurfaceRoot({
+    surfaces: [viteSurface('demo-pc', 'apps/pc')],
+    files: {
+      'apps/pc/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${createToken('app-pc')}\n`,
+      'etc/topology/overrides/standalone.development.env': `${PC_ANCHOR_ENV}=app-pc\n`,
+    },
+  });
+  try {
+    const result = checkAppAccessTokenEnv({
+      root,
+      profileId: 'standalone.development',
+      env: {},
+    });
+    assert.equal(result.checked, 1);
+    assert.equal(result.surfaceAnchors[0].anchors[0].source, 'recorded');
+    assert.equal(
+      result.surfaceAnchors[0].anchors[0].file,
+      'etc/topology/overrides/standalone.development.env',
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('the repository-level variable is the fallback for every surface', () => {
+  const root = createSurfaceRoot({
+    surfaces: [viteSurface('demo-pc', 'apps/pc'), viteSurface('demo-h5', 'apps/h5')],
+    files: {
+      'apps/pc/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${createToken('app-shared')}\n`,
+      'apps/h5/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${createToken('app-shared')}\n`,
+    },
+  });
+  try {
+    const result = checkAppAccessTokenEnv({
+      root,
+      profileId: 'standalone.development',
+      env: { [ANCHOR_ENV]: 'app-shared' },
+    });
+    assert.equal(result.checked, 2);
+    assert.deepEqual(
+      result.surfaceAnchors.map((surface) => [surface.anchors[0].appId, surface.anchors[0].source]),
+      [['app-shared', 'repository'], ['app-shared', 'repository']],
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('--surface limits the check to the selected surface', () => {
+  const root = createSurfaceRoot({
+    surfaces: [viteSurface('demo-pc', 'apps/pc'), viteSurface('demo-h5', 'apps/h5')],
+    files: {
+      'apps/pc/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${createToken('app-pc')}\n`,
+    },
+  });
+  try {
+    const result = checkAppAccessTokenEnv({
+      root,
+      profileId: 'standalone.development',
+      surfaceIds: ['demo-pc'],
+      env: { [PC_ANCHOR_ENV]: 'app-pc' },
+    });
+    assert.equal(result.checked, 1);
+    assert.deepEqual(result.surfaceAnchors.map((surface) => surface.surfaceId), ['demo-pc']);
+    assert.throws(
+      () => checkAppAccessTokenEnv({
+        root,
+        profileId: 'standalone.development',
+        surfaceIds: ['demo-missing'],
+        env: { [PC_ANCHOR_ENV]: 'app-pc' },
+      }),
+      /is not declared/u,
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('a committed placeholder token is reported as needing materialization', () => {
+  const root = createSurfaceRoot({
+    surfaces: [viteSurface('demo-pc', 'apps/pc')],
+    files: {
+      'apps/pc/.env.standalone.development':
+        `SDKWORK_ACCESS_TOKEN=${createToken(PUBLIC_APP_ACCESS_TOKEN_PENDING_APP_ID)}\n`,
+    },
+  });
+  try {
+    const result = checkAppAccessTokenEnv({
+      root,
+      profileId: 'standalone.development',
+      env: { [PC_ANCHOR_ENV]: 'app-pc' },
+    });
+    assert.equal(result.checked, 0);
+    assert.equal(result.pending.length, 1);
+    assert.equal(result.pending[0].surfaceId, 'demo-pc');
+    assert.throws(
+      () => checkAppAccessTokenEnv({
+        root,
+        profileId: 'standalone.development',
+        env: { [PC_ANCHOR_ENV]: 'app-pc' },
+        requireAnchor: true,
+      }),
+      /needs materialization/u,
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('--require-anchor fails when no layer carries the anchor', () => {
+  const root = createSurfaceRoot({
+    surfaces: [viteSurface('demo-pc', 'apps/pc')],
+    files: {
+      'apps/pc/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${createToken('app-pc')}\n`,
+    },
+  });
+  try {
+    assert.throws(
+      () => checkAppAccessTokenEnv({
+        root,
+        profileId: 'standalone.development',
+        env: {},
+        requireAnchor: true,
+      }),
+      /SDKWORK_DEPLOY_APPLICATION_ID_DEMO_PC \(or SDKWORK_DEPLOY_APPLICATION_ID\) is required/u,
+    );
   } finally {
     rmSync(root, { force: true, recursive: true });
   }

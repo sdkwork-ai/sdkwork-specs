@@ -99,6 +99,8 @@
       "../sdkwork-cloudrouter/sdks/cloudrouter-open-sdk/cloudrouter-open-sdk-typescript",
       "../sdkwork-community/sdks/sdkwork-community-app-sdk/sdkwork-community-app-sdk-typescript",
       "../sdkwork-community/sdks/sdkwork-community-backend-sdk/sdkwork-community-backend-sdk-typescript",
+      "../sdkwork-company/apps/sdkwork-company-pc/packages/sdkwork-company-pc-admin-enterprise",
+      "../sdkwork-company/sdks/sdkwork-company-backend-sdk/sdkwork-company-backend-sdk-typescript",
       "../sdkwork-core/sdkwork-core-pc-react",
       "../sdkwork-course/sdks/sdkwork-course-backend-sdk/sdkwork-course-backend-sdk-typescript",
       "../sdkwork-deployments/sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript",
