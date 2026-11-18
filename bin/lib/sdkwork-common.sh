@@ -474,7 +474,7 @@ sdkwork_remote() {
   # string so the remote shell re-parses exactly the intended command.
   local remote_command
   remote_command="$(sdkwork_shell_quote "$@")"
-  sdkwork_run ssh -p "${SDKWORK_SSH_PORT}" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+  sdkwork_run ssh -n -p "${SDKWORK_SSH_PORT}" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
     ${login[@]+"${login[@]}"} "${SDKWORK_SSH_HOST}" -- "${remote_command}"
 }
 
@@ -545,7 +545,7 @@ sdkwork_remote_file_exists() {
   else
     local login=()
     [[ -n "${SDKWORK_SSH_USER}" ]] && login=(-l "${SDKWORK_SSH_USER}")
-    ssh -p "${SDKWORK_SSH_PORT}" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+    ssh -n -p "${SDKWORK_SSH_PORT}" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
       ${login[@]+"${login[@]}"} "${SDKWORK_SSH_HOST}" "test -f $(printf '%q' "${path}")" >/dev/null 2>&1
   fi
   status=$?
@@ -750,7 +750,7 @@ sdkwork_remote_capture() {
   [[ -n "${SDKWORK_SSH_USER}" ]] && login=(-l "${SDKWORK_SSH_USER}")
   local remote_command
   remote_command="$(sdkwork_shell_quote "$@")"
-  ssh -p "${SDKWORK_SSH_PORT}" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+  ssh -n -p "${SDKWORK_SSH_PORT}" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
     ${login[@]+"${login[@]}"} "${SDKWORK_SSH_HOST}" -- "${remote_command}"
 }
 
