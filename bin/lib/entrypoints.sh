@@ -333,10 +333,21 @@ sdkwork_entry_docker_deploy() {
       sdkwork_push_dir "${SDKWORK_BIN_HOST}" "${bundle}" "${remote_dir}" \
         ${push_excludes[@]+"${push_excludes[@]}"}
       # 2. for remote targets, make sure the image is present (a local/WSL target
-      #    relies on the image built or loaded there; DOCKER_SPEC.md §2.1)
+      #    relies on the image built or loaded there; DOCKER_SPEC.md §2.1).
+      #    The bundle's own image.tar.gz is the offline load channel: when the
+      #    pushed bundle carries it (or the target already has the image), skip
+      #    the registry pull — the bundle deploy.sh loads image.tar.gz itself,
+      #    and a direct pull can fail on registry TLS that the bundle channel
+      #    never needs.
       if [[ "${SDKWORK_BIN_HOST}" != wsl && "${SDKWORK_BIN_HOST}" != local && -n "${SDKWORK_BIN_IMAGE_TAG}" ]]; then
-        sdkwork_remote "${SDKWORK_BIN_HOST}" docker pull \
-          "$(sdkwork_image_ref "${SDKWORK_IMAGE_NAME}" "${SDKWORK_BIN_IMAGE_TAG}")"
+        local pull_ref
+        pull_ref="$(sdkwork_image_ref "${SDKWORK_IMAGE_NAME}" "${SDKWORK_BIN_IMAGE_TAG}")"
+        if sdkwork_remote_file_exists "${SDKWORK_BIN_HOST}" "${remote_dir}/image.tar.gz" \
+          || sdkwork_remote_image_exists "${SDKWORK_BIN_HOST}" "${pull_ref}"; then
+          sdkwork_log "bundle carries image.tar.gz (or target has ${pull_ref}); skipping the registry pull"
+        else
+          sdkwork_remote "${SDKWORK_BIN_HOST}" docker pull "${pull_ref}"
+        fi
       fi
       # 3. run the bundle entrypoint inside the deployed bundle directory
       sdkwork_remote_in_dir "${SDKWORK_BIN_HOST}" "${remote_dir}" "${deploy_args[@]}" ;;
