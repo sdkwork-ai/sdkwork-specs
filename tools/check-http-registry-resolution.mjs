@@ -168,10 +168,6 @@ const REGISTRY_CALL =
 // surface and what the migration must do; the entry is removed in the change
 // that fixes the site. Never add an entry without a date and a removal plan.
 const IDENTITY_BASELINE = new Map([
-  [
-    'sdkwork-voice/crates/sdkwork-voice-embedded-bootstrap/src/bootstrap.rs',
-    'voice speech generation uses a process API key; carry the caller pair once the route is wired',
-  ],
 ]);
 
 // Every file that resolves a target through the registry owes an identity
