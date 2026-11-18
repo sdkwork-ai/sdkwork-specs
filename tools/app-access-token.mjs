@@ -17,6 +17,37 @@ export const PUBLIC_APP_ACCESS_TOKEN_KEY = 'SDKWORK_ACCESS_TOKEN';
 export const PUBLIC_APP_ACCESS_TOKEN_KID = 'public-app-token';
 
 /**
+ * Committed app id placeholder for a surface whose anchor is known only at
+ * deployment (`APP_ACCESS_TOKEN_SPEC.md` §3.1.1,
+ * `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §8).
+ *
+ * A repository commits this value instead of a fabricated identity, and a
+ * verification gate reports it as needing materialization rather than as a claim
+ * mismatch. A packaging gate that requires the anchor refuses it.
+ */
+export const PUBLIC_APP_ACCESS_TOKEN_PENDING_APP_ID = '__SDKWORK_DEPLOY_APPLICATION_ID__';
+
+/**
+ * True when a token claim still carries the committed app id placeholder.
+ *
+ * The canonical placeholder is `__SDKWORK_DEPLOY_APPLICATION_ID__`; the
+ * `<ENV_VAR>`-derived form is accepted too, so a surface that declares a
+ * different anchor variable keeps the same signal.
+ * @param appId - token `app_id` or `aud` claim.
+ * @param envName - declared anchor variable, when known.
+ * @returns true when the value is a pending materialization placeholder.
+ */
+export function isApplicationAccessTokenPendingAppId(appId, envName = '') {
+  const value = String(appId ?? '').trim();
+  if (!value) {
+    return false;
+  }
+  const name = String(envName ?? '').trim();
+  return value === PUBLIC_APP_ACCESS_TOKEN_PENDING_APP_ID
+    || (name ? value === `__${name}__` : false);
+}
+
+/**
  * `accessToken` field naming the environment variable that carries the app id.
  *
  * A deployment that makes the deploy application the identity of every access

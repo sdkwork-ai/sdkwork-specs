@@ -7,10 +7,14 @@
  * Usage:
  *   node <sdkwork-specs>/tools/check-release-access-token-env.mjs --root <repo>
  *   node <sdkwork-specs>/tools/check-release-access-token-env.mjs --root <repo> --profiles test,demo
+ *   node <sdkwork-specs>/tools/check-release-access-token-env.mjs --root <repo> --surface <id>[,<id>]
  *
  * The check reads `etc/sdkwork.deployment.config.json` and the client env
- * surface files declared by `etc/client-env.materialization.json`. It never
- * reads a secret or prints a token.
+ * surface files declared by `etc/client-env.materialization.json`. Each surface
+ * resolves its own deployment anchor: the surface-scoped variable in the process
+ * environment, the same variable recorded in the profile env layer, then the
+ * repository-level variable (`app-access-token-anchor.mjs`,
+ * `APP_ACCESS_TOKEN_SPEC.md` §3.1.1). It never reads a secret or prints a token.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -19,16 +23,31 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import {
+  PUBLIC_APP_ACCESS_TOKEN_PENDING_APP_ID,
   assertApplicationAccessToken,
+  decodeApplicationAccessToken,
+  isApplicationAccessTokenPendingAppId,
   isMissingAppIdEnvironmentError,
-  resolveApplicationAccessTokenAppId,
+  surfaceApplicationTokenEnvName,
 } from './app-access-token.mjs';
+import {
+  DEFAULT_DEPLOYMENT_CONFIG_PATH,
+  resolveSurfaceAnchor,
+} from './app-access-token-anchor.mjs';
+import { filterClientEnvSurfaces } from './materialize-client-env.mjs';
 
 const DEFAULT_RELEASE_ENVIRONMENTS = ['test', 'staging', 'demo', 'production'];
 const PROFILE_PATTERN = /^(?:standalone|cloud)\.(development|test|staging|demo|production)$/u;
 
 function parseArgs(argv) {
-  const options = { root: process.cwd(), profiles: [], json: false, allowNoSurfaces: false, requireAnchor: false };
+  const options = {
+    root: process.cwd(),
+    profiles: [],
+    json: false,
+    allowNoSurfaces: false,
+    requireAnchor: false,
+    surfaceIds: [],
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (token === '--json') {
@@ -45,17 +64,16 @@ function parseArgs(argv) {
       options.requireAnchor = true;
       continue;
     }
-    if (token === '--root') {
+    if (token === '--root' || token === '--profiles' || token === '--surface') {
       const value = String(argv[index + 1] ?? '').trim();
-      if (!value) throw new Error('--root requires a value.');
-      options.root = path.resolve(value);
-      index += 1;
-      continue;
-    }
-    if (token === '--profiles') {
-      const value = String(argv[index + 1] ?? '').trim();
-      if (!value) throw new Error('--profiles requires a value.');
-      options.profiles = value.split(',').map((profile) => profile.trim()).filter(Boolean);
+      if (!value) throw new Error(`${token} requires a value.`);
+      if (token === '--root') {
+        options.root = path.resolve(value);
+      } else if (token === '--profiles') {
+        options.profiles = value.split(',').map((profile) => profile.trim()).filter(Boolean);
+      } else {
+        options.surfaceIds.push(...value.split(',').map((entry) => entry.trim()).filter(Boolean));
+      }
       index += 1;
       continue;
     }
@@ -66,15 +84,6 @@ function parseArgs(argv) {
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, 'utf8').replace(/^\uFEFF/u, ''));
-}
-
-function readDotenv(filePath) {
-  const values = {};
-  for (const line of readFileSync(filePath, 'utf8').split(/\r?\n/u)) {
-    const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/u.exec(line);
-    if (match) values[match[1]] = match[2].trim().replace(/^["']|["']$/gu, '');
-  }
-  return values;
 }
 
 function formatFromManifest(manifest) {
@@ -115,9 +124,40 @@ function readSurfaces(root) {
   }));
 }
 
+function anchorVariables(error, surfaceId) {
+  const surfaceEnvName = surfaceApplicationTokenEnvName(error.envName, surfaceId);
+  return surfaceEnvName ? `${surfaceEnvName} (or ${error.envName})` : error.envName;
+}
+
+function resolveSurfaceFormat(surface, root) {
+  const appRoot = path.join(root, String(surface.root ?? ''));
+  const manifestPath = path.join(appRoot, 'agent.app.config.json');
+  let format = surface.format;
+  let manifest = null;
+  if (existsSync(manifestPath)) {
+    try {
+      manifest = readJson(manifestPath);
+    } catch {
+      manifest = null;
+    }
+    if (!format || format === 'auto') format = formatFromManifest(manifest);
+  }
+  if (!format) format = 'vite';
+  if (format === 'harmony-native' || format === 'android-native' || format === 'ios-native') {
+    format = 'native';
+  }
+  return { appRoot, manifest, format };
+}
+
 export function checkReleaseAccessTokenEnv(
   rootDir,
-  { environments = DEFAULT_RELEASE_ENVIRONMENTS, allowNoSurfaces = false, requireAnchor = false, env = process.env } = {},
+  {
+    environments = DEFAULT_RELEASE_ENVIRONMENTS,
+    allowNoSurfaces = false,
+    requireAnchor = false,
+    surfaceIds = [],
+    env = process.env,
+  } = {},
 ) {
   const root = path.resolve(rootDir);
   const deploymentPath = path.join(root, 'etc', 'sdkwork.deployment.config.json');
@@ -125,6 +165,8 @@ export function checkReleaseAccessTokenEnv(
     return {
       root,
       checked: [],
+      pending: [],
+      skippedSurfaces: [],
       failures: [{ profileId: '<config>', reason: 'etc/sdkwork.deployment.config.json is missing' }],
     };
   }
@@ -136,114 +178,145 @@ export function checkReleaseAccessTokenEnv(
   });
   const surfaces = readSurfaces(root);
   const checked = [];
+  const pending = [];
   const skippedSurfaces = [];
   const failures = [];
 
   if (!surfaces || surfaces.length === 0) {
     // Server-only repositories have no client document to carry a public
     // token; the pre-commit hook opts out explicitly with `--allow-no-surfaces`.
-    if (allowNoSurfaces) return { root, checked, failures, skipped: true };
+    if (allowNoSurfaces) return { root, checked, pending, skippedSurfaces, failures, skipped: true };
     failures.push({
       profileId: '<surfaces>',
       reason: 'etc/client-env.materialization.json declares no client surface to carry the access token',
     });
-    return { root, checked, failures };
+    return { root, checked, pending, skippedSurfaces, failures };
   }
-  const clientSurfaces = surfaces.filter((surface) => surface.format !== 'none');
+  const selectedSurfaces = filterClientEnvSurfaces(surfaces, surfaceIds);
+  const clientSurfaces = selectedSurfaces.filter((surface) => surface.format !== 'none');
   if (clientSurfaces.length === 0) {
     // A repository that declares only format=none surfaces is server-only; it
     // has no browser/mobile document to carry a public application token.
-    return { root, checked, failures, skipped: true };
+    return { root, checked, pending, skippedSurfaces, failures, skipped: true };
   }
 
   for (const surface of clientSurfaces) {
-    const appRoot = path.join(root, String(surface.root ?? ''));
-    const manifestPath = path.join(appRoot, 'agent.app.config.json');
-    let format = surface.format;
-    let manifest = null;
-    if (existsSync(manifestPath)) {
-      try {
-        manifest = readJson(manifestPath);
-      } catch {
-        manifest = null;
-      }
-      if (!format || format === 'auto') format = formatFromManifest(manifest);
-    }
-    if (!format) format = 'vite';
-    if (format === 'harmony-native' || format === 'android-native' || format === 'ios-native') {
-      format = 'native';
-    }
-    // Resolve the expected app identity with the materializer's own logic. A
-    // release surface that takes its app id from the deploy anchor cannot be
-    // verified without that anchor, so fail and name the variable instead of
-    // comparing against the retired manifest id (APP_ACCESS_TOKEN_SPEC §3.1.1).
-    let expectedAppId;
-    if (surface.accessToken && typeof surface.accessToken === 'object') {
-      try {
-        expectedAppId = resolveApplicationAccessTokenAppId(surface.accessToken, env).appId;
-      } catch (error) {
-        if (isMissingAppIdEnvironmentError(error)) {
-          const entry = {
-            profileId: surface.id,
-            reason: `${error.envName} is required to verify this release surface's public application token`,
-          };
-          if (requireAnchor) {
-            failures.push(entry);
-          } else {
-            skippedSurfaces.push(entry);
-          }
-          continue;
-        }
-        failures.push({
-          profileId: surface.id,
-          reason: error instanceof Error ? error.message : String(error),
-        });
-        continue;
-      }
-    } else {
-      expectedAppId = manifest?.backend?.appId ?? manifest?.app?.key;
-    }
+    const surfaceId = String(surface?.id ?? '').trim();
+    const { appRoot, manifest, format } = resolveSurfaceFormat(surface, root);
+    const usesAnchor = surface.accessToken
+      && typeof surface.accessToken === 'object'
+      && !Array.isArray(surface.accessToken);
+    // A legacy surface without an `accessToken` input has no deployment anchor;
+    // its manifest identity is compared instead.
+    const manifestAppId = manifest?.backend?.appId ?? manifest?.app?.key;
     const excluded = new Set(surface.excludeProfiles ?? []);
     for (const profileId of releaseProfiles) {
       const filePath = profilePath(appRoot, format, profileId);
       if (excluded.has(profileId) && !existsSync(filePath)) {
         continue;
       }
+      let appId = manifestAppId;
+      let resolution = null;
+      if (usesAnchor) {
+        try {
+          resolution = resolveSurfaceAnchor({
+            rootDir: root,
+            surface,
+            profileId,
+            env,
+            deploymentConfigPath: DEFAULT_DEPLOYMENT_CONFIG_PATH,
+          });
+          appId = resolution.appId;
+        } catch (error) {
+          if (isMissingAppIdEnvironmentError(error)) {
+            const entry = {
+              profileId: `${surfaceId}/${profileId}`,
+              reason: `${anchorVariables(error, surfaceId)} is required to verify this release surface's public application token`,
+            };
+            if (requireAnchor) {
+              failures.push(entry);
+            } else {
+              skippedSurfaces.push(entry);
+            }
+            continue;
+          }
+          failures.push({
+            profileId: `${surfaceId}/${profileId}`,
+            reason: error instanceof Error ? error.message : String(error),
+          });
+          continue;
+        }
+      }
       if (!existsSync(filePath)) {
         failures.push({
-          profileId: `${surface.id}/${profileId}`,
+          profileId: `${surfaceId}/${profileId}`,
           reason: `missing ${path.relative(root, filePath).replaceAll('\\', '/')}`,
         });
         continue;
       }
       const token = readToken(filePath);
       if (!token) {
-        failures.push({ profileId: `${surface.id}/${profileId}`, reason: 'SDKWORK_ACCESS_TOKEN is missing or empty' });
+        failures.push({ profileId: `${surfaceId}/${profileId}`, reason: 'SDKWORK_ACCESS_TOKEN is missing or empty' });
+        continue;
+      }
+      let payload;
+      try {
+        ({ payload } = decodeApplicationAccessToken(token));
+      } catch (error) {
+        failures.push({
+          profileId: `${surfaceId}/${profileId}`,
+          reason: error instanceof Error ? error.message.split('\n')[0] : String(error),
+        });
+        continue;
+      }
+      if (
+        isApplicationAccessTokenPendingAppId(payload.app_id, resolution?.baseEnvName)
+        || isApplicationAccessTokenPendingAppId(payload.aud, resolution?.baseEnvName)
+      ) {
+        const file = path.relative(root, filePath).replaceAll('\\', '/');
+        pending.push({ profileId: `${surfaceId}/${profileId}`, file });
+        if (requireAnchor) {
+          const provenance = resolution ? ` (from ${resolution.envName}=${appId})` : '';
+          failures.push({
+            profileId: `${surfaceId}/${profileId}`,
+            reason: `needs materialization: ${file} still carries the ${PUBLIC_APP_ACCESS_TOKEN_PENDING_APP_ID} `
+              + `placeholder instead of ${appId}${provenance}`,
+          });
+        }
         continue;
       }
       try {
+        const environment = profileId.split('.')[1];
+        const deploymentProfile = profileId.split('.')[0];
+        // The decode above only classifies the pending placeholder; reuse the
+        // token validator for the claim checks.
         assertApplicationAccessToken(token, {
-          environment: profileId.split('.')[1],
-          deploymentProfile: profileId.split('.')[0],
-          ...(expectedAppId ? { appId: expectedAppId } : {}),
+          environment,
+          deploymentProfile,
+          ...(appId ? { appId } : {}),
         });
-        checked.push(`${surface.id}/${profileId}`);
+        checked.push(`${surfaceId}/${profileId}`);
       } catch (error) {
         failures.push({
-          profileId: `${surface.id}/${profileId}`,
+          profileId: `${surfaceId}/${profileId}`,
           reason: error instanceof Error ? error.message.split('\n')[0] : String(error),
         });
       }
     }
   }
 
-  if (checked.length === 0 && failures.length === 0 && skippedSurfaces.length === 0) {
+  if (
+    checked.length === 0
+    && failures.length === 0
+    && skippedSurfaces.length === 0
+    && pending.length === 0
+  ) {
     failures.push({
       profileId: '<matrix>',
       reason: `no client surface covers ${environments.join(', ')}`,
     });
   }
-  return { root, checked, skippedSurfaces, failures };
+  return { root, checked, pending, skippedSurfaces, failures };
 }
 
 function main() {
@@ -255,14 +328,18 @@ function main() {
     environments,
     allowNoSurfaces: options.allowNoSurfaces,
     requireAnchor: options.requireAnchor,
+    surfaceIds: options.surfaceIds,
   });
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
   } else {
     if (result.failures.length === 0) {
       console.log(`release access-token preflight passed: ${result.checked.length} surface/profile pair(s)`);
-      for (const skip of result.skippedSurfaces ?? []) {
-        console.log(`  - skipped ${skip.profileId}: ${skip.reason}`);
+      for (const entry of result.skippedSurfaces ?? []) {
+        console.log(`  - skipped ${entry.profileId}: ${entry.reason}`);
+      }
+      for (const entry of result.pending ?? []) {
+        console.log(`  - needs materialization: ${entry.profileId} (${entry.file})`);
       }
     } else {
       console.error('release access-token preflight failed:');
