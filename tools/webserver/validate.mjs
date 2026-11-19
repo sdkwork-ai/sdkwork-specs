@@ -63,7 +63,7 @@ const UPSTREAM_KEYS = new Set(['name', 'loadBalancing', 'hashKey', 'keepalive', 
 const TARGET_KEYS = new Set(['address', 'weight', 'maxFails', 'failTimeout', 'backup', 'down', 'resolve', 'raw']);
 const SERVER_KEYS = new Set([
   'listen', 'serverName', 'http2', 'root', 'index', 'tryFiles', 'charset', 'errorPage',
-  'returnStatus', 'returnBody', 'gzip', 'include', 'raw', 'tls', 'location',
+  'returnStatus', 'returnBody', 'gzip', 'include', 'raw', 'tls', 'location', 'securityHeaders',
 ]);
 const TLS_KEYS = new Set([
   'cert', 'certFile', 'certKeyFile', 'chainFile', 'protocols', 'ciphers', 'preferServerCiphers',
