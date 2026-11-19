@@ -76,6 +76,13 @@ Rules:
   never hand-written and never inherited from `etc/topology/base.env` or an
   application `etc/env.base.env` overlay.
 
+> **Deprecated for new consumers.** The committed matrix above remains a supported release input,
+> but a surface that needs an application credential *during a user session* `MUST` obtain it from
+> `appAccessTokens.create` (§8): that credential is signed, revocable, and expresses the caller's
+> own, organization, or tenant entitlement. The committed `alg:none` token stays the pre-login
+> isolation credential (§5) and is removed per surface only after that surface exchanges at
+> runtime.
+
 ## 3. Token Format And Claims
 
 The application access token is a public isolation token. It uses JWT compact
@@ -455,3 +462,99 @@ node <sdkwork-specs>/tools/adopt-app-access-token-files.mjs --workspace <workspa
 - [ ] No session, auth, refresh, API-key, OAuth, or signing secret is committed.
 - [ ] `dev`, `start`, and `build` fail closed when the selected token is absent.
 - [ ] Generated files are deterministic and reviewed as a normal diff.
+- [ ] A consumer that needs an application credential at runtime calls
+  `appAccessTokens.create` (§8) instead of inventing a second issuance path.
+
+## 8. Runtime Application Access Token Exchange
+
+Status: **target path**. The committed `SDKWORK_ACCESS_TOKEN` profile matrix (§2–§6) stays valid and
+is **deprecated** for new consumers; a repository migrates surface by surface once its runtime
+can mint the credential it needs.
+
+### 8.1 Why the committed token is not the runtime answer
+
+The committed token is `alg:none` public material (§1, §5). It can only be produced at build time
+from a deployment-injected anchor, so every new consumer must first be registered, have its anchor
+materialized, and be rebuilt. It also carries no subject that could authorize anything: any client
+can forge one. An application that needs a credential *for itself, for its organization, or for its
+tenant*, obtained by a signed-in user at run time, therefore needs a signed credential and an
+issuance endpoint.
+
+### 8.2 Issuing endpoint
+
+| Property | Value |
+| --- | --- |
+| Route | `POST /app/v3/api/iam/app_access_tokens` |
+| Operation id | `appAccessTokens.create` |
+| Auth mode | `dual-token` (authenticated user session) |
+| Permission | `iam.app_tokens.create` (`app_user` baseline) |
+| Success | HTTP `201` with `SdkWorkApiResponse.data.item` = `IamAppAccessToken` |
+| Owner | `sdkwork-iam` (app-api) |
+| SDK | `@sdkwork/iam-app-sdk` → `iam.appAccessTokens.create(body)` |
+
+Request body (`IamAppAccessTokenCreateCommand`): at least one selector.
+
+| Field | Meaning |
+| --- | --- |
+| `appId` | the installation's deploy application anchor (preferred: it is the identity the deployment plane publishes) |
+| `tenantApplicationId` | the IAM installation row (`tapp_…`) of the caller's tenant |
+| `instanceKey` | the installation instance key of the caller's tenant |
+
+The tenant, the organization, and the release scope are **server-derived**. A body that supplies
+`tenantId`, `organizationId`, or `ownershipScope` is not a selector and `MUST` be ignored: the
+installation decides the scope (`APPLICATION_IDENTITY_SPEC.md` §4.1 rule 3).
+
+Response item (`IamAppAccessToken`): `accessToken`, `authToken`, `expiresAt`, `appId`,
+`tenantApplicationId`, `organizationId`, `ownershipScope`, `sessionId`.
+
+### 8.3 Entitlement matrix
+
+The credential is issued only when the installation's release scope entitles the caller. The
+caller's tenant always comes from its session, so a cross-tenant selector cannot resolve.
+
+| Installation `ownership_scope` | Who may exchange | Enforcement |
+| --- | --- | --- |
+| `USER` | the installation owner only | `installation.owner_user_id == session.user_id` |
+| `ORGANIZATION` | an active member of the installation's organization | `iam_organization_membership` row, same tenant and organization |
+| `TENANT` | any active member of the caller's tenant holding `iam.app_tokens.create` | `iam_tenant_member` row plus the route permission |
+
+Additional preconditions, all failing closed: the installation `MUST` be `enabled`; the caller's
+session environment `MUST` have an `active` installation-environment row; the issued
+`permission_scope` `MUST` be the intersection of the caller's session scopes and the installation's
+`access_permissions`.
+
+### 8.4 Credential properties
+
+- Signed with the tenant signing key (`alg` is never `none`); the subject is the installation's
+  deploy application anchor, so `app_id`/`aud` name the deployment, not the IAM runtime app id.
+- Session-class: **one hour** TTL, persisted as a revocable session, audited like any other IAM
+  issuance. It is not the §2 public token and `MUST NOT` be committed to a profile file.
+- It authorizes the same operations a session of that installation authorizes — bounded by the
+  intersection above — so a consumer can call app-api and backend-api surfaces with
+  `Access-Token`/`Authorization: Bearer`.
+- It `MUST NOT` be used to issue further credentials, register or provision installations, or
+  obtain another application's credential.
+
+### 8.5 Client libraries
+
+- `@sdkwork/iam-app-sdk` exposes the typed call:
+  `iam.appAccessTokens.create({ appId }) => IamAppAccessToken`.
+- `sdkwork-deployments` ships `sdkwork-deploy-app-token`, the deploy-side library that resolves a
+  caller-facing selector (slug / uuid / anchor) inside the caller's tenant and then performs the
+  exchange: `DeployAppTokenService::issue(tenant_id, session, request)`. It reads only
+  `deploy_app`, never signs, and never caches or widens a credential.
+
+### 8.6 Migration from the committed token
+
+1. Keep the committed matrix until every consumer of a surface can exchange at runtime; the two
+   paths coexist (no profile file changes are required by this section).
+2. A consumer replaces `SDKWORK_ACCESS_TOKEN` reads with an exchange call bound to its logged-in
+   session, and keeps the committed token only for the pre-login isolation route (§5).
+3. A consumer that only ever calls during a user session `MAY` drop the committed token once its
+   surface matrix is migrated; removal is a per-repository decision, not a platform cut-over.
+
+```bash
+# Verify the contract after touching the endpoint or its schemas
+node <sdkwork-specs>/tools/check-api-operation-patterns.mjs --workspace <workspace-root>
+node <sdkwork-specs>/tools/check-api-response-envelope.mjs --workspace <workspace-root>
+```
