@@ -499,13 +499,38 @@ Request body (`IamAppAccessTokenCreateCommand`): at least one selector.
 | `appId` | the installation's deploy application anchor (preferred: it is the identity the deployment plane publishes) |
 | `tenantApplicationId` | the IAM installation row (`tapp_…`) of the caller's tenant |
 | `instanceKey` | the installation instance key of the caller's tenant |
+| `environment` | exact installation lifecycle to initialize (`development`/`test`/`staging`/`demo`/`production`). Omitted means: the caller's session environment when the installation registered it, otherwise the installation's **only active** environment; anything ambiguous fails closed and names the registered rows |
+| `ownershipScope` | release-scope **declaration** to be checked (`TENANT`/`ORGANIZATION`/`USER`); the installation decides and the value is immutable |
 
-The tenant, the organization, and the release scope are **server-derived**. A body that supplies
-`tenantId`, `organizationId`, or `ownershipScope` is not a selector and `MUST` be ignored: the
-installation decides the scope (`APPLICATION_IDENTITY_SPEC.md` §4.1 rule 3).
+The tenant and the organization are **server-derived**. A body that supplies
+`tenantId` or `organizationId` does not name a selector and `MUST` be ignored: the
+installation decides the organization claim.
 
-Response item (`IamAppAccessToken`): `accessToken`, `authToken`, `expiresAt`, `appId`,
-`tenantApplicationId`, `organizationId`, `ownershipScope`, `sessionId`.
+The response item (`IamAppAccessToken`) also reports the lifecycle the credential
+was gated on (`environment`), so a client can cache it without re-decoding the JWT.
+
+### 8.2.1 Three initialization paths
+
+One endpoint serves the three ways an application factory needs to initialize a
+credential. The installation's release scope selects the path, and the capability is
+resolved **at that scope**, never from an aggregated session list:
+
+| Path | Capability | Resolved at | Release declaration |
+| --- | --- | --- | --- |
+| Tenant admin | `iam.app_tokens.create` **or** `iam.app_tokens.admin` | tenant-scope bindings only | omit to inherit the installation (`TENANT` applications yield tenant-level credentials) |
+| Organization member with the capability | `iam.app_tokens.admin` | that organization's bindings **plus** tenant bindings | omit to inherit (`ORGANIZATION`) |
+| Application owner | none — ownership | n/a | omit to inherit (`USER`) |
+
+The scope resolution is the security boundary: `resolve_session_scopes(..., None)` reads
+tenant-scope bindings only, and `resolve_session_scopes(..., Some(organization))` adds that
+organization's bindings. An organization grant therefore can never satisfy a tenant-level
+exchange, and a tenant grant satisfies every organization of its tenant.
+
+An omitted `ownershipScope` inherits the installation's release scope, so an application the
+factory registers as `TENANT` (the deploy default) initializes as a **tenant-level** credential
+with no extra input. An explicit declaration that disagrees with the installation `MUST` fail with
+a conflict naming the value; the installation's scope is immutable
+(`APPLICATION_IDENTITY_SPEC.md` §4.1 rule 3).
 
 ### 8.3 Entitlement matrix
 
@@ -514,21 +539,43 @@ caller's tenant always comes from its session, so a cross-tenant selector cannot
 
 | Installation `ownership_scope` | Who may exchange | Enforcement |
 | --- | --- | --- |
-| `USER` | the installation owner only | `installation.owner_user_id == session.user_id` |
-| `ORGANIZATION` | an active member of the installation's organization | `iam_organization_membership` row, same tenant and organization |
-| `TENANT` | any active member of the caller's tenant holding `iam.app_tokens.create` | `iam_tenant_member` row plus the route permission |
+| `USER` | the installation owner only — even a platform administrator must not impersonate it | `installation.owner_user_id == session.user_id` |
+| `ORGANIZATION` | an active member of that organization holding `iam.app_tokens.admin` **for that organization** | `iam_organization_membership` row (same tenant and organization) plus the capability resolved with that organization's bindings; `org_admin` supplies it through its `iam.*` grant |
+| `TENANT` | an active member of that tenant holding `iam.app_tokens.create` or `iam.app_tokens.admin` at tenant scope | `iam_tenant_member` row plus the capability resolved with tenant-scope bindings only |
 
-Additional preconditions, all failing closed: the installation `MUST` be `enabled`; the caller's
-session environment `MUST` have an `active` installation-environment row; the issued
-`permission_scope` `MUST` be the intersection of the caller's session scopes and the installation's
+Additional preconditions, all failing closed: the installation `MUST` be `enabled`; the selected
+environment `MUST` have an `active` installation-environment row; the issued `permission_scope`
+`MUST` be the intersection of the caller's session scopes and the installation's
 `access_permissions`.
+
+Baseline capability grants (IAM module catalog):
+
+| Capability | Baseline holders | Resolved at |
+| --- | --- | --- |
+| `iam.app_tokens.create` | `app_user` — every tenant member | tenant scope |
+| `iam.app_tokens.admin` | `platform_system_admin`, `platform_super_admin` | tenant scope |
+| `iam.app_tokens.admin` | `org_admin` (through its `iam.*` role grant) | the bound organization |
+
+A deployment `MUST` not broaden these baselines implicitly: an organization grant applies only
+where its binding is organization-scoped, because the entitlement check resolves the caller's
+capabilities with the installation's organization.
 
 ### 8.4 Credential properties
 
 - Signed with the tenant signing key (`alg` is never `none`); the subject is the installation's
   deploy application anchor, so `app_id`/`aud` name the deployment, not the IAM runtime app id.
+- Claims: `accessToken`, `authToken`, `expiresAt`, `appId`, `tenantApplicationId`,
+  `organizationId`, `ownershipScope`, `environment`, `sessionId`.
+- The `environment` claim is the coarse session-plane value (`Dev`/`Test`/`Prod`) while the
+  installation gate runs against the exact lifecycle key; `staging` and `demo` installations
+  therefore carry the `Prod` claim, consistent with the rest of IAM.
 - Session-class: **one hour** TTL, persisted as a revocable session, audited like any other IAM
   issuance. It is not the §2 public token and `MUST NOT` be committed to a profile file.
+- Each issuance writes one `iam_audit_event` (action `iam.app_access_token.created`, resource
+  `iam_application_installation`, actor the calling user, detail carrying the anchor, release
+  scope, lifecycle, and session id — never the credential or its hash). A failed audit write
+  `MUST` return an error instead of handing out an unaudited credential; the already-persisted
+  session then carries no disclosed token and expires with the TTL.
 - It authorizes the same operations a session of that installation authorizes — bounded by the
   intersection above — so a consumer can call app-api and backend-api surfaces with
   `Access-Token`/`Authorization: Bearer`.
@@ -538,11 +585,12 @@ session environment `MUST` have an `active` installation-environment row; the is
 ### 8.5 Client libraries
 
 - `@sdkwork/iam-app-sdk` exposes the typed call:
-  `iam.appAccessTokens.create({ appId }) => IamAppAccessToken`.
+  `iam.appAccessTokens.create({ appId, environment?, ownershipScope? }) => IamAppAccessToken`.
 - `sdkwork-deployments` ships `sdkwork-deploy-app-token`, the deploy-side library that resolves a
   caller-facing selector (slug / uuid / anchor) inside the caller's tenant and then performs the
-  exchange: `DeployAppTokenService::issue(tenant_id, session, request)`. It reads only
-  `deploy_app`, never signs, and never caches or widens a credential.
+  exchange: `DeployAppTokenService::issue(tenant_id, session, request)`, with
+  `AppTokenRequest::with_environment(...)` for the lifecycle hint. It reads only `deploy_app`,
+  never signs, and never caches or widens a credential.
 
 ### 8.6 Migration from the committed token
 
@@ -553,8 +601,67 @@ session environment `MUST` have an `active` installation-environment row; the is
 3. A consumer that only ever calls during a user session `MAY` drop the committed token once its
    surface matrix is migrated; removal is a per-repository decision, not a platform cut-over.
 
+### 8.7 App factory flow
+
+The exchange is the last step of the application factory
+(`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §11); all three steps exist today and no committed token
+is involved on this path:
+
+| Step | Owner | Operation |
+| --- | --- | --- |
+| 1. Register the application | deploy | `POST /app/v3/api/apps` — `ownerType` defaults to `TENANT`; a user-created application is `USER` with the caller as `user_id` |
+| 2. Provision the installation | deploy → IAM | `POST /backend/v3/api/apps/{appId}/identity_provision` (automatic on create) writes `iam_application_installation` with the application's `ownershipScope`/`ownerUserId` and its lifecycle environment rows |
+| 3. Initialize the credential | IAM | `POST /app/v3/api/iam/app_access_tokens` — operator (admin, default `TENANT`) or the owner/member (8.3) |
+
+Operationally: an operator registers an application and initializes a tenant-level credential with
+no extra input; a signed-in user registers an application (it becomes a `USER` installation owned
+by that user) and initializes its credential as its owner. Both use the same endpoint, and neither
+needs a deployment-injected static token.
+
 ```bash
 # Verify the contract after touching the endpoint or its schemas
 node <sdkwork-specs>/tools/check-api-operation-patterns.mjs --workspace <workspace-root>
 node <sdkwork-specs>/tools/check-api-response-envelope.mjs --workspace <workspace-root>
 ```
+
+### 8.8 Rule flow
+
+Normative order. A step runs only when every earlier step passed; a failure stops the flow with
+the stated class and no credential is issued.
+
+| # | Step | Rule | Failure |
+| --- | --- | --- | --- |
+| 0 | Transport auth | `dual-token` only: a session `Access-Token` + `Authorization: Bearer`. The `alg:none` public isolation token (§5) is never accepted here | 401 |
+| 1 | Route capability | the session must hold `iam.app_tokens.create` (entry capability). `iam.app_tokens.admin` broadens *which installations* are reachable; it does not replace the entry capability | 403 |
+| 2 | Throttle | one bucket per `(tenant, user)` from the IAM rate-limit window; a limiter storage failure fails closed | 429 / 503 |
+| 3 | Session actor | tenant, user, session organization, environment, deployment mode. A bootstrap/system actor is refused | 401 |
+| 4 | Body | at least one of `appId` / `tenantApplicationId` / `instanceKey`; `ownershipScope` ∈ {TENANT, ORGANIZATION, USER} when present; `environment` optional | 400 |
+| 5 | Installation resolution | resolved **within the caller's tenant** by anchor → installation row → instance key. Another tenant's row is indistinguishable from a missing one | 404 |
+| 6 | Installation state | `status = enabled`; a `USER` installation must carry its owner | 409 |
+| 7 | Release-scope entitlement | `USER`: owner only. `TENANT`: active tenant membership + (`iam.app_tokens.create` or `iam.app_tokens.admin`) resolved from **tenant-scope bindings only**. `ORGANIZATION`: active membership of that organization + `iam.app_tokens.admin` resolved **for that organization** | 403 |
+| 8 | Scope declaration | omitted → inherit the installation's scope; explicit → must equal it (the installation is immutable) | 409 |
+| 9 | Environment | explicit `environment` must be a registered `active` lifecycle; omitted → session environment when registered, else the installation's only `active` environment, else refuse and list the rows | 409 |
+| 10 | Issuance | tenant signing key; `app_id`/`aud` = deploy application anchor; `permission_scope` = caller scopes ∩ installation `access_permissions`; `organization_id` from the installation; `ownership_scope` from the installation; `environment` claim from the lifecycle; **1 h** TTL; session persisted | 500 |
+| 11 | Audit | one `iam_audit_event` (`iam.app_access_token.created`); failure refuses to disclose the token | 500 |
+| 12 | Response | `201` `data.item` = `IamAppAccessToken` | — |
+
+Invariants of the issued credential:
+
+- it names the deployment (`app_id`/`aud` = anchor), never the IAM runtime app id;
+- its permissions are the intersection above, so it can never exceed the caller;
+- `USER` credentials are issued to the owner's user id and nobody else's;
+- it cannot mint further credentials, register or provision installations, or read another
+  application's credential. Chaining is prevented by the permission intersection: an installation
+  `MUST NOT` list `iam.app_tokens.create` or `iam.app_tokens.admin` in its
+  `backend.accessTokenPermissionScope`, so no credential it issues can satisfy step 1 of §8.8;
+- it is revocable as a session and expires in one hour; callers should cache until `expiresAt`.
+
+Regression entry points (implementation):
+
+| Concern | Where |
+| --- | --- |
+| capability/entitlement matrix, scope declaration, environment choice | `sdkwork-iam-web-adapter/src/app_token_exchange.rs` |
+| installation resolution, issuance, signing-key and session persistence | `sdkwork-iam-web-adapter/src/access_token_issue.rs` |
+| route capability + auth mode | `sdkwork-routes-iam-app-api/src/manifest.rs` |
+| session guard, throttle, HTTP mapping | `sdkwork-routes-iam-app-api/src/handlers.rs` |
+| deploy-side selector resolution and exchange | `sdkwork-deployments/crates/sdkwork-deploy-app-token` |
