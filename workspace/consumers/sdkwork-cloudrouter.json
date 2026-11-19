@@ -97,6 +97,7 @@
       "../sdkwork-cloudrouter/sdks/cloudrouter-app-sdk/cloudrouter-app-sdk-typescript",
       "../sdkwork-cloudrouter/sdks/cloudrouter-backend-sdk/cloudrouter-backend-sdk-typescript",
       "../sdkwork-cloudrouter/sdks/cloudrouter-open-sdk/cloudrouter-open-sdk-typescript",
+      "../sdkwork-community/apps/sdkwork-community-common/packages/*",
       "../sdkwork-community/sdks/sdkwork-community-app-sdk/sdkwork-community-app-sdk-typescript",
       "../sdkwork-community/sdks/sdkwork-community-backend-sdk/sdkwork-community-backend-sdk-typescript",
       "../sdkwork-company/apps/sdkwork-company-pc/packages/sdkwork-company-pc-admin-enterprise",
