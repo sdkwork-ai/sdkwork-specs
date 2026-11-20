@@ -46,9 +46,9 @@ export const DEVICE_CLASSES = Object.freeze([
 ]);
 
 export const CAPTURE_TOOLS = Object.freeze([
-  'playwright', 'host-webview', 'flutter-integration-test', 'android-instrumentation',
-  'ios-xctest', 'harmony-test', 'mini-program-automator', 'unity-recorder',
-  'render-pipeline', 'manual',
+  'playwright', 'host-webview', 'flutter-integration-test', 'flutter-widget-test',
+  'android-instrumentation', 'ios-xctest', 'harmony-test', 'mini-program-automator',
+  'unity-recorder', 'render-pipeline', 'manual',
 ]);
 
 const CONTENT_APP_TYPES = new Set(['PPT', 'VIDEO', 'POSTER']);

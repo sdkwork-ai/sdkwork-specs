@@ -429,7 +429,7 @@ Rules:
 - `surfaces[]` `MUST` cover every shipped UI surface family in `publish.platforms`. The validator fails a missing `h5`, `ios`, `android`, `harmony`, `desktop`, `web`, or `mini-program` surface. When the manifest ships `ipados` or `android-tablet`, the `ios` or `android` surface entry `MUST` include the tablet capture viewport and device class.
 - `capture.command` `MUST` be a deterministic, non-interactive command that exits non-zero when a declared surface cannot be captured. It `MUST` write a machine-readable report to `<capture.outputRoot>/capture-report.json` matching [`schemas/sdkwork.app-assets.capture-report.schema.v1.json`](schemas/sdkwork.app-assets.capture-report.schema.v1.json), and it `MUST NOT` write catalog media directly into `assets/media/`.
 - A report with `status = partial` or `status = failed` `MUST` name every skipped or failed capture and its surface. The appstore creation flow treats an incomplete report as not listable.
-- `capture.tool` names the primary adapter: `playwright`, `host-webview`, `flutter-integration-test`, `android-instrumentation`, `ios-xctest`, `harmony-test`, `mini-program-automator`, `unity-recorder`, `render-pipeline`, or `manual` (manual requires a written exception in `assets/README.md`). A surface `MAY` declare its own `tool` when the application mixes browser and device surfaces (for example uni-app H5 plus WeChat mini program).
+- `capture.tool` names the primary adapter: `playwright`, `host-webview`, `flutter-integration-test`, `flutter-widget-test`, `android-instrumentation`, `ios-xctest`, `harmony-test`, `mini-program-automator`, `unity-recorder`, `render-pipeline`, or `manual` (manual requires a written exception in `assets/README.md`). `flutter-widget-test` is the deterministic widget-test adapter: it pumps the shipped screens at canonical viewports with fixed fonts and in-memory repositories, and is the correct adapter when no device or integration-test runner is available. A surface `MAY` declare its own `tool` when the application mixes browser and device surfaces (for example uni-app H5 plus WeChat mini program).
 - `capture.locales` `MUST` include `media.metadata.defaultLocale` and every locale that has a cover.
 
 ### 6.3 Capture Determinism
@@ -458,6 +458,7 @@ Captured media is review evidence. A capture that changes because of the environ
 | PC web, H5, static web | `playwright` | One Chromium context per locale; disable device emulation for `DESKTOP_16_9` |
 | Desktop host | `host-webview` | Drive the Tauri/Electron renderer through a test harness or capture the same renderer build; OS chrome excluded |
 | Flutter | `flutter-integration-test` | `IntegrationTestWidgetsFlutterBinding` screenshot or golden pipeline; one run per platform locale |
+| Flutter (host-bound widget run) | `flutter-widget-test` | Widget-test capture at canonical viewports with real CJK and Material icon fonts loaded; deterministic fake repositories; raw output under the capture root, promotion separate |
 | Android native | `android-instrumentation` | Gradle managed device + instrumentation screenshot; no emulator chrome |
 | iOS native | `ios-xctest` | `XCUIScreen` screenshot or simulator screenshot from a deterministic launch argument set |
 | HarmonyOS | `harmony-test` | hvigor test plus device snapshot; no desktop mirror |

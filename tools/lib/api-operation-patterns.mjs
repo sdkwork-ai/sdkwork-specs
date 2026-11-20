@@ -586,6 +586,8 @@ const COMMAND_ACTIONS = new Set([
   // a command suffix, so the action must be a recognized stable verb.
   'ensure',
   'heartbeat',
+  'install',
+  'uninstall',
   'explain',
   'leave',
   'migrate',

@@ -18,6 +18,7 @@ import {
 import { getPackager } from './lib/app-publish/packager-registry.mjs';
 import { getUploader, SUPPORTED_REGISTRIES, distPackageName } from './lib/app-publish/uploaders.mjs';
 import { ReportBuilder } from './lib/app-publish/report.mjs';
+import { buildStoreSubmissionPlans, readStorePublishing } from './lib/app-publish/store-submission.mjs';
 import {
   isPreRelease,
   toDisplayPath,
@@ -248,6 +249,22 @@ test('h5 packager collectArtifacts archives dist', () => {
   assert.ok(fs.existsSync(artifacts[0].path));
 });
 
+test('discover resolves a Dart-only Flutter app root from pubspec.yaml', () => {
+  const ws = makeTempWorkspace();
+  const appRoot = path.join(ws, 'apps', 'sdkwork-dart-only-flutter-mobile');
+  writeText(path.join(appRoot, 'pubspec.yaml'), 'name: sdkwork_dart_only\nversion: 1.2.3\n');
+  writeJson(path.join(appRoot, 'agent.app.config.json'), {
+    app: { key: 'dart-only' },
+    runtime: { framework: 'flutter' },
+  });
+  const resolved = resolveApp(ws, appRoot, 'sdkwork-dart-only-flutter-mobile');
+  assert.ok(resolved);
+  assert.equal(resolved.architecture, 'flutter-mobile');
+  assert.equal(resolved.appKey, 'dart-only');
+  assert.equal(resolved.version, '1.2.3');
+  assert.equal(resolved.appName, 'sdkwork_dart_only');
+});
+
 test('flutter-mobile packager detect requires pubspec.yaml', () => {
   const ws = makeTempWorkspace();
   const appRoot = path.join(ws, 'apps', 'sdkwork-fake-flutter-mobile');
@@ -261,6 +278,41 @@ test('flutter-mobile packager detect requires pubspec.yaml', () => {
   const detected = packager.detect(appRoot, {}, {});
   assert.ok(detected);
   assert.deepEqual(detected.platforms.sort(), ['android', 'ios']);
+});
+
+test('flutter-mobile packager detect resolves the declared harmony target', () => {
+  const ws = makeTempWorkspace();
+  const appRoot = path.join(ws, 'apps', 'sdkwork-fake-flutter-mobile');
+  fs.mkdirSync(appRoot, { recursive: true });
+  writeText(path.join(appRoot, 'pubspec.yaml'), 'name: fake\n');
+  writeJson(path.join(appRoot, 'package.json'), { name: '@sdkwork/fake-flutter', version: '1.0.0' });
+  writeJson(path.join(appRoot, 'agent.app.config.json'), {
+    runtime: { framework: 'flutter', targetPlatforms: ['ios', 'android', 'harmony'] },
+    publish: { platforms: ['APP_IOS', 'APP_ANDROID', 'APP_HARMONY'] },
+  });
+
+  const packager = getPackager('flutter-mobile');
+  const detected = packager.detect(appRoot, readJsonLocal(path.join(appRoot, 'agent.app.config.json')), {});
+  assert.ok(detected);
+  assert.deepEqual(detected.platforms.sort(), ['android', 'harmony', 'ios']);
+  assert.deepEqual(
+    packager.detect(appRoot, readJsonLocal(path.join(appRoot, 'agent.app.config.json')), { platformFilter: 'harmony' }).platforms,
+    ['harmony'],
+  );
+});
+
+test('flutter-mobile packager collects a harmony hap', () => {
+  const ws = makeTempWorkspace();
+  const appRoot = path.join(ws, 'apps', 'sdkwork-fake-flutter-mobile');
+  fs.mkdirSync(path.join(appRoot, 'build', 'ohos', 'entry', 'default'), { recursive: true });
+  writeText(path.join(appRoot, 'pubspec.yaml'), 'name: fake\n');
+  writeJson(path.join(appRoot, 'package.json'), { name: '@sdkwork/fake-flutter', version: '1.0.0' });
+  writeText(path.join(appRoot, 'build', 'ohos', 'entry', 'default', 'entry-default-signed.hap'), 'hap');
+  const packager = getPackager('flutter-mobile');
+  const artifacts = packager.collectArtifacts(appRoot, { platform: 'harmony', appConfig: {} });
+  assert.equal(artifacts.length, 1);
+  assert.equal(artifacts[0].name, 'harmony.hap');
+  assert.equal(artifacts[0].format, 'HAP');
 });
 
 test('mini-program packager detect resolves weixin platform', () => {
@@ -400,6 +452,139 @@ test('ReportBuilder writes a JSON file', () => {
   const parsed = JSON.parse(fs.readFileSync(out, 'utf8'));
   assert.equal(parsed.summary.dryRun, 1);
 });
+
+test('store lanes resolve their independent configRef documents', () => {
+  const { appRoot, appConfig } = makeStoreAppFixture();
+  const { configs, issues } = readStorePublishing(appRoot, appConfig);
+  assert.deepEqual(issues, []);
+  assert.deepEqual(
+    configs.map((entry) => entry.config.marketId),
+    ['APPLE_APP_STORE', 'GOOGLE_PLAY', 'HUAWEI_APPGALLERY'],
+  );
+});
+
+test('publish-app builds one store plan per market target and keeps external steps explicit', () => {
+  const { appRoot, appConfig } = makeStoreAppFixture();
+  const artifacts = threeMobileArtifacts();
+  const { plans, issues } = buildStoreSubmissionPlans({
+    appRoot,
+    appConfig,
+    artifacts,
+    requireArtifacts: true,
+  });
+  assert.deepEqual(issues, []);
+  assert.deepEqual(plans.map((plan) => `${plan.marketId}/${plan.targetId}`), [
+    'APPLE_APP_STORE/ios',
+    'GOOGLE_PLAY/android',
+    'HUAWEI_APPGALLERY/android',
+    'HUAWEI_APPGALLERY/harmony',
+  ]);
+  assert.ok(plans.every((plan) => plan.blockers.length === 0));
+  assert.match(plans[0].body.data.attributes.versionString, /^1\.2\.3$/u);
+  assert.equal(plans[0].externalSteps.length, 1);
+  assert.match(plans[1].endpoint, /applications\/com\.acme\.app\/edits/u);
+  assert.deepEqual(plans[1].externalSteps, []);
+  assert.equal(plans[2].externalSteps.length, 1);
+  assert.deepEqual(plans[2].artifacts, ['android.aab']);
+  assert.deepEqual(plans[3].artifacts, ['harmony.hap']);
+  assert.equal(plans[2].body.packageType, 'ANDROID');
+  assert.equal(plans[3].body.packageType, 'HARMONY');
+});
+
+test('publish-app store plans fail closed per target', () => {
+  const { appRoot, appConfig } = makeStoreAppFixture();
+  const { plans } = buildStoreSubmissionPlans({
+    appRoot,
+    appConfig,
+    artifacts: [{ name: 'android.aab', path: 'android.aab', format: 'AAB' }],
+    requireArtifacts: true,
+  });
+  const apple = plans.find((plan) => plan.marketId === 'APPLE_APP_STORE');
+  const huaweiAndroid = plans.find((plan) => plan.marketId === 'HUAWEI_APPGALLERY' && plan.targetId === 'android');
+  const huaweiHarmony = plans.find((plan) => plan.marketId === 'HUAWEI_APPGALLERY' && plan.targetId === 'harmony');
+  assert.deepEqual(apple.blockers.length, 1);
+  assert.deepEqual(huaweiAndroid.blockers, []);
+  assert.deepEqual(huaweiHarmony.blockers.length, 1);
+});
+
+test('publish-app rejects a store configRef outside the app root', () => {
+  const { appRoot, appConfig } = makeStoreAppFixture();
+  appConfig.publish.stores[0].configRef = '../outside.json';
+  const { issues } = readStorePublishing(appRoot, appConfig);
+  assert.ok(issues.some((issue) => /must resolve inside the app root/u.test(issue)));
+});
+
+function makeStoreAppFixture() {
+  const ws = makeTempWorkspace();
+  const appRoot = path.join(ws, 'apps', 'sdkwork-fake-flutter-mobile');
+  const storeDir = path.join(appRoot, 'etc', 'store-publishing');
+  const configs = {
+    'apple-app-store.json': {
+      marketId: 'APPLE_APP_STORE',
+      platforms: ['ios'],
+      identifiers: { bundleId: 'com.acme.app', appleId: null },
+      release: { track: 'APP_STORE', releaseType: 'MANUAL', countries: ['US', 'CN'] },
+      submission: {
+        mode: 'automated',
+        transport: 'app-store-connect-api',
+        credentialRefs: { keyId: 'env:ASC_KEY' },
+        targets: [{ id: 'ios', platform: 'ios', packageFormat: 'IPA', artifactName: 'ios.ipa' }],
+      },
+    },
+    'google-play.json': {
+      marketId: 'GOOGLE_PLAY',
+      platforms: ['android'],
+      identifiers: { applicationId: 'com.acme.app' },
+      release: { track: 'PRODUCTION', releaseType: 'STAGED_ROLLOUT', phasedRelease: true, rolloutPercent: 25, countries: ['US'] },
+      submission: {
+        mode: 'automated',
+        transport: 'google-play-developer-api',
+        credentialRefs: { serviceAccount: 'env:PLAY_SA' },
+        targets: [{ id: 'android', platform: 'android', packageFormat: 'AAB', artifactName: 'android.aab' }],
+      },
+    },
+    'huawei-appgallery.json': {
+      marketId: 'HUAWEI_APPGALLERY',
+      platforms: ['android', 'harmony'],
+      identifiers: { applicationId: 'com.acme.app' },
+      release: { track: 'REVIEW', releaseType: 'MANUAL', countries: ['CN', 'US'] },
+      submission: {
+        mode: 'automated',
+        transport: 'appgallery-connect-api',
+        credentialRefs: { clientId: 'env:AGC_ID', clientSecret: 'env:AGC_SECRET' },
+        targets: [
+          { id: 'android', platform: 'android', packageFormat: 'AAB', artifactName: 'android.aab' },
+          { id: 'harmony', platform: 'harmony', packageFormat: 'HAP', artifactName: 'harmony.hap' },
+        ],
+      },
+    },
+  };
+  for (const [name, config] of Object.entries(configs)) {
+    writeJson(path.join(storeDir, name), config);
+  }
+  const appConfig = {
+    app: { key: 'sdkwork-fake-flutter-mobile', name: 'fake' },
+    release: { currentVersion: '1.2.3' },
+    publish: {
+      stores: Object.keys(configs).map((name, index) => ({
+        marketId: Object.values(configs)[index].marketId,
+        configRef: `etc/store-publishing/${name}`,
+      })),
+    },
+  };
+  writeJson(path.join(appRoot, 'agent.app.config.json'), appConfig);
+  writeJson(path.join(appRoot, 'package.json'), { name: '@sdkwork/fake-flutter-mobile', version: '1.2.3' });
+  writeText(path.join(appRoot, 'pubspec.yaml'), 'name: fake\n');
+  return { ws, appRoot, appConfig };
+}
+
+function threeMobileArtifacts() {
+  return [
+    { name: 'ios.ipa', path: 'ios.ipa', format: 'IPA' },
+    { name: 'android.aab', path: 'android.aab', format: 'AAB' },
+    { name: 'harmony.hap', path: 'harmony.hap', format: 'HAP' },
+  ];
+}
 
 function readJsonLocal(p) {
   return JSON.parse(fs.readFileSync(p, 'utf8'));

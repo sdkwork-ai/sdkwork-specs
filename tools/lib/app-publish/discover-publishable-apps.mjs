@@ -111,7 +111,10 @@ export function discoverRepoApps(repoRoot) {
  */
 export function resolveApp(repoRoot, appRoot, appDirName) {
   const pkgPath = path.join(appRoot, 'package.json');
-  const packageJson = readJson(pkgPath);
+  // Flutter roots are Dart packages: they own `pubspec.yaml`, not necessarily
+  // an npm `package.json`. Treat either declaration as the app identity so the
+  // Flutter architecture can actually reach the publish orchestrator.
+  const packageJson = readJson(pkgPath) ?? readPubspec(appRoot);
   if (!packageJson || !packageJson.name) return null;
 
   const appConfigPath = path.join(appRoot, 'agent.app.config.json');
@@ -149,6 +152,29 @@ export function resolveApp(repoRoot, appRoot, appDirName) {
     packageJson,
     manifestDriven,
   };
+}
+
+/**
+ * Reads the `name`/`version` identity of a Dart package root.
+ *
+ * A Flutter application root is identified by `pubspec.yaml`; the publish
+ * orchestrator only needs the two scalar fields, so a focused line reader is
+ * used instead of adding a YAML dependency.
+ *
+ * @param {string} appRoot
+ * @returns {{name: string, version?: string} | null}
+ */
+function readPubspec(appRoot) {
+  const file = path.join(appRoot, 'pubspec.yaml');
+  if (!fs.existsSync(file)) return null;
+  const identity = {};
+  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/u)) {
+    const match = /^(name|version):\s*(.+?)\s*$/u.exec(line);
+    if (match) {
+      identity[match[1]] = match[2].replace(/^['"]|['"]$/gu, '');
+    }
+  }
+  return typeof identity.name === 'string' && identity.name.trim() ? identity : null;
 }
 
 /**

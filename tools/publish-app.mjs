@@ -37,6 +37,7 @@ import {
 } from './lib/app-publish/discover-publishable-apps.mjs';
 import { getPackager } from './lib/app-publish/packager-registry.mjs';
 import { getUploader, SUPPORTED_REGISTRIES, distPackageName } from './lib/app-publish/uploaders.mjs';
+import { buildStoreSubmissionPlans, SUPPORTED_STORE_MARKETS } from './lib/app-publish/store-submission.mjs';
 import { checkRemoteVersion } from './lib/app-publish/version-check.mjs';
 import { ReportBuilder } from './lib/app-publish/report.mjs';
 import { detectGithubRepoSlug, isPreRelease, releaseTag, toDisplayPath } from './lib/app-publish/util.mjs';
@@ -60,6 +61,8 @@ function parseCli() {
       tag: { type: 'string', default: 'latest' },
       'skip-build': { type: 'boolean', default: false },
       'allow-pre-release': { type: 'boolean', default: false },
+      stores: { type: 'boolean', default: false },
+      market: { type: 'string' },
       report: { type: 'string' },
       help: { type: 'boolean', default: false },
     },
@@ -90,6 +93,8 @@ Options:
   --tag <npm-dist-tag>          npm dist-tag (default: latest)
   --skip-build                  skip per-platform build step
   --allow-pre-release           allow publishing 0.x / -rc / -beta versions
+  --stores                      emit per-market store submission plans (publish.stores)
+  --market <id>                 limit store plans to one market (${SUPPORTED_STORE_MARKETS.join(', ')})
   --report <path>               write JSON report to this path
   --help                        show usage
 
@@ -201,8 +206,48 @@ async function processApp(item, opts, report, uploader) {
   const repoSlug = opts['repo-slug'] || detectGithubRepoSlug(item.repoRoot) || '';
   const notes = `Release ${appKey} ${version} (architecture: ${item.architecture})`;
 
+  const builtArtifacts = [];
   for (const platform of platforms) {
-    await processPlatform(item, { appKey, appName: item.appName, version, platform, repoSlug, notes, appConfig: item.appConfig }, opts, report, uploader, packager);
+    const artifacts = await processPlatform(item, { appKey, appName: item.appName, version, platform, repoSlug, notes, appConfig: item.appConfig }, opts, report, uploader, packager);
+    builtArtifacts.push(...(artifacts ?? []));
+  }
+
+  if (opts.stores || opts.market) {
+    reportStorePlans(item, { appKey, version, appConfig: item.appConfig, artifacts: builtArtifacts }, opts, report);
+  }
+}
+
+/**
+ * Emits one report item per declared store lane.
+ *
+ * The plan is local: endpoint, body, credential references, artifacts and the
+ * external console steps. A missing artifact fails the lane in a real publish
+ * run and is reported as dry-run in a dry run; external steps are recorded as
+ * the item reason without failing the lane.
+ */
+function reportStorePlans(item, { appKey, version, appConfig, artifacts }, opts, report) {
+  const { plans, issues } = buildStoreSubmissionPlans({
+    appRoot: item.appRoot,
+    appConfig,
+    artifacts,
+    marketFilter: opts.market,
+    requireArtifacts: !opts['dry-run'],
+  });
+  for (const issue of issues) {
+    report.add(makeItem(item, appKey, version, 'store:config', 'failed', issue, 0));
+    console.log(`  store config: failed —${issue}`);
+  }
+  for (const plan of plans) {
+    const notes = [...plan.blockers, ...plan.externalSteps.map((step) => `external: ${step}`)].join('; ');
+    const platformLabel = `store:${plan.marketId}/${plan.targetId}`;
+    if (plan.blockers.length > 0 && !opts['dry-run']) {
+      report.add(makeItem(item, appKey, version, platformLabel, 'failed', notes, 0, plan.provider, plan.artifacts.join(',')));
+      console.log(`  store ${plan.marketId}/${plan.targetId}: failed —${plan.blockers.join('; ')}`);
+      continue;
+    }
+    const status = opts['dry-run'] ? 'dry-run' : 'success';
+    report.add(makeItem(item, appKey, version, platformLabel, status, notes, 0, plan.provider, plan.artifacts.join(',')));
+    console.log(`  store ${plan.marketId}/${plan.targetId}: ${status} —${plan.provider}${notes ? ` (${notes})` : ''}`);
   }
 }
 
@@ -225,7 +270,9 @@ async function processPlatform(item, ctx, opts, report, uploader, packager) {
   if (probe.exists === true) {
     report.add(makeItem(item, appKey, version, platform, 'skipped', `already published (${opts.registry})`, 0));
     console.log(`  ${platform}: skipped, ${version} already published on ${opts.registry}`);
-    return;
+    // A skipped publish still owns local build output; keep it available for
+    // the store submission plans instead of reporting a false missing artifact.
+    return packager.collectArtifacts(item.appRoot, { appKey, version, platform, appConfig });
   }
   if (probe.exists === null) {
     console.log(`  ${platform}: warn, version probe inconclusive (${probe.detail ?? 'unknown'})`);
@@ -238,13 +285,13 @@ async function processPlatform(item, ctx, opts, report, uploader, packager) {
       : `${opts.registry} publish (dry-run)`;
     report.add(makeItem(item, appKey, version, platform, 'dry-run', detail, 0));
     console.log(`  ${platform}: dry-run, would publish to ${opts.registry}${opts.registry === 'npm' && npmName ? ` as ${npmName}@${version}` : ''}`);
-    return;
+    return [];
   }
 
   if (!opts['dry-run'] && !uploader.hasCredentials(process.env)) {
     report.add(makeItem(item, appKey, version, platform, 'skipped', `missing credential: ${uploader.credentialName()}`, 0));
     console.log(`  ${platform}: skipped, missing credential (${uploader.credentialName()})`);
-    return;
+    return [];
   }
 
   // Build.
@@ -258,7 +305,7 @@ async function processPlatform(item, ctx, opts, report, uploader, packager) {
   if (!buildResult.ok) {
     report.add(makeItem(item, appKey, version, platform, 'failed', buildResult.detail, buildMs));
     console.log(`  ${platform}: build failed — ${buildResult.detail}`);
-    return;
+    return [];
   }
   console.log(`  ${platform}: build ok (${buildResult.detail}, ${buildMs}ms)`);
 
@@ -267,7 +314,7 @@ async function processPlatform(item, ctx, opts, report, uploader, packager) {
   if (artifacts.length === 0) {
     report.add(makeItem(item, appKey, version, platform, 'failed', 'no artifacts produced by build', buildMs));
     console.log(`  ${platform}: failed, no artifacts produced`);
-    return;
+    return [];
   }
 
   // Upload.
@@ -288,10 +335,11 @@ async function processPlatform(item, ctx, opts, report, uploader, packager) {
   if (!pubResult.ok) {
     report.add(makeItem(item, appKey, version, platform, 'failed', pubResult.detail, buildMs + pubMs, artifacts[0].name));
     console.log(`  ${platform}: upload failed — ${pubResult.detail}`);
-    return;
+    return artifacts;
   }
   report.add(makeItem(item, appKey, version, platform, 'success', pubResult.detail, buildMs + pubMs, opts.registry, artifacts[0].name));
   console.log(`  ${platform}: ok — ${pubResult.detail} (${pubMs}ms)`);
+  return artifacts;
 }
 
 function artifactUrlFor(appConfig, platform) {

@@ -42,9 +42,12 @@ export function artifactPackages(appConfig, platform) {
  * ANDROID, IOS, WEIXIN.
  */
 function platformMatches(token, requested) {
-  const t = String(token).toLowerCase();
+  // Manifest package cursors use the PlusPlatform token (`APP_ANDROID`); the
+  // packager's platform argument uses the short delivery token (`android`).
+  const t = String(token).toLowerCase().replace(/^app_/, '');
   const r = String(requested).toLowerCase();
   if (t === r) return true;
+  if (r === 'harmony' && (t === 'harmony' || t === 'harmonyos')) return true;
   // `desktop` umbrella matches desktop_* tokens.
   if (r === 'desktop' && t.startsWith('desktop')) return true;
   if (r === 'windows' && t === 'desktop_windows') return true;
