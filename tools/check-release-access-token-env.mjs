@@ -36,7 +36,7 @@ import {
   DEFAULT_DEPLOYMENT_CONFIG_PATH,
   resolveSurfaceAnchor,
 } from './app-access-token-anchor.mjs';
-import { filterClientEnvSurfaces } from './materialize-client-env.mjs';
+import { assertSurfaceAccessTokenIdentity, filterClientEnvSurfaces } from './materialize-client-env.mjs';
 
 const DEFAULT_RELEASE_ENVIRONMENTS = ['test', 'staging', 'demo', 'production'];
 const PROFILE_PATTERN = /^(?:standalone|cloud)\.(development|test|staging|demo|production)$/u;
@@ -215,6 +215,18 @@ export function checkReleaseAccessTokenEnv(
     let ownershipScope;
     let ownerUserId = '';
     if (usesAnchor) {
+      try {
+        // The declaration must agree with the root's manifest identity
+        // (`APP_ACCESS_TOKEN_SPEC.md` §3): a release token cannot resolve another
+        // tenant, or an organization the application is not bound to.
+        assertSurfaceAccessTokenIdentity({ rootDir: root, surface, accessToken: surface.accessToken });
+      } catch (error) {
+        failures.push({
+          profileId: surfaceId,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
       try {
         ({ ownershipScope } = resolveApplicationOwnershipScope(surface.accessToken, env));
         if (ownershipScope === 'USER') {

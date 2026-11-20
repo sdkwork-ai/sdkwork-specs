@@ -4,9 +4,11 @@ import test from 'node:test';
 import {
   APPLICATION_OWNERSHIP_SCOPE_ENV,
   APPLICATION_OWNER_USER_ID_ENV,
+  PUBLIC_APP_ACCESS_TOKEN_NO_EXPIRY,
   assertApplicationAccessToken,
   createApplicationAccessToken,
   decodeApplicationAccessToken,
+  isApplicationAccessTokenExpiryPermanent,
   resolveApplicationAccessTokenScope,
   resolveApplicationOwnershipScope,
 } from './app-access-token.mjs';
@@ -214,25 +216,78 @@ test('an absent claim is only valid for a TENANT surface', () => {
   );
 });
 
-test('release scope resolution prefers the environment, then the declaration, then TENANT', () => {
-  const declaration = { ownershipScope: 'organization' };
-  assert.deepEqual(resolveApplicationOwnershipScope(declaration, {}), {
-    ownershipScope: 'ORGANIZATION',
-    source: 'declaration',
-  });
-  assert.deepEqual(resolveApplicationOwnershipScope(declaration, {
-    [APPLICATION_OWNERSHIP_SCOPE_ENV]: 'tenant',
+test('release scope resolution prefers the environment, then the declaration, then the organization binding', () => {
+  assert.deepEqual(
+    resolveApplicationOwnershipScope({ ownershipScope: 'organization', organizationId: '42' }, {}),
+    { ownershipScope: 'ORGANIZATION', source: 'declaration' },
+  );
+  // A deployment-provided value outranks the declaration, and it still has to
+  // agree with the organization binding.
+  assert.deepEqual(resolveApplicationOwnershipScope({ ownershipScope: 'TENANT' }, {
+    [APPLICATION_OWNERSHIP_SCOPE_ENV]: 'USER',
   }), {
-    ownershipScope: 'TENANT',
+    ownershipScope: 'USER',
     source: 'environment',
   });
   assert.deepEqual(resolveApplicationOwnershipScope({}, {}), {
     ownershipScope: 'TENANT',
     source: 'default',
   });
+  // The organization binding is the same fact as the level: declaring only the
+  // organization id is enough for an organization-level surface.
+  assert.deepEqual(resolveApplicationOwnershipScope({ organizationId: '42' }, {}), {
+    ownershipScope: 'ORGANIZATION',
+    source: 'organization-binding',
+  });
+  assert.deepEqual(resolveApplicationOwnershipScope({ organizationId: '0' }, {}), {
+    ownershipScope: 'TENANT',
+    source: 'default',
+  });
   assert.throws(
     () => resolveApplicationOwnershipScope({ ownershipScope: 'GLOBAL' }, {}),
     /accessToken\.ownershipScope=GLOBAL is not a release scope/u,
+  );
+});
+
+test('a release scope that contradicts the organization binding fails closed', () => {
+  assert.throws(
+    () => resolveApplicationOwnershipScope({ ownershipScope: 'ORGANIZATION' }, {}),
+    /ownership_scope=ORGANIZATION \(from declaration\) requires a non-zero organizationId/u,
+  );
+  assert.throws(
+    () => resolveApplicationOwnershipScope({ organizationId: '42' }, {
+      [APPLICATION_OWNERSHIP_SCOPE_ENV]: 'TENANT',
+    }),
+    /ownership_scope=TENANT \(from environment\) is tenant-level, so organizationId must be 0/u,
+  );
+  assert.throws(
+    () => resolveApplicationOwnershipScope({}, {
+      [APPLICATION_OWNERSHIP_SCOPE_ENV]: 'ORGANIZATION',
+    }),
+    /ownership_scope=ORGANIZATION \(from environment\) requires a non-zero organizationId/u,
+  );
+});
+
+test('the declared access scope guard must agree with the organization binding', () => {
+  assert.deepEqual(
+    resolveApplicationOwnershipScope({ scope: 'tenant', organizationId: '0' }, {}),
+    { ownershipScope: 'TENANT', source: 'default' },
+  );
+  assert.deepEqual(
+    resolveApplicationOwnershipScope({ scope: 'organization', organizationId: '42' }, {}),
+    { ownershipScope: 'ORGANIZATION', source: 'organization-binding' },
+  );
+  assert.throws(
+    () => resolveApplicationOwnershipScope({ scope: 'organization', organizationId: '0' }, {}),
+    /accessToken\.scope=organization conflicts with organizationId=0/u,
+  );
+  assert.throws(
+    () => resolveApplicationOwnershipScope({ scope: 'tenant', organizationId: '42' }, {}),
+    /accessToken\.scope=tenant conflicts with organizationId=42/u,
+  );
+  assert.throws(
+    () => resolveApplicationOwnershipScope({ scope: 'platform' }, {}),
+    /accessToken\.scope=platform must be tenant or organization/u,
   );
 });
 
@@ -270,5 +325,40 @@ test('the USER scope takes its owner user id from the environment or the declara
       { [APPLICATION_OWNER_USER_ID_ENV]: '0' },
     ),
     /SDKWORK_APPLICATION_OWNER_USER_ID must not be the tenant sentinel 0/u,
+  );
+});
+
+test('a committed token is permanent by default', () => {
+  const { payload } = decodeApplicationAccessToken(createApplicationAccessToken(identity));
+  assert.equal(payload.exp, PUBLIC_APP_ACCESS_TOKEN_NO_EXPIRY);
+  assert.equal(payload.exp, 0);
+  assert.equal(isApplicationAccessTokenExpiryPermanent(payload.exp), true);
+  assert.equal(isApplicationAccessTokenExpiryPermanent(undefined), true);
+  assert.equal(isApplicationAccessTokenExpiryPermanent(4102444800), false);
+});
+
+test('a concrete rotation deadline must be in the future', () => {
+  const rotation = createApplicationAccessToken({ ...identity, expiresAt: 4102444800 });
+  assert.equal(decodeApplicationAccessToken(rotation).payload.exp, 4102444800);
+  assert.throws(
+    () => createApplicationAccessToken({ ...identity, expiresAt: 1 }),
+    /must be after the token's issuedAt/u,
+  );
+});
+
+test('a permanent token survives any check instant while an elapsed deadline fails', () => {
+  const permanent = createApplicationAccessToken(identity);
+  assert.doesNotThrow(() => assertApplicationAccessToken(permanent, { ...identity, now: 4_102_444_800 }));
+  const rotation = createApplicationAccessToken({ ...identity, expiresAt: 4_102_444_800 });
+  assert.doesNotThrow(() => assertApplicationAccessToken(rotation, { ...identity, now: 4_102_444_799 }));
+  assert.throws(
+    () => assertApplicationAccessToken(rotation, { ...identity, now: 4_102_444_800 }),
+    /expired at 4102444800/u,
+  );
+  // Only the lifetime decision changes with the clock; a malformed deadline is
+  // refused before any comparison.
+  assert.throws(
+    () => assertApplicationAccessToken(tokenWith({ exp: 'soon' }), { ...identity }),
+    /exp claim must be a non-negative integer/u,
   );
 });

@@ -635,6 +635,73 @@ function applicationAccessTokenValues(surface, profile, env = process.env, sourc
   };
 }
 
+/**
+ * Read one surface's application manifest identity, when the root carries one.
+ *
+ * `APP_ACCESS_TOKEN_SPEC.md` §3 takes `tenant_id` from the root manifest's
+ * `backend.tenantId` and `organization_id` from `backend.organizationId`, so the
+ * materializer and the gates compare a surface's `accessToken` declaration
+ * against this identity instead of trusting the declaration alone.
+ * @param rootDir - repository root.
+ * @param surface - declared client surface.
+ * @returns the declared backend identity, or undefined when the root has no manifest.
+ */
+export function readSurfaceManifestIdentity(rootDir, surface) {
+  const manifestPath = path.join(path.resolve(rootDir, String(surface.root ?? '.')), 'agent.app.config.json');
+  if (!existsSync(manifestPath)) {
+    return undefined;
+  }
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, 'utf8').replace(/^\uFEFF/u, ''));
+  } catch (error) {
+    throw new Error(
+      `${path.relative(rootDir, manifestPath).replaceAll('\\', '/')} is unreadable: `
+      + `${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const backend = manifest?.backend && typeof manifest.backend === 'object' ? manifest.backend : {};
+  const read = (value) => (typeof value === 'string' ? value.trim() : '');
+  return {
+    tenantId: read(backend.tenantId),
+    organizationId: read(backend.organizationId),
+  };
+}
+
+/**
+ * Refuse a surface token declaration that contradicts its root's manifest.
+ *
+ * The tenant claim is always authoritative: a token declaring another tenant
+ * would resolve isolation outside the application's own manifest. The
+ * organization check is one-directional — a manifest that names a non-zero
+ * organization cannot ship tenant-level tokens, while a repository-owned
+ * manifest (`0`) may bind one surface to a specific organization for that
+ * installation.
+ * @param options - repository root, surface, and its `accessToken` declaration.
+ * @throws when the declaration contradicts the manifest identity.
+ */
+export function assertSurfaceAccessTokenIdentity({ rootDir, surface, accessToken }) {
+  const identity = readSurfaceManifestIdentity(rootDir, surface);
+  if (identity === undefined) {
+    return;
+  }
+  const declaredTenant = String(accessToken?.tenantId ?? '').trim() || '100001';
+  if (identity.tenantId && declaredTenant !== identity.tenantId) {
+    throw new Error(
+      `${surface.id}: accessToken.tenantId=${declaredTenant} contradicts the manifest `
+      + `backend.tenantId=${identity.tenantId}; the public token must resolve the root's own tenant.`,
+    );
+  }
+  const declaredOrganization = String(accessToken?.organizationId ?? '').trim() || '0';
+  if (identity.organizationId && identity.organizationId !== '0' && declaredOrganization !== identity.organizationId) {
+    throw new Error(
+      `${surface.id}: accessToken.organizationId=${declaredOrganization} contradicts the manifest `
+      + `backend.organizationId=${identity.organizationId}; an organization-bound application cannot `
+      + 'ship a token outside that organization.',
+    );
+  }
+}
+
 export function createClientSurfaceValues({ surface, sourceValues, profile, env = process.env }) {
   const values = {};
   for (const prefix of surface.includePrefixes ?? []) {
@@ -760,6 +827,11 @@ function resolveSurfaceOutputPath(rootDir, surface, profileId) {
   if (surface.format === 'vite') {
     return path.join(appRoot, `.env.${profileId}`);
   }
+  if (surface.format === 'dotenv-root') {
+    // A documented dotenv application root (the repository root's deployment
+    // profiles): same carrier shape as Vite, materialized in token-only mode.
+    return path.join(appRoot, `.env.${profileId}`);
+  }
   if (surface.format === 'flutter') {
     return path.join(appRoot, 'env', `sdkwork.${profileId}.json`);
   }
@@ -798,6 +870,93 @@ function serializeJson(values) {
     null,
     2,
   )}\n`;
+}
+
+/**
+ * Merge the generated public token into a documented dotenv profile file.
+ *
+ * A `mode: "token-only"` surface owns `.env.<profile>` documents that carry
+ * hand-authored documentation, URLs, and empty key placeholders (the repository
+ * root's deployment profiles). Only the `SDKWORK_ACCESS_TOKEN` line is
+ * generated, so every other byte — comments, ordering, CRLF line endings —
+ * survives a materialization.
+ * @param existing - current document content.
+ * @param token - generated public application access token.
+ * @returns the complete new content.
+ */
+export function mergeDotenvAccessToken(existing, token) {
+  const line = `${PUBLIC_APP_ACCESS_TOKEN_KEY}=${token}`;
+  if (existing.trim() === '') {
+    return `# SDKWork public application access token (APP_ACCESS_TOKEN_SPEC.md).\n${line}\n`;
+  }
+  const newline = existing.includes('\r\n') ? '\r\n' : '\n';
+  const lines = existing.split(/\r?\n/u);
+  if (lines[lines.length - 1] === '') {
+    lines.pop();
+  }
+  const tokenLine = /^\s*(?:export\s+)?SDKWORK_ACCESS_TOKEN\s*=/u;
+  const merged = [];
+  let replaced = false;
+  for (const raw of lines) {
+    if (!tokenLine.test(raw)) {
+      merged.push(raw);
+      continue;
+    }
+    if (!replaced) {
+      merged.push(line);
+      replaced = true;
+    }
+  }
+  if (!replaced) {
+    merged.push(line);
+  }
+  return `${merged.join(newline)}${newline}`;
+}
+
+/**
+ * Materialize one token-only surface's profile document.
+ *
+ * The document is authored, so a missing file fails instead of being invented;
+ * its declared identity keys must agree with the profile being materialized, so
+ * a token can never be written into another profile's document.
+ * @param {object} options - surface, profile, paths, check flag, and env bag.
+ * @returns the profile file path.
+ */
+function materializeTokenOnlySurface({ rootDir, surface, profile, outputPath, check, env, sourceProfile }) {
+  const relative = path.relative(rootDir, outputPath).replaceAll('\\', '/');
+  if (surface.format !== 'dotenv-root' && surface.format !== 'vite') {
+    throw new Error(`${surface.id} token-only mode requires a dotenv surface format.`);
+  }
+  if (!existsSync(outputPath)) {
+    throw new Error(
+      `${surface.id} profile document is missing: ${relative}; author it, then materialize its token.`,
+    );
+  }
+  if (!surface.accessToken || typeof surface.accessToken !== 'object' || Array.isArray(surface.accessToken)) {
+    throw new Error(`${surface.id} must declare accessToken for a token-only surface.`);
+  }
+  const existing = readFileSync(outputPath, 'utf8');
+  const declared = parseClientEnvDotenv(existing);
+  const identity = [
+    ['SDKWORK_ENVIRONMENT', profile.environment],
+    ['SDKWORK_DEPLOYMENT_PROFILE', profile.deploymentProfile],
+    ['SDKWORK_PROFILE_ID', profile.profileId],
+  ];
+  for (const [key, expected] of identity) {
+    if (declared[key] !== undefined && declared[key] !== expected) {
+      throw new Error(`${relative} declares ${key}=${declared[key]}, expected ${expected}.`);
+    }
+  }
+  const token = createSurfaceApplicationAccessToken(surface, profile, env, sourceProfile.values);
+  const content = mergeDotenvAccessToken(existing, token);
+  if (check) {
+    if (existing !== content) {
+      throw new Error(`${relative} is missing or stale. Run the client env materializer.`);
+    }
+  } else {
+    writeFileSync(outputPath, content, 'utf8');
+  }
+  return outputPath;
 }
 
 function loadMaterializationConfig(rootDir, configPath) {
@@ -910,7 +1069,33 @@ export function materializeClientEnv({
       if (Array.isArray(surface.excludeProfiles) && surface.excludeProfiles.includes(profileId)) {
         continue;
       }
+      if (surface.accessToken && typeof surface.accessToken === 'object' && !Array.isArray(surface.accessToken)) {
+        assertSurfaceAccessTokenIdentity({
+          rootDir: normalizedRoot,
+          surface,
+          accessToken: surface.accessToken,
+        });
+      }
       const outputPath = resolveSurfaceOutputPath(normalizedRoot, surface, profileId);
+      if (surface.mode !== undefined && surface.mode !== 'token-only') {
+        throw new Error(`${surface.id} uses unsupported materialization mode ${surface.mode}.`);
+      }
+      if (surface.mode === 'token-only') {
+        // A documented profile envelope (the repository root's `.env.<profile>`
+        // deployment documents): the materializer owns the public application
+        // token line and nothing else, so authored documentation, URLs, and empty
+        // key placeholders survive. `--check` compares the token line alone.
+        results.push(materializeTokenOnlySurface({
+          rootDir: normalizedRoot,
+          surface,
+          profile: sourceProfile.profile,
+          outputPath,
+          check,
+          env,
+          sourceProfile,
+        }));
+        continue;
+      }
       if (surface.format === 'harmony-native') {
         // Harmony runtime config is a nested, hand-authored template. Preserve
         // its shape and inject only the profile identity and public token.

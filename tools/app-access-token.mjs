@@ -271,34 +271,78 @@ export function normalizeApplicationOwnershipScope(value, label = 'ownershipScop
  *      installation that is being materialized owns the scope;
  *   2. the materialization surface declaration
  *      (`accessToken.ownershipScope`);
- *   3. `TENANT`, the only default in `APPLICATION_IDENTITY_SPEC.md` §4.1.
+ *   3. the surface's organization binding — a non-zero
+ *      `accessToken.organizationId` means an `ORGANIZATION` release, `0` means
+ *      `TENANT`. The binding is the same fact as the level, so a repository
+ *      declares the organization id once instead of repeating it as a scope;
+ *   4. `TENANT`, the only default in `APPLICATION_IDENTITY_SPEC.md` §4.1.
+ *
+ * `accessToken.scope` (`tenant` | `organization`) is an explicit guard: when
+ * present it must agree with the organization binding, whichever source
+ * supplied the scope.
  * @param accessTokenSpec - materialization `accessToken` input object.
  * @param env - environment bag to read the override from.
- * @returns the resolved scope plus its source (`environment`, `declaration`, `default`).
+ * @returns the resolved scope plus its source (`environment`, `declaration`,
+ *   `organization-binding`, `default`).
  */
 export function resolveApplicationOwnershipScope(accessTokenSpec = {}, env = process.env) {
   const spec = accessTokenSpec && typeof accessTokenSpec === 'object' ? accessTokenSpec : {};
+  const organizationId = normalizeText(spec.organizationId) || '0';
+  const boundScope = organizationId === '0'
+    ? DEFAULT_APPLICATION_OWNERSHIP_SCOPE
+    : 'ORGANIZATION';
+  const declaredLevel = normalizeText(spec.scope).toLowerCase();
+  if (declaredLevel !== '' && declaredLevel !== 'tenant' && declaredLevel !== 'organization') {
+    throw new Error(
+      `accessToken.scope=${String(spec.scope)} must be tenant or organization; `
+      + 'it is the explicit guard for the organization binding.',
+    );
+  }
+  if (declaredLevel !== '') {
+    const expected = boundScope === 'ORGANIZATION' ? 'organization' : 'tenant';
+    if (declaredLevel !== expected) {
+      throw new Error(
+        `accessToken.scope=${declaredLevel} conflicts with organizationId=${organizationId}; `
+        + `a ${expected}-level token needs ${expected === 'tenant' ? 'organizationId=0' : 'a non-zero organizationId'}.`,
+      );
+    }
+  }
   const fromEnvironment = String(env?.[APPLICATION_OWNERSHIP_SCOPE_ENV] ?? '').trim();
-  if (fromEnvironment) {
-    return {
-      ownershipScope: normalizeApplicationOwnershipScope(
-        fromEnvironment,
-        APPLICATION_OWNERSHIP_SCOPE_ENV,
-      ),
-      source: 'environment',
-    };
+  const resolved = fromEnvironment
+    ? {
+        ownershipScope: normalizeApplicationOwnershipScope(fromEnvironment, APPLICATION_OWNERSHIP_SCOPE_ENV),
+        source: 'environment',
+      }
+    : String(spec[APP_ACCESS_TOKEN_OWNERSHIP_SCOPE_FIELD] ?? '').trim()
+      ? {
+          ownershipScope: normalizeApplicationOwnershipScope(
+            String(spec[APP_ACCESS_TOKEN_OWNERSHIP_SCOPE_FIELD]).trim(),
+            `accessToken.${APP_ACCESS_TOKEN_OWNERSHIP_SCOPE_FIELD}`,
+          ),
+          source: 'declaration',
+        }
+      : boundScope === 'ORGANIZATION'
+        ? { ownershipScope: boundScope, source: 'organization-binding' }
+        : { ownershipScope: DEFAULT_APPLICATION_OWNERSHIP_SCOPE, source: 'default' };
+  // The release scope and the organization binding must agree, whichever source
+  // supplied the scope. A tenant or personal token cannot carry a non-zero
+  // organization, and an organization release cannot carry `0`
+  // (`APPLICATION_IDENTITY_SPEC.md` §4.1 rule 7).
+  if (resolved.ownershipScope === 'ORGANIZATION' && boundScope !== 'ORGANIZATION') {
+    throw new Error(
+      `ownership_scope=ORGANIZATION (from ${resolved.source}) requires a non-zero `
+      + `organizationId; got ${organizationId}. Declare accessToken.organizationId for an `
+      + 'organization-scoped installation.',
+    );
   }
-  const declared = String(spec[APP_ACCESS_TOKEN_OWNERSHIP_SCOPE_FIELD] ?? '').trim();
-  if (declared) {
-    return {
-      ownershipScope: normalizeApplicationOwnershipScope(
-        declared,
-        `accessToken.${APP_ACCESS_TOKEN_OWNERSHIP_SCOPE_FIELD}`,
-      ),
-      source: 'declaration',
-    };
+  if (resolved.ownershipScope !== 'ORGANIZATION' && boundScope === 'ORGANIZATION') {
+    throw new Error(
+      `ownership_scope=${resolved.ownershipScope} (from ${resolved.source}) is tenant-level, `
+      + `so organizationId must be 0; got ${organizationId}. Declare ownershipScope=ORGANIZATION `
+      + 'for an organization-scoped installation.',
+    );
   }
-  return { ownershipScope: DEFAULT_APPLICATION_OWNERSHIP_SCOPE, source: 'default' };
+  return resolved;
 }
 
 /**
@@ -367,10 +411,70 @@ export const PUBLIC_APP_ACCESS_TOKEN_SIGNATURE = 'public';
 export const PUBLIC_APP_ACCESS_TOKEN_CLASS = 'application';
 export const PUBLIC_APP_ACCESS_TOKEN_VERSION = 1;
 
-// Fixed generation instant and rotation ceiling keep committed profiles stable.
-// Rotation is an explicit change to these constants plus a full regeneration.
+// The fixed generation instant keeps committed profiles stable.
 export const PUBLIC_APP_ACCESS_TOKEN_ISSUED_AT = Math.floor(Date.UTC(2026, 0, 1) / 1000);
-export const PUBLIC_APP_ACCESS_TOKEN_EXPIRES_AT = Math.floor(Date.UTC(2100, 0, 1) / 1000);
+
+/**
+ * The `exp` claim value that means "never expires".
+ *
+ * The public application access token ships inside the packaged application and
+ * is permanent by default (`APP_ACCESS_TOKEN_SPEC.md` §3): it is SaaS-isolation
+ * material, not a session credential, so losing it silently at an arbitrary
+ * instant would break every pre-login call of an already-shipped build. IAM
+ * reads this sentinel as no expiry (`sdkwork-iam`
+ * `application_access_token.rs`), and so do the bootstrap reuse check and every
+ * gate. Rotation stays explicit: bump `PUBLIC_APP_ACCESS_TOKEN_VERSION`, or pass
+ * a concrete `expiresAt` for a deliberately time-boxed rotation window.
+ */
+export const PUBLIC_APP_ACCESS_TOKEN_NO_EXPIRY = 0;
+
+/**
+ * Whether one `exp` claim value means "never expires".
+ *
+ * Both the explicit sentinel `0` and an absent claim are permanent, matching the
+ * server contract; any other finite value is a rotation deadline.
+ * @param value - decoded `exp` claim, when present.
+ * @returns true when the token never expires.
+ */
+export function isApplicationAccessTokenExpiryPermanent(value) {
+  if (value === undefined || value === null) {
+    return true;
+  }
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds === PUBLIC_APP_ACCESS_TOKEN_NO_EXPIRY;
+}
+
+/**
+ * Reject a token whose concrete rotation deadline has passed.
+ *
+ * A permanent token (`exp: 0` or no `exp`) always passes. A concrete deadline
+ * that already elapsed is the one expiry condition a committed profile must not
+ * ship, so the gates call this instead of re-deriving the rule.
+ * @param payload - decoded token payload.
+ * @param nowSeconds - current Unix instant in seconds.
+ * @throws when `exp` is malformed or names a past instant.
+ */
+export function assertApplicationAccessTokenLifetime(
+  payload,
+  nowSeconds = Math.floor(Date.now() / 1000),
+) {
+  const declared = payload?.exp;
+  if (declared === undefined || declared === null) {
+    return;
+  }
+  if (typeof declared !== 'number' || !Number.isInteger(declared) || declared < 0) {
+    throw new Error(
+      'Public application access token exp claim must be a non-negative integer; '
+      + `got ${JSON.stringify(declared)}. Use exp=0 for a permanent token.`,
+    );
+  }
+  if (!isApplicationAccessTokenExpiryPermanent(declared) && declared <= nowSeconds) {
+    throw new Error(
+      `Public application access token expired at ${declared}; the packaged token must be permanent `
+      + '(exp=0) or carry a rotation deadline in the future. Regenerate it with the canonical generator.',
+    );
+  }
+}
 
 const ENVIRONMENTS = new Set(['development', 'test', 'staging', 'demo', 'production']);
 const DEPLOYMENT_PROFILES = new Set(['standalone', 'cloud']);
@@ -537,7 +641,14 @@ export function createApplicationAccessToken(options = {}) {
     : PUBLIC_APP_ACCESS_TOKEN_ISSUED_AT;
   const expiresAt = Number.isFinite(options.expiresAt)
     ? Math.trunc(options.expiresAt)
-    : PUBLIC_APP_ACCESS_TOKEN_EXPIRES_AT;
+    : PUBLIC_APP_ACCESS_TOKEN_NO_EXPIRY;
+  // A rotation deadline before the fixed generation instant could never be
+  // valid; refusing it keeps a typo from committing an already-expired profile.
+  if (!isApplicationAccessTokenExpiryPermanent(expiresAt) && expiresAt <= issuedAt) {
+    throw new Error(
+      `expiresAt=${expiresAt} must be after the token's issuedAt=${issuedAt}, or 0 for a permanent token.`,
+    );
+  }
 
   const header = {
     alg: 'none',
@@ -596,6 +707,18 @@ export function decodeApplicationAccessToken(token) {
   if (payload?.token_class !== PUBLIC_APP_ACCESS_TOKEN_CLASS || payload?.token_type !== 'access') {
     throw new Error('Public application access token must declare token_class=application and token_type=access.');
   }
+  // `exp` is permanent (`0`) or a concrete rotation deadline; any other shape is
+  // malformed. Whether a concrete deadline has passed is a gate decision
+  // (`assertApplicationAccessTokenLifetime`), not a decode failure.
+  if (
+    payload.exp !== undefined
+    && (typeof payload.exp !== 'number' || !Number.isInteger(payload.exp) || payload.exp < 0)
+  ) {
+    throw new Error(
+      'Public application access token exp claim must be a non-negative integer; '
+      + `got ${JSON.stringify(payload.exp)}. Use exp=0 for a permanent token.`,
+    );
+  }
   const organizationId = String(payload.organization_id ?? '');
   const expectedLoginScope = resolveLoginScope(organizationId);
   if (payload.login_scope !== expectedLoginScope) {
@@ -637,12 +760,20 @@ export function decodeApplicationAccessToken(token) {
 
 /**
  * Validate one committed token against the expected app/profile identity.
+ *
+ * Also refuses a concrete rotation deadline that already elapsed
+ * (`assertApplicationAccessTokenLifetime`); a permanent token passes.
  * @param {string} token - committed token.
- * @param {object} expected - expected app identity and profile.
+ * @param {object} expected - expected app identity and profile; `now` (Unix
+ *   seconds) overrides the clock for deterministic checks.
  * @returns {object} decoded payload.
  */
 export function assertApplicationAccessToken(token, expected = {}) {
   const { payload } = decodeApplicationAccessToken(token);
+  assertApplicationAccessTokenLifetime(
+    payload,
+    Number.isFinite(expected.now) ? Math.trunc(expected.now) : undefined,
+  );
   const checks = [
     ['app_id', expected.appId],
     ['aud', expected.appId],
@@ -726,10 +857,11 @@ Generate options:
   --permission-scope <list>    comma-separated, default iam:self
   --session-id <id>            default bootstrap-public-<app>-<profile>.<environment>
   --issued-at <epoch-seconds>  default 1767225600
-  --expires-at <epoch-seconds> default 4102444800
+  --expires-at <epoch-seconds> rotation deadline; default 0 (permanent, never expires)
   --json                       print token plus decoded header/payload
 
-The token is a public SaaS-isolation string, not a secret.`);
+The token ships with the packaged application and is permanent by default. The
+token is a public SaaS-isolation string, not a secret.`);
 }
 
 function runCli() {

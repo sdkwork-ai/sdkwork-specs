@@ -910,6 +910,243 @@ test('an ORGANIZATION surface without a non-zero organization fails generation',
       profile: CLOUD_PRODUCTION_PROFILE,
       env: {},
     }),
-    /ownership_scope=ORGANIZATION requires a non-zero organization_id/u,
+    /ownership_scope=ORGANIZATION \(from declaration\) requires a non-zero organizationId/u,
   );
+});
+
+function createTokenOnlyRoot({ documentProfile = 'standalone.development', accessToken = {} } = {}) {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-client-env-token-only-'));
+  writeFixture(root, 'etc/sdkwork.deployment.config.json', JSON.stringify({
+    profiles: {
+      'standalone.development': { config: 'topology/standalone.development.env' },
+      'standalone.test': { config: 'topology/standalone.test.env' },
+    },
+  }, null, 2));
+  writeFixture(root, 'etc/topology/standalone.development.env', [
+    'SDKWORK_ENVIRONMENT=development',
+    'SDKWORK_DEPLOYMENT_PROFILE=standalone',
+    'SDKWORK_PROFILE_ID=standalone.development',
+    '',
+  ].join('\n'));
+  writeFixture(root, 'etc/topology/standalone.test.env', [
+    'SDKWORK_ENVIRONMENT=test',
+    'SDKWORK_DEPLOYMENT_PROFILE=standalone',
+    'SDKWORK_PROFILE_ID=standalone.test',
+    '',
+  ].join('\n'));
+  writeFixture(root, 'etc/client-env.materialization.json', JSON.stringify({
+    schemaVersion: 1,
+    kind: 'sdkwork.client-env-materialization',
+    command: 'materialize',
+    sourceIdentity: {
+      deploymentProfileKeys: ['SDKWORK_DEPLOYMENT_PROFILE'],
+      environmentKeys: ['SDKWORK_ENVIRONMENT'],
+      profileIdKeys: ['SDKWORK_PROFILE_ID'],
+    },
+    profiles: ['standalone.development', 'standalone.test'],
+    surfaces: [{
+      id: 'root-web',
+      root: '.',
+      format: 'dotenv-root',
+      mode: 'token-only',
+      runtimeTarget: 'browser',
+      accessToken: {
+        appIdEnv: 'SDKWORK_DEPLOY_APPLICATION_ID',
+        tenantId: '100001',
+        organizationId: '0',
+        permissionScope: ['iam:self'],
+        ...accessToken,
+      },
+    }],
+  }, null, 2));
+  writeFixture(root, 'agent.app.config.json', JSON.stringify({
+    schemaVersion: 3,
+    kind: 'agent.app',
+    backend: { tenantId: '100001', organizationId: '0' },
+  }, null, 2));
+  writeFixture(root, '.env.standalone.development', [
+    '# Authored deployment document for the web shell.',
+    `SDKWORK_ENVIRONMENT=${documentProfile.split('.')[1]}`,
+    `SDKWORK_DEPLOYMENT_PROFILE=${documentProfile.split('.')[0]}`,
+    `SDKWORK_PROFILE_ID=${documentProfile}`,
+    'SDKWORK_RUNTIME_TARGET=browser',
+    '# An empty placeholder that must survive materialization.',
+    'DEEPSEEK_API_KEY=',
+    'SDKWORK_ACCESS_TOKEN=stale-authored-token',
+    '',
+  ].join('\n'));
+  writeFixture(root, '.env.standalone.test', [
+    'SDKWORK_ENVIRONMENT=test',
+    'SDKWORK_DEPLOYMENT_PROFILE=standalone',
+    'SDKWORK_PROFILE_ID=standalone.test',
+    'SDKWORK_RUNTIME_TARGET=browser',
+    'SDKWORK_ACCESS_TOKEN=',
+    '',
+  ].join('\n'));
+  return root;
+}
+
+test('token-only surfaces regenerate the token line and keep the authored document', () => {
+  const root = createTokenOnlyRoot();
+  const env = { SDKWORK_DEPLOY_APPLICATION_ID: '381158401561858048' };
+  try {
+    const written = materializeClientEnv({ rootDir: root, env });
+    assert.equal(written.length, 2);
+    const development = readFileSync(path.join(root, '.env.standalone.development'), 'utf8');
+    // Every authored byte outside the token line survives.
+    assert.match(development, /# Authored deployment document for the web shell\./u);
+    assert.match(development, /# An empty placeholder that must survive materialization\.\nDEEPSEEK_API_KEY=/u);
+    assert.match(development, /SDKWORK_RUNTIME_TARGET=browser/u);
+    assert.doesNotMatch(development, /stale-authored-token/u);
+    const token = /^SDKWORK_ACCESS_TOKEN=(.+)$/mu.exec(development)?.[1] ?? '';
+    const { payload } = decodeApplicationAccessToken(token);
+    assert.equal(payload.app_id, '381158401561858048');
+    assert.equal(payload.exp, 0, 'a packaged token is permanent by default');
+    assert.equal(payload.ownership_scope, 'TENANT');
+    assert.equal(payload.environment, 'development');
+    assert.equal(payload.deployment_profile, 'standalone');
+    assert.equal(payload.runtime_target, 'browser');
+    // The second document got its own environment/profile pair.
+    const testProfile = decodeApplicationAccessToken(
+      /^SDKWORK_ACCESS_TOKEN=(.+)$/mu.exec(readFileSync(path.join(root, '.env.standalone.test'), 'utf8'))?.[1] ?? '',
+    ).payload;
+    assert.equal(testProfile.environment, 'test');
+    assert.equal(testProfile.deployment_profile, 'standalone');
+    // The written matrix verifies, and tampering makes --check fail.
+    assert.doesNotThrow(() => materializeClientEnv({ rootDir: root, env, check: true }));
+    writeFileSync(
+      path.join(root, '.env.standalone.development'),
+      development.replace(/^SDKWORK_ACCESS_TOKEN=.*$/mu, 'SDKWORK_ACCESS_TOKEN=tampered'),
+      'utf8',
+    );
+    assert.throws(
+      () => materializeClientEnv({ rootDir: root, env, check: true }),
+      /\.env\.standalone\.development is missing or stale/u,
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('a token-only surface refuses a missing document and a mismatched identity', () => {
+  const missing = createTokenOnlyRoot();
+  try {
+    rmSync(path.join(missing, '.env.standalone.test'));
+    assert.throws(
+      () => materializeClientEnv({ rootDir: missing, env: { SDKWORK_DEPLOY_APPLICATION_ID: 'anchor-1' } }),
+      /root-web profile document is missing: \.env\.standalone\.test/u,
+    );
+  } finally {
+    rmSync(missing, { force: true, recursive: true });
+  }
+
+  const mismatched = createTokenOnlyRoot({ documentProfile: 'standalone.test' });
+  try {
+    assert.throws(
+      () => materializeClientEnv({ rootDir: mismatched, env: { SDKWORK_DEPLOY_APPLICATION_ID: 'anchor-1' } }),
+      /\.env\.standalone\.development declares SDKWORK_ENVIRONMENT=test, expected development/u,
+    );
+  } finally {
+    rmSync(mismatched, { force: true, recursive: true });
+  }
+});
+
+test('a token-only ORGANIZATION surface stamps the organization claim', () => {
+  const root = createTokenOnlyRoot({
+    accessToken: { organizationId: '42', ownershipScope: 'ORGANIZATION' },
+  });
+  try {
+    materializeClientEnv({ rootDir: root, env: { SDKWORK_DEPLOY_APPLICATION_ID: 'anchor-1' } });
+    const { payload } = decodeApplicationAccessToken(
+      /^SDKWORK_ACCESS_TOKEN=(.+)$/mu.exec(readFileSync(path.join(root, '.env.standalone.development'), 'utf8'))?.[1] ?? '',
+    );
+    assert.equal(payload.organization_id, '42');
+    assert.equal(payload.login_scope, 'ORGANIZATION');
+    assert.equal(payload.ownership_scope, 'ORGANIZATION');
+    assert.equal(payload.exp, 0);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('an organization-bound application cannot ship a token outside its manifest organization', () => {
+  const root = createTokenOnlyRoot();
+  try {
+    writeFixture(root, 'agent.app.config.json', JSON.stringify({
+      backend: { tenantId: '100001', organizationId: '42' },
+    }, null, 2));
+    assert.throws(
+      () => materializeClientEnv({ rootDir: root, env: { SDKWORK_DEPLOY_APPLICATION_ID: 'anchor-1' } }),
+      /accessToken\.organizationId=0 contradicts the manifest backend\.organizationId=42/u,
+    );
+
+    // Declaring the same organization is coherent and yields an
+    // organization-level token for that installation.
+    writeFixture(root, 'etc/client-env.materialization.json', JSON.stringify({
+      schemaVersion: 1,
+      kind: 'sdkwork.client-env-materialization',
+      sourceIdentity: {
+        deploymentProfileKeys: ['SDKWORK_DEPLOYMENT_PROFILE'],
+        environmentKeys: ['SDKWORK_ENVIRONMENT'],
+        profileIdKeys: ['SDKWORK_PROFILE_ID'],
+      },
+      profiles: ['standalone.development', 'standalone.test'],
+      surfaces: [{
+        id: 'root-web',
+        root: '.',
+        format: 'dotenv-root',
+        mode: 'token-only',
+        runtimeTarget: 'browser',
+        accessToken: { appIdEnv: 'SDKWORK_DEPLOY_APPLICATION_ID', organizationId: '42' },
+      }],
+    }, null, 2));
+    materializeClientEnv({ rootDir: root, env: { SDKWORK_DEPLOY_APPLICATION_ID: 'anchor-1' } });
+    const { payload } = decodeApplicationAccessToken(
+      /^SDKWORK_ACCESS_TOKEN=(.+)$/mu.exec(readFileSync(path.join(root, '.env.standalone.development'), 'utf8'))?.[1] ?? '',
+    );
+    assert.equal(payload.organization_id, '42');
+    assert.equal(payload.ownership_scope, 'ORGANIZATION');
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('a token declaration cannot name another tenant than its manifest', () => {
+  const root = createTokenOnlyRoot();
+  try {
+    writeFixture(root, 'agent.app.config.json', JSON.stringify({
+      backend: { tenantId: '100002', organizationId: '0' },
+    }, null, 2));
+    assert.throws(
+      () => materializeClientEnv({ rootDir: root, env: { SDKWORK_DEPLOY_APPLICATION_ID: 'anchor-1' } }),
+      /accessToken\.tenantId=100001 contradicts the manifest backend\.tenantId=100002/u,
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('an organization-level surface is derived from its organization binding alone', () => {
+  // The organization id carries the level: a repository that declares only
+  // `accessToken.organizationId` gets an organization release, not a conflict.
+  const root = createTokenOnlyRoot({ accessToken: { organizationId: '42' } });
+  try {
+    materializeClientEnv({ rootDir: root, env: { SDKWORK_DEPLOY_APPLICATION_ID: 'anchor-1' } });
+    const { payload } = decodeApplicationAccessToken(
+      /^SDKWORK_ACCESS_TOKEN=(.+)$/mu.exec(readFileSync(path.join(root, '.env.standalone.development'), 'utf8'))?.[1] ?? '',
+    );
+    assert.equal(payload.organization_id, '42');
+    assert.equal(payload.ownership_scope, 'ORGANIZATION');
+    assert.equal(payload.login_scope, 'ORGANIZATION');
+    assert.equal(payload.user_id, '0');
+    assert.equal(payload.exp, 0);
+    // The written matrix still verifies under the derived expectation.
+    assert.doesNotThrow(() => materializeClientEnv({
+      rootDir: root,
+      env: { SDKWORK_DEPLOY_APPLICATION_ID: 'anchor-1' },
+      check: true,
+    }));
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
 });

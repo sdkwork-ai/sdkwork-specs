@@ -21,7 +21,7 @@ import {
   DEFAULT_DEPLOYMENT_CONFIG_PATH,
   resolveSurfaceAnchor,
 } from './app-access-token-anchor.mjs';
-import { filterClientEnvSurfaces } from './materialize-client-env.mjs';
+import { filterClientEnvSurfaces, assertSurfaceAccessTokenIdentity } from './materialize-client-env.mjs';
 
 const DEFAULT_CONFIG_PATH = 'etc/client-env.materialization.json';
 const DEFAULT_PROFILE_IDS = ['standalone', 'cloud'].flatMap(
@@ -93,7 +93,7 @@ function readTokenFromJson(filePath) {
 
 function resolveProfilePath(root, surface, profileId) {
   const appRoot = path.resolve(root, surface.root);
-  if (surface.format === 'vite') {
+  if (surface.format === 'vite' || surface.format === 'dotenv-root') {
     return path.join(appRoot, `.env.${profileId}`);
   }
   if (surface.format === 'flutter') {
@@ -183,6 +183,15 @@ export function checkAppAccessTokenEnv({
       continue;
     }
     const accessToken = surface.accessToken;
+    try {
+      // The declaration must agree with the root's own manifest identity, so a
+      // surface cannot verify a token for another tenant or an organization the
+      // application is not bound to (`APP_ACCESS_TOKEN_SPEC.md` §3).
+      assertSurfaceAccessTokenIdentity({ rootDir, surface, accessToken });
+    } catch (error) {
+      failures.push(`${surfaceId}: ${error instanceof Error ? error.message : String(error)}`);
+      continue;
+    }
     const baseEnvName = resolveApplicationAccessTokenEnvName(accessToken);
     const surfaceEnvName = surfaceApplicationTokenEnvName(baseEnvName, surfaceId);
     // The expected release scope is resolved exactly as the materializer
@@ -252,7 +261,7 @@ export function checkAppAccessTokenEnv({
       }
       let tokens;
       try {
-        tokens = surface.format === 'vite'
+        tokens = surface.format === 'vite' || surface.format === 'dotenv-root'
           ? readTokenFromDotenv(filePath)
           : readTokenFromJson(filePath);
       } catch (error) {

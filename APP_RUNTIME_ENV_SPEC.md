@@ -97,7 +97,13 @@ One matrix serves every application family through two surface styles:
 
 Materialization formats per family are owned by
 `tools/materialize-client-env.mjs` (vite dotenv, flutter JSON, mini-program
-JSON); `tools/build-browser-client.mjs` owns the browser runtime document.
+JSON, Harmony native, and the `dotenv-root` documented profile an application
+root keeps as a hand-authored `.env.<profile>` document). A surface declared
+`mode: "token-only"` is authored, not generated: materialization rewrites only
+its `SDKWORK_ACCESS_TOKEN` line, refuses a document whose declared identity
+names another profile, and `--check` compares that line alone, so documentation,
+URLs, and empty key placeholders survive;
+`tools/build-browser-client.mjs` owns the browser runtime document.
 
 A materialized file is the authority for the selected profile. It is loaded by
 its framework at build time — the Vite mode, Flutter's

@@ -8,6 +8,7 @@ import { checkAppAccessTokenEnv } from './check-app-access-token-env.mjs';
 import {
   PUBLIC_APP_ACCESS_TOKEN_PENDING_APP_ID,
   createApplicationAccessToken,
+  decodeApplicationAccessToken,
 } from './app-access-token.mjs';
 
 const ANCHOR_ENV = 'SDKWORK_DEPLOY_APPLICATION_ID';
@@ -529,6 +530,106 @@ test('a legacy tenant token without the claim still verifies a TENANT surface', 
       env: { [ANCHOR_ENV]: 'app-pc' },
     });
     assert.equal(result.checked, 1);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('an ORGANIZATION surface derives its expected scope from the organization binding', () => {
+  // Only the organization id is declared: the gate must expect ORGANIZATION
+  // (`organization-binding`) and verify the organization-level token, not
+  // default to TENANT and reject it.
+  const surface = {
+    id: 'demo-pc',
+    root: 'apps/pc',
+    format: 'vite',
+    runtimeTarget: 'browser',
+    accessToken: { appIdEnv: ANCHOR_ENV, organizationId: '42' },
+  };
+  const token = createToken('app-pc', { ownershipScope: 'ORGANIZATION', organizationId: '42' });
+  const root = createSurfaceRoot({
+    surfaces: [surface],
+    files: {
+      'apps/pc/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${token}\n`,
+    },
+  });
+  try {
+    const result = checkAppAccessTokenEnv({
+      root,
+      profileId: 'standalone.development',
+      env: { [ANCHOR_ENV]: 'app-pc' },
+    });
+    assert.equal(result.checked, 1);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('a declaration that names another tenant than the root manifest fails the gate', () => {
+  const root = createSurfaceRoot({
+    surfaces: [viteSurface('demo-pc', 'apps/pc')],
+    files: {
+      'apps/pc/agent.app.config.json': JSON.stringify({
+        backend: { tenantId: '100002', organizationId: '0' },
+      }, null, 2),
+      'apps/pc/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${createToken('app-pc')}\n`,
+    },
+  });
+  try {
+    assert.throws(
+      () => checkAppAccessTokenEnv({
+        root,
+        profileId: 'standalone.development',
+        env: { [ANCHOR_ENV]: 'app-pc' },
+      }),
+      /accessToken\.tenantId=100001 contradicts the manifest backend\.tenantId=100002/u,
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('a packaged token is permanently valid and an elapsed rotation deadline fails', () => {
+  const token = createToken('app-pc');
+  assert.equal(
+    decodeApplicationAccessToken(token).payload.exp,
+    0,
+    'the committed token ships permanent (exp=0)',
+  );
+  const root = createSurfaceRoot({
+    surfaces: [viteSurface('demo-pc', 'apps/pc')],
+    files: {
+      'apps/pc/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${token}\n`,
+    },
+  });
+  try {
+    const result = checkAppAccessTokenEnv({
+      root,
+      profileId: 'standalone.development',
+      env: { [ANCHOR_ENV]: 'app-pc' },
+    });
+    assert.equal(result.checked, 1);
+
+    // A rotation deadline that already elapsed cannot keep shipping: the gate
+    // names it instead of letting a dead credential reach a package.
+    const elapsed = createApplicationAccessToken({
+      appId: 'app-pc',
+      tenantId: '100001',
+      organizationId: '0',
+      environment: 'development',
+      deploymentProfile: 'standalone',
+      runtimeTarget: 'browser',
+      expiresAt: 1_780_000_000,
+    });
+    writeFixture(root, 'apps/pc/.env.standalone.development', `SDKWORK_ACCESS_TOKEN=${elapsed}\n`);
+    assert.throws(
+      () => checkAppAccessTokenEnv({
+        root,
+        profileId: 'standalone.development',
+        env: { [ANCHOR_ENV]: 'app-pc' },
+      }),
+      /expired at 1780000000/u,
+    );
   } finally {
     rmSync(root, { force: true, recursive: true });
   }

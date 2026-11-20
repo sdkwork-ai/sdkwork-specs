@@ -38,8 +38,14 @@ Rules:
 
 ## 2. Required Env Profile Matrix
 
-Every manifest-bearing application root under `apps/*` `MUST` carry a complete
-per-scope env profile set. The profile id is
+Every application root that ships an installable artifact — every manifest-bearing
+root under `apps/*`, and the repository root that carries `agent.app.config.json`
+and builds the Web/Desktop shell — `MUST` carry a complete per-scope env profile
+set, whatever its application type (Vite, Flutter, mini program, Harmony native,
+or another JSON runtime root). The token ships inside the packaged artifact: a
+root without one cannot resolve its tenant, organization, application,
+environment, and deployment profile before an interactive login exists, so "no
+token yet" is never a legal state for a released application. The profile id is
 `<deployment-profile>.<environment>` per `ENVIRONMENT_SPEC.md` §5.1:
 
 ```text
@@ -59,11 +65,28 @@ shape is owned by the application architecture:
 | Harmony native | `config/app/runtime-env.<profile-id>.json` |
 | Other JSON runtime root | `config/app/runtime-env.<profile-id>.json` |
 
+The repository root's documented `.env.<profile-id>` deployment documents (the
+Web/Desktop shell build input) keep the Vite carrier shape but are authored
+documents: their token is materialized in **token-only** mode, which owns the
+`SDKWORK_ACCESS_TOKEN` line and preserves every other byte, including
+documentation and empty key placeholders
+(`materialize-client-env.mjs`, `mode: "token-only"`). A missing document is a
+failure, not a skip, and a document whose declared identity names another
+profile is refused so a token cannot land in the wrong carrier.
+
 Rules:
 
 - The ten files above are mandatory even when the root declares only one
   supported deployment profile; `agent.app.config.json`
   `runtime.supportedDeploymentProfiles` controls packaging, not the env matrix.
+- The token `MUST` be permanent. It ships with the application and has no
+  expiry in normal operation: `exp: 0` (the canonical sentinel), or no `exp`
+  claim at all. A packaged build cannot renew a credential it did not keep, so
+  an expiring profile token is a defect, and the gates fail one whose concrete
+  rotation deadline already elapsed.
+- Every declared application type `MUST` carry the token. The matrix is per
+  root, not per repository: a repository whose five `apps/*` roots are covered
+  still fails the standard while its Web/Desktop root documents carry none.
 - `SDKWORK_ACCESS_TOKEN` `MUST` be present, non-empty, and a three-part JWT
   compact serialization. A missing, empty, malformed, or mismatched token
   `MUST` fail `dev`, `start`, `serve`, `build`, `package`, and `dist` before the
@@ -114,7 +137,7 @@ Required claims:
 | `user_id` | `0` for `TENANT`/`ORGANIZATION`; the installation owner's user id for `USER` (§3.2.1) |
 | `permission_scope` | `["iam:self"]` |
 | `iat` | fixed generation instant |
-| `exp` | far-future rotation deadline |
+| `exp` | `0` — permanent (the default); a concrete future epoch is an explicit rotation deadline |
 
 Rules:
 
@@ -131,10 +154,21 @@ Rules:
 - The generator `MUST` be deterministic: the same app, profile, manifest
   identity, and generation instant produce the same token. Regenerating without
   a rotation request `MUST NOT` rewrite committed files.
+- The token `MUST` be permanent by default: `exp` is `0`, the explicit
+  no-expiry sentinel (`app-access-token.mjs`
+  `PUBLIC_APP_ACCESS_TOKEN_NO_EXPIRY`, `sdkwork-iam`
+  `APPLICATION_ACCESS_TOKEN_NO_EXPIRY`), and the gates also accept an absent
+  claim. Permanent means exactly that — no session lifetime, no scheduled
+  refresh, and a shipped package keeps working until it is replaced.
+- A concrete `exp` is an explicit rotation deadline and stays opt-in: the
+  generator takes it as an override for a time-boxed rotation window, and a
+  deadline at or before the generation instant is refused. Every gate refuses a
+  committed token whose concrete deadline already elapsed, so an expired
+  credential cannot reach a package.
 - Rotation is an explicit act: bump the generator's generation instant or
   `token_version`, regenerate every profile file, review the diff, and commit.
-  A committed token does not expire in normal operation; `exp` is a rotation
-  ceiling, not a session lifetime.
+  A committed token does not expire in normal operation; a concrete `exp` is a
+  rotation ceiling chosen by the operator, never a default.
 
 ### 3.1 Token Value Is A String
 
@@ -193,6 +227,12 @@ Rules:
   `__SDKWORK_DEPLOY_APPLICATION_ID__` for a surface whose anchor is only known at
   deployment, so no fabricated identity is committed. Deployment re-runs
   `materialize-client-env` with the anchor set before building or packaging.
+- A documented profile document (`mode: "token-only"`) is authored, not
+  generated: materialization replaces only the `SDKWORK_ACCESS_TOKEN` line,
+  keeps every other byte, and refuses a document whose declared identity names
+  another profile. The placeholder rule above still applies to the token it
+  holds, so a source checkout keeps the pending anchor while shipping the
+  current claim set.
 - Verification gates `MUST` resolve the expected app id per surface with the
   same `appIdEnv` logic, highest precedence first:
   1. the surface-scoped variable `<appIdEnv>_<SURFACE>` in the process
@@ -265,6 +305,22 @@ The organization context above is not the installation's release scope: a `USER`
 tenant-level in organization terms (`organization_id = 0`, `login_scope = TENANT`) and is
 identified only by its `ownership_scope` claim (§3.2.1).
 
+The two levels are the two multi-tenant isolation keys, and they are not
+interchangeable:
+
+- **Tenant-level** (`organization_id = 0`): every row the credential can reach is
+  scoped by `tenant_id` alone, so the tenant is one SaaS boundary and its
+  organizations are rows *inside* that boundary, not separate boundaries.
+- **Organization-level** (`organization_id` non-zero): rows are scoped by
+  `tenant_id` plus that `organization_id`, so one tenant can host several
+  organizations whose data never mixes, and a tenant-level credential is not a
+  superset of an organization-level one on a route that requires the binding.
+- The token level is a property of the installation and the artifact, decided by
+  the surface declaration (`accessToken.organizationId` / `accessToken.scope`),
+  never by a request. A client `MUST NOT` rewrite, widen, or re-scope a shipped
+  token; a caller that needs another level receives a different credential from
+  IAM, not an edited claim.
+
 Rules:
 
 - The generator `MUST` derive `login_scope` from `organization_id`; it `MUST NOT`
@@ -320,10 +376,15 @@ Generation rules:
   1. the process environment variable `SDKWORK_APPLICATION_OWNERSHIP_SCOPE`;
   2. the materialization surface declaration `accessToken.ownershipScope` in
      `etc/client-env.materialization.json`;
-  3. the default `TENANT`.
+  3. the surface's organization binding: a non-zero
+     `accessToken.organizationId` is an `ORGANIZATION` release and `0` is
+     `TENANT`, so the level is declared once rather than repeated as a scope;
+  4. the default `TENANT`.
 
   A deployment-provided value outranks the committed declaration because the scope belongs to
   the installation, not to the repository (`APPLICATION_IDENTITY_SPEC.md` §4.1 rule 3).
+  `accessToken.scope` (`tenant` | `organization`) stays an explicit guard and must agree with the
+  organization binding whichever source supplied the scope.
 - `ORGANIZATION` `MUST` carry a non-zero `organization_id`; `TENANT` and `USER` `MUST` carry `0`,
   because a personal release is tenant-level in organization terms and only `ownership_scope`
   distinguishes it from a tenant release (rule 7). A contradiction fails materialization and
@@ -378,6 +439,22 @@ direct generation still names the organization id.
   `ownership_scope`, `environment`, `deployment_profile`, and `runtime_target`
   match the selected root and profile. An absent `ownership_scope` is the
   legacy derivation and is accepted only for a `TENANT` surface (§3.2.1).
+- The validation `MUST` also check the lifetime: a permanent token (`exp: 0` or
+  absent) passes, and a concrete `exp` that already elapsed fails with the claim
+  that expired. `assertApplicationAccessToken` owns that decision, so every
+  consumer applies the same rule.
+- Every declared surface is covered, including a token-only documented root: a
+  missing profile document fails, and the surface list itself is validated, so a
+  newly added application type cannot ship without its token.
+- The materialization declaration is the authoritative inventory of a
+  repository's client application types: a repository that ships client
+  artifacts `MUST` declare one surface per type, and a repository root that
+  builds a packaged client artifact (the Web/Desktop shell) `MUST` declare its
+  token-only `.env.<profile>` surface. The gate enforces every declared
+  surface's matrix and its agreement with the owning manifest; it does not infer
+  undeclared roots, because a repository may legitimately keep server-only or
+  non-client roots outside the token matrix (`format: "none"` declares a
+  server-only repository).
 - A failure `MUST` be non-zero and name the failing app root, profile file,
   profile id, and the repair command
   `node <sdkwork-specs>/tools/materialize-client-env.mjs --root <repository>`.
@@ -425,6 +502,14 @@ direct generation still names the organization id.
   issued by IAM after the declared login flow.
 - The server `MUST` reject a token whose `app_id`/`aud` does not resolve to an
   enabled tenant application for its `tenant_id` and `organization_id`.
+- The resolver `MUST` project the isolation keys onto the credential's data
+  scope: `tenant:<tenant_id>` for every application token,
+  `organization:<organization_id>` for an organization-level token, and
+  `user:<owner_user_id>` for a `USER` release. The projection matches a session
+  credential's, so a data plane that filters by data scope isolates a
+  tenant-level token to its tenant and an organization-level token to its
+  organization (`API_SPEC.md` §10.4, `DATABASE_SPEC.md` §16). A tenant-level
+  token `MUST NOT` carry an `organization:` entry.
 - Production IAM `MUST NOT` trust `token_class:application` tokens for
   administrative operations (application register, provision, enable, or access
   credential issuance).
@@ -455,10 +540,18 @@ node <sdkwork-specs>/tools/adopt-app-access-token-files.mjs --workspace <workspa
 ## 7. Checklist
 
 - [ ] Every manifest-bearing `apps/*` root has all ten profile files.
+- [ ] Every application type is covered, including the repository root's
+  Web/Desktop `.env.<profile-id>` documents: no shipped artifact carries an
+  empty `SDKWORK_ACCESS_TOKEN`.
 - [ ] Every profile file carries exactly one non-empty `SDKWORK_ACCESS_TOKEN`.
+- [ ] Every token is permanent (`exp: 0` or absent); only a deliberate rotation
+  window carries a concrete future deadline, and no committed deadline elapsed.
 - [ ] Every token matches its manifest identity and profile claims.
 - [ ] Every token carries the installation's `ownership_scope`; `ORGANIZATION` names a non-zero
   organization and `USER` carries its owner's `user_id`.
+- [ ] The token's level matches the deployment: tenant-level uses
+  `organization_id=0` and keys isolation by `tenant_id`; organization-level uses
+  the deployment's non-zero organization and keys isolation by that id.
 - [ ] No session, auth, refresh, API-key, OAuth, or signing secret is committed.
 - [ ] `dev`, `start`, and `build` fail closed when the selected token is absent.
 - [ ] Generated files are deterministic and reviewed as a normal diff.

@@ -39,7 +39,12 @@ Rules:
   projects the root deployment profile matrix into tracked Vite, Flutter, and
   native mini-program client files. It emits generic and application-scoped
   profile identity, rejects secret-bearing keys and cloud loopback URLs, and
-  supports `--check` for stale-file verification. `--environment <lifecycle>`
+  supports `--check` for stale-file verification. A surface declared
+  `format: "dotenv-root"` with `mode: "token-only"` is an authored
+  `.env.<profile>` document (the Web/Desktop shell's deployment documents): the
+  run rewrites only its `SDKWORK_ACCESS_TOKEN` line, refusing a document whose
+  declared identity names another profile, so documentation, URLs, and empty
+  key placeholders survive. `--environment <lifecycle>`
   (repeatable or comma-separated) limits materialization to that lifecycle's
   profiles, so one environment's deploy anchor never overwrites another's
   committed profile files.
