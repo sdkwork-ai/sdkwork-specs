@@ -120,6 +120,33 @@ test('rejects frontend UI and service raw HTTP or local SDK construction', () =>
   assert.match(result.stderr, /services must receive injected SDK clients/u);
 });
 
+test('accepts a page-local fetch method that calls an injected port', () => {
+  const root = makeRepo();
+  const appRoot = path.join(root, 'apps/sdkwork-demo-pc');
+  writeJson(path.join(appRoot, 'agent.app.config.json'), { schemaVersion: 1, applicationCode: 'demo' });
+  writeJson(path.join(appRoot, 'packages/sdkwork-demo-pc-orders/package.json'), {
+    name: '@sdkwork/demo-pc-orders',
+    version: '0.0.0',
+  });
+  writeText(
+    path.join(appRoot, 'packages/sdkwork-demo-pc-orders/src/pages/OrdersPage.ts'),
+    [
+      'interface Port { list(): Promise<unknown[]> }',
+      'Page({',
+      '  reload() { this.fetch(1); },',
+      '  fetch(page: number): Promise<void> {',
+      '    return Promise.resolve(this.port.list());',
+      '  },',
+      '});',
+      '',
+    ].join('\n'),
+  );
+
+  const result = runChecker(['--root', root]);
+
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test('scans child repositories with --workspace', () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'sdkwork-layering-workspace-'));
   const repo = path.join(workspace, 'sdkwork-demo');

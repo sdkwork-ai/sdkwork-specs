@@ -17,6 +17,10 @@ export const FOUNDATION_PNPM_PACKAGES = [
   '../sdkwork-iam/sdks/sdkwork-iam-app-sdk/sdkwork-iam-app-sdk-typescript',
   '../sdkwork-iam/sdks/sdkwork-iam-backend-sdk/sdkwork-iam-backend-sdk-typescript',
   '../sdkwork-appbase/packages/common/foundation/sdkwork-runtime-bootstrap',
+  // The mobile-react packages depend on the component core via `workspace:*`;
+  // without this entry the closure is uninstallable
+  // (ERR_PNPM_WORKSPACE_PKG_NOT_FOUND).
+  '../sdkwork-appbase/packages/common/foundation/sdkwork-appbase-component-core',
   '../sdkwork-appbase/packages/pc-react/foundation/sdkwork-appbase-pc-react',
   '../sdkwork-appbase/packages/pc-react/foundation/sdkwork-i18n-pc-react',
   '../sdkwork-appbase/packages/mobile-react/foundation/sdkwork-appbase-mobile-react',
@@ -25,6 +29,10 @@ export const FOUNDATION_PNPM_PACKAGES = [
   // `workspace:*`; without this entry the closure is uninstallable
   // (ERR_PNPM_WORKSPACE_PKG_NOT_FOUND).
   '../sdkwork-appbase/sdks/sdkwork-base-data-backend-sdk/sdkwork-base-data-backend-sdk-typescript',
+  // The marketplace surface (app-console and H5) talks to the platform order
+  // center through this SDK; the deploy H5 app declares it as a direct
+  // `workspace:*` dependency.
+  '../sdkwork-order/sdks/sdkwork-order-app-sdk/sdkwork-order-app-sdk-typescript',
   '../sdkwork-core/sdkwork-core-pc-react',
   '../sdkwork-ui/sdkwork-ui-pc-react',
   '../sdkwork-sdk-commons/sdkwork-sdk-common-typescript',

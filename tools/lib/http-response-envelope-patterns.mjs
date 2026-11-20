@@ -79,6 +79,12 @@ const IGNORE_DIRS = new Set([
   'build',
   '.pnpm-store',
   '.tmp',
+  // Scratch directories that hold hand-copied OpenAPI snapshots. They are not
+  // published authorities, and a stale copy there produced false findings
+  // against an authority that had already been fixed (sdkwork-iam keeps
+  // `tmp/openapi-snap/`). `check-doc-tool-invocation-contract.mjs` skips the same
+  // two names.
+  'tmp',
   '.turbo',
   'coverage',
 ]);

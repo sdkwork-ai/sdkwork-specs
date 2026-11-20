@@ -25,7 +25,20 @@ const SKIP_DIRS = new Set([
 const SOURCE_EXTENSIONS = new Set(['.java', '.js', '.jsx', '.ts', '.tsx']);
 const TEST_FILE_RE = /(?:^|[/\\])(?:__tests__|tests?|fixtures?)(?:[/\\])|[._-](?:test|spec)\.(?:[cm]?[jt]sx?|java)$/u;
 const JAVA_HTTP_IMPORT_RE = /^(?:org\.springframework\.(?:http|web)\.|jakarta\.servlet\.|javax\.servlet\.|sdkwork\.web\.)/u;
-const RAW_HTTP_RE = /\bfetch\s*\(|\baxios\s*\.|\bky\s*\.|\bgot\s*\(|\bnew\s+XMLHttpRequest\s*\(/u;
+const RAW_HTTP_CALL_RE =
+  /(?<![.\w$])(?:fetch|got)\s*\(|\bky\s*[.(]|\baxios\s*\.|\bnew\s+XMLHttpRequest\s*\(/u;
+// A page-local method named `fetch` (for example `fetch(page)` on a Page
+// object) is not an HTTP client call. Strip its declaration before probing for
+// bare `fetch(`/`got(`/`ky(` call expressions; member calls such as
+// `this.fetch(...)` or `port.fetch(...)` are excluded by the negative
+// lookbehind above.
+const LOCAL_HTTP_HELPER_DEF_RE =
+  /(?:^|\n)\s*(?:(?:public|private|protected|static|async|override)\s+)*fetch\s*\([^)]*\)\s*(?::[^{]+)?\{/gu;
+
+function hasRawHttpCall(source) {
+  const withoutLocalHelpers = String(source).replace(LOCAL_HTTP_HELPER_DEF_RE, '\n');
+  return RAW_HTTP_CALL_RE.test(withoutLocalHelpers);
+}
 const SDK_CREATE_CLIENT_IMPORT_RE = /import\s*\{[^}]*\bcreateClient\b[^}]*\}\s*from\s*['"]@sdkwork\/[a-z0-9-]+-(?:app|backend)-sdk(?:\/[^'"]*)?['"]/u;
 
 function usage() {
@@ -158,12 +171,12 @@ function validateJavaFile({ rel, source, issues }) {
 }
 
 function validateFrontendFile({ rel, source, issues }) {
-  if (isFrontendUi(rel) && RAW_HTTP_RE.test(source)) {
+  if (isFrontendUi(rel) && hasRawHttpCall(source)) {
     issues.push(`${rel}: UI layer must not call raw HTTP; call package services and injected SDK clients`);
   }
 
   if (isFrontendService(rel)) {
-    if (RAW_HTTP_RE.test(source)) {
+    if (hasRawHttpCall(source)) {
       issues.push(`${rel}: service layer must not call raw HTTP; use injected SDK clients or typed service ports`);
     }
     if (SDK_CREATE_CLIENT_IMPORT_RE.test(source) && /\bcreateClient\s*\(/u.test(source)) {

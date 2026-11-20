@@ -572,7 +572,19 @@ const COMMAND_ACTIONS = new Set([
   'close',
   'complete',
   'convert',
+  // Lifecycle commands the IAM installation and account surfaces expose. They
+  // are stable domain verbs under API_SPEC.md section 7.4's "for example" list,
+  // which is non-exhaustive; omitting them classified an idempotent
+  // `POST .../disable` as a create operation and demanded `201` for a command
+  // that answers `200`.
   'deactivate',
+  'default',
+  'disable',
+  'enable',
+  // Batch "make sure these exist" command used by the deploy hostname-claim
+  // endpoint (`/domain_zones/{zoneId}/hostname_claims:ensure`). The path carries
+  // a command suffix, so the action must be a recognized stable verb.
+  'ensure',
   'heartbeat',
   'explain',
   'leave',
