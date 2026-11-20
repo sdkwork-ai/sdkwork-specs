@@ -789,7 +789,7 @@ Forbidden or migration-only patterns:
 - Generic or globally callable cross-organization repository methods, including unbounded journal replay, export, search, or mutation.
 - SQL comments, markers, lint suppressions, or method names treated as authorization for an unscoped query.
 - Manual production schema edits without reconciliation into migrations and schema registry.
-- SQLite used by a service, server, container, cloud workload, shared gateway module, shared worker, or server-side system of record.
+- SQLite used by a service, server, container, cloud workload, platform cloud gateway, application standalone gateway, shared worker, or server-side system of record.
 - Server completion or compatibility claims based only on SQLite tests.
 - One physical DDL/migration tree copied between PostgreSQL and SQLite or converted with regex/type substitution.
 - Avoiding PostgreSQL constraints, types, indexes, RLS, locks, or query features only to keep SQLite parity.

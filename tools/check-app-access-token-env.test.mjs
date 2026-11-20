@@ -589,6 +589,59 @@ test('a declaration that names another tenant than the root manifest fails the g
   }
 });
 
+test('tenant-level and organization-level tokens are not interchangeable', () => {
+  const surface = (organizationId) => ({
+    ...viteSurface('demo-pc', 'apps/pc'),
+    accessToken: { appIdEnv: ANCHOR_ENV, organizationId },
+  });
+  const tenantToken = createToken('app-pc', { ownershipScope: 'TENANT', organizationId: '0' });
+  const orgToken = (organizationId) => createToken('app-pc', {
+    ownershipScope: 'ORGANIZATION',
+    organizationId,
+  });
+  const cases = [
+    {
+      name: 'organization surface with a tenant token',
+      surface: surface('42'),
+      token: tenantToken,
+      error: /organization_id=0 does not match 42/u,
+    },
+    {
+      name: 'tenant surface with an organization token',
+      surface: surface('0'),
+      token: orgToken('42'),
+      error: /organization_id=42 does not match 0/u,
+    },
+    {
+      name: 'organization surface with another organization token',
+      surface: surface('42'),
+      token: orgToken('43'),
+      error: /organization_id=43 does not match 42/u,
+    },
+  ];
+  for (const { name, surface: declared, token, error } of cases) {
+    const root = createSurfaceRoot({
+      surfaces: [declared],
+      files: {
+        'apps/pc/.env.standalone.development': `SDKWORK_ACCESS_TOKEN=${token}\n`,
+      },
+    });
+    try {
+      assert.throws(
+        () => checkAppAccessTokenEnv({
+          root,
+          profileId: 'standalone.development',
+          env: { [ANCHOR_ENV]: 'app-pc' },
+        }),
+        error,
+        name,
+      );
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  }
+});
+
 test('a packaged token is permanently valid and an elapsed rotation deadline fails', () => {
   const token = createToken('app-pc');
   assert.equal(

@@ -283,6 +283,20 @@
       "tier": "guardrail",
       "baseline": 0,
       "note": "GITHUB_WORKFLOW_SPEC.md section 12: executable conformance fixtures for the entrypoint, pin, lane, and role rules. A rule change without a fixture update fails here."
+    },
+    {
+      "id": "check:application-factory-standard",
+      "tool": "check-application-factory-standard.mjs",
+      "scope": "workspace",
+      "argv": [
+        "--root",
+        "{workspace}/sdkwork-specs",
+        "--workspace",
+        "{workspace}"
+      ],
+      "tier": "guardrail",
+      "baseline": 0,
+      "note": "APPLICATION_FACTORY_DEPLOYMENT_SPEC.md sections 2, 6 and 13 had no machine gate at all (audit finding P0-2): the concept/authority anchors, the delivery-source boundary (`deploy_app_source` versus `deploy_app_source_spec`), and the landing-status table were only ever re-read by a human. This gate executes the load-bearing claims - section 13's closing rule names it - by checking that the four named section headings survive, that every landing row carries four cells and a YYYY-MM-DD `reviewed` date (at least six rows), that the named migration/constraint artifacts exist in sdkwork-deployments, sdkwork-iam and sdkwork-webserver, that the retired `Product application`/`Blueprint` vocabulary stays out of APPLICATION_IDENTITY_SPEC.md while the factory keeps deploy application, installation, hosting carrier, scaffold and deploy_app_source_spec, and that every backticked spec filename the standard cites resolves in the standards root. A module repository that is not checked out is a `[skip]`; a repository that is present but lost a named artifact fails. The self-test is tools/check-application-factory-standard.test.mjs (`pnpm test:application-factory-standard`)."
     }
   ]
 }

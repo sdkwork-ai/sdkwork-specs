@@ -320,6 +320,13 @@ interchangeable:
   never by a request. A client `MUST NOT` rewrite, widen, or re-scope a shipped
   token; a caller that needs another level receives a different credential from
   IAM, not an edited claim.
+- The isolation key is the canonical tuple of `APPLICATION_IDENTITY_SPEC.md`
+  §4.1 rule 7: `(tenant_id, app_id)` for a tenant release,
+  `(tenant_id, app_id, organization_id)` for an organization release, and
+  `(tenant_id, app_id, user_id)` for a personal release. Downstream modules bind
+  that tuple (`ApplicationIsolationKey::filter_columns`) instead of hand-writing
+  a predicate, and a tenant-level credential is never narrowed by an
+  organization binding it does not own.
 
 Rules:
 

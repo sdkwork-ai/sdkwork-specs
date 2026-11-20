@@ -44,6 +44,8 @@
     "check:workspace-link-materialization": "node tools/check-workspace-link-materialization.mjs --workspace ..",
     "test:workspace-link-materialization": "node --test tools/check-workspace-link-materialization.test.mjs",
     "check:deploy-standard": "node tools/check-deploy-standard.mjs --workspace ..",
+    "check:application-factory-standard": "node tools/check-application-factory-standard.mjs --root . --workspace ..",
+    "test:application-factory-standard": "node --test tools/check-application-factory-standard.test.mjs",
     "check:upload-declaration-standard": "node tools/check-upload-declaration-standard.mjs --workspace ..",
     "check:doc-tool-invocation-contract": "node tools/check-doc-tool-invocation-contract.mjs --workspace ..",
     "check:repository-baseline-content": "node tools/check-repository-baseline-content.mjs --workspace ..",

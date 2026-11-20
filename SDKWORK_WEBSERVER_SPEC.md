@@ -1070,7 +1070,7 @@ The validator `tools/check-webserver-toml-standard.mjs` enforces:
 | W27 | `[http.certificates]` `MUST` live in `server.common.toml` only; environment files `MUST NOT` repeat certificate blocks |
 | W28 | `server.include` snippet paths `MUST` exist under `deployments/webserver/` |
 | W29 | Modules with `expose.mode` `web` / `web+api` (except edge proxy-only products) `MUST` declare Adaptive Web maps in common, production `location /` dispatch, and gateway `/api/` proxy snippets |
-| W30 | Enabled modules `MUST` declare exactly one primary API upstream named `gateway`; shared gateway snippets `MUST` reference `http://gateway`; upstream names are unique per effective configuration / nginx process, not globally across modules; multi-module composers `MUST` deduplicate upstream blocks by name (§8.1); dispatch-edge surfaces are exempt |
+| W30 | Enabled modules `MUST` declare exactly one primary API upstream named `gateway`; application standalone gateway snippets `MUST` reference `http://gateway`; upstream names are unique per effective configuration / nginx process, not globally across modules; multi-module composers `MUST` deduplicate upstream blocks by name (§8.1); dispatch-edge surfaces are exempt |
 
 Workspace mode (`--workspace <root>`) scans every sibling module with a
 `deployments/` directory and reports missing layout v3 files as compliance

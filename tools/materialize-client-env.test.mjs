@@ -17,7 +17,8 @@ import {
   surfaceAnchorEnvironment,
   surfaceAnchorEnvNames,
 } from './materialize-client-env.mjs';
-import { decodeApplicationAccessToken } from './app-access-token.mjs';
+import { createApplicationAccessToken, decodeApplicationAccessToken } from './app-access-token.mjs';
+import { checkAppAccessTokenEnv } from './check-app-access-token-env.mjs';
 
 test('canonical client profile matrix contains both deployment profiles and five environments', () => {
   assert.deepEqual(CLIENT_ENV_PROFILE_IDS, [
@@ -1048,6 +1049,126 @@ test('a token-only surface refuses a missing document and a mismatched identity'
     );
   } finally {
     rmSync(mismatched, { force: true, recursive: true });
+  }
+});
+
+test('a repository carries tenant-level and organization-level surfaces side by side', () => {
+  const TENANT_ANCHOR = 'SDKWORK_DEPLOY_APPLICATION_ID_TENANT_APP';
+  const ORG_ANCHOR = 'SDKWORK_DEPLOY_APPLICATION_ID_ORG_APP';
+  const root = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-client-env-levels-'));
+  writeFixture(root, 'etc/sdkwork.deployment.config.json', JSON.stringify({
+    profiles: { 'standalone.development': { config: 'topology/standalone.development.env' } },
+  }, null, 2));
+  writeFixture(root, 'etc/topology/standalone.development.env', [
+    'SDKWORK_ENVIRONMENT=development',
+    'SDKWORK_DEPLOYMENT_PROFILE=standalone',
+    'SDKWORK_PROFILE_ID=standalone.development',
+    '',
+  ].join('\n'));
+  writeFixture(root, 'etc/client-env.materialization.json', JSON.stringify({
+    schemaVersion: 1,
+    kind: 'sdkwork.client-env-materialization',
+    command: 'materialize',
+    sourceIdentity: {
+      deploymentProfileKeys: ['SDKWORK_DEPLOYMENT_PROFILE'],
+      environmentKeys: ['SDKWORK_ENVIRONMENT'],
+      profileIdKeys: ['SDKWORK_PROFILE_ID'],
+    },
+    profiles: ['standalone.development'],
+    surfaces: [
+      {
+        id: 'tenant-app',
+        root: 'apps/tenant',
+        format: 'dotenv-root',
+        mode: 'token-only',
+        runtimeTarget: 'browser',
+        accessToken: {
+          appIdEnv: 'SDKWORK_DEPLOY_APPLICATION_ID',
+          organizationId: '0',
+        },
+      },
+      {
+        id: 'org-app',
+        root: 'apps/org',
+        format: 'dotenv-root',
+        mode: 'token-only',
+        runtimeTarget: 'browser',
+        accessToken: {
+          appIdEnv: 'SDKWORK_DEPLOY_APPLICATION_ID',
+          organizationId: '42',
+        },
+      },
+    ],
+  }, null, 2));
+  for (const [relative, org] of [['apps/tenant', '0'], ['apps/org', '0']]) {
+    writeFixture(root, `${relative}/agent.app.config.json`, JSON.stringify({
+      backend: { tenantId: '100001', organizationId: org },
+    }, null, 2));
+    writeFixture(root, `${relative}/.env.standalone.development`, [
+      'SDKWORK_ENVIRONMENT=development',
+      'SDKWORK_DEPLOYMENT_PROFILE=standalone',
+      'SDKWORK_PROFILE_ID=standalone.development',
+      'SDKWORK_ACCESS_TOKEN=',
+      '',
+    ].join('\n'));
+  }
+  const env = { [TENANT_ANCHOR]: 'anchor-tenant', [ORG_ANCHOR]: 'anchor-org' };
+  const readToken = (relative) =>
+    /^SDKWORK_ACCESS_TOKEN=(.+)$/mu.exec(readFileSync(path.join(root, relative), 'utf8'))?.[1] ?? '';
+  try {
+    materializeClientEnv({ rootDir: root, env });
+    const tenant = decodeApplicationAccessToken(readToken('apps/tenant/.env.standalone.development')).payload;
+    const organization = decodeApplicationAccessToken(readToken('apps/org/.env.standalone.development')).payload;
+
+    assert.equal(tenant.organization_id, '0');
+    assert.equal(tenant.login_scope, 'TENANT');
+    assert.equal(tenant.ownership_scope, 'TENANT');
+    assert.equal(tenant.app_id, 'anchor-tenant');
+    assert.equal(organization.organization_id, '42');
+    assert.equal(organization.login_scope, 'ORGANIZATION');
+    assert.equal(organization.ownership_scope, 'ORGANIZATION');
+    assert.equal(organization.app_id, 'anchor-org');
+
+    const result = checkAppAccessTokenEnv({ root, profileId: 'standalone.development', env });
+    assert.equal(result.checked, 2, 'each surface verifies against its own level');
+
+    // Swapping the two carriers must fail even though both tokens are valid.
+    writeFixture(root, 'apps/tenant/.env.standalone.development', [
+      'SDKWORK_ENVIRONMENT=development',
+      'SDKWORK_DEPLOYMENT_PROFILE=standalone',
+      'SDKWORK_PROFILE_ID=standalone.development',
+      `SDKWORK_ACCESS_TOKEN=${readToken('apps/org/.env.standalone.development')}`,
+      '',
+    ].join('\n'));
+    assert.throws(
+      () => checkAppAccessTokenEnv({ root, profileId: 'standalone.development', env }),
+      /app_id=anchor-org does not match anchor-tenant/u,
+    );
+
+    // A token for the tenant surface's anchor but at the organization level is
+    // rejected on the level itself, not merely on the anchor.
+    const foreignOrgToken = createApplicationAccessToken({
+      appId: 'anchor-tenant',
+      tenantId: '100001',
+      organizationId: '42',
+      ownershipScope: 'ORGANIZATION',
+      environment: 'development',
+      deploymentProfile: 'standalone',
+      runtimeTarget: 'browser',
+    });
+    writeFixture(root, 'apps/tenant/.env.standalone.development', [
+      'SDKWORK_ENVIRONMENT=development',
+      'SDKWORK_DEPLOYMENT_PROFILE=standalone',
+      'SDKWORK_PROFILE_ID=standalone.development',
+      `SDKWORK_ACCESS_TOKEN=${foreignOrgToken}`,
+      '',
+    ].join('\n'));
+    assert.throws(
+      () => checkAppAccessTokenEnv({ root, profileId: 'standalone.development', env }),
+      /organization_id=42 does not match 0/u,
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
   }
 });
 

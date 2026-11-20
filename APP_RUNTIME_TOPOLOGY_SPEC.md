@@ -617,7 +617,7 @@ The shared `@sdkwork/app-topology` runtime plan `MUST` resolve selected access
 endpoints after process and client-architecture filtering. It owns bind parsing,
 wildcard-listener loopback projection, LAN address discovery, deterministic URL
 ordering, and standard access-line formatting. Application launchers may add
-product-specific API route diagnostics, but they `MUST NOT` guess that
+application-specific API route diagnostics, but they `MUST NOT` guess that
 `application.public-ingress` serves a UI root or publish a URL that was not
 declared by `accessEndpoints`.
 

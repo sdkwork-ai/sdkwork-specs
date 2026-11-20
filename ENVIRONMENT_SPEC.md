@@ -601,7 +601,7 @@ Rules:
 
 - `VITE_*` keys are the authored browser contract. They are injected at build time and are the only browser-visible env keys. Browser bundles must not read `process.env` directly.
 - `PORTAL_PUBLIC_*` keys are the runtime contract. They are injected at runtime and are the only runtime env keys. Browser bundles must not read `import.meta.env` directly.
-- In `standalone` browser development, authored `VITE_*` same-origin relative API paths `MUST` win over any `PORTAL_PUBLIC_*` value derived from a dev launcher or shared gateway ingress. A dev runner `MUST NOT` inject absolute `PORTAL_PUBLIC_SDK_BASE_URL` or per-dependency absolute SDK base URLs when the browser contract is same-origin mounted.
+- In `standalone` browser development, authored `VITE_*` same-origin relative API paths `MUST` win over any `PORTAL_PUBLIC_*` value derived from a dev launcher or platform cloud gateway ingress. A dev runner `MUST NOT` inject absolute `PORTAL_PUBLIC_SDK_BASE_URL` or per-dependency absolute SDK base URLs when the browser contract is same-origin mounted.
 - In `cloud` browser/runtime config, public ingress and platform gateway URLs `MUST` be materialized into `PORTAL_PUBLIC_*` (or equivalent runtime config) from topology. Per-surface and per-dependency absolute base URLs `MUST` remain available when selected surfaces route to different hosts.
 - When both `VITE_*` and `PORTAL_PUBLIC_*` exist for the same logical surface, resolution order is:
   1. explicit per-SDK override in authored runtime config or component spec;

@@ -15,8 +15,8 @@ Exactly one word per concept. A word listed in the third column `MUST NOT` be us
 | --- | --- | --- |
 | Deploy application | The runtime identity anchor: the deployed, running application of one tenant | product identity, OAuth client, installation record |
 | Installation | One tenant's installed instance of a product, bound one-to-one to a deploy application | the product itself, the OAuth client |
-| Blueprint | The identity slice of one product version: OAuth relying party metadata, scopes, domains, packages, frozen at install time | a standalone third application definition, a commerce listing, a scaffold |
-| Product application | The cross-tenant product identity that is developed and published | a tenant installation, a deployed unit |
+| Application identity slice | The identity material of one product version — OAuth relying party metadata, scopes, domains, packages — frozen at install time | a standalone application definition, a commerce listing, a scaffold |
+| Application (product identity) | The cross-tenant identity that is developed and published | a tenant installation, a deployed unit |
 | Listing | The commerce and distribution surface, including price | the runtime or identity definition |
 | SKU | One independently describable, deliverable variant of a product | a version number, an optimistic-lock column |
 | Scaffold | Design-time generator input used to create a product application | a runtime definition |
@@ -40,7 +40,7 @@ A `template` `MUST NOT` name a first-class application definition in a new contr
 | --- | --- | --- |
 | Installation ↔ deploy application | exactly 1:1 | one install record per anchor, one anchor per install record |
 | Installation ↔ release scope | exactly 1:1 | one `ownership_scope` per installation, immutable for its lifetime (§4.1) |
-| Product application ↔ deploy application | exactly 1:1 per tenant | a tenant's copy of a product has one anchor |
+| Application (product identity) ↔ deploy application | exactly 1:1 per tenant | a tenant's copy of a product has one anchor |
 | Product version ↔ installation | 1:N | one immutable version serves many installs; the install freezes the identity slice it was created from |
 
 Rules:
