@@ -109,3 +109,10 @@ temp/
 *.tmp
 *.temp
 .next/
+
+# Git LFS writes these hooks locally; they are environment state, not repo content.
+.githooks/post-checkout
+.githooks/post-commit
+.githooks/post-merge
+.githooks/pre-push
+
