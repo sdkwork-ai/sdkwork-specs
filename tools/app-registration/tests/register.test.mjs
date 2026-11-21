@@ -78,6 +78,15 @@ function manifest(overrides = {}) {
       appType: 'APP_REACT',
       ...(overrides.app ?? {}),
     },
+    runtime: {
+      family: 'web',
+      framework: 'react',
+      ...(overrides.runtime ?? {}),
+    },
+    publish: {
+      platforms: ['WEB'],
+      ...(overrides.publish ?? {}),
+    },
     backend: {
       appId: 'sdkwork-demo',
       tenantId: '100001',
@@ -240,6 +249,7 @@ test('an existing application and installation are reused without a second creat
       deployApplicationId: '900777',
       slug: 'sdkwork-demo',
       name: 'SDKWork Demo',
+      appKind: 'PC_WEB',
     }],
     installations: [{
       installationId: 'ta-existing',
@@ -382,6 +392,7 @@ test('a conflicting anchor between the environment and the deploy row fails clos
       deployApplicationId: '222',
       slug: 'sdkwork-demo',
       name: 'SDKWork Demo',
+      appKind: 'PC_WEB',
     }],
   });
   try {
@@ -1261,3 +1272,222 @@ test('--no-register-environments is the explicit downgrade path', async () => {
     workspace.cleanup();
   }
 });
+
+test('a Flutter root creates a FLUTTER_APP deploy application, never an API service', async () => {
+  const workspace = createWorkspace({
+    repositories: [{
+      name: 'sdkwork-demo',
+      manifest: manifest({
+        app: { appType: 'APP_FLUTTER' },
+        runtime: { family: 'mobile', framework: 'flutter' },
+        publish: { platforms: ['APP_IOS', 'APP_ANDROID'] },
+      }),
+      clientEnv: clientEnv(),
+    }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({ workspaceRoot: workspace.root, stack });
+    assert.equal(report.counts.failed, 0, JSON.stringify(report.entries[0]?.error));
+    const entry = report.entries[0];
+    assert.equal(entry.deployAppKind, 'FLUTTER_APP');
+    assert.equal(entry.applicationType, 'flutter');
+    const create = stack.requestsFor('POST', '/app/v3/api/apps')[0];
+    assert.equal(create.body.appKind, 'FLUTTER_APP');
+    const provision = stack.requestsFor('POST', '/backend/v3/api/iam/installations')[0];
+    assert.equal(provision.body.applicationType, 'flutter');
+    assert.equal(stack.apps.get('sdkwork-demo').appKind, 'FLUTTER_APP');
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('a mini program root registers as a mini program even when app.appType is NONE', async () => {
+  const workspace = createWorkspace({
+    repositories: [{
+      name: 'sdkwork-demo',
+      manifest: manifest({
+        app: { appType: 'NONE' },
+        runtime: { family: 'mini-program', framework: 'weixin-mini-program' },
+        publish: { platforms: ['MP_WEIXIN'] },
+      }),
+      clientEnv: clientEnv(),
+    }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({ workspaceRoot: workspace.root, stack });
+    assert.equal(report.counts.failed, 0, JSON.stringify(report.entries[0]?.error));
+    const entry = report.entries[0];
+    assert.equal(entry.deployAppKind, 'WECHAT_MINIPROGRAM');
+    assert.equal(entry.applicationType, 'miniprogram');
+    assert.equal(stack.requestsFor('POST', '/app/v3/api/apps')[0].body.appKind, 'WECHAT_MINIPROGRAM');
+    assert.match((entry.notes ?? []).join(' '), /NONE|applicationType/u);
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('an existing row registered under the wrong kind fails closed with the correction', async () => {
+  const workspace = createWorkspace({
+    repositories: [{
+      name: 'sdkwork-demo',
+      manifest: manifest({
+        app: { appType: 'APP_FLUTTER' },
+        runtime: { family: 'mobile', framework: 'flutter' },
+        publish: { platforms: ['APP_ANDROID'] },
+      }),
+      clientEnv: clientEnv(),
+    }],
+  });
+  const stack = await startFakeStack({
+    apps: [{
+      uuid: 'uuid-wrong',
+      deployApplicationId: '900555',
+      slug: 'sdkwork-demo',
+      name: 'SDKWork Demo',
+      appKind: 'API_SERVICE',
+    }],
+  });
+  try {
+    const { report } = await runRegistration({ workspaceRoot: workspace.root, stack });
+    assert.equal(report.counts.failed, 1);
+    assert.match(report.entries[0].error, /stored as API_SERVICE/u);
+    assert.match(report.entries[0].error, /resolves to FLUTTER_APP/u);
+    assert.match(report.entries[0].error, /immutable/u);
+    assert.equal(
+      stack.requestsFor('POST', '/backend/v3/api/iam/installations').length,
+      0,
+      'a mismatched row must not receive an installation',
+    );
+    assert.equal(stack.requestsFor('POST', '/app/v3/api/apps').length, 0);
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('--fix-app-types repairs a contradictory app.appType and registers the proven surface', async () => {
+  const workspace = createWorkspace({
+    repositories: [{
+      name: 'sdkwork-demo',
+      manifest: manifest({
+        app: { appType: 'APP_HTML' },
+        runtime: { family: 'mobile', framework: 'flutter' },
+        publish: { platforms: ['APP_ANDROID'] },
+      }),
+      clientEnv: clientEnv(),
+    }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({
+      workspaceRoot: workspace.root,
+      stack,
+      overrides: { fixAppTypes: true },
+    });
+    assert.equal(report.counts.failed, 0, JSON.stringify(report.entries[0]?.error));
+    assert.equal(report.entries[0].appType, 'APP_FLUTTER');
+    assert.equal(report.entries[0].appTypeRepair?.previous, 'APP_HTML');
+    const manifestText = readFileSync(
+      path.join(workspace.root, 'sdkwork-demo', 'agent.app.config.json'),
+      'utf8',
+    );
+    assert.match(manifestText, /"appType": "APP_FLUTTER"/u);
+    assert.equal(stack.apps.get('sdkwork-demo').appKind, 'FLUTTER_APP');
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('--deploy-app-kind is an explicit, validated override', async () => {
+  const workspace = createWorkspace({
+    repositories: [{
+      name: 'sdkwork-demo',
+      manifest: manifest({
+        runtime: { family: 'mobile', framework: 'uni-app-x' },
+        publish: { platforms: ['APP_ANDROID', 'APP_IOS'] },
+      }),
+      clientEnv: clientEnv(),
+    }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({
+      workspaceRoot: workspace.root,
+      stack,
+      overrides: { deployAppKind: 'ANDROID_APP' },
+    });
+    assert.equal(report.counts.failed, 0, JSON.stringify(report.entries[0]?.error));
+    assert.equal(report.entries[0].deployAppKind, 'ANDROID_APP');
+    assert.equal(report.entries[0].deployAppKindSource, '--deploy-app-kind override');
+    assert.equal(stack.requestsFor('POST', '/app/v3/api/apps')[0].body.appKind, 'ANDROID_APP');
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('a contradictory app.appType fails naming the expected value', async () => {
+  const workspace = createWorkspace({
+    repositories: [{
+      name: 'sdkwork-demo',
+      manifest: manifest({
+        app: { appType: 'APP_HTML' },
+        runtime: { family: 'mobile', framework: 'flutter' },
+        publish: { platforms: ['APP_ANDROID'] },
+      }),
+      clientEnv: clientEnv(),
+    }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({ workspaceRoot: workspace.root, stack });
+    assert.equal(report.counts.failed, 1);
+    assert.match(report.entries[0].error, /APP_HTML/u);
+    assert.match(report.entries[0].error, /expected APP_FLUTTER/u);
+    assert.equal(stack.requestsFor('POST', '/app/v3/api/apps').length, 0);
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+test('--fix-app-types under --dry-run reports the repair and writes nothing', async () => {
+  const workspace = createWorkspace({
+    repositories: [{
+      name: 'sdkwork-demo',
+      manifest: manifest({
+        app: { appType: 'APP_HTML' },
+        runtime: { family: 'mobile', framework: 'flutter' },
+      }),
+      clientEnv: clientEnv(),
+    }],
+  });
+  const stack = await startFakeStack();
+  try {
+    const { report } = await runRegistration({
+      workspaceRoot: workspace.root,
+      stack,
+      overrides: { dryRun: true, fixAppTypes: true },
+    });
+    assert.equal(report.counts.invalid, 0);
+    const entry = report.entries[0];
+    assert.equal(entry.status, 'planned');
+    assert.equal(entry.appType, 'APP_FLUTTER');
+    assert.deepEqual(entry.appTypeRepairPlanned, { previous: 'APP_HTML', appType: 'APP_FLUTTER' });
+    const manifestText = readFileSync(
+      path.join(workspace.root, 'sdkwork-demo', 'agent.app.config.json'),
+      'utf8',
+    );
+    assert.match(manifestText, /"appType": "APP_HTML"/u, 'a dry run must not write the manifest');
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
+

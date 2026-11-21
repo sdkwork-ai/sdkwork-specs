@@ -5,27 +5,269 @@ import test from 'node:test';
 
 import {
   DEPLOY_APP_CREATE_IDEMPOTENCY_KEY_PREFIX,
+  DEPLOY_APP_KINDS,
   DEPLOY_IDEMPOTENCY_KEY_MAX_LEN,
+  MANIFEST_APP_TYPES,
+  NEW_REGISTRATION_DEPLOY_APP_KINDS,
   RegistrationConfigurationError,
   assertDeployApplicationAnchor,
   buildDeployAppCreateBody,
   buildInstallationProvisionBody,
   defaultDeploymentProfile,
   deployAppCreateIdempotencyKey,
-  deployAppKindForApplicationType,
   deriveProvisioningIdempotencyKey,
+  describeSurfaceNameMismatch,
   environmentUpsertIdempotencyKey,
   expandPrimaryDomainPattern,
-  mapManifestAppTypeToApplicationType,
   normalizeEnvironment,
   normalizePrimaryDomain,
   readDeployAppItem,
   readInstallationItem,
+  replaceManifestAppType,
+  resolveDeployAppSurface,
   resolveDeploySlug,
   resolvePrimaryDomain,
   resolveRegistrationSettings,
   tenantApplicationInstanceKey,
+  verifyDeployAppKind,
 } from '../contract.mjs';
+
+test('the deploy kind and manifest app type vocabularies are closed', () => {
+  assert.deepEqual(
+    [...DEPLOY_APP_KINDS].sort(),
+    [
+      'ANDROID_APP', 'API_SERVICE', 'DESKTOP_APP', 'DOUYIN_MINIPROGRAM', 'FLUTTER_APP',
+      'H5_WEB', 'HARMONYOS_APP', 'IOS_APP', 'PC_WEB', 'SPA_WEB', 'STATIC_WEB',
+      'WECHAT_MINIPROGRAM',
+    ],
+  );
+  assert.equal(NEW_REGISTRATION_DEPLOY_APP_KINDS.includes('SPA_WEB'), false);
+  assert.equal(NEW_REGISTRATION_DEPLOY_APP_KINDS.length, DEPLOY_APP_KINDS.length - 1);
+  for (const appType of ['NONE', 'SDK', 'APP_HTML', 'APP_FLUTTER', 'APP_UNIAPP', 'APP_REACT', 'APP_HARMONY']) {
+    assert.ok(MANIFEST_APP_TYPES.includes(appType), `${appType} must be a manifest app type`);
+  }
+});
+
+test('the surface resolver reads the runtime facts, not app.appType', () => {
+  const cases = [
+    {
+      name: 'flutter root',
+      input: { appType: 'APP_FLUTTER', runtimeFamily: 'mobile', runtimeFramework: 'flutter', publishPlatforms: ['APP_IOS', 'APP_ANDROID'] },
+      kind: 'FLUTTER_APP',
+      applicationType: 'flutter',
+      canonicalAppType: 'APP_FLUTTER',
+    },
+    {
+      name: 'wechat mini program',
+      input: { appType: 'NONE', runtimeFamily: 'mini-program', runtimeFramework: 'weixin-mini-program', publishPlatforms: ['MP_WEIXIN'] },
+      kind: 'WECHAT_MINIPROGRAM',
+      applicationType: 'miniprogram',
+      canonicalAppType: '',
+    },
+    {
+      name: 'uni-app mini program',
+      input: { appType: 'APP_UNIAPP', runtimeFamily: 'mini-program', runtimeFramework: 'uni-app', publishPlatforms: ['MP_WEIXIN'] },
+      kind: 'WECHAT_MINIPROGRAM',
+      applicationType: 'miniprogram',
+      canonicalAppType: 'APP_UNIAPP',
+    },
+    {
+      name: 'native wechat mini program framework',
+      input: { appType: 'NONE', runtimeFamily: 'mini-program', runtimeFramework: 'mp-weixin', publishPlatforms: ['MP_WEIXIN'] },
+      kind: 'WECHAT_MINIPROGRAM',
+      applicationType: 'miniprogram',
+      canonicalAppType: '',
+    },
+    {
+      name: 'douyin mini program',
+      input: { appType: 'APP_UNIAPP', runtimeFamily: 'mini-program', runtimeFramework: 'mp-douyin', publishPlatforms: ['MP_DOUYIN'] },
+      kind: 'DOUYIN_MINIPROGRAM',
+      applicationType: 'miniprogram',
+      canonicalAppType: '',
+    },
+    {
+      name: 'harmony native',
+      input: { appType: 'APP_HARMONY', runtimeFamily: 'mobile', runtimeFramework: 'harmony-native', publishPlatforms: ['APP_HARMONY'] },
+      kind: 'HARMONYOS_APP',
+      applicationType: 'harmonyos',
+      canonicalAppType: 'APP_HARMONY',
+    },
+    {
+      name: 'h5 root',
+      input: { appType: 'APP_REACT', runtimeFamily: 'mobile', runtimeFramework: 'react-h5', publishPlatforms: ['H5'] },
+      kind: 'H5_WEB',
+      applicationType: 'h5',
+    },
+    {
+      name: 'capacitor h5 root',
+      input: { appType: 'APP_REACT', runtimeFamily: 'mobile', runtimeFramework: 'react-capacitor', publishPlatforms: ['H5', 'APP_IOS', 'APP_ANDROID'] },
+      kind: 'H5_WEB',
+      applicationType: 'h5',
+    },
+    {
+      name: 'pc web root',
+      input: { appType: 'APP_REACT', runtimeFamily: 'web', runtimeFramework: 'react', publishPlatforms: ['WEB'] },
+      kind: 'PC_WEB',
+      applicationType: 'pc',
+    },
+    {
+      name: 'tauri desktop root',
+      input: { appType: 'APP_REACT', runtimeFamily: 'desktop', runtimeFramework: 'react-tauri', publishPlatforms: ['DESKTOP_WINDOWS'] },
+      kind: 'DESKTOP_APP',
+      applicationType: 'desktop',
+    },
+    {
+      name: 'static site',
+      input: { appType: 'APP_HTML', runtimeFamily: 'web', runtimeFramework: 'static-html', publishPlatforms: ['WEB'] },
+      kind: 'STATIC_WEB',
+      applicationType: 'pc',
+    },
+    {
+      name: 'api server',
+      input: { appType: 'SDK', runtimeFamily: 'server', runtimeFramework: 'rust-axum' },
+      kind: 'API_SERVICE',
+      applicationType: 'api',
+    },
+    {
+      name: 'native android',
+      input: { appType: 'APP_REACT', runtimeFamily: 'mobile', runtimeFramework: 'android-native', publishPlatforms: ['APP_ANDROID'] },
+      kind: 'ANDROID_APP',
+      applicationType: 'android',
+    },
+    {
+      name: 'native ios',
+      input: { appType: 'APP_REACT', runtimeFamily: 'mobile', runtimeFramework: 'ios-native', publishPlatforms: ['APP_IOS'] },
+      kind: 'IOS_APP',
+      applicationType: 'ios',
+    },
+  ];
+  for (const testCase of cases) {
+    const resolved = resolveDeployAppSurface(testCase.input);
+    assert.equal(resolved.deployAppKind, testCase.kind, `${testCase.name}: kind`);
+    assert.equal(resolved.applicationType, testCase.applicationType, `${testCase.name}: IAM type`);
+    if (testCase.canonicalAppType !== undefined) {
+      assert.equal(resolved.canonicalAppType, testCase.canonicalAppType, `${testCase.name}: appType`);
+    }
+    assert.deepEqual(resolved.defects, [], `${testCase.name}: no defect`);
+  }
+  // The same declared app type resolves differently when the surface differs:
+  // that is the bug class this resolver exists to prevent.
+  const asH5 = resolveDeployAppSurface({ appType: 'APP_REACT', runtimeFamily: 'mobile', runtimeFramework: 'react-h5' });
+  const asPc = resolveDeployAppSurface({ appType: 'APP_REACT', runtimeFamily: 'web', runtimeFramework: 'react' });
+  assert.equal(asH5.applicationType, 'h5');
+  assert.equal(asPc.applicationType, 'pc');
+  assert.notEqual(asH5.deployAppKind, asPc.deployAppKind);
+});
+
+test('the surface resolver fails closed instead of defaulting to an API service', () => {
+  const unknown = resolveDeployAppSurface({ appType: 'APP_REACT' });
+  assert.equal(unknown.deployAppKind, '');
+  assert.equal(unknown.applicationType, '');
+  assert.match(unknown.defects.join(' '), /cannot derive the deploy application kind/u);
+
+  const unknownPlatform = resolveDeployAppSurface({
+    runtimeFamily: 'mini-program',
+    runtimeFramework: 'alipay-mini-program',
+    publishPlatforms: ['MP_ALIPAY'],
+  });
+  assert.equal(unknownPlatform.deployAppKind, '');
+  assert.match(unknownPlatform.defects.join(' '), /no canonical deploy application kind/u);
+
+  const multiApp = resolveDeployAppSurface({
+    runtimeFamily: 'mobile',
+    runtimeFramework: 'uni-app-x',
+    clientArchitectures: ['uniappx'],
+    publishPlatforms: ['APP_ANDROID', 'APP_IOS', 'APP_HARMONY'],
+  });
+  assert.equal(multiApp.deployAppKind, '');
+  assert.match(multiApp.defects.join(' '), /uni-app delivers/u);
+
+  const bothMiniPrograms = resolveDeployAppSurface({
+    runtimeFamily: 'mini-program',
+    runtimeFramework: 'multi-mini-program',
+    publishPlatforms: ['MP_WEIXIN', 'MP_DOUYIN'],
+  });
+  assert.equal(bothMiniPrograms.deployAppKind, 'WECHAT_MINIPROGRAM');
+});
+
+test('a root that lists several architectures is classified by its framework', () => {
+  const resolved = resolveDeployAppSurface({
+    appType: 'APP_REACT',
+    runtimeFamily: 'web',
+    runtimeFramework: 'react',
+    clientArchitectures: ['pc-web', 'h5', 'flutter', 'mini-program'],
+    publishPlatforms: ['WEB', 'H5', 'MP_WEIXIN'],
+  });
+  assert.equal(resolved.deployAppKind, 'PC_WEB');
+  assert.match(resolved.notes.join(' '), /publish\.platforms also declares/u);
+});
+
+test('an H5-only delivery is H5, while WEB plus H5 stays the browser surface', () => {
+  const h5Only = resolveDeployAppSurface({
+    appType: 'APP_REACT',
+    runtimeFamily: 'web',
+    runtimeFramework: 'react',
+    publishPlatforms: ['H5'],
+  });
+  assert.equal(h5Only.deployAppKind, 'H5_WEB');
+  assert.equal(h5Only.applicationType, 'h5');
+
+  const both = resolveDeployAppSurface({
+    appType: 'APP_REACT',
+    runtimeFamily: 'web',
+    runtimeFramework: 'react',
+    publishPlatforms: ['WEB', 'H5'],
+  });
+  assert.equal(both.deployAppKind, 'PC_WEB');
+  assert.equal(both.applicationType, 'pc');
+});
+
+test('app.appType contradictions are reported, and missing values only warn', () => {
+  const contradiction = resolveDeployAppSurface({
+    appType: 'APP_HTML',
+    runtimeFamily: 'mobile',
+    runtimeFramework: 'flutter',
+  });
+  assert.equal(contradiction.canonicalAppType, 'APP_FLUTTER');
+  assert.equal(contradiction.appTypeDeclared, 'APP_HTML');
+  const none = resolveDeployAppSurface({
+    appType: 'NONE',
+    runtimeFamily: 'mini-program',
+    runtimeFramework: 'weixin-mini-program',
+    publishPlatforms: ['MP_WEIXIN'],
+  });
+  assert.equal(none.appTypeWarning, true);
+  assert.equal(none.canonicalAppType, '');
+});
+
+test('replaceManifestAppType patches only the appType value', () => {
+  const text = `{\n  "app": {\n    "key": "demo",\n    "appType": "APP_HTML",\n    "name": "Demo"\n  },\n  "runtime": {\n    "appType": "APP_HTML"\n  }\n}\n`;
+  const patched = replaceManifestAppType(text, 'APP_FLUTTER');
+  assert.ok(patched);
+  assert.equal(patched.previous, 'APP_HTML');
+  assert.equal(patched.text, text.replace('"appType": "APP_HTML",\n    "name"', '"appType": "APP_FLUTTER",\n    "name"'));
+  assert.equal(replaceManifestAppType(text, ''), null);
+  assert.equal(replaceManifestAppType('{}', 'APP_FLUTTER'), null);
+});
+
+test('verifyDeployAppKind refuses an immutable kind mismatch', () => {
+  assert.equal(verifyDeployAppKind({ slug: 'demo', appKind: 'FLUTTER_APP' }, 'FLUTTER_APP', 'demo'), '');
+  assert.equal(verifyDeployAppKind({ slug: 'demo', appKind: '' }, 'FLUTTER_APP', 'demo'), '');
+  const mismatch = verifyDeployAppKind({ slug: 'demo', appKind: 'API_SERVICE' }, 'FLUTTER_APP', 'demo');
+  assert.match(mismatch, /stored as API_SERVICE/u);
+  assert.match(mismatch, /resolves to FLUTTER_APP/u);
+  assert.match(mismatch, /immutable/u);
+});
+
+test('describeSurfaceNameMismatch flags a directory whose surface disagrees', () => {
+  assert.match(
+    describeSurfaceNameMismatch('apps/sdkwork-image-flutter-mobile', 'API_SERVICE'),
+    /names a flutter surface/u,
+  );
+  assert.equal(describeSurfaceNameMismatch('apps/sdkwork-image-flutter-mobile', 'FLUTTER_APP'), '');
+  assert.equal(describeSurfaceNameMismatch('apps/sdkwork-cloudrouter-pc', 'PC_WEB'), '');
+  assert.equal(describeSurfaceNameMismatch('.', 'PC_WEB'), '');
+});
 
 test('environments normalize and reject anything outside the lifecycle', () => {
   assert.equal(normalizeEnvironment('dev'), 'development');
@@ -38,15 +280,6 @@ test('environments normalize and reject anything outside the lifecycle', () => {
   );
   assert.equal(defaultDeploymentProfile('development'), 'standalone');
   assert.equal(defaultDeploymentProfile('production'), 'cloud');
-});
-
-test('manifest app types map onto the IAM provisioning vocabulary', () => {
-  assert.equal(mapManifestAppTypeToApplicationType('APP_HTML'), 'h5');
-  assert.equal(mapManifestAppTypeToApplicationType('APP_FLUTTER'), 'flutter');
-  assert.equal(mapManifestAppTypeToApplicationType('APP_REACT'), 'pc');
-  assert.equal(mapManifestAppTypeToApplicationType('APP_API'), 'api');
-  assert.equal(mapManifestAppTypeToApplicationType('SOMETHING_ELSE'), 'other');
-  assert.equal(mapManifestAppTypeToApplicationType(''), '');
 });
 
 test('slug derives from app.key, then app.name, then the directory', () => {
@@ -140,30 +373,42 @@ test('the anchor must be the decimal deploy application id', () => {
   }
 });
 
-test('the apps.create body is deterministic and carries only derived fields', () => {
+test('the apps.create body is deterministic and requires a resolved kind', () => {
   const body = buildDeployAppCreateBody({
     slug: 'sdkwork-im-pc',
     name: 'SDKWork IM PC',
-    appKind: 'SPA_WEB',
+    appKind: 'PC_WEB',
     environment: 'development',
     metadata: { 'sdkwork.io/source-repository': 'sdkwork-im' },
   });
   assert.deepEqual(body, {
     name: 'SDKWork IM PC',
     slug: 'sdkwork-im-pc',
-    appKind: 'SPA_WEB',
+    appKind: 'PC_WEB',
     defaultEnvironment: 'development',
     metadata: { 'sdkwork.io/source-repository': 'sdkwork-im' },
   });
   assert.deepEqual(body, buildDeployAppCreateBody({
     slug: 'sdkwork-im-pc',
     name: 'SDKWork IM PC',
-    appKind: 'SPA_WEB',
+    appKind: 'PC_WEB',
     environment: 'development',
     metadata: { 'sdkwork.io/source-repository': 'sdkwork-im' },
   }));
-  assert.equal(deployAppKindForApplicationType('h5'), 'SPA_WEB');
-  assert.equal(deployAppKindForApplicationType('api'), 'API_SERVICE');
+  // No silent fallback: the retired behavior registered every unknown surface as
+  // an API service.
+  assert.throws(
+    () => buildDeployAppCreateBody({ slug: 'sdkwork-im-pc', name: 'SDKWork IM PC' }),
+    (error) => error instanceof RegistrationConfigurationError && /appKind is required/u.test(error.message),
+  );
+  assert.throws(
+    () => buildDeployAppCreateBody({ slug: 'sdkwork-im-pc', name: 'SDKWork IM PC', appKind: 'SPA_WEB' }),
+    (error) => error instanceof RegistrationConfigurationError && /legacy-only/u.test(error.message),
+  );
+  assert.throws(
+    () => buildDeployAppCreateBody({ slug: 'sdkwork-im-pc', name: 'SDKWork IM PC', appKind: 'NOT_A_KIND' }),
+    (error) => error instanceof RegistrationConfigurationError,
+  );
 });
 
 test('the provisioning body binds the anchor, not the manifest runtime app id', () => {
@@ -208,7 +453,7 @@ test('an explicit empty permission scope survives as an explicit choice', () => 
   assert.throws(
     () => buildInstallationProvisionBody({
       deployApplicationId: '900123',
-      applicationType: 'desktop',
+      applicationType: 'browser-desktop',
       environment: 'production',
       tenantId: '100001',
       organizationId: '0',
@@ -485,3 +730,4 @@ test('the environment upsert key is deterministic per installation row', () => {
   assert.ok(longKey.length <= DEPLOY_IDEMPOTENCY_KEY_MAX_LEN, `key too long: ${longKey.length}`);
   assert.equal(longKey, environmentUpsertIdempotencyKey('100001', 'x'.repeat(200), 'development'));
 });
+

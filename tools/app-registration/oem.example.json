@@ -1,0 +1,8 @@
+{
+  "brand": "example",
+  "apiDomain": "api.example.com",
+  "domainSuffix": "example.com",
+  "domainPattern": "{app}.{env}.{suffix}",
+  "tenantId": "100001",
+  "organizationId": "0"
+}

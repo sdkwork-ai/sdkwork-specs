@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 import {
   DEPLOY_APPLICATION_ID_ENV,
   IAM_MANAGEMENT_SETTINGS_ENV,
+  NEW_REGISTRATION_DEPLOY_APP_KINDS,
   REGISTRATION_ENVIRONMENTS,
   REGISTRATION_SETTINGS_ENV,
   RegistrationConfigurationError,
@@ -62,6 +63,15 @@ Selection:
                              placeholders, e.g. "app.{env}.sdkwork.com". Falls back to
                              environments.<env>.accessUrl|deployUrl, then
                              backend.primaryDomain|domain. No source fails the plan.
+  --deploy-app-kind <kind>   Explicit deploy application kind for a root that genuinely serves
+                             several endpoint surfaces. The kind is otherwise derived from
+                             runtime.family/framework, clientArchitectures, and
+                             publish.platforms; a root whose facts cannot name one surface fails
+                             closed instead of defaulting to API_SERVICE.
+                             Values: ${NEW_REGISTRATION_DEPLOY_APP_KINDS.join('|')}
+  --fix-app-types            Write a derived app.appType back into agent.app.config.json when the
+                             declared value contradicts the proven surface (e.g. APP_HTML on a
+                             Flutter root). Without it the contradiction fails the item.
 
 Execution:
   --dry-run                  Print the plan; no request, no file write
@@ -139,6 +149,8 @@ export function parseArgs(argv) {
     regenerateTopologyEnv: true,
     materialize: true,
     includeServersOnly: false,
+    deployAppKind: '',
+    fixAppTypes: false,
     help: false,
   };
   const valueOf = (index, name) => {
@@ -208,6 +220,13 @@ export function parseArgs(argv) {
       case '--anchor-kind':
         options.anchorKind = valueOf(index, arg);
         index += 1;
+        break;
+      case '--deploy-app-kind':
+        options.deployAppKind = valueOf(index, arg);
+        index += 1;
+        break;
+      case '--fix-app-types':
+        options.fixAppTypes = true;
         break;
       case '--anchor-map':
         options.anchorMapPath = path.resolve(valueOf(index, arg));
@@ -301,7 +320,10 @@ function printItemLines(report) {
     if (entry.status === 'planned' || entry.status === 'invalid') {
       const defects = entry.defects?.length ? `  defects=${entry.defects.length}` : '';
       const domain = entry.primaryDomain ? ` domain=${entry.primaryDomain}` : '';
-      console.log(`[${entry.status}] ${entry.label} slug=${entry.slug}${domain}${defects}`);
+      const kind = entry.deployAppKind ? ` kind=${entry.deployAppKind}` : ' kind=-';
+      const type = entry.applicationType ? ` type=${entry.applicationType}` : ' type=-';
+      const repaired = entry.appTypeRepair ? ` appTypeFixed=${entry.appTypeRepair.appType}` : '';
+      console.log(`[${entry.status}] ${entry.label}${kind}${type} slug=${entry.slug}${domain}${repaired}${defects}`);
       continue;
     }
     const anchor = entry.deployApplicationId || '-';

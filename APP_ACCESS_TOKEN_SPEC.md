@@ -765,3 +765,32 @@ Regression entry points (implementation):
 | route capability + auth mode | `sdkwork-routes-iam-app-api/src/manifest.rs` |
 | session guard, throttle, HTTP mapping | `sdkwork-routes-iam-app-api/src/handlers.rs` |
 | deploy-side selector resolution and exchange | `sdkwork-deployments/crates/sdkwork-deploy-app-token` |
+
+### 8.9 Self-published (USER) modules and OEM domains
+
+A module that lets its own users publish their own application does not commit
+the user's identity into the shared profile matrix. The rules:
+
+- The registration actor decides ownership: an operator/admin creates `TENANT`
+  applications, an organization-scoped operator creates `ORGANIZATION`
+  applications, and a user session creates `USER` applications
+  (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §14). The registrar never invents the
+  owner; Deploy derives it from the caller and IAM validates it against the
+  installation.
+- A `USER` public token carries the owner's positive decimal user id in
+  `user_id`; it is generated for that user's build/publish, not for the
+  repository's committed tenant identity. `register-module.mjs --auth user`
+  therefore defaults to no anchor write and no shared materialization; an
+  explicit `--materialize-user` writes `ownershipScope=USER` +
+  `ownerUserId=<id>` and regenerates the profiles for that local build.
+- An `ORGANIZATION` token carries the non-zero `organization_id` and
+  `ownership_scope=ORGANIZATION`; the server projection is
+  `organization:<id>`, not `tenant:<id>`. A tenant-level token never authorizes an
+  organization installation, and the reverse also fails.
+- The anchor remains the deploy application anchor (`app_id`/`aud`) in every
+  mode. Changing the deployment API domain or OEM domain suffix is
+  configuration only and `MUST NOT` rewrite an existing anchor or token.
+- OEM initialization (`--api-domain`, `--domain-suffix`/`--domain-pattern`,
+  `--brand`, `--oem-config`) is one run of the same command per module. The
+  resulting anchors are recorded in the authored env layer; the public token is
+  materialized from them and verified by the token gates.

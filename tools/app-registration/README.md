@@ -223,6 +223,45 @@ repository anchor. Running the registrar with `--scope all` adds the per-surface
 records and rewrites each surface's carrier with its own anchor; a repeated run
 creates nothing, changes no byte, and reports every anchor as already present.
 
+## Deploy application kind
+
+`app_kind` is a delivery shape, not a product type. The registrar resolves it from
+the manifest surface facts (`runtime.family`, `runtime.framework`,
+`runtime.clientArchitectures`, `publish.platforms`, and the built `runtimeTarget`
+values) per `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §14.6:
+
+| Root | Kind |
+| --- | --- |
+| Flutter (`runtime.framework=flutter`) | `FLUTTER_APP` |
+| WeChat / Douyin mini program (`runtime.family=mini-program`, `MP_WEIXIN` / `MP_DOUYIN`) | `WECHAT_MINIPROGRAM` / `DOUYIN_MINIPROGRAM` |
+| Native HarmonyOS / Android / iOS | `HARMONYOS_APP` / `ANDROID_APP` / `IOS_APP` |
+| H5 or Capacitor surface | `H5_WEB` |
+| PC browser surface | `PC_WEB` |
+| Desktop host (`electron`, `tauri`) | `DESKTOP_APP` |
+| Static site (`static-html`) | `STATIC_WEB` |
+| Server / CLI / library root | `API_SERVICE` |
+
+Three guardrails keep a wrong type out of the ledger:
+
+- **No default.** The create body requires the resolved kind; an unresolvable
+  surface is a plan defect naming the conflicting fact, never an `API_SERVICE`
+  row. `SPA_WEB` is legacy-only and is rejected for a new registration.
+- **Explicit resolution.** A root that genuinely serves several surfaces is
+  registered under its primary surface with a note, or the operator records the
+  decision with `--deploy-app-kind <kind>` (shown as the source in the report).
+- **Correction.** A declared `app.appType` that contradicts a forced value
+  (Flutter, HarmonyOS, uni-app) fails the item naming the expected value;
+  `--fix-app-types` rewrites that single field in place, preserving the file's
+  formatting, and the report records the previous value. A root found by slug whose
+  stored kind differs fails closed, because `app_kind` is immutable: retire the
+  draft row and re-register instead of patching it.
+
+`--audit` prints the resolved kind, source, canonical `app.appType`, surface
+defects, and notes for every root of the module, and flags a root whose directory
+name (`-pc`, `-h5`, `-flutter-mobile`, `-mini-program`, `-harmony-mobile`) names a
+different surface than its manifest — the usual symptom of a stub manifest copied
+from the repository root.
+
 ## Primary domain
 
 IAM enable refuses an installation whose `primary_domain` is blank
@@ -254,15 +293,25 @@ instead of one of them losing a mid-batch `409` based on completion order.
 
 ## Sequence per application × environment
 
-1. **Plan** — slug, application type (`app.appType` → `h5|pc|flutter|api|other`),
-   permission scope, primary domain, deterministic keys, anchor sinks. A plan
+1. **Plan** — slug, deploy application kind and application type (both derived
+   from the manifest surface: `runtime.family`, `runtime.framework`,
+   `runtime.clientArchitectures`, `publish.platforms`, and the built
+   `runtimeTarget` values — see `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §14.6),
+   permission scope, primary domain, deterministic keys, anchor sinks. The kind is
+   never defaulted: an unresolvable surface is a plan defect that names the
+   conflicting fact, and `--deploy-app-kind <kind>` is the explicit resolution for
+   a root that genuinely serves several surfaces. A declared `app.appType` that
+   contradicts a forced value fails the item unless `--fix-app-types` writes the
+   derived value back. A plan
    defect (no slug, no application type, no permission scope **where the client
    surface requires one**, missing client env configuration, no domain source,
    duplicate domain) is a recorded failure, not a skip. The one planned skip is a
    `serversOnly` root, reported as `status: "skipped"` with `skipKind` and
    `skipReason`; `--include-servers-only` registers it instead.
 2. **Deploy ensure** — `GET /app/v3/api/apps?keyword=<slug>` and an exact slug
-   comparison; when absent, `POST /app/v3/api/apps` with
+   comparison; a row whose stored `appKind` differs from the resolved kind fails
+   closed with the corrective action (the kind is immutable). When absent,
+   `POST /app/v3/api/apps` with
    `Idempotency-Key: sdkwork-app-register:<environment>:<slug>` **and**
    `X-Content-SHA256: sha256(request body bytes)`. A `409` slug conflict re-reads
    the row and adopts it.
@@ -476,3 +525,21 @@ exported anchor, and the no-filter default still writes the whole matrix).
   rewrites it. A deployment that reads client anchors from those keys must export
   them (or let the resolved topology profile carry them); the materializer accepts
   either source and still fails closed when no anchor is available.
+
+## Troubleshooting: the app exists but the installation stays `pending_config`
+
+`apps.create` provisions the IAM installation row from Deploy, and it lands in
+`pending_config` with no `primary_domain` and no environment row. The registrar's
+next steps enable it and write the lifecycle environment through
+`POST /backend/v3/api/iam/installations/{installationId}/enable` and
+`PUT /backend/v3/api/iam/tenants/{tenantId}/installations/{installationId}/environments/{environmentKey}`.
+A gateway build that does not register those routes answers `404` with
+`route is not registered in the gateway route manifest`. The observable result is
+exactly the reported one: the Deploy app list still shows the app (tenant-owned,
+identity active) while every public application token is rejected because no
+enabled installation projects a data scope.
+
+Older gateways expose only the legacy transport (`/backend/v3/api/iam/tenants/{tenantId}/applications`). The IAM client's `transport: auto` (the default) tries the canonical route, then reconciles the installation Deploy already created through the legacy list/enable/environment routes, which are dual-token. `--iam-transport legacy` forces that path and `--iam-transport canonical` refuses the fallback. Deploy a Gateway/IAM build that exposes the canonical installation lifecycle routes, then re-run the registrar. The app is resolved by slug and the existing installation by
+`deploy_application_id`, so the retry does not create a second app. Do not patch
+production installation rows by hand; the enable route also projects the tenant
+and organization keys the token resolver reads.

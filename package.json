@@ -59,7 +59,11 @@
     "release:sdk:publish:dry-run": "node tools/publish-sdk.mjs --workspace .. --dry-run",
     "release:sdk:publish:list": "node tools/publish-sdk.mjs --workspace .. --list",
     "release:app:publish": "node tools/publish-app.mjs --workspace ..",
-    "release:app:publish:dry-run": "node tools/publish-app.mjs --workspace .. --dry-run"
+    "release:app:publish:dry-run": "node tools/publish-app.mjs --workspace .. --dry-run",
+    "register:module": "node tools/register-module.mjs",
+    "test:module-registration": "node --test tools/app-registration/module-registration.test.mjs",
+    "register:workspace": "node tools/register-workspace.mjs",
+    "test:workspace-registration": "node --test tools/register-workspace.test.mjs"
   },
   "dependencies": {
     "js-yaml": "^5.4.2",

@@ -62,6 +62,15 @@ function manifest(overrides = {}) {
       appType: 'APP_API',
       ...(overrides.app ?? {}),
     },
+    runtime: {
+      family: 'server',
+      framework: 'rust-axum',
+      ...(overrides.runtime ?? {}),
+    },
+    publish: {
+      platforms: [],
+      ...(overrides.publish ?? {}),
+    },
     backend: {
       appId: 'sdkwork-im-pc',
       tenantId: '100001',
@@ -128,6 +137,8 @@ function createMultiSurfaceWorkspace(options = {}) {
     ['agent.app.config.json', manifest({ app: { appType: 'APP_API' } })],
     ['apps/sdkwork-im-pc/agent.app.config.json', manifest({
       app: { key: 'sdkwork-im-pc', name: 'Sdkwork IM PC', displayName: 'Sdkwork IM PC', appType: 'APP_REACT' },
+      runtime: { family: 'web', framework: 'react' },
+      publish: { platforms: ['WEB'] },
       environments: {
         development: { accessUrl: 'https://pc-dev.sdkwork.test' },
         production: { accessUrl: 'https://pc.sdkwork.test' },
@@ -140,6 +151,8 @@ function createMultiSurfaceWorkspace(options = {}) {
         displayName: 'Sdkwork IM Mobile',
         appType: 'APP_FLUTTER',
       },
+      runtime: { family: 'mobile', framework: 'flutter' },
+      publish: { platforms: ['APP_ANDROID'] },
       environments: {
         development: { accessUrl: 'https://flutter-dev.sdkwork.test' },
         production: { accessUrl: 'https://flutter.sdkwork.test' },

@@ -134,6 +134,11 @@ Rules:
 - **MUST** keep a Flutter codebase as one `FLUTTER_APP` deploy application with multiple platform targets, not as separate `IOS_APP`/`ANDROID_APP` applications. — *Violation:* registering the same Flutter build as an `IOS_APP` to get an iOS token; the store identity and release flow now disagree with the build.
 - **MUST** keep WeChat and Douyin mini programs as separate applications, because their platform app ids, review channels, and size ceilings are independent. — *Violation:* one `WECHAT_MINIPROGRAM` application with a `DOUYIN` target; the matrix rejects it.
 - **MUST** map a new registration to the endpoint it actually serves: an interactive H5 surface uses `H5_WEB`, an interactive PC surface uses `PC_WEB`, and a content-only static site `MAY` use `STATIC_WEB` under `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`; `SPA_WEB` remains only for pre-existing rows. — *Check:* a new `SPA_WEB` registration is rejected in review and migrated to `PC_WEB` or `H5_WEB`; a static site cites the static-web root standard.
+- **MUST** derive `app_kind` from the application root's manifest surface facts — `app.appType`, `runtime.family`, `runtime.framework`, `runtime.clientArchitectures`, `publish.platforms`, and the built `runtimeTarget` values (`APP_MANIFEST_SPEC.md` §6.1) — not from `app.appType` alone, not from a type mapped from it, and never from an unstated default. `app.appType` cannot distinguish an H5 root from a PC root, and it can be absent or stale (a native mini program root carries `NONE`), so a mapping from it cannot name the surface. — *Violation:* a Flutter root registered as `API_SERVICE` because the type mapping had no Flutter member; a mini program root whose `app.appType` is `NONE` silently becoming `API_SERVICE`.
+- **MUST** fail closed when the facts do not name exactly one surface, naming the missing or conflicting fact instead of registering a guessed kind. A root that ships several endpoint surfaces `MUST` be split, or the operator `MUST` resolve the choice explicitly; an explicit resolution is recorded as its own source in the registration report. — *Violation:* defaulting an unresolvable root to `API_SERVICE`, so the admin ledger shows an API service for a mini program.
+- **MUST** treat `API_SERVICE` as a positive classification (a server/API deployment), never as the fallback for an unclassified client surface. — *Check:* removing the runtime facts from a client root fails the registration; it does not create an `API_SERVICE` row.
+- **MUST** correct a surface whose declared `app.appType` contradicts the proven surface instead of registering it silently: the registration fails naming the expected value, and an explicit repair writes the derived value back. — *Check:* an `APP_HTML` Flutter root fails with `APP_FLUTTER` named, and the repair rewrites only that manifest field.
+- **MUST** detect an existing row whose `app_kind` no longer matches the proven surface and fail closed with the corrective action; because the kind is immutable, the row is retired and re-registered rather than patched. — *Violation:* adopting a draft `API_SERVICE` row for a Flutter root and wiring its anchor into the Flutter release.
 - **MUST** expose the admin filter dimensions from the canonical records: application group, `owner_type`/`ownershipScope`, `app_kind`, `app_status`, and lifecycle environment. The filter `MUST` be a server-side query over the owner's reachable rows, not a client-side narrowing of a tenant-wide list. — *Violation:* the admin ledger shows another user's `USER` applications because the filter runs after the list; the owner gate belongs in the query (section 4).
 - **MUST NOT** register an API gateway, a hosting carrier, or a store listing as an application surface. The gateway is infrastructure, the carrier is hosting, and the listing is commerce. — *Violation:* a `deploy_app` row for `sdkwork-api-cloud-gateway`; it receives an installation and a token but serves no tenant endpoint.
 
@@ -391,3 +396,223 @@ Rules:
 - **MUST** close a gap through the owning module and update this table in the same change; a standard-only edit does not close behavior. — *Check:* the closing change names the migration/API/test and updates the evidence column.
 - **MUST** treat the physical schema names (`deploy_app`, `iam_application_installation`, and its `tenant_application_id` columns) as physical naming facts, not as a second concept. Every public wire/API/SDK name uses `installation`; a further physical rename requires `MIGRATION_SPEC.md`. — *Violation:* declaring a second installation concept because a database column still says `tenant_application_id`.
 - **MUST** re-read a row's named evidence before changing its `reviewed` date; a date bumped without the re-read is a false status claim. — *Check:* `tools/check-application-factory-standard.mjs` validates that every row carries a `reviewed` date and that the evidence it names still exists.
+
+## 14. Module Registration, Self-Service Publication, And OEM Initialization
+
+Every `sdkwork-*` module uses **one** registration command, not a bespoke script:
+`sdkwork-specs/tools/register-module.mjs`. It discovers the module's root
+manifest and every `apps/*` manifest, so "register the current module" is a
+property of the repository layout, not a hand-maintained list.
+
+### 14.1 Registration identity and ownership
+
+| Caller | Deploy owner | IAM `ownership_scope` | Who may use it |
+| --- | --- | --- | --- |
+| Operator/admin credential | `TENANT` | `TENANT` (organization id `0`) | The whole tenant; the app center lists it for tenant administrators |
+| Organization-scoped operator/org admin credential | organization-scoped deploy app (`organization_id <> 0`) | `ORGANIZATION` with non-zero `organizationId` | The members of that organization |
+| Signed-in user session | `USER` | `USER` with `ownerUserId` = the session user | Only that user's own app center and personal release |
+
+- The registrar **MUST NOT** choose the owner locally, but it **MUST** send the
+  ownership level it means: `ownerType=TENANT|ORGANIZATION|USER` on
+  `apps.create`. Deploy's absent-field default is `TENANT`, so a user-published
+  app that omits the field becomes tenant-owned and disappears from the user's
+  app center. IAM then validates `ownership_scope` against the deploy row, so a
+  user token cannot create a `TENANT`-owned application.
+- A native Electron desktop app and the browser Web app are **separate deploy
+  applications**, not one manifest with two delivery modes. Each root carries its
+  own `agent.app.config.json` (`runtime.family=desktop`,
+  `runtime.framework=electron` for Electron; `runtime.family=web` for the Web
+  build), its own slug, anchor, installation, and token surface. The registrar
+  maps a desktop host (`electron`, `tauri`) to Deploy `appKind=DESKTOP_APP`, a
+  browser Web root to `PC_WEB`, and an H5 root to `H5_WEB`; `SPA_WEB` is a
+  legacy-only value and is never produced by a new registration. Registering only
+  one of them is incomplete for a product that ships both artifacts.
+- A `USER` installation is immutable in ownership: it carries
+  `ownerUserId` and the public token's `user_id` claim is that owner
+  (`APP_ACCESS_TOKEN_SPEC.md` §3.2.1). The owner is a positive decimal IAM user
+  id; a user session without one is refused.
+- Enabling/provisioning an installation is the super-admin step. `--auth user`
+  therefore still needs an operator credential for the IAM leg
+  (`--operator-username`/`--operator-password` or the bootstrap operator env).
+  A platform that lets users publish without an operator must perform the
+  equivalent enable in its own publish pipeline before the token is usable.
+- Both modes are idempotent: the deploy application is resolved by slug, the
+  installation by `deploy_application_id`, and the environment row by
+  `(installation_id, env_key)`. Re-running never creates a second application or
+  a second anchor for the same surface.
+- **ORGANIZATION** registration is the organization-level isolation path
+  (`APP_ACCESS_TOKEN_SPEC.md` ?3.2): the caller is an organization-scoped
+  operator/org administrator, the deploy app carries the organization, and the
+  installation is provisioned with `ownershipScope=ORGANIZATION` and a non-zero
+  `organizationId`. Tenant (`0`) and organization (`>0`) ids are never
+  interchanged, and the public token keeps
+  `organization_id=<org>` + `ownership_scope=ORGANIZATION`, which projects
+  `organization:<id>` into the server data scope. The universal command exposes
+  this as `--ownership organization --organization-id <org>`.
+
+### 14.2 Token ownership for self-published applications
+
+- The committed module matrix stays the **tenant-level** identity of the module.
+  A user-specific anchor and token belong to that user's deployment and
+  **MUST NOT** be committed into the module's shared profile files.
+- `--auth user` therefore defaults to `--no-write-anchor --no-materialize`; an
+  explicit `--materialize-user` writes a USER-scoped anchor (`ownershipScope=USER`,
+  `ownerUserId=<id>`) and regenerates the profiles for that user's local build.
+  `--token-out <path>` writes a single `SDKWORK_ACCESS_TOKEN=<USER token>` plus
+  the anchor and ownership assignments to that file, so a user build can consume
+  its personal identity without touching the committed matrix.
+- Deploy slugs **and** installation domains are tenant-unique, so a user-published
+  copy gets its own namespaces: `<slug>-u<userId>` and
+  `<first-label>-u<userId>.<rest>` by default (`--slug-suffix` and
+  `--domain-label-suffix` override them). It therefore coexists with the
+  tenant-owned registration of the same module. Its anchor is recorded in the
+  user's local build layer, never in the tenant matrix.
+- At runtime, a self-published app uses the same public-token shape:
+  `app_id`/`aud` = its deploy application anchor, `ownership_scope=USER`,
+  `user_id` = the owner, `exp=0` unless rotated. The anchor is per surface, so
+  a multi-surface module keeps independent anchors just like the tenant mode.
+
+### 14.3 OEM / white-label cluster initialization
+
+The API domain and the public domain suffix are **deployment configuration**,
+never source constants:
+
+- `--api-domain <host>` points both the Deploy app-api and the IAM backend at
+  `https://<host>`; `--deploy-base-url`/`--iam-base-url` override either side.
+- `--brand`, `--domain-suffix`, and `--domain-pattern` (or one `--oem-config`
+  JSON) produce the installation domains. The pattern supports `{env}`,
+  `{slug}`, `{app}`, `{brand}`, and `{suffix}`; `{app}` is the deploy slug form.
+- A new OEM cluster is initialized by running the same command with the new API
+  domain and suffix, then verifying the app list and the token gates. Replacing
+  only the domain **MUST NOT** change an existing anchor: the anchor identifies
+  the deploy application, the domain is only an installation attribute.
+- Quick initialization order (applies to every module):
+  1. Deploy the cluster and expose the gateway; record its API host.
+  2. Set the OEM brand/suffix (or pass the flags) and run
+     `register-module --environment production --auth operator --api-domain <host> ...`.
+  3. Add every returned deploy anchor to the gateway's IAM allowed audiences
+     (`GATEWAY_IAM_ALLOWED_AUDIENCES` / OEM cluster config): tenant anchors and,
+     for self-service, each user app anchor. Without that entry the
+     credential-entry bootstrap rejects the app's own public token with
+     `40103 IAM credential audience is not allowed for this application host`,
+     and the app center lists nothing. A gateway that must serve user-published
+     apps at scale SHOULD derive the allow-list from the tenant installation
+     inventory (or a wildcard in its own config) instead of a hand-maintained
+     list; until then `register-module --auth user --token-out` plus adding the
+     returned anchor is the runbook.
+  4. Confirm the deploy app list contains every surface as `TENANT`-owned.
+  5. Run the token materialization and both token gates; commit the resulting
+     profile matrix and the anchor records in the authored env layer.
+  6. For user self-publication, run the same command with `--auth user` and the
+     user's session; do not reuse the tenant anchors.
+
+### 14.4 User-defined manifests
+
+A module may ship manifests the SDKWork generator did not create. Registration
+accepts them as long as the identity the deployment needs can be supplied:
+
+- a missing `app.appType` may be supplied with `--default-app-type <api|h5|pc|flutter|miniprogram|ios|android|harmonyos|desktop|other>`;
+- a missing `backend.accessTokenPermissionScope` may be supplied with
+  `--default-permission-scope <csv>`; a root that also has no materialization
+  declaration still mints no client token, so it is classified and can be
+  registered with `--include-servers-only`;
+- a missing domain source is supplied by `--primary-domain`, `--domain-suffix`,
+  or the OEM pattern, never guessed;
+- `--audit` prints the classification of every root (type, token carrier, scope
+  requirement, domain source, anchor sinks) before a run, so an unusual manifest
+  is visible as data instead of failing halfway through.
+
+### 14.5 Acceptance
+
+- The module registers with one command and no hand-written `--only` list.
+- Operator mode creates `TENANT` apps and the app center lists them.
+- User mode creates `USER` apps, the owner can see them, and the installation
+  carries the same owner id in IAM and in the public token.
+- TENANT, ORGANIZATION, and USER registrations each carry their own
+  `ownership_scope`, organization/owner id, and data-scope projection; a token
+  of one level is rejected by another level's installation.
+- An Electron desktop root registers with `appKind=DESKTOP_APP` and its browser
+  root with `appKind=PC_WEB` (an H5 root with `H5_WEB`); both anchors are
+  materialized into their own surface files
+  (`apps/<desktop>/...`, `apps/<web>/...`) and both appear in the app center.
+- Every registered kind is the one the manifest surface proves: a Flutter root is
+  `FLUTTER_APP`, a WeChat mini program is `WECHAT_MINIPROGRAM`, a Douyin mini
+  program is `DOUYIN_MINIPROGRAM`, a native HarmonyOS root is
+  `HARMONYOS_APP`, and a server/API root is `API_SERVICE`; no client root is
+  registered as `API_SERVICE` merely because its type could not be resolved.
+- A root whose manifest facts do not name one surface is reported with the
+  conflicting fact instead of being registered; after the manifest or the
+  explicit registration choice is corrected, the run registers the proven kind.
+- Replacing the API domain/suffix and re-running does not duplicate apps,
+  installations, environments, or anchors.
+- The generated tokens pass `check-app-access-token-env.mjs` and
+  `check-release-access-token-env.mjs`.
+- The app center lists every ownership scope the server authorizes (`USER`,
+  `TENANT`, `ORGANIZATION`), not only the caller's personal `USER` rows; a
+  tenant-owned application published by an operator must be visible in the
+  admin's app center.
+- The Electron Desktop and Web manifests agree with their actual packages: the
+  Desktop manifest names the packaging `appId`/product (for example
+  `com.sdkwork.birdcoder` / `BirdCoder`), and the Web manifest names the host that
+  actually serves the Web artifact. Each artifact build injects its own anchor:
+  the Desktop packaging lane exports the Desktop deploy anchor and the Web build
+  prefers its `apps/web/.env.<profile>` surface file (the exported anchor still
+  wins during Desktop packaging). A Desktop build that silently reuses the Web
+  token is a registration/alignment defect.
+
+### 14.6 Surface Kind Resolution and Correction
+
+`tools/register-module.mjs` classifies every application root from its manifest
+surface facts through one resolver (`tools/app-registration/contract.mjs`
+`resolveDeployAppSurface`). The resolver is the only authority that produces an
+`appKind` for a new registration; `buildDeployAppCreateBody` refuses a body
+without one, so a missing classification is an error rather than an
+`API_SERVICE` row.
+
+Precedence, highest first:
+
+| Fact | Resolves to |
+| --- | --- |
+| `runtime.framework = flutter` | `FLUTTER_APP` |
+| `runtime.framework = harmony-native` / `arkts` | `HARMONYOS_APP` |
+| `runtime.framework = android-native` / `ios-native` | `ANDROID_APP` / `IOS_APP` |
+| `runtime.family = mini-program` or a `*-mini-program` framework, with `MP_WEIXIN` / `MP_DOUYIN` | `WECHAT_MINIPROGRAM` / `DOUYIN_MINIPROGRAM` |
+| `uni-app` / `uni-app-x` with one App platform | that platform's native kind; more than one App platform fails closed |
+| `runtime.framework = static-html` | `STATIC_WEB` |
+| desktop host framework (`electron`, `tauri`) | `DESKTOP_APP` |
+| H5 evidence (H5/Capacitor framework, `H5` platform, `h5`/`capacitor-*` runtime target) | `H5_WEB` |
+| `runtime.family = web` | `PC_WEB` (a web root with only server/container targets is `API_SERVICE`) |
+| `runtime.family = desktop` with a browser target | `PC_WEB`; otherwise `DESKTOP_APP` |
+| `runtime.family = server` / `cli` / `library` / `plugin` | `API_SERVICE` |
+
+`runtime.framework` is decisive; `runtime.clientArchitectures` corroborates it and
+is consulted only when no framework is declared, because a multi-surface
+repository lists every architecture it ships. The IAM `applicationType` is then
+derived from the kind (`H5_WEB`→`h5`, `PC_WEB`/`STATIC_WEB`→`pc`,
+`DESKTOP_APP`→`desktop`, `FLUTTER_APP`→`flutter`, `API_SERVICE`→`api`,
+`WECHAT_MINIPROGRAM`/`DOUYIN_MINIPROGRAM`→`miniprogram`, `IOS_APP`→`ios`,
+`ANDROID_APP`→`android`, `HARMONYOS_APP`→`harmonyos`), so the IAM leg cannot
+inherit a collapsed or stale product type from `app.appType`.
+
+Correction, in the order the registrar applies it:
+
+1. **Fail closed on an unresolvable surface.** No kind means a plan defect that
+   names the missing or conflicting fact; nothing reaches Deploy or IAM.
+2. **Resolve, never guess, a multi-surface root.** A root that declares, for
+   example, a mini program and a web surface is registered under its primary
+   surface with a note naming the extra surface, or the operator resolves the
+   choice with `--deploy-app-kind <kind>` (recorded as the source in the report).
+   A uni-app root that delivers several App platforms fails closed because no
+   single canonical kind covers them.
+3. **Correct a contradictory `app.appType`.** When the closed set forces a value
+   (Flutter, HarmonyOS, uni-app) and the manifest declares another one, the item
+   fails naming the expected value; `--fix-app-types` rewrites that one field in
+   place (formatting preserved) and the report records the previous value.
+4. **Detect an existing mis-kinded row.** A deploy application found by slug whose
+   `appKind` differs from the resolved kind fails the item with the corrective
+   action; the kind is immutable, so the draft row is retired and re-registered
+   rather than patched.
+5. **Surface a stub manifest.** A root whose directory name encodes a surface
+   (`-pc`, `-h5`, `-flutter-mobile`, `-mini-program`, `-harmony-mobile`) while its
+   runtime facts resolve to another kind is reported in the audit and the run
+   notes, so a copied root manifest is visible before it reaches a release.

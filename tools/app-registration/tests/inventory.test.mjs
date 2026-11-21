@@ -10,9 +10,9 @@ import {
   REGISTRATION_ENVIRONMENTS,
   buildRegistrationInventory,
   discoverApplicationRoots,
-  mapManifestAppTypeToApplicationType,
   slugifyAppKey,
 } from '../inventory.mjs';
+import { resolveDeployAppSurface } from '../contract.mjs';
 
 function writeJson(filePath, value) {
   mkdirSync(path.dirname(filePath), { recursive: true });
@@ -34,6 +34,15 @@ function manifest(overrides = {}) {
       displayName: 'SDKWork IM',
       appType: 'APP_REACT',
       ...(overrides.app ?? {}),
+    },
+    runtime: {
+      family: 'web',
+      framework: 'react',
+      ...(overrides.runtime ?? {}),
+    },
+    publish: {
+      platforms: ['WEB'],
+      ...(overrides.publish ?? {}),
     },
     backend: {
       appId: 'sdkwork-im',
@@ -67,10 +76,45 @@ test('slugify matches the deploy slug rules', () => {
   assert.ok(slugifyAppKey('a'.repeat(400)).length <= 120);
 });
 
-test('app types map onto the IAM vocabulary', () => {
-  assert.equal(mapManifestAppTypeToApplicationType('APP_HTML'), 'h5');
-  assert.equal(mapManifestAppTypeToApplicationType('APP_FLUTTER'), 'flutter');
-  assert.equal(mapManifestAppTypeToApplicationType(undefined), '');
+test('the inventory resolves each surface kind from its runtime facts', () => {
+  createWorkspace((root) => {
+    writeJson(path.join(root, 'sdkwork-demo', 'agent.app.config.json'), manifest({
+      app: { key: 'sdkwork-demo-h5', appType: 'APP_REACT' },
+      runtime: { family: 'mobile', framework: 'react-h5' },
+      publish: { platforms: ['H5'] },
+    }));
+    writeJson(path.join(root, 'sdkwork-demo', 'apps', 'sdkwork-demo-flutter-mobile', 'agent.app.config.json'), manifest({
+      app: { key: 'sdkwork-demo-flutter-mobile', appType: 'APP_FLUTTER' },
+      runtime: { family: 'mobile', framework: 'flutter' },
+      publish: { platforms: ['APP_IOS', 'APP_ANDROID'] },
+    }));
+    writeJson(path.join(root, 'sdkwork-demo', 'apps', 'sdkwork-demo-mini-program', 'agent.app.config.json'), manifest({
+      app: { key: 'sdkwork-demo-mini-program', appType: 'NONE' },
+      runtime: { family: 'mini-program', framework: 'weixin-mini-program' },
+      publish: { platforms: ['MP_WEIXIN'] },
+    }));
+    const inventory = buildRegistrationInventory({ workspaceRoot: root });
+    const byId = Object.fromEntries(inventory.entries.map((entry) => [entry.id, entry]));
+    assert.equal(byId['sdkwork-demo'].deployAppKind, 'H5_WEB');
+    assert.equal(byId['sdkwork-demo'].applicationType, 'h5');
+    assert.equal(byId['sdkwork-demo/apps/sdkwork-demo-flutter-mobile'].deployAppKind, 'FLUTTER_APP');
+    assert.equal(byId['sdkwork-demo/apps/sdkwork-demo-flutter-mobile'].applicationType, 'flutter');
+    assert.equal(byId['sdkwork-demo/apps/sdkwork-demo-mini-program'].deployAppKind, 'WECHAT_MINIPROGRAM');
+    assert.equal(byId['sdkwork-demo/apps/sdkwork-demo-mini-program'].applicationType, 'miniprogram');
+    assert.equal(byId['sdkwork-demo/apps/sdkwork-demo-mini-program'].appTypeWarning, true);
+    assert.equal(inventory.counts.missingDeployAppKind, 0);
+    assert.deepEqual(inventory.counts.deployAppKinds, {
+      FLUTTER_APP: 1,
+      H5_WEB: 1,
+      WECHAT_MINIPROGRAM: 1,
+    });
+  });
+});
+
+test('a manifest without runtime facts fails the surface resolution', () => {
+  const resolved = resolveDeployAppSurface({ appType: 'APP_REACT' });
+  assert.equal(resolved.deployAppKind, '');
+  assert.match(resolved.defects.join(' '), /cannot derive the deploy application kind/u);
 });
 
 test('the scan finds repository-root and apps/* manifests only', () => {
@@ -379,3 +423,4 @@ test('a profile carrier file alone keeps the scope requirement, without a declar
     );
   });
 });
+

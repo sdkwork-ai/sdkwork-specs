@@ -50,11 +50,12 @@ import {
   surfaceApplicationTokenEnvName,
 } from '../app-access-token.mjs';
 import {
-  mapManifestAppTypeToApplicationType,
+  describeSurfaceNameMismatch,
+  resolveDeployAppSurface,
   slugifyAppKey,
 } from './contract.mjs';
 
-export { mapManifestAppTypeToApplicationType, slugifyAppKey };
+export { describeSurfaceNameMismatch, resolveDeployAppSurface, slugifyAppKey };
 
 /** Manifest file name that makes a directory an application root. */
 export const APP_MANIFEST_FILE = 'agent.app.config.json';
@@ -134,6 +135,16 @@ export const PERMISSION_SCOPE_REQUIREMENTS = Object.freeze({
 
 function toPosix(relativePath) {
   return relativePath.split(path.sep).join('/');
+}
+
+/** Trimmed string list of a manifest array field, dropping empty entries. */
+function asStringList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => String(entry ?? '').trim())
+    .filter((entry) => entry.length > 0);
 }
 
 function readJson(filePath) {
@@ -738,6 +749,25 @@ export function buildRegistrationInventory(options = {}) {
       };
     }
 
+    // The surface authority is the manifest runtime + delivery metadata, not the
+    // coarse `app.appType` (`APP_MANIFEST_SPEC.md` §6.1): Flutter, mini program,
+    // native mobile, and API delivery are indistinguishable in `appType` alone.
+    const surface = resolveDeployAppSurface({
+      appType: manifest?.app?.appType,
+      runtimeFamily: manifest?.runtime?.family,
+      runtimeFramework: manifest?.runtime?.framework,
+      // `defaultArchitecture` is the legacy single-architecture spelling of the
+      // same fact (`APP_MANIFEST_SPEC.md` §6), and the IAM bootstrap framework
+      // reads it too, so both provisioners must classify it identically.
+      clientArchitectures: [
+        ...asStringList(manifest?.runtime?.clientArchitectures),
+        ...asStringList([manifest?.runtime?.defaultArchitecture]),
+      ],
+      publishPlatforms: manifest?.publish?.platforms,
+      runtimeTargets: (manifest?.artifacts?.installConfig?.packages ?? [])
+        .map((entry) => entry?.runtimeTarget),
+    });
+
     entries.push({
       id: toPosix(path.relative(workspaceRoot, appRoot)),
       repo: path.basename(repoRoot),
@@ -747,7 +777,22 @@ export function buildRegistrationInventory(options = {}) {
       appName,
       displayName: String(manifest?.app?.displayName ?? '').trim(),
       appType: String(manifest?.app?.appType ?? '').trim(),
-      applicationType: mapManifestAppTypeToApplicationType(manifest?.app?.appType) ?? '',
+      runtimeFamily: String(manifest?.runtime?.family ?? '').trim(),
+      runtimeFramework: String(manifest?.runtime?.framework ?? '').trim(),
+      clientArchitectures: asStringList(manifest?.runtime?.clientArchitectures),
+      publishPlatforms: asStringList(manifest?.publish?.platforms),
+      runtimeTargets: asStringList(
+        (manifest?.artifacts?.installConfig?.packages ?? []).map((entry) => entry?.runtimeTarget),
+      ),
+      applicationType: surface.applicationType,
+      deployAppKind: surface.deployAppKind,
+      deployAppKindSource: surface.deployAppKindSource,
+      canonicalAppType: surface.canonicalAppType,
+      appTypeDeclared: surface.appTypeDeclared,
+      appTypeWarning: surface.appTypeWarning,
+      surfaceNotes: surface.notes,
+      surfaceDefects: surface.defects,
+      surfaceNameWarning: describeSurfaceNameMismatch(relativeAppDir, surface.deployAppKind),
       backendAppId: String(manifest?.backend?.appId ?? '').trim(),
       backendPrimaryDomain: String(manifest?.backend?.primaryDomain ?? '').trim(),
       backendDomain: String(manifest?.backend?.domain ?? '').trim(),
@@ -831,6 +876,21 @@ export function buildRegistrationInventory(options = {}) {
         ).length,
       },
       missingApplicationType: parsed.filter((entry) => entry.applicationType === '').length,
+      // Surface resolution: a root whose manifest facts do not identify exactly
+      // one endpoint surface cannot be registered; it is reported here instead of
+      // silently becoming an API service.
+      missingDeployAppKind: parsed.filter((entry) => !entry.deployAppKind).length,
+      appTypeWarnings: parsed.filter((entry) => entry.appTypeWarning).length,
+      surfaceNameWarnings: parsed.filter((entry) => entry.surfaceNameWarning).length,
+      appTypeContradictions: parsed.filter(
+        (entry) => entry.canonicalAppType !== '' && entry.appType !== entry.canonicalAppType,
+      ).length,
+      deployAppKinds: parsed.reduce((tally, entry) => {
+        if (entry.deployAppKind) {
+          tally[entry.deployAppKind] = (tally[entry.deployAppKind] ?? 0) + 1;
+        }
+        return tally;
+      }, {}),
       withClientTokenCarrier: parsed.filter(
         (entry) => entry.tokenCarrier?.kind === 'client-env-materializer',
       ).length,

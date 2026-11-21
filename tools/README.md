@@ -48,6 +48,27 @@ Rules:
   (repeatable or comma-separated) limits materialization to that lifecycle's
   profiles, so one environment's deploy anchor never overwrites another's
   committed profile files.
+- `register-module.mjs` (implementation in `app-registration/module-registration.mjs`)
+  is the universal one-command module initializer. It discovers the module root
+  manifest and every `apps/*` manifest, registers all of them, and is the same
+  command for every `sdkwork-*` repository. `--auth operator` creates `TENANT`
+  applications and materializes the committed profile matrix; `--auth user`
+  runs the Deploy calls as the signed-in user (or a password-grant session) and
+  provisions the installation as `USER` with `ownerUserId`, leaving the shared
+  anchors untouched unless `--materialize-user` asks for a local
+  materialization. `--ownership organization --organization-id <org>` registers the same module at organization isolation (IAM `ownershipScope=ORGANIZATION`, data scope `organization:<org>`). OEM clusters switch one configuration: `--api-domain`
+  (Deploy + IAM origin), `--brand`, `--domain-suffix`/`--domain-pattern`, or one
+  `--oem-config` JSON (`oem.example.json` in the tool directory). See
+  `APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §14. `--audit` classifies every root before running; `--default-app-type`/`--default-permission-scope` cover manifests the SDKWork generator did not write; `--iam-transport auto` (default) reconciles older gateways that expose only the legacy tenant-application route. The deploy application kind is derived from the manifest surface (`runtime.family`/`runtime.framework`, `clientArchitectures`, `publish.platforms`), never from `app.appType` or a default: a Flutter root becomes `FLUTTER_APP` and a mini program becomes `WECHAT_MINIPROGRAM`/`DOUYIN_MINIPROGRAM`, and an unclassifiable root fails with the conflicting fact named. `--deploy-app-kind <kind>` records an explicit choice for a genuinely multi-surface root, and `--fix-app-types` repairs only a contradicted `app.appType`. Re-running against a draft row registered under the wrong kind fails closed (the kind is immutable); retire that draft and re-run so the correct kind is created.
+
+- `register-workspace.mjs` runs that same module initializer for every
+  `sdkwork-*` repository in the workspace, so a new module needs no bespoke
+  command. It forwards the operator/OEM flags, stops on the first failing module
+  in the summary, and `--print-audiences` emits the
+  `GATEWAY_IAM_ALLOWED_AUDIENCES=<anchors>` line an OEM cluster must merge.
+  USER self-publication stays per module (`--auth user`) because the login token
+  belongs to that module's installation.
+
 - `register-applications.mjs` (implementation in `app-registration/`) registers
   every application root of a workspace into Deploy and IAM and hands the
   returned deploy-application anchor to the profile materializers. Per
@@ -298,3 +319,80 @@ Rules:
   `--workspace ..` for the fleet audit or `--root .` inside one repository,
   whose gate then answers only for that repository's own documents.
 - Tools must not embed application-specific secrets, local paths, or application-line behavior.
+
+## Module registration quick start
+
+Run the universal initializer from the module root; it discovers the root
+manifest and every `apps/*` manifest, so there is no per-module id list and every
+`sdkwork-*` repository uses the same command.
+
+```bash
+# Operator/admin: TENANT-owned apps, committed anchors, materialized tokens
+node ../sdkwork-specs/tools/register-module.mjs \
+  --environment production --auth operator \
+  --api-domain api.example.com --domain-suffix example.com \
+  --username operator --password "$SDKWORK_IAM_OPERATOR_PASSWORD"
+
+# Signed-in user: USER-owned self-published apps; the operator enables the
+# installation, the user's own app center lists the result. The shared committed
+# matrix is not rewritten unless --materialize-user is passed.
+node ../sdkwork-specs/tools/register-module.mjs \
+  --environment production --auth user \
+  --username alice --password "$SDKWORK_USER_PASSWORD" \
+  --access-token "$SDKWORK_ACCESS_TOKEN" \
+  --operator-username operator --operator-password "$SDKWORK_IAM_OPERATOR_PASSWORD" \
+  --api-domain api.example.com --domain-suffix example.com
+
+# OEM cluster: one config replaces the API domain and the public suffix
+node ../sdkwork-specs/tools/register-module.mjs \
+  --environment production --auth operator \
+  --oem-config ../sdkwork-specs/tools/app-registration/oem.example.json \
+  --username operator --password "$SDKWORK_IAM_OPERATOR_PASSWORD"
+
+# Organization isolation: non-zero organization id, ORGANIZATION ownership
+node ../sdkwork-specs/tools/register-module.mjs \
+  --environment production --auth operator --ownership organization \
+  --organization-id 100002 \
+  --api-domain api.example.com --domain-suffix example.com \
+  --username operator --password "$SDKWORK_IAM_OPERATOR_PASSWORD"
+
+# Audit the module roots before registering (no credentials needed)
+node ../sdkwork-specs/tools/register-module.mjs --audit
+
+# Whole workspace (operator): every module, then the gateway audience line
+node ../sdkwork-specs/tools/register-workspace.mjs \
+  --environment production --auth operator \
+  --api-domain api.example.com --domain-suffix example.com \
+  --username operator --password "$SDKWORK_IAM_OPERATOR_PASSWORD" \
+  --print-audiences
+
+# Plan only
+node ../sdkwork-specs/tools/register-module.mjs --dry-run --auth operator --api-domain api.example.com
+```
+
+A client that is already signed in can pass `--user-access-token`/`--user-auth-token`
+instead of the password grant; the token must belong to the same tenant and, for
+`--auth user`, carry the owner's `user_id`.
+
+After a successful run, add every registered deploy anchor to the gateway's
+`GATEWAY_IAM_ALLOWED_AUDIENCES` (or the OEM cluster config): tenant anchors and
+each user-published anchor. A gateway that does not allow the app's anchor rejects
+the public token at credential-entry bootstrap (`40103`) and the app center stays
+empty even though the app rows exist. Gateways serving self-service at scale
+should derive the allow-list from the tenant installation inventory instead of a
+hand-maintained list.
+
+A user-published copy gets per-user deploy slug and domain namespaces
+(`<slug>-u<userId>` and `<first-label>-u<userId>.<rest>`, override with
+`--slug-suffix`/`--domain-label-suffix`) because slugs and installation domains
+are unique per tenant; it never overwrites the tenant registration.
+`--token-out <path>` writes the USER token plus its anchor/owner assignments, so
+the user's build can consume its personal identity without changing the
+committed matrix.
+
+The command is idempotent: the deploy application is resolved by slug, the
+installation by `deploy_application_id`, and the lifecycle by
+`(installation_id, env_key)`. A cluster whose gateway does not yet expose the IAM
+installation lifecycle routes cannot complete the IAM leg; the failure is named
+in the report and `app-registration/README.md` documents the gateway
+requirement.

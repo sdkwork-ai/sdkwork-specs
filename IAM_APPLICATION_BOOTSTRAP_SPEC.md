@@ -126,7 +126,7 @@ Rules:
   - manifest mapping helpers, including `mapManifestAppTypeToApplicationType(...)`, `resolveDeployApplicationId(...)`, and `deriveProvisioningIdempotencyKey(...)`
   - command validation (`validateTenantApplicationProvisionCommand(...)`) and bootstrap auth/env resolution helpers
   - env handoff helpers such as `formatBootstrapEnvFile(...)`
-- The provisioning command `MUST` carry `applicationType` (`api` | `h5` | `pc` | `flutter` | `other`) and `deployApplicationId`; the framework `MUST` fail closed naming the missing field instead of sending an incomplete body.
+- The provisioning command `MUST` carry `applicationType` (`api` | `h5` | `pc` | `flutter` | `miniprogram` | `ios` | `android` | `harmonyos` | `desktop` | `other`) and `deployApplicationId`; the framework `MUST` fail closed naming the missing field instead of sending an incomplete body. This is the IAM runtime and `@sdkwork/iam-application-bootstrap` vocabulary, and it `MUST` match the Deploy endpoint the installation serves.
 - Repeated onboarding with the same `provisioningIdempotencyKey` `MUST` be a replay: the framework returns the first outcome and the API reconciles the one installation bound to that deploy application.
 
 Forbidden in application-owned bootstrap code:
@@ -144,7 +144,7 @@ Minimum manifest fields for IAM bootstrap:
 | Manifest field | Bootstrap use |
 | --- | --- |
 | `app.name`, `app.displayName` | installation `displayName` |
-| `app.appType` | source of the product-semantic `applicationType` (`APP_HTML`→`h5`, `APP_FLUTTER`→`flutter`, `APP_REACT`/`APP_VUE`/`APP_PC`→`pc`, `APP_API`→`api`, otherwise `other`) |
+| `app.appType` | source of the product-semantic `applicationType` when the caller does not pass the proven surface: `APP_HTML`→`h5`, `APP_FLUTTER`→`flutter`, `APP_REACT`/`APP_VUE`/`APP_PC`→`pc`, `APP_UNIAPP`→`miniprogram`, `APP_IOS`→`ios`, `APP_ANDROID`→`android`, `APP_HARMONY`→`harmonyos`, `APP_DESKTOP`→`desktop`, `APP_API`/`SDK`→`api`, otherwise `other`. A deployment that registers its surfaces from `runtime.family`/`runtime.framework`/`publish.platforms` (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §14.6) passes the proven type instead, because `APP_REACT` alone cannot distinguish an H5 root from a PC root |
 | `backend.deployApplicationId` | deploy application anchor the installation serves; the deployment's own application id. A self-provisioned installation whose deployment identity is the IAM runtime id may fall back to `backend.appId`, but a deployment that assigns its own id `MUST` pass it here, through the caller, or via `SDKWORK_DEPLOY_APPLICATION_ID` |
 | `backend.accessTokenPermissionScope` or `backend.permissionScope` | required non-empty default access permissions |
 | `backend.tenantId`, `backend.organizationId` | installation scope defaults |

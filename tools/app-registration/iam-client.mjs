@@ -65,6 +65,9 @@ export const IAM_TENANT_APPLICATIONS_PATH = '/iam/installations';
 /** Tenant-scoped installation management path prefix (dual-token surface). */
 export const IAM_TENANT_APPLICATIONS_MANAGEMENT_PREFIX = '/iam/tenants';
 
+/** Legacy tenant-application path prefix still served by older gateways. */
+export const IAM_TENANT_APPLICATIONS_LEGACY_PREFIX = '/iam/tenants';
+
 /** App-api login path used to mint a dual-token session for the operator. */
 export const IAM_APP_SESSION_LOGIN_PATH = '/app/v3/api/auth/sessions';
 
@@ -90,6 +93,11 @@ export class IamApiError extends Error {
 
 function trim(value) {
   return String(value ?? '').trim();
+}
+
+/** Whether a gateway rejected a path because the route is not in its manifest. */
+function isRouteMissing(error) {
+  return error instanceof IamApiError && Number(error.status) === 404;
 }
 
 /**
@@ -175,6 +183,13 @@ export function createIamApplicationClient(options) {
   }
   const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 10_000;
+  const transport = trim(options.transport) || 'auto';
+  if (!['auto', 'canonical', 'legacy'].includes(transport)) {
+    throw new IamApiError(
+      `IAM transport ${JSON.stringify(options.transport)} is not auto, canonical, or legacy`,
+      { kind: 'invalid-settings' },
+    );
+  }
   const authFields = hasAuthToken
     ? { authToken: trim(auth.authToken) }
     : { username: trim(auth.username), password: trim(auth.password) };
@@ -187,6 +202,17 @@ export function createIamApplicationClient(options) {
   const canMintSession = mintUsername.length > 0 && mintPassword.length > 0;
   /** @type {{accessToken: string, authToken: string} | null} */
   let mintedSession = null;
+
+  /** Headers for a dual-token route. */
+  function dualTokenHeaders(session, serializedBody = '') {
+    return {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      authorization: `Bearer ${session.authToken}`,
+      'access-token': session.accessToken,
+      ...(serializedBody ? bodyFingerprintHeaders(serializedBody) : {}),
+    };
+  }
 
   function signalFor() {
     return typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
@@ -321,8 +347,41 @@ export function createIamApplicationClient(options) {
      * @param body - provisioning command plus bootstrap operator auth
      * @returns the installation item
      */
-    provisionInstallation(body) {
-      return request(IAM_TENANT_APPLICATIONS_PATH, { ...authFields, ...body });
+    async provisionInstallation(body) {
+      const tenantId = trim(body?.tenantId);
+      const canonicalPath = IAM_TENANT_APPLICATIONS_PATH;
+      const legacyPath = `${IAM_TENANT_APPLICATIONS_LEGACY_PREFIX}/${encodeURIComponent(tenantId)}/applications`;
+      const payload = async (pathLabel) => request(pathLabel, { ...authFields, ...body });
+      const legacy = async () => {
+        // Older gateways do not accept a client-side installation create; Deploy
+        // creates the row while creating the app. Reconcile that row instead of
+        // guessing a legacy create body.
+        const found = await this.findLegacyInstallation(body.deployApplicationId, tenantId);
+        if (found) {
+          await this.updateLegacyInstallation(found.installationId, tenantId, {
+            primaryDomain: body.primaryDomain,
+            accessPermissions: body.accessPermissions,
+          });
+          return found;
+        }
+        throw new IamApiError(
+          `gateway exposes only the legacy installation transport and no installation exists for `
+          + `deploy application ${body.deployApplicationId}; create the Deploy app first or upgrade `
+          + 'the gateway to the canonical installation lifecycle routes',
+          { kind: 'rejected', status: 404, path: legacyPath, retryable: true },
+        );
+      };
+      if (transport === 'legacy') {
+        return legacy();
+      }
+      try {
+        return await payload(canonicalPath);
+      } catch (error) {
+        if (transport === 'auto' && isRouteMissing(error) && tenantId) {
+          return legacy();
+        }
+        throw error;
+      }
     },
 
     /**
@@ -331,17 +390,45 @@ export function createIamApplicationClient(options) {
      * @param body - extra fields (tenant scope)
      * @returns the installation item
      */
-    enableInstallation(installationId, body = {}) {
+    async enableInstallation(installationId, body = {}) {
       const id = trim(installationId);
       if (!id) {
         throw new IamApiError('tenant application id is required to enable an installation', {
           kind: 'invalid-settings',
         });
       }
-      return request(
-        `${IAM_TENANT_APPLICATIONS_PATH}/${encodeURIComponent(id)}/enable`,
-        { ...authFields, ...body },
-      );
+      const tenantId = trim(body.tenantId);
+      const canonicalPath = `${IAM_TENANT_APPLICATIONS_PATH}/${encodeURIComponent(id)}/enable`;
+      const legacyPath = `${IAM_TENANT_APPLICATIONS_LEGACY_PREFIX}/${encodeURIComponent(tenantId)}/applications/${encodeURIComponent(id)}/enable`;
+      const payload = async (pathLabel) => request(pathLabel, { ...authFields, ...body });
+      const legacy = async () => {
+        if (trim(body.primaryDomain) || Array.isArray(body.accessPermissions)) {
+          await this.updateLegacyInstallation(id, tenantId, {
+            primaryDomain: body.primaryDomain,
+            accessPermissions: body.accessPermissions,
+          });
+        }
+        const session = await resolveManagementSession();
+        const serialized = serializeRequestBody({ tenantId });
+        const response = await send('POST', `${origin}${IAM_BACKEND_API_PREFIX}${legacyPath}`, {
+          headers: dualTokenHeaders(session, serialized),
+          body: serialized,
+          pathLabel: legacyPath,
+        });
+        const item = unwrapIamItem(response, legacyPath);
+        return { ...item, installationId: trim(item.installationId ?? item.tenantApplicationId ?? id) };
+      };
+      if (transport === 'legacy') {
+        return legacy();
+      }
+      try {
+        return await payload(canonicalPath);
+      } catch (error) {
+        if (transport === 'auto' && isRouteMissing(error) && tenantId) {
+          return legacy();
+        }
+        throw error;
+      }
     },
 
     /**
@@ -381,7 +468,10 @@ export function createIamApplicationClient(options) {
         );
       }
       const session = await resolveManagementSession();
-      const pathLabel = `${IAM_TENANT_APPLICATIONS_MANAGEMENT_PREFIX}/${encodeURIComponent(tenantId)}`
+      const canonicalPath = `${IAM_TENANT_APPLICATIONS_MANAGEMENT_PREFIX}/${encodeURIComponent(tenantId)}`
+        + `/installations/${encodeURIComponent(installationId)}`
+        + `/environments/${encodeURIComponent(envKey)}`;
+      const legacyPath = `${IAM_TENANT_APPLICATIONS_LEGACY_PREFIX}/${encodeURIComponent(tenantId)}`
         + `/applications/${encodeURIComponent(installationId)}`
         + `/environments/${encodeURIComponent(envKey)}`;
       const serializedBody = serializeRequestBody({
@@ -397,12 +487,86 @@ export function createIamApplicationClient(options) {
       if (trim(command.idempotencyKey)) {
         headers['idempotency-key'] = trim(command.idempotencyKey);
       }
-      const payload = await send('PUT', `${origin}${IAM_BACKEND_API_PREFIX}${pathLabel}`, {
-        headers,
-        body: serializedBody,
+      const put = async (pathLabel) => {
+        const payload = await send('PUT', `${origin}${IAM_BACKEND_API_PREFIX}${pathLabel}`, {
+          headers,
+          body: serializedBody,
+          pathLabel,
+        });
+        return unwrapIamItem(payload, pathLabel);
+      };
+      if (transport === 'legacy') {
+        return put(legacyPath);
+      }
+      if (transport === 'canonical') {
+        return put(canonicalPath);
+      }
+      try {
+        return await put(legacyPath);
+      } catch (error) {
+        if (transport === 'auto' && isRouteMissing(error)) {
+          return put(canonicalPath);
+        }
+        throw error;
+      }
+    },
+
+    /** Update the primary domain of a legacy installation before enabling it. */
+    async updateLegacyInstallation(installationId, tenantId, command = {}) {
+      const id = trim(installationId);
+      const tenant = trim(tenantId);
+      const primaryDomain = trim(command.primaryDomain);
+      const accessPermissions = Array.isArray(command.accessPermissions)
+        ? command.accessPermissions.filter((permission) => trim(permission).length > 0)
+        : [];
+      if (!id || !tenant || (!primaryDomain && accessPermissions.length === 0)) {
+        return null;
+      }
+      const session = await resolveManagementSession();
+      const pathLabel = `${IAM_TENANT_APPLICATIONS_LEGACY_PREFIX}/${encodeURIComponent(tenant)}/applications/${encodeURIComponent(id)}`;
+      const update = { ...(primaryDomain ? { primaryDomain } : {}) };
+      if (accessPermissions.length > 0) {
+        update.accessPermissions = accessPermissions;
+      }
+      const serialized = serializeRequestBody(update);
+      const payload = await send('PATCH', `${origin}${IAM_BACKEND_API_PREFIX}${pathLabel}`, {
+        headers: dualTokenHeaders(session, serialized),
+        body: serialized,
         pathLabel,
       });
       return unwrapIamItem(payload, pathLabel);
+    },
+
+    /** Find an installation the legacy gateway created for a deploy application. */
+    async findLegacyInstallation(deployApplicationId, tenantId) {
+      const anchor = trim(deployApplicationId);
+      const tenant = trim(tenantId);
+      if (!anchor || !tenant) {
+        return null;
+      }
+      const session = await resolveManagementSession();
+      const pathLabel = `${IAM_TENANT_APPLICATIONS_LEGACY_PREFIX}/${encodeURIComponent(tenant)}/applications?page=1&page_size=100`;
+      const payload = await send('GET', `${origin}${IAM_BACKEND_API_PREFIX}${pathLabel}`, {
+        headers: dualTokenHeaders(session),
+        pathLabel,
+      });
+      const items = payload?.data?.items ?? payload?.items ?? [];
+      const item = items.find((candidate) => {
+        const id = trim(candidate?.tenantApplicationId ?? candidate?.installationId ?? candidate?.id);
+        return id.endsWith(`_${anchor}`);
+      });
+      if (!item) {
+        return null;
+      }
+      return {
+        installationId: trim(item.tenantApplicationId ?? item.installationId ?? item.id),
+        deployApplicationId: anchor,
+        status: trim(item.status),
+        appId: trim(item.appId),
+        instanceKey: trim(item.instanceKey),
+        applicationType: trim(item.applicationType),
+        raw: item,
+      };
     },
   };
 }

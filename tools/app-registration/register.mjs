@@ -72,28 +72,33 @@
  */
 
 import { spawn } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import {
   DEPLOY_APPLICATION_ID_ENV,
+  IAM_TENANT_APPLICATION_TYPES,
+  NEW_REGISTRATION_DEPLOY_APP_KINDS,
   PRIMARY_DOMAIN_SOURCES,
   RegistrationConfigurationError,
+  applicationTypeForDeployKind,
   assertDeployApplicationIdForKind,
   buildDeployAppCreateBody,
   buildInstallationProvisionBody,
   defaultDeploymentProfile,
   deployAppCreateIdempotencyKey,
-  deployAppKindForApplicationType,
   environmentUpsertIdempotencyKey,
   formatRegistrationItemLabel,
   normalizeEnvironment,
   readDeployAppItem,
   readInstallationItem,
+  replaceManifestAppType,
   resolveDeploySlug,
   resolvePrimaryDomain,
   tenantApplicationInstanceKey,
+  verifyDeployAppKind,
 } from './contract.mjs';
 import { DeployApiError, createDeployApplicationClient, findAppBySlug } from './deploy-client.mjs';
 import { IamApiError, createIamApplicationClient } from './iam-client.mjs';
@@ -124,6 +129,48 @@ function sleepDefault(milliseconds) {
   return new Promise((resolve) => {
     setTimeout(resolve, milliseconds);
   });
+}
+
+/**
+ * Write the derived `app.appType` back into one application manifest.
+ *
+ * Only the explicit `--fix-app-types` repair calls this: the declared type
+ * contradicts the surface the runtime facts prove, and the operator asked for the
+ * derivation to be persisted. The path is confined to the selected workspace and
+ * the rewrite preserves the authored formatting (see `replaceManifestAppType`).
+ * @param entry - inventory entry (workspace-relative `manifestPath`)
+ * @param nextAppType - canonical app type to write
+ * @param options - run options carrying `workspaceRoot`
+ * @returns the repair record, or `null` when the file cannot be repaired
+ */
+function repairManifestAppType(entry, nextAppType, options) {
+  const workspaceRoot = trim(options.workspaceRoot);
+  const manifestPath = trim(entry.manifestPath);
+  if (!workspaceRoot || !manifestPath) {
+    return null;
+  }
+  const absoluteRoot = path.resolve(workspaceRoot);
+  const absoluteManifest = path.resolve(absoluteRoot, manifestPath);
+  const relative = path.relative(absoluteRoot, absoluteManifest);
+  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
+    return null;
+  }
+  let text;
+  try {
+    text = readFileSync(absoluteManifest, 'utf8');
+  } catch {
+    return null;
+  }
+  const patched = replaceManifestAppType(text, nextAppType);
+  if (!patched) {
+    return null;
+  }
+  writeFileSync(absoluteManifest, patched.text, 'utf8');
+  return {
+    manifestPath: relative.split(path.sep).join('/'),
+    previous: patched.previous,
+    appType: trim(nextAppType).toUpperCase(),
+  };
 }
 
 /**
@@ -444,6 +491,75 @@ export function planRegistrationItem(entry, allEntries, environment, options = {
     surfaces: [],
   };
 
+  // Surface first: the deploy application kind and the IAM application type are
+  // both derived from the manifest runtime + delivery facts the inventory read
+  // (`resolveDeployAppSurface`). The declared `app.appType` is not the authority:
+  // it cannot distinguish H5 from PC, and Flutter, mini program, native mobile,
+  // and API delivery collapse to the same few values.
+  const deployKindOverride = trim(options.deployAppKind).toUpperCase();
+  if (deployKindOverride && !NEW_REGISTRATION_DEPLOY_APP_KINDS.includes(deployKindOverride)) {
+    throw new RegistrationConfigurationError(
+      `deployAppKind=${JSON.stringify(options.deployAppKind)} is not a deploy application kind a new `
+      + `registration may select; expected one of ${NEW_REGISTRATION_DEPLOY_APP_KINDS.join('|')}`,
+    );
+  }
+  plan.deployKind = deployKindOverride || trim(entry.deployAppKind).toUpperCase();
+  plan.deployKindSource = deployKindOverride
+    ? '--deploy-app-kind override'
+    : trim(entry.deployAppKindSource);
+  plan.surfaceNotes = Array.isArray(entry.surfaceNotes) ? [...entry.surfaceNotes] : [];
+  if (trim(entry.surfaceNameWarning)) {
+    plan.surfaceNotes.push(entry.surfaceNameWarning);
+  }
+  plan.appTypeDeclared = trim(entry.appType);
+  plan.canonicalAppType = trim(entry.canonicalAppType).toUpperCase();
+  plan.applicationType = trim(plan.applicationType) || (
+    plan.deployKind ? trim(entry.applicationType) : ''
+  );
+
+  for (const defect of entry.surfaceDefects ?? []) {
+    if (deployKindOverride) {
+      // The override is the operator's explicit decision about the surface; the
+      // ambiguity stays visible as a note instead of blocking what was chosen.
+      plan.surfaceNotes.push(`overridden by --deploy-app-kind=${deployKindOverride}: ${defect}`);
+      continue;
+    }
+    defects.push(`${entry.id}: ${defect}`);
+  }
+  if (deployKindOverride && !plan.applicationType) {
+    plan.applicationType = applicationTypeForDeployKind(deployKindOverride);
+    if (plan.applicationType) {
+      plan.applicationTypeSource = '--deploy-app-kind override';
+    }
+  }
+  if (!plan.deployKind) {
+    defects.push(
+      `${entry.id}: the deploy application kind cannot be resolved from the manifest surface. `
+      + 'Declare runtime.family/runtime.framework plus publish.platforms per '
+      + 'APP_MANIFEST_SPEC.md §6.1, split a multi-surface root into its own application roots, '
+      + 'or pass --deploy-app-kind explicitly after reviewing the surface',
+    );
+  }
+
+  const defaultApplicationType = trim(options.defaultApplicationType).toLowerCase();
+  if (!plan.applicationType && defaultApplicationType) {
+    if (!IAM_TENANT_APPLICATION_TYPES.includes(defaultApplicationType)) {
+      throw new RegistrationConfigurationError(
+        `defaultApplicationType=${JSON.stringify(defaultApplicationType)} is not one of ${IAM_TENANT_APPLICATION_TYPES.join('|')}`,
+      );
+    }
+    plan.applicationType = defaultApplicationType;
+    plan.applicationTypeSource = '--default-app-type';
+  } else if (plan.applicationType) {
+    plan.applicationTypeSource = 'manifest surface';
+  }
+  const defaultPermissionScope = Array.isArray(options.defaultPermissionScope)
+    ? options.defaultPermissionScope.filter((entry) => trim(entry).length > 0)
+    : [];
+  if (plan.permissionScope.length === 0 && defaultPermissionScope.length > 0) {
+    plan.permissionScope = [...defaultPermissionScope];
+  }
+
   // A server-only root mints no public client token, so there is no
   // `accessTokenPermissionScope` for the registration to carry. Skipping it is an
   // explicit, reported outcome with its reason — never a silent drop — and
@@ -464,11 +580,41 @@ export function planRegistrationItem(entry, allEntries, environment, options = {
 
   if (plan.applicationType === '') {
     defects.push(
-      `${entry.id}: app.appType is missing from agent.app.config.json; IAM provisioning needs a `
-      + 'product-semantic applicationType',
+      `${entry.id}: app.appType is missing from agent.app.config.json and the runtime surface does `
+      + 'not imply an IAM applicationType; declare app.appType or pass --default-app-type',
     );
   }
-  if (plan.permissionScopeRequirement === PERMISSION_SCOPE_REQUIREMENTS.MISSING_CLIENT_ENV_CONFIGURATION) {
+  if (plan.canonicalAppType && plan.appTypeDeclared && plan.appTypeDeclared !== plan.canonicalAppType) {
+    // The surface proves the declared product type wrong (for example APP_HTML on a
+    // Flutter root). Writing back is an explicit repair; otherwise the operator
+    // must fix the manifest, because platform_app/catalog projection reads it.
+    if (options.fixAppTypes === true && options.dryRun === true) {
+      // A plan must not mutate the tree: report the repair the real run would do.
+      plan.surfaceNotes.push(
+        `--fix-app-types would rewrite app.appType ${JSON.stringify(plan.appTypeDeclared)} -> `
+        + `${JSON.stringify(plan.canonicalAppType)} in ${entry.manifestPath}`,
+      );
+      plan.appTypeDeclared = plan.canonicalAppType;
+      plan.appTypeRepairPlanned = { previous: trim(entry.appType), appType: plan.canonicalAppType };
+    } else {
+      const repaired = options.fixAppTypes === true
+        ? repairManifestAppType(entry, plan.canonicalAppType, options)
+        : null;
+      if (repaired) {
+        plan.appTypeDeclared = plan.canonicalAppType;
+        plan.appTypeRepair = repaired;
+      } else {
+        defects.push(
+          `${entry.id}: app.appType=${JSON.stringify(plan.appTypeDeclared)} contradicts the surface the `
+          + `runtime facts prove (${plan.deployKind}: expected ${plan.canonicalAppType}). Fix the `
+          + 'manifest, or pass --fix-app-types to write the derived value back into '
+          + 'agent.app.config.json',
+        );
+      }
+    }
+  }
+  if (plan.permissionScopeRequirement === PERMISSION_SCOPE_REQUIREMENTS.MISSING_CLIENT_ENV_CONFIGURATION
+    && plan.permissionScope.length === 0) {
     // Kept separate from the scope defect on purpose: this root's client env was
     // never configured, so asking for a scope tells the operator to edit the wrong
     // file. The actionable prerequisite is the materialization declaration.
@@ -497,20 +643,22 @@ export function planRegistrationItem(entry, allEntries, environment, options = {
   }
   try {
     const resolved = resolveDeploySlug(entry, allEntries);
-    plan.slug = resolved.slug;
-    plan.slugSource = resolved.slugSource;
-    plan.slugDisambiguated = resolved.disambiguated;
+    const suffix = trim(options.slugSuffix);
+    plan.slug = suffix ? `${resolved.slug}${suffix}`.slice(0, 120) : resolved.slug;
+    plan.slugSource = suffix ? `${resolved.slugSource}+slugSuffix` : resolved.slugSource;
+    plan.slugDisambiguated = resolved.disambiguated || Boolean(suffix);
   } catch (error) {
     defects.push(error instanceof Error ? error.message : String(error));
   }
 
-  if (plan.slug) {
+  if (plan.slug && plan.deployKind) {
     plan.deployCreateIdempotencyKey = deployAppCreateIdempotencyKey(environment, plan.slug);
     plan.deployCreateBody = buildDeployAppCreateBody({
       slug: plan.slug,
       name: entry.appName,
       displayName: entry.displayName,
-      appKind: deployAppKindForApplicationType(plan.applicationType),
+      appKind: plan.deployKind,
+      ownerType: options.deployOwnerType,
       environment,
       metadata: {
         'sdkwork.io/source-repository': entry.repo,
@@ -530,8 +678,16 @@ export function planRegistrationItem(entry, allEntries, environment, options = {
       slug: plan.slug,
       pattern: options.primaryDomainPattern,
     });
-    plan.primaryDomain = resolvedDomain.domain;
-    plan.primaryDomainSource = resolvedDomain.source;
+    let resolvedDomainValue = resolvedDomain.domain;
+    const labelSuffix = trim(options.primaryDomainLabelSuffix);
+    if (resolvedDomainValue && labelSuffix) {
+      const [label, ...rest] = resolvedDomainValue.split('.');
+      resolvedDomainValue = `${label}${labelSuffix}${rest.length > 0 ? `.${rest.join('.')}` : ''}`;
+    }
+    plan.primaryDomain = resolvedDomainValue;
+    plan.primaryDomainSource = labelSuffix
+      ? `${resolvedDomain.source}+labelSuffix`
+      : resolvedDomain.source;
     if (!resolvedDomain.domain) {
       defects.push(
         `${entry.id}: no primaryDomain source for ${environment}. IAM enable refuses an `
@@ -648,6 +804,17 @@ async function withRetries(operation, policy) {
 async function ensureDeployApplication(context, plan) {
   const { deployClient, options } = context;
   const recorded = plan.recordedAnchor;
+  // Adopting an existing row is only valid when it still carries the kind the
+  // manifest surface resolves to. `app_kind` is immutable, so a row registered by
+  // an older, mis-detecting run cannot be silently reused: the item fails with the
+  // corrective action instead of wiring a token to the wrong surface.
+  const adopt = (item, created, attempts, lookup) => {
+    const defect = verifyDeployAppKind(readDeployAppItem(item), plan.deployKind, plan.label);
+    if (defect) {
+      throw new RegistrationConfigurationError(defect, { slug: plan.slug, lookup });
+    }
+    return { item, created, attempts, lookup };
+  };
   // A recorded anchor that is also a uuid can be read directly; the app API
   // addresses applications by uuid, so this is the only exact re-read.
   if (recorded && options.anchorKind === 'deploy-application-uuid') {
@@ -656,12 +823,7 @@ async function ensureDeployApplication(context, plan) {
       context.retryPolicy,
     );
     if (existing.value) {
-      return {
-        item: existing.value,
-        created: false,
-        attempts: existing.attempts,
-        lookup: 'anchor',
-      };
+      return adopt(existing.value, false, existing.attempts, 'anchor');
     }
   }
   const found = await withRetries(
@@ -669,7 +831,7 @@ async function ensureDeployApplication(context, plan) {
     context.retryPolicy,
   );
   if (found.value) {
-    return { item: found.value, created: false, attempts: found.attempts, lookup: 'slug' };
+    return adopt(found.value, false, found.attempts, 'slug');
   }
   try {
     const created = await withRetries(
@@ -678,7 +840,7 @@ async function ensureDeployApplication(context, plan) {
       }),
       context.retryPolicy,
     );
-    return { item: created.value, created: true, attempts: created.attempts, lookup: 'create' };
+    return adopt(created.value, true, created.attempts, 'create');
   } catch (error) {
     // A concurrent creator won `uk_deploy_app_tenant_slug`: adopt its row rather
     // than failing the item, because the deterministic key would have replayed
@@ -689,12 +851,7 @@ async function ensureDeployApplication(context, plan) {
         context.retryPolicy,
       );
       if (adopted.value) {
-        return {
-          item: adopted.value,
-          created: false,
-          attempts: adopted.attempts,
-          lookup: 'slug-after-conflict',
-        };
+        return adopt(adopted.value, false, adopted.attempts, 'slug-after-conflict');
       }
     }
     throw error;
@@ -741,17 +898,22 @@ function resolveAnchor(context, plan, deployItem) {
 }
 
 async function provisionIamInstallation(context, plan, anchor, applicationType) {
+  const organizationId = trim(context.options.ownershipScope).toUpperCase() === 'ORGANIZATION'
+    ? trim(context.options.organizationId) || plan.organizationId
+    : plan.organizationId;
   const body = buildInstallationProvisionBody({
     deployApplicationId: anchor,
     anchorKind: context.options.anchorKind,
     applicationType,
     environment: plan.environment,
     tenantId: plan.tenantId,
-    organizationId: plan.organizationId,
+    organizationId,
     displayName: plan.displayName || plan.slug,
     appKey: plan.slug,
     accessPermissions: plan.permissionScope,
     primaryDomain: plan.primaryDomain,
+    ownershipScope: context.options.ownershipScope,
+    ownerUserId: context.options.ownerUserId,
   });
   const provisioned = await withRetries(
     () => context.iamClient.provisionInstallation(body),
@@ -867,6 +1029,8 @@ async function enableIamInstallation(context, plan, item) {
   const enabled = await withRetries(
     () => context.iamClient.enableInstallation(item.installationId, {
       tenantId: plan.tenantId,
+      primaryDomain: plan.primaryDomain,
+      accessPermissions: plan.permissionScope,
     }),
     context.retryPolicy,
   );
@@ -923,10 +1087,19 @@ async function registerOne(context, plan) {
     slug: plan.slug,
     slugSource: plan.slugSource,
     applicationType: plan.applicationType,
+    applicationTypeSource: plan.applicationTypeSource ?? '',
+    deployAppKind: plan.deployKind,
+    deployAppKindSource: plan.deployKindSource,
+    appType: plan.appTypeDeclared,
+    canonicalAppType: plan.canonicalAppType,
     permissionScopeCount: plan.permissionScope.length,
     permissionScopeRequirement: plan.permissionScopeRequirement,
     permissionScopeRequirementReason: plan.permissionScopeRequirementReason,
     permissionScopeRequirementNotes: plan.permissionScopeRequirementNotes,
+    notes: [
+      ...(plan.permissionScopeRequirementNotes ?? []),
+      ...(plan.surfaceNotes ?? []),
+    ],
     clientSurface: plan.clientSurface,
     serversOnly: plan.serversOnly,
     primaryDomain: plan.primaryDomain,
@@ -947,6 +1120,7 @@ async function registerOne(context, plan) {
     materialize: { status: 'pending' },
     attempts: 0,
     error: '',
+    ...(plan.appTypeRepair ? { appTypeRepair: plan.appTypeRepair } : {}),
   };
   try {
     const deployOutcome = await ensureDeployApplication(context, plan);
@@ -1361,6 +1535,8 @@ export async function registerApplications(options = {}, dependencies = {}) {
     materialize: options.materialize !== false,
     registerEnvironments: options.registerEnvironments !== false,
     primaryDomainPattern: trim(options.primaryDomainPattern),
+    deployAppKind: trim(options.deployAppKind).toUpperCase(),
+    fixAppTypes: options.fixAppTypes === true,
     concurrency,
     maxAttempts,
     retryDelayMs,
@@ -1399,8 +1575,16 @@ export async function registerApplications(options = {}, dependencies = {}) {
         deploymentProfile: explicitDeploymentProfile,
         anchorOverrides,
         primaryDomainPattern: options.primaryDomainPattern,
+        slugSuffix: options.slugSuffix,
+        primaryDomainLabelSuffix: options.primaryDomainLabelSuffix,
+        deployOwnerType: options.deployOwnerType,
+        ignoreRecordedAnchor: options.ignoreRecordedAnchor === true,
         includeServersOnly: options.includeServersOnly === true,
         anchorGroup,
+        deployAppKind: options.deployAppKind,
+        fixAppTypes: options.fixAppTypes === true,
+        dryRun: options.dryRun === true,
+        workspaceRoot,
       },
     );
     plan.repoAbsoluteRoot = repoRoot;
@@ -1413,7 +1597,9 @@ export async function registerApplications(options = {}, dependencies = {}) {
       sink.absolutePath = path.resolve(workspaceRoot, sink.path);
       sink.absoluteRepoRoot = repoRoot;
     }
-    const recorded = readPlanRecordedAnchor(plan);
+    const recorded = options.ignoreRecordedAnchor === true
+      ? { value: '', conflict: [] }
+      : readPlanRecordedAnchor(plan);
     if (recorded.conflict.length > 0) {
       defects.push(
         `${entry.id}: conflicting ${recorded.keyLabel} values across environment `
@@ -1456,6 +1642,11 @@ export async function registerApplications(options = {}, dependencies = {}) {
         slugSource: plan.slugSource,
         slugDisambiguated: Boolean(plan.slugDisambiguated),
         applicationType: plan.applicationType,
+        applicationTypeSource: plan.applicationTypeSource ?? '',
+        deployAppKind: plan.deployKind,
+        deployAppKindSource: plan.deployKindSource,
+        appType: plan.appTypeDeclared,
+        canonicalAppType: plan.canonicalAppType,
         permissionScopeCount: plan.permissionScope.length,
         permissionScopeRequirement: plan.permissionScopeRequirement,
         permissionScopeRequirementReason: plan.permissionScopeRequirementReason,
@@ -1464,7 +1655,10 @@ export async function registerApplications(options = {}, dependencies = {}) {
         primaryDomain: plan.primaryDomain,
         primaryDomainSource: plan.primaryDomainSource,
         anchorGroup: plan.anchorGroup,
-        notes: plan.permissionScopeRequirementNotes,
+        notes: [
+          ...(plan.permissionScopeRequirementNotes ?? []),
+          ...(plan.surfaceNotes ?? []),
+        ],
       };
       if (skip) {
         report.entries.push({
@@ -1534,10 +1728,29 @@ export async function registerApplications(options = {}, dependencies = {}) {
             : 'not-applicable',
         },
         defects: plan.defects,
+        ...(plan.appTypeRepair ? { appTypeRepair: plan.appTypeRepair } : {}),
+        ...(plan.appTypeRepairPlanned ? { appTypeRepairPlanned: plan.appTypeRepairPlanned } : {}),
       });
     }
     report.counts = summarizeCounts(report.entries, plans.length);
     return report;
+  }
+
+  const ownershipScope = trim(options.ownershipScope).toUpperCase();
+  if (ownershipScope && !['TENANT', 'ORGANIZATION', 'USER'].includes(ownershipScope)) {
+    throw new RegistrationConfigurationError(
+      `ownershipScope=${JSON.stringify(options.ownershipScope)} is not TENANT, ORGANIZATION, or USER`,
+    );
+  }
+  if (ownershipScope === 'ORGANIZATION' && !/^[1-9][0-9]*$/u.test(trim(options.organizationId))) {
+    throw new RegistrationConfigurationError(
+      'ORGANIZATION registration requires a positive organizationId override',
+    );
+  }
+  if (ownershipScope === 'USER' && !/^[1-9][0-9]*$/u.test(trim(options.ownerUserId))) {
+    throw new RegistrationConfigurationError(
+      'USER registration requires a positive ownerUserId',
+    );
   }
 
   const settings = options.settings;
@@ -1559,6 +1772,7 @@ export async function registerApplications(options = {}, dependencies = {}) {
       baseUrl: settings.iam.baseUrl,
       auth: settings.iam.auth,
       management: settings.iam.management,
+      transport: settings.iam.transport,
       timeoutMs: settings.iam.timeoutMs,
       fetchImpl: dependencies.fetchImpl,
     });
@@ -1595,6 +1809,11 @@ export async function registerApplications(options = {}, dependencies = {}) {
     environment: plan.environment,
     slug: plan.slug,
     applicationType: plan.applicationType,
+    applicationTypeSource: plan.applicationTypeSource ?? '',
+    deployAppKind: plan.deployKind,
+    deployAppKindSource: plan.deployKindSource,
+    appType: plan.appTypeDeclared,
+    canonicalAppType: plan.canonicalAppType,
     permissionScopeCount: plan.permissionScope.length,
     permissionScopeRequirement: plan.permissionScopeRequirement,
     clientSurface: plan.clientSurface,

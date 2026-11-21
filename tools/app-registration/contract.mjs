@@ -88,8 +88,27 @@ export const DEPLOY_APP_SLUG_MAX_LEN = 120;
 /** Longest deploy application name accepted by `apps.create`. */
 export const DEPLOY_APP_NAME_MAX_LEN = 200;
 
-/** Product-semantic application types IAM provisioning accepts. */
-export const IAM_TENANT_APPLICATION_TYPES = ['api', 'h5', 'pc', 'flutter', 'other'];
+/**
+ * Product-semantic tenant-application types IAM provisioning accepts.
+ *
+ * This is the ten-value vocabulary of the IAM runtime and its
+ * `@sdkwork/iam-application-bootstrap` framework (endpoint, not rendering
+ * technology): the web surfaces, Flutter, the two mini-program providers, the
+ * three native mobile kinds, desktop, API, and the `other` fallback. The
+ * registrar sends the endpoint it proved, never a collapsed subset.
+ */
+export const IAM_TENANT_APPLICATION_TYPES = [
+  'api',
+  'h5',
+  'pc',
+  'flutter',
+  'miniprogram',
+  'ios',
+  'android',
+  'harmonyos',
+  'desktop',
+  'other',
+];
 
 /** Canonical registration environments. */
 export const REGISTRATION_ENVIRONMENTS = [
@@ -224,38 +243,464 @@ export function defaultDeploymentProfile(environment) {
   return DEFAULT_DEPLOYMENT_PROFILE_BY_ENVIRONMENT.get(normalizeEnvironment(environment));
 }
 
+/** Deploy application kinds (`deploy_app.app_kind`, Deploy's `AppKind` enum). */
+export const DEPLOY_APP_KINDS = Object.freeze([
+  'H5_WEB',
+  'PC_WEB',
+  'WECHAT_MINIPROGRAM',
+  'DOUYIN_MINIPROGRAM',
+  'FLUTTER_APP',
+  'IOS_APP',
+  'ANDROID_APP',
+  'HARMONYOS_APP',
+  'API_SERVICE',
+  'DESKTOP_APP',
+  'STATIC_WEB',
+  'SPA_WEB',
+]);
+
 /**
- * Map the manifest `app.appType` onto the IAM provisioning `applicationType`.
- * @param appType - manifest `app.appType`
- * @returns the provisioning type, `other` for an unrecognized value, or `''`
+ * Kinds a new registration may select.
+ *
+ * `SPA_WEB` is a retired rendering-model value: pre-existing rows may still
+ * carry it, but a new registration MUST NOT produce it
+ * (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §5).
  */
-export function mapManifestAppTypeToApplicationType(appType) {
-  const normalized = trimToValue(appType).toUpperCase();
-  if (!normalized) {
+export const NEW_REGISTRATION_DEPLOY_APP_KINDS = Object.freeze(
+  DEPLOY_APP_KINDS.filter((kind) => kind !== 'SPA_WEB'),
+);
+
+/** Manifest `app.appType` values (`PlusProjectType`, `APP_MANIFEST_SPEC.md` §4). */
+export const MANIFEST_APP_TYPES = Object.freeze([
+  'NONE',
+  'SDK',
+  'PPT',
+  'APP_HTML',
+  'APP_VUE',
+  'APP_FLUTTER',
+  'APP_UNIAPP',
+  'APP_REACT',
+  'APP_UNITY',
+  'APP_HARMONY',
+  'VIDEO',
+  'POSTER',
+]);
+
+/**
+ * IAM `applicationType` implied by one deploy kind.
+ *
+ * IAM's vocabulary names the endpoint the installation serves, the deploy kind is
+ * the delivery shape; this table is the only place the two are related
+ * (`IAM_APPLICATION_BOOTSTRAP_SPEC.md` §2.1). Both vocabularies carry the
+ * mini-program, native-mobile, and desktop members, so the IAM leg keeps the
+ * proven endpoint instead of collapsing to `other`/`pc`. The two legacy web kinds
+ * cannot name one endpoint, so they keep IAM's `pc` web default.
+ */
+const IAM_APPLICATION_TYPE_BY_DEPLOY_KIND = Object.freeze({
+  H5_WEB: 'h5',
+  PC_WEB: 'pc',
+  STATIC_WEB: 'pc',
+  DESKTOP_APP: 'desktop',
+  FLUTTER_APP: 'flutter',
+  API_SERVICE: 'api',
+  WECHAT_MINIPROGRAM: 'miniprogram',
+  DOUYIN_MINIPROGRAM: 'miniprogram',
+  IOS_APP: 'ios',
+  ANDROID_APP: 'android',
+  HARMONYOS_APP: 'harmonyos',
+});
+
+/**
+ * Manifest `app.appType` a deploy kind forces, when the closed set has one.
+ *
+ * The closed set has no member for H5, PC, native mobile, or mini program
+ * delivery (`APP_UNIAPP` covers uni-app only), so those kinds do not force a
+ * value: the declared type cannot be proven wrong from the kind alone.
+ */
+const FORCED_MANIFEST_APP_TYPE_BY_DEPLOY_KIND = Object.freeze({
+  FLUTTER_APP: 'APP_FLUTTER',
+  HARMONYOS_APP: 'APP_HARMONY',
+});
+
+/** Client architecture family of each `publish.platforms` value. */
+const PLATFORM_ARCHITECTURE = new Map([
+  ['WEB', 'web'],
+  ['H5', 'web'],
+  ['H5_WEIXIN', 'web'],
+  ['DESKTOP', 'desktop'],
+  ['DESKTOP_WINDOWS', 'desktop'],
+  ['DESKTOP_MACOS', 'desktop'],
+  ['DESKTOP_LINUX', 'desktop'],
+  ['WINDOWS', 'desktop'],
+  ['MACOS', 'desktop'],
+  ['LINUX', 'desktop'],
+  ['MP', 'mini-program'],
+  ['MP_WEIXIN', 'mini-program'],
+  ['MP_ALIPAY', 'mini-program'],
+  ['MP_BAIDU', 'mini-program'],
+  ['MP_TOUTIAO', 'mini-program'],
+  ['MP_LARK', 'mini-program'],
+  ['MP_QQ', 'mini-program'],
+  ['MP_KUAISHOU', 'mini-program'],
+  ['MP_JD', 'mini-program'],
+  ['MP_360', 'mini-program'],
+  ['MP_DINGTALK', 'mini-program'],
+  ['MP_ALI', 'mini-program'],
+  ['MP_DOUYIN', 'mini-program'],
+  ['MP_WEIXIN_GAME', 'mini-program'],
+  ['MP_QQ_GAME', 'mini-program'],
+  ['MP_BAIDU_GAME', 'mini-program'],
+  ['MP_TOUTIAO_GAME', 'mini-program'],
+  ['APP', 'mobile'],
+  ['APP_PLUS', 'mobile'],
+  ['APP_IOS', 'mobile'],
+  ['APP_ANDROID', 'mobile'],
+  ['APP_HARMONY', 'mobile'],
+  ['IOS', 'mobile'],
+  ['ANDROID', 'mobile'],
+  ['HARMONYOS', 'mobile'],
+  ['API', 'api'],
+  ['OTHER', 'other'],
+]);
+
+/** Architecture families one deploy kind can deliver (`§5` platform matrix). */
+const DEPLOY_KIND_ARCHITECTURES = Object.freeze({
+  H5_WEB: ['web', 'mobile'],
+  PC_WEB: ['web', 'desktop'],
+  STATIC_WEB: ['web'],
+  DESKTOP_APP: ['desktop'],
+  FLUTTER_APP: ['mobile', 'web', 'desktop'],
+  WECHAT_MINIPROGRAM: ['mini-program'],
+  DOUYIN_MINIPROGRAM: ['mini-program'],
+  IOS_APP: ['mobile'],
+  ANDROID_APP: ['mobile'],
+  HARMONYOS_APP: ['mobile'],
+  API_SERVICE: ['api'],
+});
+
+/** Native application kinds of one App-target platform. */
+const MOBILE_APP_KIND_BY_PLATFORM = Object.freeze({
+  APP_IOS: 'IOS_APP',
+  IOS: 'IOS_APP',
+  APP_ANDROID: 'ANDROID_APP',
+  ANDROID: 'ANDROID_APP',
+  APP_HARMONY: 'HARMONYOS_APP',
+  HARMONYOS: 'HARMONYOS_APP',
+});
+
+/** Frameworks whose delivery is a desktop host executable. */
+const DESKTOP_HOST_FRAMEWORKS = new Set([
+  'electron',
+  'tauri',
+  'react-tauri',
+  'react-electron',
+  'vue-tauri',
+  'vue-electron',
+]);
+
+/** Frameworks that are a plain browser build, never a native package. */
+const BROWSER_FRAMEWORKS = new Set([
+  'react',
+  'react-vite',
+  'react-vite-h5',
+  'react-pc',
+  'react-workspace',
+  'vue',
+  'vue-vite',
+  'next',
+  'nuxt',
+  'svelte',
+  'angular',
+  'web',
+]);
+
+/** Server runtimes; a root with these families is an API deployment, not a UI. */
+const SERVER_RUNTIME_FAMILIES = new Set(['server', 'cli', 'library', 'plugin']);
+
+/** `runtimeTarget` values that mean a browser artifact was built. */
+const BROWSER_RUNTIME_TARGETS = new Set(['browser', 'web', 'h5', 'capacitor-ios', 'capacitor-android']);
+
+/** `runtimeTarget` values that mean the Mobile/H5 lane rather than a PC browser. */
+const H5_RUNTIME_TARGETS = new Set(['h5', 'capacitor-ios', 'capacitor-android']);
+
+/** `runtimeTarget` values that mean a server-side artifact only. */
+const SERVER_RUNTIME_TARGETS = new Set(['server', 'container']);
+
+function asUpperList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => trimToValue(entry).toUpperCase())
+    .filter((entry) => entry.length > 0);
+}
+
+function asLowerList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => trimToValue(entry).toLowerCase())
+    .filter((entry) => entry.length > 0);
+}
+
+/**
+ * Resolve the deploy application kind and the IAM application type of one
+ * application root from its manifest facts.
+ *
+ * The registrar MUST NOT infer the kind from `app.appType` alone (or from a
+ * mapped `applicationType`): `APP_REACT` covers both an H5 and a PC root, and a
+ * declared value can be stale or absent (a native mini program root has no
+ * closed-set member). `APP_MANIFEST_SPEC.md` §6.1 makes `runtime.family`,
+ * `runtime.framework`, `clientArchitectures`, and `publish.platforms` the surface
+ * authority, so this function reads those facts, derives the IAM type from the
+ * proven endpoint, and fails closed instead of defaulting.
+ *
+ * @param input - manifest surface facts
+ * @param input.appType - declared `app.appType`
+ * @param input.runtimeFamily - `runtime.family`
+ * @param input.runtimeFramework - `runtime.framework`
+ * @param input.clientArchitectures - `runtime.clientArchitectures`
+ * @param input.publishPlatforms - `publish.platforms`
+ * @param input.runtimeTargets - `artifacts.installConfig.packages[].runtimeTarget`
+ * @returns the resolved kind/type, the forced app type, and every defect
+ */
+export function resolveDeployAppSurface(input = {}) {
+  const appType = trimToValue(input.appType).toUpperCase();
+  const family = trimToValue(input.runtimeFamily).toLowerCase();
+  const framework = trimToValue(input.runtimeFramework).toLowerCase();
+  const architectures = new Set(asLowerList(input.clientArchitectures));
+  const platforms = new Set(asUpperList(input.publishPlatforms));
+  const runtimeTargets = new Set(asLowerList(input.runtimeTargets));
+  const defects = [];
+  const notes = [];
+
+  const hasArchitecture = (...names) => names.some((name) => architectures.has(name));
+  const hasPlatform = (...names) => names.some((name) => platforms.has(name));
+  const platformArchitectures = new Set(
+    [...platforms]
+      .map((platform) => PLATFORM_ARCHITECTURE.get(platform))
+      .filter((architecture) => architecture !== undefined && architecture !== 'other'),
+  );
+
+  // The `runtime.framework` string is the decisive fact; `clientArchitectures`
+  // corroborates it. Only a manifest that declares no framework falls back to the
+  // architecture list, because a multi-surface repository lists every architecture
+  // it ships (for example a web root whose `clientArchitectures` also mentions
+  // flutter and mini-program) and must not be classified by the widest member.
+  const frameworkDecides = framework !== '';
+  const byFrameworkOrArchitecture = (name) => framework === name
+    || (!frameworkDecides && hasArchitecture(name));
+
+  const isFlutter = byFrameworkOrArchitecture('flutter');
+  const isHarmonyNative = framework === 'harmony-native'
+    || framework === 'arkts'
+    || (!frameworkDecides && hasArchitecture('harmony-native'));
+  const isAndroidNative = byFrameworkOrArchitecture('android-native');
+  const isIosNative = byFrameworkOrArchitecture('ios-native');
+  const isDesktopHost = DESKTOP_HOST_FRAMEWORKS.has(framework)
+    || (!frameworkDecides && hasArchitecture('tauri', 'electron'));
+  const isStaticWeb = framework === 'static-html'
+    || (!frameworkDecides && hasArchitecture('static-web'));
+  const isUniApp = framework === 'uni-app'
+    || framework === 'uni-app-x'
+    || (!frameworkDecides && hasArchitecture('uniapp', 'uniappx'));
+  const miniProgramFramework = framework === 'mp-weixin'
+    || framework.startsWith('mp-')
+    || /(^|-)mini-program$/u.test(framework);
+  const miniProgramDelivery = family === 'mini-program' || miniProgramFramework;
+  const hasH5Evidence = framework === 'react-h5'
+    || framework === 'react-capacitor'
+    || framework === 'vue-h5'
+    || framework === 'vue-capacitor'
+    || hasArchitecture('h5', 'capacitor')
+    || hasPlatform('H5', 'H5_WEIXIN')
+    || [...runtimeTargets].some((target) => H5_RUNTIME_TARGETS.has(target));
+  // An H5-only delivery is an H5 endpoint even when the manifest kept the coarse
+  // `web` family: the declared delivery platform is more specific than the
+  // family, and a root that also declares WEB is primarily the browser surface.
+  const h5OnlyDelivery = hasPlatform('H5', 'H5_WEIXIN') && !hasPlatform('WEB');
+  const browserTargeted = [...runtimeTargets].some((target) => BROWSER_RUNTIME_TARGETS.has(target));
+  const serverTargetedOnly = runtimeTargets.size > 0
+    && [...runtimeTargets].every((target) => SERVER_RUNTIME_TARGETS.has(target));
+
+  const nativeMarkers = [
+    isFlutter && 'flutter',
+    isHarmonyNative && 'harmony-native',
+    isAndroidNative && 'android-native',
+    isIosNative && 'ios-native',
+  ].filter(Boolean);
+  if (nativeMarkers.length > 1) {
+    defects.push(
+      `runtime declares ${nativeMarkers.join(' and ')} at once; one manifest root is one endpoint `
+      + 'surface, so split the implementations into their own roots',
+    );
+  }
+
+  /** Mini program kind from the declared MP platform. */
+  const miniProgramKind = () => {
+    const declared = [...platforms].filter((platform) => platform.startsWith('MP_'));
+    if (hasPlatform('MP_WEIXIN')) {
+      return 'WECHAT_MINIPROGRAM';
+    }
+    if (hasPlatform('MP_DOUYIN')) {
+      return 'DOUYIN_MINIPROGRAM';
+    }
+    if (declared.length > 0) {
+      defects.push(
+        `mini program platform ${declared.join(', ')} has no canonical deploy application kind; `
+        + 'Deploy can represent WeChat and Douyin mini programs only',
+      );
+      return '';
+    }
+    defects.push(
+      'a mini program root must declare its delivery platform (MP_WEIXIN or MP_DOUYIN) in '
+      + 'publish.platforms so the deploy application kind can be resolved',
+    );
     return '';
+  };
+
+  let deployAppKind = '';
+  let source = '';
+
+  if (defects.length === 0) {
+    if (isFlutter) {
+      deployAppKind = 'FLUTTER_APP';
+      source = 'runtime.framework=flutter';
+    } else if (isHarmonyNative) {
+      deployAppKind = 'HARMONYOS_APP';
+      source = 'runtime.framework=harmony-native';
+    } else if (isAndroidNative && isIosNative) {
+      defects.push(
+        'runtime declares both android-native and ios-native; a native mobile root is one '
+        + 'platform surface, so split Android and iOS into their own roots',
+      );
+    } else if (isAndroidNative) {
+      deployAppKind = 'ANDROID_APP';
+      source = 'runtime.framework=android-native';
+    } else if (isIosNative) {
+      deployAppKind = 'IOS_APP';
+      source = 'runtime.framework=ios-native';
+    } else if (miniProgramDelivery) {
+      deployAppKind = miniProgramKind();
+      source = 'publish.platforms=MP_*';
+    } else if (isUniApp) {
+      const declared = [...platforms].filter((platform) => platform.startsWith('APP_'));
+      const kinds = [...new Set(declared.map((platform) => MOBILE_APP_KIND_BY_PLATFORM[platform]))];
+      if (kinds.length > 1) {
+        defects.push(
+          `uni-app delivers ${declared.join(', ')} in one root; each of those platforms is its own `
+          + 'deploy application surface, so split them into separate application roots',
+        );
+      } else if (kinds.length === 1 && kinds[0]) {
+        deployAppKind = kinds[0];
+        source = `publish.platforms=${declared.join(',')}`;
+      } else if (hasPlatform('H5', 'H5_WEIXIN')) {
+        deployAppKind = 'H5_WEB';
+        source = 'publish.platforms=H5';
+      } else if (hasPlatform('WEB')) {
+        deployAppKind = 'PC_WEB';
+        source = 'publish.platforms=WEB';
+      } else {
+        defects.push(
+          'a uni-app root must declare its delivery surface (MP_*, APP_*, H5, or WEB) in '
+          + 'publish.platforms',
+        );
+      }
+    } else if (isStaticWeb) {
+      deployAppKind = 'STATIC_WEB';
+      source = 'runtime.framework=static-html';
+    } else if (isDesktopHost) {
+      deployAppKind = 'DESKTOP_APP';
+      source = 'runtime.framework=desktop host';
+    } else if (
+      hasH5Evidence
+      && (
+        family === 'mobile'
+        || family === ''
+        || framework.includes('h5')
+        || framework.includes('capacitor')
+        || h5OnlyDelivery
+      )
+    ) {
+      deployAppKind = 'H5_WEB';
+      source = hasArchitecture('h5') || framework.includes('h5')
+        ? 'runtime.framework=h5'
+        : 'publish.platforms/runtimeTargets=H5|browser';
+    } else if (family === 'web') {
+      deployAppKind = BROWSER_FRAMEWORKS.has(framework) || framework === ''
+        ? 'PC_WEB'
+        : serverTargetedOnly
+          ? 'API_SERVICE'
+          : 'PC_WEB';
+      source = deployAppKind === 'API_SERVICE'
+        ? 'runtime.family=web with server-only runtime targets'
+        : 'runtime.family=web';
+    } else if (family === 'desktop') {
+      deployAppKind = hasPlatform('WEB') || browserTargeted ? 'PC_WEB' : 'DESKTOP_APP';
+      source = deployAppKind === 'PC_WEB' ? 'runtime.family=desktop + WEB' : 'runtime.family=desktop';
+    } else if (SERVER_RUNTIME_FAMILIES.has(family)) {
+      deployAppKind = 'API_SERVICE';
+      source = `runtime.family=${family}`;
+    } else if (family === 'mobile') {
+      deployAppKind = 'H5_WEB';
+      source = 'runtime.family=mobile without a native framework';
+      notes.push(
+        'runtime.family=mobile declares no native framework (android-native, ios-native, '
+        + 'harmony-native, flutter); the root is registered as an H5 delivery — declare the '
+        + 'framework to make the surface explicit',
+      );
+    } else {
+      defects.push(
+        `cannot derive the deploy application kind: runtime.family=${JSON.stringify(family)} and `
+        + `runtime.framework=${JSON.stringify(framework)} match no surface. Declare the manifest `
+        + 'runtime metadata per APP_MANIFEST_SPEC.md §6.1 or pass --deploy-app-kind explicitly',
+      );
+    }
   }
-  switch (normalized) {
-    case 'APP_HTML':
-    case 'APP_H5':
-    case 'H5':
-      return 'h5';
-    case 'APP_FLUTTER':
-    case 'FLUTTER':
-      return 'flutter';
-    case 'APP_REACT':
-    case 'APP_VUE':
-    case 'APP_PC':
-    case 'PC':
-    case 'WEB':
-    case 'DESKTOP':
-      return 'pc';
-    case 'APP_API':
-    case 'API':
-    case 'SDK':
-      return 'api';
-    default:
-      return 'other';
+
+  if (deployAppKind) {
+    const accepted = DEPLOY_KIND_ARCHITECTURES[deployAppKind] ?? [];
+    const foreign = [...platformArchitectures].filter((architecture) => !accepted.includes(architecture));
+    if (foreign.length > 0) {
+      const article = /^[AEIOU]/u.test(deployAppKind) ? 'an' : 'a';
+      notes.push(
+        `publish.platforms also declares ${[...platforms]
+          .filter((platform) => foreign.includes(PLATFORM_ARCHITECTURE.get(platform)))
+          .join(', ')}; ${article} ${deployAppKind} deploy application serves `
+        + `${accepted.join('/')} only — the other surface needs its own deploy application`,
+      );
+    }
   }
+
+  // Only a kind whose closed-set member is unambiguous forces the declared type.
+  // Mini program delivery has no member of its own (`APP_UNIAPP` covers a uni-app
+  // project, not a native WXML root), so a wrong mini program `appType` is a
+  // warning, not a proven contradiction.
+  const canonicalAppType = FORCED_MANIFEST_APP_TYPE_BY_DEPLOY_KIND[deployAppKind]
+    ?? (isUniApp && deployAppKind !== '' ? 'APP_UNIAPP' : '');
+  const applicationType = IAM_APPLICATION_TYPE_BY_DEPLOY_KIND[deployAppKind] ?? '';
+  const appTypeWarning = appType === ''
+    || appType === 'NONE'
+    || !MANIFEST_APP_TYPES.includes(appType);
+  if (appTypeWarning) {
+    notes.push(
+      `app.appType=${JSON.stringify(appType)} is not a client application type; the surface is `
+      + 'classified from the runtime facts, but catalog/store projection reads app.appType — set it '
+      + `to one of ${MANIFEST_APP_TYPES.join('|')} that matches the surface`,
+    );
+  }
+
+  return {
+    deployAppKind,
+    deployAppKindSource: source,
+    applicationType,
+    canonicalAppType,
+    appTypeDeclared: appType,
+    appTypeWarning,
+    defects,
+    notes,
+  };
 }
 
 /**
@@ -647,13 +1092,36 @@ export function assertDeployApplicationIdForKind(value, label, anchorKind) {
  * Every persisted field is derived from the application identity only, so a
  * retried create produces the same `request_sha256` and replays the recorded row
  * instead of being rejected as "key reused with a different body".
+ *
+ * `appKind` is required and MUST come from {@link resolveDeployAppSurface}. The
+ * retired fallback (`API_SERVICE`) is deliberately gone: it silently registered
+ * every surface the old mapping did not know (Flutter, mini program, native
+ * mobile, HarmonyOS) as an API service.
  * @param input - slug plus manifest identity
  * @returns the request body
+ * @throws {RegistrationConfigurationError} when the kind is missing or not a deploy kind
  */
 export function buildDeployAppCreateBody(input) {
   const slug = trimToValue(input.slug);
   if (!slug) {
     throw new RegistrationConfigurationError('deploy application slug is required to create an app');
+  }
+  const appKind = trimToValue(input.appKind).toUpperCase();
+  if (!appKind) {
+    throw new RegistrationConfigurationError(
+      'appKind is required to create a deploy application; resolve it from the manifest surface '
+      + 'facts with resolveDeployAppSurface (runtime.family/framework, clientArchitectures, '
+      + 'publish.platforms) instead of relying on a default',
+      { slug },
+    );
+  }
+  if (!NEW_REGISTRATION_DEPLOY_APP_KINDS.includes(appKind)) {
+    throw new RegistrationConfigurationError(
+      `appKind=${JSON.stringify(input.appKind)} is not a deploy application kind a new registration `
+      + `may select; expected one of ${NEW_REGISTRATION_DEPLOY_APP_KINDS.join('|')} `
+      + '(SPA_WEB is legacy-only)',
+      { slug, appKind },
+    );
   }
   const name = (
     trimToValue(input.displayName)
@@ -663,8 +1131,17 @@ export function buildDeployAppCreateBody(input) {
   const body = {
     name,
     slug,
-    appKind: trimToValue(input.appKind) || 'API_SERVICE',
+    appKind,
   };
+  const ownerType = trimToValue(input.ownerType).toUpperCase();
+  if (ownerType) {
+    if (!['PLATFORM', 'TENANT', 'ORGANIZATION', 'USER'].includes(ownerType)) {
+      throw new RegistrationConfigurationError(
+        `ownerType=${JSON.stringify(input.ownerType)} is not PLATFORM, TENANT, ORGANIZATION, or USER`,
+      );
+    }
+    body.ownerType = ownerType;
+  }
   const environment = trimToValue(input.environment).toLowerCase();
   if (environment) {
     body.defaultEnvironment = environment.slice(0, 16);
@@ -677,25 +1154,180 @@ export function buildDeployAppCreateBody(input) {
 }
 
 /**
- * Deploy `appKind` for one application type.
+ * Verify an existing deploy application row still carries the resolved kind.
  *
- * Deploy's own vocabulary (`AppKind`) is a delivery shape, IAM's
- * `applicationType` is a product semantic shape; this is the only place the two
- * are related.
- * @param applicationType - IAM application type
- * @returns the deploy app kind
+ * `app_kind` is immutable (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` §5): a row
+ * created by an older registration whose surface was mis-detected cannot be
+ * repaired in place. The registrar therefore fails closed with the corrective
+ * action instead of adopting the wrong row and wiring a token to it.
+ * @param item - deploy application item (`readDeployAppItem` output)
+ * @param expectedKind - kind resolved from the manifest
+ * @param label - operator-facing item label
+ * @returns `''` when the row agrees or cannot be proven, else a defect message
  */
-export function deployAppKindForApplicationType(applicationType) {
-  switch (trimToValue(applicationType)) {
-    case 'h5':
-      return 'SPA_WEB';
-    case 'pc':
-      return 'SPA_WEB';
-    case 'api':
-      return 'API_SERVICE';
-    default:
-      return 'API_SERVICE';
+export function verifyDeployAppKind(item, expectedKind, label = 'application') {
+  const stored = trimToValue(item?.appKind).toUpperCase();
+  const expected = trimToValue(expectedKind).toUpperCase();
+  if (!stored || !expected || stored === expected) {
+    return '';
   }
+  return `${label}: deploy application ${JSON.stringify(item?.slug || item?.uuid || '')} is stored as `
+    + `${stored}, but the manifest surface resolves to ${expected}. app_kind is immutable, so an `
+    + 'existing row cannot be corrected in place: archive that draft row (it has no release yet) '
+    + 'and re-run the registration, or restore the manifest to the surface the row was created '
+    + 'with';
+}
+
+/**
+ * IAM application type implied by one deploy kind.
+ *
+ * Used when an operator resolves an ambiguous surface with an explicit
+ * `--deploy-app-kind` override, so the IAM provisioning type still follows the
+ * deploy kind instead of an unrelated declared value.
+ * @param deployAppKind - deploy `AppKind`
+ * @returns the IAM application type, or `''` when the kind is unknown
+ */
+export function applicationTypeForDeployKind(deployAppKind) {
+  return IAM_APPLICATION_TYPE_BY_DEPLOY_KIND[trimToValue(deployAppKind).toUpperCase()] ?? '';
+}
+
+/**
+ * Surface tokens an application directory name may encode.
+ *
+ * This is a consistency check, not a classifier: a root named
+ * `sdkwork-<product>-flutter-mobile` whose manifest claims a server runtime (the
+ * usual symptom of a surface manifest copied from the repository root) is called
+ * out instead of being registered under the wrong kind without a trace.
+ */
+const DIRECTORY_SURFACE_KINDS = Object.freeze([
+  { token: 'flutter', kinds: ['FLUTTER_APP'] },
+  { token: 'harmony', kinds: ['HARMONYOS_APP'] },
+  { token: 'mini-program', kinds: ['WECHAT_MINIPROGRAM', 'DOUYIN_MINIPROGRAM'] },
+  { token: 'miniprogram', kinds: ['WECHAT_MINIPROGRAM', 'DOUYIN_MINIPROGRAM'] },
+  { token: 'uniapp', kinds: ['WECHAT_MINIPROGRAM', 'DOUYIN_MINIPROGRAM', 'H5_WEB', 'PC_WEB', 'ANDROID_APP', 'IOS_APP'] },
+  { token: 'h5', kinds: ['H5_WEB'] },
+  { token: 'pc', kinds: ['PC_WEB', 'DESKTOP_APP'] },
+  { token: 'web', kinds: ['PC_WEB', 'H5_WEB', 'STATIC_WEB'] },
+  { token: 'desktop', kinds: ['DESKTOP_APP'] },
+  { token: 'ios', kinds: ['IOS_APP', 'FLUTTER_APP'] },
+  { token: 'android', kinds: ['ANDROID_APP', 'FLUTTER_APP'] },
+]);
+
+/**
+ * Warn when the application directory name and the resolved kind disagree.
+ * @param appDir - application directory (relative or a bare name)
+ * @param deployAppKind - kind resolved from the manifest surface
+ * @returns the warning, or `''` when they agree or the name names no surface
+ */
+export function describeSurfaceNameMismatch(appDir, deployAppKind) {
+  const kind = trimToValue(deployAppKind).toUpperCase();
+  if (!kind) {
+    return '';
+  }
+  const name = trimToValue(appDir).toLowerCase().replace(/[\\/]+$/u, '');
+  const base = name.split(/[\\/]/u).pop() ?? '';
+  if (!base || base === '.') {
+    return '';
+  }
+  const segments = base.split(/[^a-z0-9]+/u).filter(Boolean);
+  for (const entry of DIRECTORY_SURFACE_KINDS) {
+    const present = entry.token.includes('-')
+      ? base.includes(entry.token)
+      : segments.includes(entry.token);
+    if (present && !entry.kinds.includes(kind)) {
+      return `the application directory ${JSON.stringify(base)} names a ${entry.token} surface, `
+        + `but the manifest surface resolves to ${kind}; the manifest runtime facts and the root `
+        + 'identity disagree, so verify the surface manifest before releasing this application';
+    }
+  }
+  return '';
+}
+
+/**
+ * Replace `app.appType` in an authored manifest while preserving its formatting.
+ *
+ * The registrar never edits a manifest implicitly. This helper exists for the
+ * explicit `--fix-app-types` repair: the declared type contradicts the surface
+ * the runtime facts prove (for example `APP_HTML` on a Flutter root), and the
+ * operator asked for the derivation to be written back. Only the `appType`
+ * string token inside the top-level `app` object is rewritten, so key order,
+ * indentation, and every unrelated authored value survive byte-for-byte; the
+ * result is re-parsed and compared before it is returned.
+ * @param manifestText - authored `agent.app.config.json` text
+ * @param nextAppType - canonical `app.appType` to write
+ * @returns the new text and the previous value, or `null` when it cannot be patched
+ */
+export function replaceManifestAppType(manifestText, nextAppType) {
+  const source = String(manifestText ?? '');
+  const expected = trimToValue(nextAppType).toUpperCase();
+  if (!source || !expected) {
+    return null;
+  }
+  const appMatch = /"app"\s*:\s*\{/u.exec(source);
+  if (!appMatch) {
+    return null;
+  }
+  const appStart = appMatch.index + appMatch[0].length - 1;
+  let depth = 0;
+  let appEnd = -1;
+  let inString = false;
+  let escaped = false;
+  for (let index = appStart; index < source.length; index += 1) {
+    const character = source[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === '\\') {
+        escaped = true;
+      } else if (character === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+      continue;
+    }
+    if (character === '{') {
+      depth += 1;
+    } else if (character === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        appEnd = index + 1;
+        break;
+      }
+    }
+  }
+  if (appEnd < 0) {
+    return null;
+  }
+  const appSlice = source.slice(appStart, appEnd);
+  const typeMatch = /("appType"\s*:\s*")([^"\\]*)(")/u.exec(appSlice);
+  if (!typeMatch) {
+    return null;
+  }
+  const previous = typeMatch[2];
+  const patchedSlice = appSlice.slice(0, typeMatch.index)
+    + typeMatch[1]
+    + expected
+    + typeMatch[3]
+    + appSlice.slice(typeMatch.index + typeMatch[0].length);
+  const patched = source.slice(0, appStart) + patchedSlice + source.slice(appEnd);
+  try {
+    const before = JSON.parse(source.replace(/^\uFEFF/u, ''));
+    const after = JSON.parse(patched.replace(/^\uFEFF/u, ''));
+    if (after?.app?.appType !== expected || before?.app?.appType !== previous) {
+      return null;
+    }
+    const expectedObject = JSON.parse(JSON.stringify(before));
+    expectedObject.app.appType = expected;
+    if (JSON.stringify(expectedObject) !== JSON.stringify(after)) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  return { text: patched, previous };
 }
 
 /**
@@ -778,6 +1410,24 @@ export function buildInstallationProvisionBody(input) {
   if (primaryDomain) {
     command.primaryDomain = primaryDomain;
   }
+  const ownershipScope = trimToValue(input.ownershipScope).toUpperCase();
+  if (ownershipScope) {
+    if (!['TENANT', 'ORGANIZATION', 'USER'].includes(ownershipScope)) {
+      throw new RegistrationConfigurationError(
+        `ownershipScope=${JSON.stringify(input.ownershipScope)} is not TENANT, ORGANIZATION, or USER`,
+      );
+    }
+    command.ownershipScope = ownershipScope;
+    if (ownershipScope === 'USER') {
+      const ownerUserId = trimToValue(input.ownerUserId);
+      if (!/^[1-9][0-9]*$/u.test(ownerUserId)) {
+        throw new RegistrationConfigurationError(
+          'a USER-owned installation requires a positive decimal ownerUserId',
+        );
+      }
+      command.ownerUserId = ownerUserId;
+    }
+  }
   return command;
 }
 
@@ -816,6 +1466,7 @@ export function readDeployAppItem(item) {
     ),
     slug: trimToValue(item.slug),
     name: trimToValue(item.name),
+    appKind: trimToValue(item.appKind).toUpperCase(),
     appStatus: trimToValue(item.appStatus),
     tenantId: trimToValue(item.tenantId),
     raw: item,
@@ -929,6 +1580,7 @@ export function resolveRegistrationSettings(env = process.env) {
     },
     iam: {
       baseUrl: assertHttpBaseUrl(iamBase.value, iamBase.key),
+      transport: trimToValue(env.SDKWORK_IAM_TRANSPORT) || 'auto',
       auth: iamAuth,
       timeoutMs: readTimeout(env, REGISTRATION_SETTINGS_ENV.iam.timeoutMs),
       // The installation-environment route is dual-token; these credentials are
