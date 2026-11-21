@@ -12,7 +12,7 @@
  * - The deploy application is the installation identity. Deploy mints both the
  *   BIGINT `id` and the `uuid` server side; `apps.retrieve` addresses the row by
  *   `uuid` (`deploy_app.uuid`), while IAM binds its installation through
- *   `iam_tenant_application.deploy_application_id`, which Deploy's own identity
+ *   `iam_installation.deploy_application_id`, which Deploy's own identity
  *   provisioning port writes as the decimal BIGINT (`deploy_app.id`).
  * - The app API returns both on every list/retrieve/create/update response:
  *   `AppResponse.id` is the uuid and `AppResponse.deployApplicationId` is the
@@ -30,15 +30,15 @@
  *
  * - One deploy application has one IAM installation: `uk_iam_application_installation_deploy`
  *   makes `iam_application_installation.deploy_application_id` one-to-one, and
- *   `provision_tenant_application` reconciles deploy-application-first
- *   (`resolve_tenant_application_by_deploy_application_id`). The deploy
+ *   `provision_installation` reconciles deploy-application-first
+ *   (`resolve_installation_by_deploy_application_id`). The deploy
  *   `uk_deploy_app_tenant_slug` slug is environment-independent, so the same
  *   repository registered for `development` and `production` keeps one deploy
  *   app, one anchor, and one installation.
  * - A lifecycle is **not** a second installation. It is one
  *   `iam_application_installation_environment` row under that installation
  *   (`env_key`, `primary_domain`, `env_status`), written through
- *   `PUT /backend/v3/api/iam/tenants/{tenantId}/applications/{installationId}/environments/{envKey}`.
+ *   `PUT /backend/v3/api/iam/tenants/{tenantId}/installations/{installationId}/environments/{envKey}`.
  *   Token issuance then requires the requested environment's row to exist and be
  *   `active`; an installation whose rows it could not write must not be enabled.
  *
@@ -56,7 +56,7 @@
  *   `Idempotency-Key: sdkwork-app-register:env:<tenant>:<installation>:<envKey>`
  *   keyed by the row identity, so several surfaces of one installation converge
  *   on one row.
- * - `iam.tenantApplications.create` uses
+ * - `iam.installations.create` uses
  *   `provisioningIdempotencyKey = iam-bootstrap-<sha256(...)[0..40]>` over the
  *   same identity tuple the framework derives it from
  *   (`@sdkwork/iam-application-bootstrap` `deriveProvisioningIdempotencyKey`), so
@@ -159,7 +159,7 @@ export const REGISTRATION_SETTINGS_ENV = Object.freeze({
 /**
  * Optional dual-token credentials for the IAM installation-management surface.
  *
- * `tenantApplications.environments.update` is a `dual-token` route, unlike the
+ * `installations.environments.update` is a `dual-token` route, unlike the
  * bootstrap-body provision/enable routes, so the environment row cannot be
  * written with the operator body credentials. When these are absent the client
  * mints a session from the bootstrap operator username + password instead; when
@@ -699,7 +699,7 @@ export function deployAppKindForApplicationType(applicationType) {
 }
 
 /**
- * Build the IAM `tenantApplications.create` body.
+ * Build the IAM `installations.create` body.
  *
  * The bootstrap operator credentials travel in the body (that is the route's
  * declared auth mode), and the anchor is the deploy application id — never the
@@ -708,7 +708,7 @@ export function deployAppKindForApplicationType(applicationType) {
  * @param input - anchor, application identity, tenant scope, and operator auth
  * @returns the request body
  */
-export function buildTenantApplicationProvisionBody(input) {
+export function buildInstallationProvisionBody(input) {
   const anchorKind = trimToValue(input.anchorKind) || 'deploy-application-id';
   if (!['deploy-application-id', 'deploy-application-uuid'].includes(anchorKind)) {
     throw new RegistrationConfigurationError(
@@ -827,13 +827,13 @@ export function readDeployAppItem(item) {
  * @param item - `data.item` of a provision/enable response
  * @returns installation id, anchor, status, runtime app id
  */
-export function readTenantApplicationItem(item) {
+export function readInstallationItem(item) {
   if (!item || typeof item !== 'object') {
     throw new RegistrationConfigurationError('IAM response has no tenant application item');
   }
-  const tenantApplicationId = trimToValue(item.tenantApplicationId) || trimToValue(item.id);
+  const installationId = trimToValue(item.installationId) || trimToValue(item.id);
   return {
-    tenantApplicationId,
+    installationId,
     deployApplicationId: trimToValue(item.deployApplicationId),
     status: trimToValue(item.status),
     appId: trimToValue(item.appId),

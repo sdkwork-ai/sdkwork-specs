@@ -9,7 +9,7 @@ import {
   RegistrationConfigurationError,
   assertDeployApplicationAnchor,
   buildDeployAppCreateBody,
-  buildTenantApplicationProvisionBody,
+  buildInstallationProvisionBody,
   defaultDeploymentProfile,
   deployAppCreateIdempotencyKey,
   deployAppKindForApplicationType,
@@ -20,7 +20,7 @@ import {
   normalizeEnvironment,
   normalizePrimaryDomain,
   readDeployAppItem,
-  readTenantApplicationItem,
+  readInstallationItem,
   resolveDeploySlug,
   resolvePrimaryDomain,
   resolveRegistrationSettings,
@@ -167,7 +167,7 @@ test('the apps.create body is deterministic and carries only derived fields', ()
 });
 
 test('the provisioning body binds the anchor, not the manifest runtime app id', () => {
-  const body = buildTenantApplicationProvisionBody({
+  const body = buildInstallationProvisionBody({
     deployApplicationId: '900123',
     applicationType: 'h5',
     environment: 'development',
@@ -188,7 +188,7 @@ test('the provisioning body binds the anchor, not the manifest runtime app id', 
 });
 
 test('an explicit empty permission scope survives as an explicit choice', () => {
-  const body = buildTenantApplicationProvisionBody({
+  const body = buildInstallationProvisionBody({
     deployApplicationId: '900123',
     applicationType: 'api',
     environment: 'production',
@@ -197,7 +197,7 @@ test('an explicit empty permission scope survives as an explicit choice', () => 
     accessPermissions: [],
   });
   assert.deepEqual(body.accessPermissions, []);
-  const omitted = buildTenantApplicationProvisionBody({
+  const omitted = buildInstallationProvisionBody({
     deployApplicationId: '900123',
     applicationType: 'api',
     environment: 'production',
@@ -206,7 +206,7 @@ test('an explicit empty permission scope survives as an explicit choice', () => 
   });
   assert.equal('accessPermissions' in omitted, false);
   assert.throws(
-    () => buildTenantApplicationProvisionBody({
+    () => buildInstallationProvisionBody({
       deployApplicationId: '900123',
       applicationType: 'desktop',
       environment: 'production',
@@ -249,13 +249,13 @@ test('deploy response parsing keeps the uuid and the decimal anchor apart', () =
 
 test('tenant application parsing tolerates both id spellings', () => {
   assert.equal(
-    readTenantApplicationItem({ id: 'ta-1', status: 'enabled', deployApplicationId: '900123' })
-      .tenantApplicationId,
+    readInstallationItem({ id: 'ta-1', status: 'enabled', deployApplicationId: '900123' })
+      .installationId,
     'ta-1',
   );
   assert.equal(
-    readTenantApplicationItem({ tenantApplicationId: 'ta-2', status: 'draft' })
-      .tenantApplicationId,
+    readInstallationItem({ installationId: 'ta-2', status: 'draft' })
+      .installationId,
     'ta-2',
   );
 });

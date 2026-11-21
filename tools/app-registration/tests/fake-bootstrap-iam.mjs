@@ -159,7 +159,7 @@ export async function startFakeBootstrapIam(options = {}) {
           tenantId: TENANT,
           organizationId: ORGANIZATION,
           appId,
-          tenantApplicationId: 'fake-installation',
+          installationId: 'fake-installation',
           expiresAt: new Date(session.expiresAt).toISOString(),
         },
         traceId: 'fake-trace-credential',

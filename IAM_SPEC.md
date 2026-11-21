@@ -100,7 +100,7 @@ Rules:
 | Audit event | `iam_audit_event` | `/iam/audit_events` |
 | Application template | `iam_application_template` | `/iam/applications/register` |
 | Application template package | `iam_application_template_package` | projected from manifest packages |
-| Tenant application | `iam_tenant_application` | `/iam/tenant_applications` |
+| Installation | `iam_application_installation` | `/iam/installations` |
 
 Minimum shared IAM persistence contract:
 
@@ -139,7 +139,7 @@ Rules:
 - `iam_user` or the canonical tenant membership relation `MUST` provide the user's tenant binding used by login. Login implementations `MUST NOT` invent tenant ids from usernames, emails, request bodies, headers, or local default values.
 - `iam_organization_membership` `MUST` provide the organization memberships used by login organization selection and authorization. A missing organization membership means tenant-level login only; it does not authorize organization-scoped data.
 - `iam_session` `MUST` store token hashes, context fields, sharding fields, data scope, permission scope, expiry, revocation, and audit timestamps.
-- Application registration, tenant application provisioning, enablement, and bootstrap access credential issuance `MUST` follow `IAM_APPLICATION_BOOTSTRAP_SPEC.md`. Do not introduce `plus_*`, `studio_*`, or a separate IAM deployment table for this flow. Application identity, the deploy-application anchor, and access-token `app_id` binding follow `APPLICATION_IDENTITY_SPEC.md`.
+- Application registration, installation provisioning, enablement, and bootstrap access credential issuance `MUST` follow `IAM_APPLICATION_BOOTSTRAP_SPEC.md`. Do not introduce `plus_*`, `studio_*`, or a separate IAM deployment table for this flow. Application identity, the deploy-application anchor, and access-token `app_id` binding follow `APPLICATION_IDENTITY_SPEC.md`.
 - An installation (`iam_application_installation`) `MUST` carry its release scope as `ownership_scope` (`TENANT` | `ORGANIZATION` | `USER`, default `TENANT`) together with the isolation key of that scope, and the database `MUST` enforce the scope/pointer agreement: `TENANT` and `USER` keep `organization_id = 0`, `ORGANIZATION` requires a non-zero `organization_id`, and `USER` requires `owner_user_id`. `APPLICATION_IDENTITY_SPEC.md` §4.1 defines the vocabulary, the isolation keys, and the immutability rule; token issuance `MUST` read the scope from this row and `MUST NOT` accept it from the request.
 - `iam_session` `MUST` record the `ownership_scope` of the installation a session was issued for, so the resolver projects the scope it authorized against instead of re-deriving it from `login_scope`.
 - Tenant token signing material `MUST` be tenant-bound. Implementations may store encrypted HMAC secrets, tenant key references, or asymmetric key metadata in `iam_tenant_signing_key`, but every active signing key `MUST` resolve to exactly one tenant and key id (`kid`).
@@ -598,7 +598,7 @@ Minimum backend-api resources:
 | `iam.securityEvents` | `securityEvents.list` |
 | `iam.auditEvents` | `auditEvents.list` |
 | `iam.applications` | `applications.register` |
-| `iam.tenantApplications` | `tenantApplications.provision`, `tenantApplications.update`, `tenantApplications.enable` |
+| `iam.installations` | `installations.provision`, `installations.update`, `installations.enable` |
 | `iam.accessCredentials` | `accessCredentials.create` |
 
 Bootstrap backend operations `MUST` use body-based bootstrap operator auth, not dual-token headers. Application onboarding `MUST` consume `@sdkwork/iam-application-bootstrap` instead of raw bootstrap HTTP. See `IAM_APPLICATION_BOOTSTRAP_SPEC.md`.
@@ -660,7 +660,7 @@ Rules:
 - [ ] Tenant lifecycle status gates login, refresh, token validation, API key use, OAuth bearer use, and protected requests; a non-active tenant fails with `40303` without deleting its rows.
 - [ ] OAuth bearer open-api operations resolve a server-side token/session record and never trust raw bearer claim strings alone in production.
 - [ ] Open-api IAM ingress uses `IamOpenApiWebRequestContextResolver` with route-manifest auth modes instead of handler-local credential parsing.
-- [ ] Application bootstrap uses `@sdkwork/iam-application-bootstrap` and backend resources `iam.applications.register`, `iam.tenantApplications.*`, and `iam.accessCredentials.create`.
+- [ ] Application bootstrap uses `@sdkwork/iam-application-bootstrap` and backend resources `iam.applications.register`, `iam.installations.*`, and `iam.accessCredentials.create`.
 - [ ] No `plus_*`, `studio_*`, or separate IAM deployment table remains in bootstrap ownership.
 - [ ] AppContext and ShardingContext are derived from verified token context.
 - [ ] Appbase HTTP handlers consume typed `WebRequestContext`/`AppContext` and do not reparse credentials.

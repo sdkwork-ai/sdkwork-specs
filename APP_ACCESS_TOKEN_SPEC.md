@@ -597,7 +597,7 @@ Request body (`IamAppAccessTokenCreateCommand`): at least one selector.
 | Field | Meaning |
 | --- | --- |
 | `appId` | the installation's deploy application anchor (preferred: it is the identity the deployment plane publishes) |
-| `tenantApplicationId` | the IAM installation row (`tapp_…`) of the caller's tenant |
+| `installationId` | the IAM installation row (`tapp_…`) of the caller's tenant |
 | `instanceKey` | the installation instance key of the caller's tenant |
 | `environment` | exact installation lifecycle to initialize (`development`/`test`/`staging`/`demo`/`production`). Omitted means: the caller's session environment when the installation registered it, otherwise the installation's **only active** environment; anything ambiguous fails closed and names the registered rows |
 | `ownershipScope` | release-scope **declaration** to be checked (`TENANT`/`ORGANIZATION`/`USER`); the installation decides and the value is immutable |
@@ -664,7 +664,7 @@ capabilities with the installation's organization.
 
 - Signed with the tenant signing key (`alg` is never `none`); the subject is the installation's
   deploy application anchor, so `app_id`/`aud` name the deployment, not the IAM runtime app id.
-- Claims: `accessToken`, `authToken`, `expiresAt`, `appId`, `tenantApplicationId`,
+- Claims: `accessToken`, `authToken`, `expiresAt`, `appId`, `installationId`,
   `organizationId`, `ownershipScope`, `environment`, `sessionId`.
 - The `environment` claim is the coarse session-plane value (`Dev`/`Test`/`Prod`) while the
   installation gate runs against the exact lifecycle key; `staging` and `demo` installations
@@ -735,7 +735,7 @@ the stated class and no credential is issued.
 | 1 | Route capability | the session must hold `iam.app_tokens.create` (entry capability). `iam.app_tokens.admin` broadens *which installations* are reachable; it does not replace the entry capability | 403 |
 | 2 | Throttle | one bucket per `(tenant, user)` from the IAM rate-limit window; a limiter storage failure fails closed | 429 / 503 |
 | 3 | Session actor | tenant, user, session organization, environment, deployment mode. A bootstrap/system actor is refused | 401 |
-| 4 | Body | at least one of `appId` / `tenantApplicationId` / `instanceKey`; `ownershipScope` ∈ {TENANT, ORGANIZATION, USER} when present; `environment` optional | 400 |
+| 4 | Body | at least one of `appId` / `installationId` / `instanceKey`; `ownershipScope` ∈ {TENANT, ORGANIZATION, USER} when present; `environment` optional | 400 |
 | 5 | Installation resolution | resolved **within the caller's tenant** by anchor → installation row → instance key. Another tenant's row is indistinguishable from a missing one | 404 |
 | 6 | Installation state | `status = enabled`; a `USER` installation must carry its owner | 409 |
 | 7 | Release-scope entitlement | `USER`: owner only. `TENANT`: active tenant membership + (`iam.app_tokens.create` or `iam.app_tokens.admin`) resolved from **tenant-scope bindings only**. `ORGANIZATION`: active membership of that organization + `iam.app_tokens.admin` resolved **for that organization** | 403 |

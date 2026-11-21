@@ -7,15 +7,15 @@
  * # Route authority (read from `sdkwork-iam`, not guessed)
  *
  * - `crates/sdkwork-routes-iam-backend-api/src/manifest.rs:643` declares
- *   `POST /backend/v3/api/iam/tenant_applications`
- *   (`tenantApplications.create`, auth mode `bootstrap-body`), and `:661`
- *   declares `POST /backend/v3/api/iam/tenant_applications/{tenantApplicationId}/enable`
+ *   `POST /backend/v3/api/iam/installations`
+ *   (`installations.create`, auth mode `bootstrap-body`), and `:661`
+ *   declares `POST /backend/v3/api/iam/installations/{installationId}/enable`
  *   (also `bootstrap-body`). The bootstrap operator credentials travel in the
  *   body through `authToken` or `username` + `password`
  *   (`sdkwork-iam-web-adapter/src/super_admin_auth.rs` `resolve_bootstrap_actor`).
  * - `crates/sdkwork-routes-iam-backend-api/src/manifest.rs:105` declares
- *   `PUT /backend/v3/api/iam/tenants/{tenantId}/applications/{tenantApplicationId}/environments/{environmentKey}`
- *   (`tenantApplications.environments.update`, auth mode `dual-token`), handled by
+ *   `PUT /backend/v3/api/iam/tenants/{tenantId}/installations/{installationId}/environments/{environmentKey}`
+ *   (`installations.environments.update`, auth mode `dual-token`), handled by
  *   `crates/sdkwork-routes-iam-backend-api/src/installation_lifecycle.rs`.
  *   `upsert_installation_environment` reconciles the row keyed by
  *   `(installation_id, env_key)`, stores `primary_domain` and `env_status`
@@ -60,7 +60,7 @@ import {
 export const IAM_BACKEND_API_PREFIX = '/backend/v3/api';
 
 /** Provision/reconcile path. */
-export const IAM_TENANT_APPLICATIONS_PATH = '/iam/tenant_applications';
+export const IAM_TENANT_APPLICATIONS_PATH = '/iam/installations';
 
 /** Tenant-scoped installation management path prefix (dual-token surface). */
 export const IAM_TENANT_APPLICATIONS_MANAGEMENT_PREFIX = '/iam/tenants';
@@ -321,18 +321,18 @@ export function createIamApplicationClient(options) {
      * @param body - provisioning command plus bootstrap operator auth
      * @returns the installation item
      */
-    provisionTenantApplication(body) {
+    provisionInstallation(body) {
       return request(IAM_TENANT_APPLICATIONS_PATH, { ...authFields, ...body });
     },
 
     /**
      * Enable one installation.
-     * @param tenantApplicationId - installation id
+     * @param installationId - installation id
      * @param body - extra fields (tenant scope)
      * @returns the installation item
      */
-    enableTenantApplication(tenantApplicationId, body = {}) {
-      const id = trim(tenantApplicationId);
+    enableInstallation(installationId, body = {}) {
+      const id = trim(installationId);
       if (!id) {
         throw new IamApiError('tenant application id is required to enable an installation', {
           kind: 'invalid-settings',

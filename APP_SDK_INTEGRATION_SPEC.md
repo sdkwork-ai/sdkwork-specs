@@ -281,7 +281,7 @@ Rules:
 
 - Every authenticated application runtime `MUST` create exactly one global `TokenManager` or language-equivalent token manager per authenticated session context.
 - Application bootstrap `MUST` consume the approved high-level IAM auth runtime/factory for its architecture when one exists, for example `createSdkworkAppbasePcAuthRuntime(...)` for PC React.
-- IAM application registration and tenant runtime provisioning `MUST` use `@sdkwork/iam-application-bootstrap` per `IAM_APPLICATION_BOOTSTRAP_SPEC.md`. Application code `MUST NOT` hand-craft raw HTTP to `/backend/v3/api/iam/applications/register`, `/backend/v3/api/iam/tenant_applications`, or `/backend/v3/api/iam/access_credentials`.
+- IAM application registration and tenant runtime provisioning `MUST` use `@sdkwork/iam-application-bootstrap` per `IAM_APPLICATION_BOOTSTRAP_SPEC.md`. Application code `MUST NOT` hand-craft raw HTTP to `/backend/v3/api/iam/applications/register`, `/backend/v3/api/iam/installations`, or `/backend/v3/api/iam/access_credentials`.
 - Application bootstrap `MUST NOT` import `@sdkwork/iam-sdk-adapter`, call `createIamAppSdkAdapter(...)`, call `createIamBackendSdkAdapter(...)`, or locally wire appbase SDK resources into IAM ports when an appbase high-level runtime/factory can do that wiring.
 - Application bootstrap `MUST NOT` call `createIamRuntime(...)` directly except inside an approved appbase-owned wrapper package that exposes the same high-level inputs.
 - Runtime/bootstrap `MUST` resolve SDK base URLs from `CONFIG_SPEC.md` and `ENVIRONMENT_SPEC.md` before creating generated SDK clients.

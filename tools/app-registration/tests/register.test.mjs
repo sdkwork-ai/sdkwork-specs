@@ -242,7 +242,7 @@ test('an existing application and installation are reused without a second creat
       name: 'SDKWork Demo',
     }],
     installations: [{
-      tenantApplicationId: 'ta-existing',
+      installationId: 'ta-existing',
       id: 'ta-existing',
       appId: 'app-runtime-900777',
       deployApplicationId: '900777',
@@ -259,11 +259,11 @@ test('an existing application and installation are reused without a second creat
     assert.equal(entry.deployApplicationId, '900777');
     assert.equal(entry.anchorSource, 'deploy-response', 'the reused row supplies the anchor');
     assert.equal(entry.deployApplicationUuid, 'uuid-existing');
-    assert.equal(entry.iam.tenantApplicationId, 'ta-existing');
+    assert.equal(entry.iam.installationId, 'ta-existing');
     assert.equal(entry.iam.enabledNow, false);
     assert.equal(stack.requestsFor('POST', '/app/v3/api/apps').length, 0);
     assert.equal(
-      stack.requestsFor('POST', '/backend/v3/api/iam/tenant_applications/ta-existing/enable').length,
+      stack.requestsFor('POST', '/backend/v3/api/iam/installations/ta-existing/enable').length,
       0,
       'an enabled installation is not re-enabled',
     );
@@ -289,7 +289,7 @@ test('a repeated run creates nothing and reuses the same identity', async () => 
 
     const creates = stack.requestsFor('POST', '/app/v3/api/apps');
     assert.equal(creates.length, 1);
-    const provisions = stack.requestsFor('POST', '/backend/v3/api/iam/tenant_applications');
+    const provisions = stack.requestsFor('POST', '/backend/v3/api/iam/installations');
     assert.equal(provisions.length, 2, 'provision is the idempotent reconcile call');
     assert.equal(
       provisions[0].body.provisioningIdempotencyKey,
@@ -311,7 +311,7 @@ test('a transient IAM failure is recorded and a retry converges', async () => {
   try {
     stack.failNextOnce({
       method: 'POST',
-      path: '/backend/v3/api/iam/tenant_applications',
+      path: '/backend/v3/api/iam/installations',
       status: 503,
     });
     const failed = await runRegistration({
@@ -389,7 +389,7 @@ test('a conflicting anchor between the environment and the deploy row fails clos
     assert.equal(report.counts.failed, 1);
     assert.match(report.entries[0].error, /conflicting deploy application anchors/u);
     assert.equal(
-      stack.requestsFor('POST', '/backend/v3/api/iam/tenant_applications').length,
+      stack.requestsFor('POST', '/backend/v3/api/iam/installations').length,
       0,
       'an ambiguous identity must not reach IAM',
     );
@@ -406,13 +406,13 @@ test('an IAM response that cannot prove the binding is refused', async () => {
   const stack = await startFakeStack({
     hooks: [{
       method: 'POST',
-      path: '/backend/v3/api/iam/tenant_applications',
+      path: '/backend/v3/api/iam/installations',
       handle: ({ installations }) => {
         // The stand-in installation must be real enough that the environment
         // upsert that now runs before enable finds it; the point of this test is
         // the missing anchor echo, not the environment row.
         installations.set('900100', {
-          tenantApplicationId: 'ta-x',
+          installationId: 'ta-x',
           id: 'ta-x',
           appId: 'app-runtime-x',
           status: 'draft',
@@ -426,7 +426,7 @@ test('an IAM response that cannot prove the binding is refused', async () => {
             code: 0,
             data: {
               item: {
-                tenantApplicationId: 'ta-x',
+                installationId: 'ta-x',
                 id: 'ta-x',
                 appId: 'app-runtime-x',
                 status: 'enabled',
@@ -962,7 +962,7 @@ test('one installation serves every lifecycle; each lifecycle is an environment 
       devEntry.deployApplicationId,
       'one deploy app means one anchor, not one anchor per lifecycle',
     );
-    assert.equal(prodEntry.iam.tenantApplicationId, devEntry.iam.tenantApplicationId);
+    assert.equal(prodEntry.iam.installationId, devEntry.iam.installationId);
     assert.equal(prodEntry.iam.status, 'enabled');
     assert.equal(prodEntry.installationEnvironment.envKey, 'production');
     assert.equal(prodEntry.installationEnvironment.status, 'active');
@@ -1002,7 +1002,7 @@ test('the environment row is written before the installation is enabled', async 
     const { report } = await runRegistration({ workspaceRoot: workspace.root, stack });
     assert.equal(report.counts.failed, 0, JSON.stringify(report.entries[0]?.error));
     const provisionIndex = stack.requests.findIndex(
-      (entry) => entry.method === 'POST' && entry.path === '/backend/v3/api/iam/tenant_applications',
+      (entry) => entry.method === 'POST' && entry.path === '/backend/v3/api/iam/installations',
     );
     const environmentIndex = stack.requests.findIndex(
       (entry) => entry.method === 'PUT' && entry.path.includes('/environments/'),
@@ -1074,7 +1074,7 @@ test('--primary-domain expands {env} and {slug} and wins over the manifest', asy
     const entry = report.entries[0];
     assert.equal(entry.primaryDomain, 'app-sdkwork-demo.development.sdkwork.test');
     assert.equal(entry.primaryDomainSource, '--primary-domain');
-    const [provision] = stack.requestsFor('POST', '/backend/v3/api/iam/tenant_applications');
+    const [provision] = stack.requestsFor('POST', '/backend/v3/api/iam/installations');
     assert.equal(provision.body.primaryDomain, 'app-sdkwork-demo.development.sdkwork.test');
     assert.equal(
       stack.environmentRequests()[0].body.primaryDomain,
@@ -1150,7 +1150,7 @@ test('a 429 on a command waits at least Retry-After before the retry', async () 
   try {
     stack.failNextOnce({
       method: 'POST',
-      path: '/backend/v3/api/iam/tenant_applications',
+      path: '/backend/v3/api/iam/installations',
       status: 429,
       headers: { 'retry-after': '2' },
       body: { status: 429, code: 42901, detail: 'too many requests' },
@@ -1166,7 +1166,7 @@ test('a 429 on a command waits at least Retry-After before the retry', async () 
       sleeps[0] >= 2_000,
       `the wait must honour Retry-After (2000ms), got ${sleeps[0]}ms`,
     );
-    assert.equal(stack.requestsFor('POST', '/backend/v3/api/iam/tenant_applications').length, 2);
+    assert.equal(stack.requestsFor('POST', '/backend/v3/api/iam/installations').length, 2);
   } finally {
     await stack.close();
     workspace.cleanup();

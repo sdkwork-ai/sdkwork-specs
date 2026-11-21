@@ -336,7 +336,7 @@ export function createBootstrapCredentialClient(settings, hooks = {}) {
     return {
       accessToken,
       authToken,
-      tenantApplicationId: trim(data.tenantApplicationId),
+      installationId: trim(data.installationId),
       sessionId: trim(data.sessionId),
       expiresAt: trim(data.expiresAt),
       echoedAppId: trim(data.appId),
@@ -668,7 +668,7 @@ export function buildReport(result, requests) {
     deviceId: result.settings.deviceId,
     deployCredential: {
       route: IAM_ACCESS_CREDENTIALS_PATH,
-      tenantApplicationId: result.deploy.tenantApplicationId,
+      installationId: result.deploy.installationId,
       echoedAppId: result.deploy.echoedAppId,
       ...result.deploy.facts,
     },

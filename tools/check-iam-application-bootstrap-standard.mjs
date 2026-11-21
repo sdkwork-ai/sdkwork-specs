@@ -16,7 +16,7 @@ const REQUIRED_BOOTSTRAP_SCRIPT = 'admin:bootstrap:app';
 const FORBIDDEN_BOOTSTRAP_HTTP_MARKERS = [
   '/backend/v3/api/iam/applications/register',
   '/backend/v3/api/iam/tenant-applications',
-  '/backend/v3/api/iam/tenant_applications',
+  '/backend/v3/api/iam/installations',
   '/backend/v3/api/iam/access-credentials',
   '/backend/v3/api/iam/access_credentials',
 ];

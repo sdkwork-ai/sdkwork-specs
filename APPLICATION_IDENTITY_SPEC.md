@@ -151,7 +151,7 @@ Pre-launch, a breaking change `MUST` still satisfy:
 
 This standard supersedes the following behaviours once a consumer migrates:
 
-- `iam_tenant_application.app_id` acting as both runtime identity and OAuth client id.
+- `iam_application_installation.app_id` acting as both runtime identity and OAuth client id.
 - `iam_application_template` / `iam_application_template_package` acting as a third application definition beside the product and the installation.
 - `deploy_app_template` / `deploy_app_template_version` / `deploy_app_template_category` acting as a second commerce authority beside the product listing and its price.
 - `deploy_build_template` being read as an application template; it is a build recipe (toolchain, commands, artifact outputs, quality gates).

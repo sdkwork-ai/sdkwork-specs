@@ -345,7 +345,7 @@ test('IAM provision and enable drive the bootstrap-body routes', async () => {
   const stack = await startFakeStack();
   try {
     const client = iamClient(stack.baseUrl);
-    const provisioned = await client.provisionTenantApplication({
+    const provisioned = await client.provisionInstallation({
       deployApplicationId: '1001',
       provisioningIdempotencyKey: 'iam-bootstrap-key',
       applicationType: 'pc',
@@ -359,7 +359,7 @@ test('IAM provision and enable drive the bootstrap-body routes', async () => {
     });
     assert.equal(provisioned.deployApplicationId, '1001');
     assert.equal(provisioned.status, 'draft');
-    const posts = stack.requestsFor('POST', '/backend/v3/api/iam/tenant_applications');
+    const posts = stack.requestsFor('POST', '/backend/v3/api/iam/installations');
     assert.equal(posts.length, 1);
     assert.equal(posts[0].body.authToken, 'operator-token');
     assert.equal(posts[0].body.deployApplicationId, '1001');
@@ -370,13 +370,13 @@ test('IAM provision and enable drive the bootstrap-body routes', async () => {
       'the body digest is sent on IAM commands too',
     );
 
-    const enabled = await client.enableTenantApplication(provisioned.tenantApplicationId, {
+    const enabled = await client.enableInstallation(provisioned.installationId, {
       tenantId: '100001',
     });
     assert.equal(enabled.status, 'enabled');
     const enables = stack.requestsFor(
       'POST',
-      `/backend/v3/api/iam/tenant_applications/${provisioned.tenantApplicationId}/enable`,
+      `/backend/v3/api/iam/installations/${provisioned.installationId}/enable`,
     );
     assert.equal(enables.length, 1);
   } finally {
@@ -389,7 +389,7 @@ test('IAM refuses to provision without a primary domain, exactly like enable', a
   try {
     const client = iamClient(stack.baseUrl);
     await assert.rejects(
-      () => client.provisionTenantApplication({
+      () => client.provisionInstallation({
         deployApplicationId: '1001',
         provisioningIdempotencyKey: 'iam-bootstrap-key',
         applicationType: 'pc',
@@ -413,7 +413,7 @@ test('the installation environment upsert uses the dual-token route and upserts 
     const client = iamClient(stack.baseUrl, {
       management: { accessToken: 'access-1', authToken: 'auth-1' },
     });
-    const provisioned = await client.provisionTenantApplication({
+    const provisioned = await client.provisionInstallation({
       deployApplicationId: '1001',
       provisioningIdempotencyKey: 'iam-bootstrap-key',
       applicationType: 'pc',
@@ -425,7 +425,7 @@ test('the installation environment upsert uses the dual-token route and upserts 
     });
     const first = await client.upsertInstallationEnvironment({
       tenantId: '100001',
-      installationId: provisioned.tenantApplicationId,
+      installationId: provisioned.installationId,
       envKey: 'development',
       primaryDomain: 'demo.sdkwork.com',
       envStatus: 'active',
@@ -436,7 +436,7 @@ test('the installation environment upsert uses the dual-token route and upserts 
     assert.equal(first.status, 'active');
     const second = await client.upsertInstallationEnvironment({
       tenantId: '100001',
-      installationId: provisioned.tenantApplicationId,
+      installationId: provisioned.installationId,
       envKey: 'development',
       primaryDomain: 'demo.sdkwork.com',
       envStatus: 'active',
@@ -473,7 +473,7 @@ test('the environment upsert mints a dual-token session from the operator passwo
       management: { username: 'admin', password: 'secret' },
     });
     assert.equal(client.hasManagementCredentials(), true);
-    const provisioned = await client.provisionTenantApplication({
+    const provisioned = await client.provisionInstallation({
       deployApplicationId: '1001',
       provisioningIdempotencyKey: 'iam-bootstrap-key',
       applicationType: 'pc',
@@ -485,7 +485,7 @@ test('the environment upsert mints a dual-token session from the operator passwo
     });
     const row = await client.upsertInstallationEnvironment({
       tenantId: '100001',
-      installationId: provisioned.tenantApplicationId,
+      installationId: provisioned.installationId,
       envKey: 'development',
       primaryDomain: 'demo.sdkwork.com',
       envStatus: 'active',
@@ -506,7 +506,7 @@ test('the environment upsert fails closed when no dual-token credential exists',
   try {
     const client = iamClient(stack.baseUrl);
     assert.equal(client.hasManagementCredentials(), false);
-    const provisioned = await client.provisionTenantApplication({
+    const provisioned = await client.provisionInstallation({
       deployApplicationId: '1001',
       provisioningIdempotencyKey: 'iam-bootstrap-key',
       applicationType: 'pc',
@@ -519,7 +519,7 @@ test('the environment upsert fails closed when no dual-token credential exists',
     await assert.rejects(
       () => client.upsertInstallationEnvironment({
         tenantId: '100001',
-        installationId: provisioned.tenantApplicationId,
+        installationId: provisioned.installationId,
         envKey: 'development',
         primaryDomain: 'demo.sdkwork.com',
         envStatus: 'active',
@@ -569,24 +569,24 @@ test('IAM failures keep the status, the problem detail, and Retry-After', async 
     const client = iamClient(stack.baseUrl);
     stack.failNextOnce({
       method: 'POST',
-      path: '/backend/v3/api/iam/tenant_applications',
+      path: '/backend/v3/api/iam/installations',
       status: 409,
       body: { status: 409, code: 40903, detail: 'anchor already claimed by another installation' },
     });
     await assert.rejects(
-      () => client.provisionTenantApplication({ deployApplicationId: '1001' }),
+      () => client.provisionInstallation({ deployApplicationId: '1001' }),
       (error) => error instanceof IamApiError
         && error.status === 409
         && /anchor already claimed/u.test(error.message),
     );
     stack.failNextOnce({
       method: 'POST',
-      path: '/backend/v3/api/iam/tenant_applications',
+      path: '/backend/v3/api/iam/installations',
       status: 429,
       headers: { 'retry-after': '3' },
     });
     await assert.rejects(
-      () => client.provisionTenantApplication({ deployApplicationId: '1001' }),
+      () => client.provisionInstallation({ deployApplicationId: '1001' }),
       (error) => error instanceof IamApiError
         && error.status === 429
         && error.retryAfterMs === 3_000,

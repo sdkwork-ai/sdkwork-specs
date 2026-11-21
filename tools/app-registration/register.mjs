@@ -41,11 +41,11 @@
  *    override, then that response field; in `--anchor-kind=deploy-application-uuid`
  *    mode the addressable uuid replaces the response field. Two disagreeing
  *    sources are a hard failure: the registrar never picks one.
- * 4. **IAM provision** —`POST /backend/v3/api/iam/tenant_applications` with the
+ * 4. **IAM provision** —`POST /backend/v3/api/iam/installations` with the
  *    anchor, the derived `provisioningIdempotencyKey`, the application type, the
  *    manifest permission scope, and the resolved `primaryDomain` (enable refuses a
  *    blank one).
- * 5. **Environment row** —`PUT /backend/v3/api/iam/tenants/{tenantId}/applications/{installationId}/environments/{envKey}`
+ * 5. **Environment row** —`PUT /backend/v3/api/iam/tenants/{tenantId}/installations/{installationId}/environments/{envKey}`
  *    with `primaryDomain` + `envStatus=active`, keyed by the row identity and
  *    deduplicated per installation, so several surfaces of one repository do not
  *    create a second row.
@@ -82,7 +82,7 @@ import {
   RegistrationConfigurationError,
   assertDeployApplicationIdForKind,
   buildDeployAppCreateBody,
-  buildTenantApplicationProvisionBody,
+  buildInstallationProvisionBody,
   defaultDeploymentProfile,
   deployAppCreateIdempotencyKey,
   deployAppKindForApplicationType,
@@ -90,7 +90,7 @@ import {
   formatRegistrationItemLabel,
   normalizeEnvironment,
   readDeployAppItem,
-  readTenantApplicationItem,
+  readInstallationItem,
   resolveDeploySlug,
   resolvePrimaryDomain,
   tenantApplicationInstanceKey,
@@ -741,7 +741,7 @@ function resolveAnchor(context, plan, deployItem) {
 }
 
 async function provisionIamInstallation(context, plan, anchor, applicationType) {
-  const body = buildTenantApplicationProvisionBody({
+  const body = buildInstallationProvisionBody({
     deployApplicationId: anchor,
     anchorKind: context.options.anchorKind,
     applicationType,
@@ -754,11 +754,11 @@ async function provisionIamInstallation(context, plan, anchor, applicationType) 
     primaryDomain: plan.primaryDomain,
   });
   const provisioned = await withRetries(
-    () => context.iamClient.provisionTenantApplication(body),
+    () => context.iamClient.provisionInstallation(body),
     context.retryPolicy,
   );
-  const item = readTenantApplicationItem(provisioned.value);
-  if (!item.tenantApplicationId) {
+  const item = readInstallationItem(provisioned.value);
+  if (!item.installationId) {
     throw new IamApiError(
       `IAM provisioned an installation for ${plan.label} without returning its id, so its `
       + 'environment row cannot be registered and it cannot be enabled or verified',
@@ -789,7 +789,7 @@ async function provisionIamInstallation(context, plan, anchor, applicationType) 
  */
 async function ensureInstallationEnvironment(context, plan, item) {
   const { options } = context;
-  const cacheKey = `${item.tenantApplicationId}@${plan.environment}`;
+  const cacheKey = `${item.installationId}@${plan.environment}`;
   // The cache holds the in-flight promise, not the finished outcome: two surfaces
   // of one installation are registered concurrently, and both must await the same
   // single upsert instead of racing two writes for one row.
@@ -818,13 +818,13 @@ async function ensureInstallationEnvironment(context, plan, item) {
     }
     const idempotencyKey = environmentUpsertIdempotencyKey(
       plan.tenantId,
-      item.tenantApplicationId,
+      item.installationId,
       plan.environment,
     );
     const upserted = await withRetries(
       () => context.iamClient.upsertInstallationEnvironment({
         tenantId: plan.tenantId,
-        installationId: item.tenantApplicationId,
+        installationId: item.installationId,
         envKey: plan.environment,
         primaryDomain: plan.primaryDomain,
         envStatus: 'active',
@@ -865,23 +865,23 @@ async function ensureInstallationEnvironment(context, plan, item) {
 
 async function enableIamInstallation(context, plan, item) {
   const enabled = await withRetries(
-    () => context.iamClient.enableTenantApplication(item.tenantApplicationId, {
+    () => context.iamClient.enableInstallation(item.installationId, {
       tenantId: plan.tenantId,
     }),
     context.retryPolicy,
   );
-  return readTenantApplicationItem(enabled.value);
+  return readInstallationItem(enabled.value);
 }
 
 function verifyIamInstallation(plan, anchor, item, options) {
   const problems = [];
   if (item.status.toLowerCase() !== 'enabled') {
-    problems.push(`installation ${item.tenantApplicationId || '(unknown)'} is ${item.status || '(no status)'} instead of enabled`);
+    problems.push(`installation ${item.installationId || '(unknown)'} is ${item.status || '(no status)'} instead of enabled`);
   }
   if (item.deployApplicationId) {
     if (item.deployApplicationId !== anchor) {
       problems.push(
-        `installation ${item.tenantApplicationId || '(unknown)'} is bound to deploy application `
+        `installation ${item.installationId || '(unknown)'} is bound to deploy application `
         + `${item.deployApplicationId}, not ${anchor}`,
       );
     }
@@ -970,7 +970,7 @@ async function registerOne(context, plan) {
       plan.applicationType,
     );
     result.iam = {
-      tenantApplicationId: provisioned.item.tenantApplicationId,
+      installationId: provisioned.item.installationId,
       appId: provisioned.item.appId,
       status: provisioned.item.status,
       deployApplicationId: provisioned.item.deployApplicationId,
@@ -1427,7 +1427,7 @@ export async function registerApplications(options = {}, dependencies = {}) {
     plan.recordedAnchorKey = recorded.key;
     // The instance key is derived from the anchor (decimal deploy application id),
     // never from the slug: the registrar and the embedded/Node bootstrap must
-    // derive the same `tenant_application_instance_key` for one installation.
+    // derive the same `installation_instance_key` for one installation.
     const anchorForInstanceKey = trim(recorded.value) || trim(plan.anchorOverride);
     plan.instanceKeyHint = anchorForInstanceKey
       ? tenantApplicationInstanceKey(anchorForInstanceKey, environment)
@@ -1496,7 +1496,7 @@ export async function registerApplications(options = {}, dependencies = {}) {
                   : 'deploy response deployApplicationId',
               },
           iam: {
-            path: '/backend/v3/api/iam/tenant_applications',
+            path: '/backend/v3/api/iam/installations',
             applicationType: plan.applicationType,
             instanceKey: plan.instanceKeyHint,
             tenantId: plan.tenantId,
@@ -1505,7 +1505,7 @@ export async function registerApplications(options = {}, dependencies = {}) {
             primaryDomain: plan.primaryDomain,
           },
           environment: {
-            path: '/backend/v3/api/iam/tenants/{tenantId}/applications/{installationId}'
+            path: '/backend/v3/api/iam/tenants/{tenantId}/installations/{installationId}'
               + '/environments/{envKey}',
             envKey: plan.environment,
             primaryDomain: plan.primaryDomain,

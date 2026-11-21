@@ -14,13 +14,13 @@
  *   `resolve_idempotency_fingerprint`).
  * - `GET /app/v3/api/apps/{appId}` resolves the *uuid*; `GET /app/v3/api/apps`
  *   filters on `keyword` (name or slug, case-insensitive).
- * - `POST /backend/v3/api/iam/tenant_applications` reconciles the one
+ * - `POST /backend/v3/api/iam/installations` reconciles the one
  *   installation bound to `deployApplicationId`, refuses a blank
  *   `primaryDomain` (IAM enable refuses a blank installation domain), and
  *   returns it; `.../enable` transitions it to `enabled` and reproduces the
  *   `409 primaryDomain must be configured` refusal when the stored installation
  *   has no domain.
- * - `PUT /backend/v3/api/iam/tenants/{tenantId}/applications/{installationId}/environments/{envKey}`
+ * - `PUT /backend/v3/api/iam/tenants/{tenantId}/installations/{installationId}/environments/{envKey}`
  *   upserts the environment row keyed by `(installation, env_key)`, requires the
  *   dual-token headers the real route declares, and rejects a domain already
  *   registered to another environment of the tenant.
@@ -252,7 +252,7 @@ export async function startFakeStack(options = {}) {
         }));
         return;
       }
-      if (record.method === 'POST' && record.path === '/backend/v3/api/iam/tenant_applications') {
+      if (record.method === 'POST' && record.path === '/backend/v3/api/iam/installations') {
         const anchor = String(payload.deployApplicationId ?? '').trim();
         if (!anchor) {
           sendJson(response, 400, problem(400, 40002, 'deployApplicationId is required'));
@@ -267,7 +267,7 @@ export async function startFakeStack(options = {}) {
           return;
         }
         if (!String(payload.primaryDomain ?? '').trim()) {
-          // `resolve_tenant_application_primary_domain` refuses a blank domain.
+          // `resolve_installation_primary_domain` refuses a blank domain.
           sendJson(response, 400, problem(
             400,
             40004,
@@ -283,7 +283,7 @@ export async function startFakeStack(options = {}) {
           return;
         }
         const installation = {
-          tenantApplicationId: `ta-${nextInstallation++}`,
+          installationId: `ta-${nextInstallation++}`,
           id: '',
           appId: `app-runtime-${anchor}`,
           deployApplicationId: anchor,
@@ -294,18 +294,18 @@ export async function startFakeStack(options = {}) {
           status: 'draft',
           accessPermissions: payload.accessPermissions ?? [],
         };
-        installation.id = installation.tenantApplicationId;
+        installation.id = installation.installationId;
         installations.set(anchor, installation);
         sendJson(response, 201, resource(installation));
         return;
       }
-      const enableMatch = /^\/backend\/v3\/api\/iam\/tenant_applications\/([^/]+)\/enable$/u.exec(
+      const enableMatch = /^\/backend\/v3\/api\/iam\/installations\/([^/]+)\/enable$/u.exec(
         record.path,
       );
       if (record.method === 'POST' && enableMatch) {
         const id = decodeURIComponent(enableMatch[1]);
         const installation = [...installations.values()].find(
-          (candidate) => candidate.tenantApplicationId === id || candidate.id === id,
+          (candidate) => candidate.installationId === id || candidate.id === id,
         );
         if (!installation) {
           sendJson(response, 404, problem(404, 40402, 'installation not found'));
@@ -341,7 +341,7 @@ export async function startFakeStack(options = {}) {
           return;
         }
         const installation = [...installations.values()].find(
-          (candidate) => candidate.tenantApplicationId === installationId
+          (candidate) => candidate.installationId === installationId
             || candidate.id === installationId,
         );
         if (!installation) {

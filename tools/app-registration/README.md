@@ -94,7 +94,7 @@ configuration is unusable.
 
 | Value | Where it comes from | Used for |
 | --- | --- | --- |
-| deploy application `id` (decimal) | `AppResponse.deployApplicationId` (int64 string), the anchor; value is `deploy_app.id` | `iam_tenant_application.deploy_application_id`, token `app_id`/`aud`, `SDKWORK_DEPLOY_APPLICATION_ID` (repository mode) or its surface-scoped form (surface mode) |
+| deploy application `id` (decimal) | `AppResponse.deployApplicationId` (int64 string), the anchor; value is `deploy_app.id` | `iam_installation.deploy_application_id`, token `app_id`/`aud`, `SDKWORK_DEPLOY_APPLICATION_ID` (repository mode) or its surface-scoped form (surface mode) |
 | deploy application `uuid` | `AppResponse.id`, the addressable id | `GET/PATCH /app/v3/api/apps/{appId}`, registrar bookkeeping |
 | slug | `app.key` (fallback `app.name`, then the directory) | `apps.create`, `uk_deploy_app_tenant_slug` |
 | environment key | lifecycle name (`development`, `production`, ...) | `iam_application_installation_environment.env_key` |
@@ -149,14 +149,14 @@ mints no public token.
 A deploy application is **environment-independent** (`uk_deploy_app_tenant_slug`
 is scoped by tenant, not by lifecycle) and IAM binds exactly one installation to
 its anchor (`uk_iam_application_installation_deploy`, enforced by
-`ensure_deploy_application_unclaimed`; `provision_tenant_application` reconciles
+`ensure_deploy_application_unclaimed`; `provision_installation` reconciles
 deploy-application-first). A lifecycle is therefore **not** a second installation
 and **not** a second anchor:
 
 - one repository → one deploy application → one anchor → one IAM installation;
 - each lifecycle → one `iam_application_installation_environment` row under that
   installation (`env_key` + `primary_domain` + `env_status`), written through
-  `PUT /backend/v3/api/iam/tenants/{tenantId}/applications/{installationId}/environments/{envKey}`.
+  `PUT /backend/v3/api/iam/tenants/{tenantId}/installations/{installationId}/environments/{envKey}`.
 
 Registering `development` and then `production` for the same repository keeps the
 same deploy app, the same anchor, and the same installation, and adds one row per
@@ -272,7 +272,7 @@ instead of one of them losing a mid-batch `409` based on completion order.
    `--anchor-kind=deploy-application-uuid` the addressable uuid replaces the
    response field. A response without the field, or with a non-decimal value, is
    a failure, and two disagreeing sources abort the item.
-4. **IAM provision** — `POST /backend/v3/api/iam/tenant_applications` with the
+4. **IAM provision** — `POST /backend/v3/api/iam/installations` with the
    anchor, the deterministic `provisioningIdempotencyKey`
    (`iam-bootstrap-<sha256(...)[0..40]>`, byte-compatible with
    `@sdkwork/iam-application-bootstrap`), the application type, the instance key
@@ -395,7 +395,7 @@ manifests.
   not a valid request.
 - The environment upsert is keyed by the row identity, so several surfaces of one
   installation converge on one row and a repeated run rewrites it.
-- `tenantApplications.create` reconciles on `deployApplicationId`; the
+- `installations.create` reconciles on `deployApplicationId`; the
   provisioning key is deterministic, so re-runs converge on one installation.
 - Retries are bounded (`--retries`, default 5 attempts). A `429` waits at least
   the `Retry-After` the server announced, otherwise the delay doubles per attempt
@@ -461,7 +461,7 @@ exported anchor, and the no-filter default still writes the whole matrix).
   binds the uuid on purpose. It does not relax the wire check: the app response
   must still carry `deployApplicationId`, because the app-api contract marks it
   required on every app response.
-- `GET /backend/v3/api/iam/tenant_applications/{id}` needs dual-token credentials,
+- `GET /backend/v3/api/iam/installations/{id}` needs dual-token credentials,
   so binding verification uses the provision/enable response. An IAM build that
   does not echo `deployApplicationId` fails verification until
   `--allow-unverified-iam-binding` is chosen deliberately.
