@@ -461,11 +461,19 @@ Rules:
   checks.
 - Dependency refs may come from a fixed `ref` or from a declared `refInput` supplied through workflow variables.
 - Every dependency or verification dependency with `refInput` in
-  `agent.workflow.json` `MUST` be exposed by the thin package workflow as a
-  matching `workflow_dispatch` input and passed through `dependency_refs_json`
-  to the reusable workflow. For example `SDKWORK_WEB_FRAMEWORK_REF` maps to
-  `github.event.inputs.sdkwork_web_framework_ref` with a
-  `vars.SDKWORK_WEB_FRAMEWORK_REF` fallback.
+  `agent.workflow.json` `MUST` reach the reusable workflow through
+  `dependency_refs_json`, resolved from the workflow variable named by its
+  `refInput` (for example `vars.SDKWORK_WEB_FRAMEWORK_REF`).
+- While the declared ref count fits GitHub's hard limit of 25
+  `workflow_dispatch` inputs per workflow file (the template owns ten, so up
+  to fifteen refs), each ref `SHOULD` also be exposed as a matching
+  dispatch input with a variable fallback, for example
+  `github.event.inputs.sdkwork_web_framework_ref || vars.SDKWORK_WEB_FRAMEWORK_REF`.
+  A repository with more refs than fit `MUST` render no per-ref dispatch
+  inputs at all: GitHub rejects the entire workflow file when the limit is
+  exceeded, which fails every trigger of the entrypoint before any job runs,
+  so a partial declaration-order subset is not a compliant alternative. Ref
+  overrides for such repositories go through the repository variables.
 - Every dependency ref `MUST` be validated as a safe Git ref before checkout. Unsafe refs with control characters, whitespace, path traversal, option-like prefixes, ref lock suffixes, or Git ref metacharacters must fail.
 - The v1 framework supports `SDKWORK_RELEASE_TOKEN` as the dependency checkout token. Other per-dependency token secret names are not valid unless a future framework version adds a documented token map.
 - Checkout implementations `MUST NOT` put tokens in clone URLs. Use Git credential headers or first-party checkout actions so tokens are masked and not persisted in remote URLs.
