@@ -658,10 +658,10 @@ Canonical baseline:
 
 Post-baseline migrations:
 
-- Ordered post-baseline migrations `MUST` be retained as the upgrade path. They are lifecycle history under section 7.3 and `MUST NOT` be deleted, folded away, or classified as debt solely because the current baseline already expresses the same end state (section 7.4 forbids deleting lifecycle history and requires a reviewed forward migration to repair an existing object).
-- The primary baseline is an **immutable bootstrap anchor**. It `MUST NOT` be rewritten to absorb later migrations. A fresh install applies the baseline followed by every ordered migration, so the baseline alone is not the complete active table inventory; the baseline README `SHOULD` state that explicitly rather than implying it is the whole schema.
-- A post-baseline migration is therefore load-bearing for every deployment, including a fresh install, and not only for databases created before the baseline. A migration whose effect the baseline happens to already contain remains valid: it is idempotent by construction, not redundant debt.
-- Migration content is checksum-immutable under section 7.3, so the baseline and the migration files jointly define the contract; do not rewrite either to make the other "complete".
+- Ordered post-baseline migrations `MUST` be retained as the upgrade path. They are lifecycle history under section 7.3 and `MUST NOT` be deleted or classified as debt solely because the current baseline already expresses the same end state (section 7.4 forbids deleting lifecycle history and requires a reviewed forward migration to repair an existing object).
+- The primary baseline is an **immutable bootstrap anchor** for fresh installs: it expresses the end state of the migration chain it was consolidated from, and applying it records the module's migration versions with their current checksums into the migration history as baseline coverage. `migrate` therefore plans only migrations born after the consolidation, and the readiness drift gate stops reporting the consolidated history as pending on a fresh install. Databases provisioned before the baseline never enter this path — the anchor-table and installation-state guards skip the baseline and their real migration history keeps driving upgrades.
+- A baseline that does not yet express a migration's effect is a baseline-completeness defect repaired by folding that migration with the module's fold tool or by a reviewed forward migration — never by editing the checksum-immutable migration file.
+- The migration files remain the upgrade path for databases provisioned before the baseline: they are checksum-immutable under section 7.3, so the baseline and the migration files jointly define the contract; do not rewrite either to make the other "complete".
 
 Initialization-state debt is limited to:
 
