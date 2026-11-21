@@ -243,6 +243,28 @@ export async function startFakeStack(options = {}) {
         sendJson(response, 200, resource(appResponse(app)));
         return;
       }
+      // `apps.update` — the registrar's guarded draft kind correction. The real
+      // API also refuses a kind change once targets or releases exist; the fake
+      // keeps the corrected field so tests can assert the repair reached Deploy.
+      if (record.method === 'PATCH' && appMatch) {
+        const uuid = decodeURIComponent(appMatch[1]);
+        const app = [...apps.values()].find((candidate) => candidate.uuid === uuid);
+        if (!app) {
+          sendJson(response, 404, problem(404, 40401, 'app not found'));
+          return;
+        }
+        if (typeof payload.appKind === 'string' && payload.appKind.trim() !== '') {
+          app.appKind = payload.appKind.trim();
+        }
+        if (typeof payload.name === 'string' && payload.name.trim() !== '') {
+          app.name = payload.name.trim();
+        }
+        if (typeof payload.description === 'string') {
+          app.description = payload.description;
+        }
+        sendJson(response, 200, resource(appResponse(app)));
+        return;
+      }
       if (record.method === 'POST' && record.path === '/app/v3/api/auth/sessions') {
         sessions += 1;
         sendJson(response, 201, envelope({

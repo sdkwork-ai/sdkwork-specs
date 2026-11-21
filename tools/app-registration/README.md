@@ -252,9 +252,13 @@ Three guardrails keep a wrong type out of the ledger:
 - **Correction.** A declared `app.appType` that contradicts a forced value
   (Flutter, HarmonyOS, uni-app) fails the item naming the expected value;
   `--fix-app-types` rewrites that single field in place, preserving the file's
-  formatting, and the report records the previous value. A root found by slug whose
-  stored kind differs fails closed, because `app_kind` is immutable: retire the
-  draft row and re-register instead of patching it.
+  formatting, and the report records the previous value. A deploy application
+  found by slug whose stored kind differs fails closed by default; a **draft**
+  row (no platform targets, no releases) can be corrected with
+  `--repair-app-kind`, which calls `apps.update` with the proven kind (the API
+  refuses a released row) and re-provisions the IAM installation type. The same
+  guarded correction is offered as "correct app type" on a draft row in the
+  App Center console; a released app is a new application, never a rename.
 
 `--audit` prints the resolved kind, source, canonical `app.appType`, surface
 defects, and notes for every root of the module, and flags a root whose directory

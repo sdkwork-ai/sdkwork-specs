@@ -1192,6 +1192,39 @@ export function applicationTypeForDeployKind(deployAppKind) {
 }
 
 /**
+ * Default `runtime_target` claim for a public application token of one deploy
+ * kind (`APP_ACCESS_TOKEN_SPEC.md` §3.2).
+ *
+ * The value describes the artifact the surface ships, not the endpoint kind, and
+ * a surface's own declaration (`etc/client-env.materialization.json`
+ * `runtimeTarget`) always wins over this table. Kinds whose store target is not
+ * implied by the kind itself return `''` so a caller must name it — a Flutter
+ * token must say which store build it belongs to, and a native iOS/Android root
+ * must name its target rather than inheriting a Web claim.
+ * @param deployAppKind - deploy `AppKind`
+ * @returns the default runtime target, or `''` when it must be supplied
+ */
+export function defaultRuntimeTargetForDeployKind(deployAppKind) {
+  switch (trimToValue(deployAppKind).toUpperCase()) {
+    case 'H5_WEB':
+    case 'PC_WEB':
+    case 'STATIC_WEB':
+      return 'browser';
+    case 'WECHAT_MINIPROGRAM':
+    case 'DOUYIN_MINIPROGRAM':
+      return 'mini-program';
+    case 'HARMONYOS_APP':
+      return 'harmony-native';
+    case 'DESKTOP_APP':
+      return 'desktop';
+    case 'API_SERVICE':
+      return 'server';
+    default:
+      return '';
+  }
+}
+
+/**
  * Surface tokens an application directory name may encode.
  *
  * This is a consistency check, not a classifier: a root named

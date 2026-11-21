@@ -1490,4 +1490,58 @@ test('--fix-app-types under --dry-run reports the repair and writes nothing', as
   }
 });
 
+test('--repair-app-kind corrects a mis-kinded draft row and re-provisions IAM', async () => {
+  const workspace = createWorkspace({
+    repositories: [{
+      name: 'sdkwork-demo',
+      manifest: manifest({
+        app: { appType: 'APP_FLUTTER' },
+        runtime: { family: 'mobile', framework: 'flutter' },
+        publish: { platforms: ['APP_ANDROID'] },
+      }),
+      clientEnv: clientEnv(),
+    }],
+  });
+  const stack = await startFakeStack({
+    apps: [{
+      uuid: 'uuid-wrong',
+      deployApplicationId: '900555',
+      slug: 'sdkwork-demo',
+      name: 'SDKWork Demo',
+      appKind: 'API_SERVICE',
+    }],
+    installations: [{
+      installationId: 'ta-wrong',
+      id: 'ta-wrong',
+      appId: 'app-runtime-900555',
+      deployApplicationId: '900555',
+      instanceKey: '900555_dev',
+      applicationType: 'other',
+      status: 'enabled',
+    }],
+  });
+  try {
+    const { report } = await runRegistration({
+      workspaceRoot: workspace.root,
+      stack,
+      overrides: { repairAppKind: true },
+    });
+    assert.equal(report.counts.failed, 0, JSON.stringify(report.entries[0]?.error));
+    const entry = report.entries[0];
+    assert.equal(entry.deployApplicationId, '900555', 'the repaired row keeps its anchor');
+    assert.equal(entry.deploy.kindRepair.from, 'API_SERVICE');
+    assert.equal(entry.deploy.kindRepair.to, 'FLUTTER_APP');
+    const update = stack.requestsFor('PATCH', '/app/v3/api/apps/uuid-wrong');
+    assert.equal(update.length, 1);
+    assert.equal(update[0].body.appKind, 'FLUTTER_APP');
+    assert.equal(stack.apps.get('sdkwork-demo').appKind, 'FLUTTER_APP');
+    const provision = stack.requestsFor('POST', '/backend/v3/api/iam/installations');
+    assert.equal(provision[0].body.applicationType, 'flutter', 'IAM type follows the corrected kind');
+    assert.equal(stack.requestsFor('POST', '/app/v3/api/apps').length, 0, 'no second application');
+  } finally {
+    await stack.close();
+    workspace.cleanup();
+  }
+});
+
 

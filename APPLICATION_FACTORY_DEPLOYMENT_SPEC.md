@@ -130,7 +130,8 @@ The platform/package matrix is enforced by `sdkwork-deploy-core::validate_app_ki
 Rules:
 
 - **MUST** register every surface as a separate deploy application with its own `app_id`, installation, token audience, and release. — *Violation:* one `PC_WEB` application carrying both `/` and `/mobile` and one token; a mobile-only credential can now call the desktop API.
-- **MUST** set `app_kind` to the surface's canonical kind and `MUST NOT` change it in place. A different endpoint kind is a new application, because its token audience, store identity, and package formats differ. — *Violation:* `PATCH`ing `PC_WEB` to `H5_WEB`; the contract does not accept `appKind` on update, and the existing releases belong to the wrong validator.
+- **MUST** set `app_kind` to the surface's canonical kind and `MUST NOT` change it in place once the endpoint is released. A different endpoint kind is a new application, because its token audience, store identity, and package formats differ. — *Violation:* `PATCH`ing a released `PC_WEB` to `H5_WEB`; the existing releases belong to the wrong validator.
+- **MUST** permit one guarded correction for a draft: `apps.update` accepts `appKind` only while the application is `DRAFT` with no platform targets and no releases, refuses the legacy `SPA_WEB` value, records `app.kind_correct` in the audit log, and re-provisions the IAM installation so its `applicationType` follows the new endpoint. The correction is a maintenance path for data registered under a mis-detected surface, not a rename. — *Check:* the command returns `409` once a platform target or release exists; a corrected draft's IAM installation reports the new type.
 - **MUST** keep a Flutter codebase as one `FLUTTER_APP` deploy application with multiple platform targets, not as separate `IOS_APP`/`ANDROID_APP` applications. — *Violation:* registering the same Flutter build as an `IOS_APP` to get an iOS token; the store identity and release flow now disagree with the build.
 - **MUST** keep WeChat and Douyin mini programs as separate applications, because their platform app ids, review channels, and size ceilings are independent. — *Violation:* one `WECHAT_MINIPROGRAM` application with a `DOUYIN` target; the matrix rejects it.
 - **MUST** map a new registration to the endpoint it actually serves: an interactive H5 surface uses `H5_WEB`, an interactive PC surface uses `PC_WEB`, and a content-only static site `MAY` use `STATIC_WEB` under `APP_STATIC_WEB_ARCHITECTURE_SPEC.md`; `SPA_WEB` remains only for pre-existing rows. — *Check:* a new `SPA_WEB` registration is rejected in review and migrated to `PC_WEB` or `H5_WEB`; a static site cites the static-web root standard.
@@ -610,8 +611,12 @@ Correction, in the order the registrar applies it:
    place (formatting preserved) and the report records the previous value.
 4. **Detect an existing mis-kinded row.** A deploy application found by slug whose
    `appKind` differs from the resolved kind fails the item with the corrective
-   action; the kind is immutable, so the draft row is retired and re-registered
-   rather than patched.
+   action. A released row keeps its kind (retire and re-register); a draft with no
+   platform targets and no releases can be corrected in place: the registrar's
+   `--repair-app-kind`, or the console's "correct app type" action for a draft,
+   calls `apps.update` with the proven kind, and the service re-provisions the
+   IAM installation type. That is the one supported migration; it is audited as
+   `app.kind_correct`.
 5. **Surface a stub manifest.** A root whose directory name encodes a surface
    (`-pc`, `-h5`, `-flutter-mobile`, `-mini-program`, `-harmony-mobile`) while its
    runtime facts resolve to another kind is reported in the audit and the run

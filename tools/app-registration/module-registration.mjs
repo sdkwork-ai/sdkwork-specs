@@ -44,6 +44,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   RegistrationConfigurationError,
+  defaultRuntimeTargetForDeployKind,
   resolveRegistrationSettings,
 } from './contract.mjs';
 import {
@@ -120,6 +121,36 @@ export function discoverModuleRoots(moduleRoot) {
     }
   }
   return roots;
+}
+
+/**
+ * `runtimeTarget` the module declares for one application root.
+ *
+ * A public application token names its surface's runtime target
+ * (`APP_ACCESS_TOKEN_SPEC.md` §3.2), so the declaration in
+ * `etc/client-env.materialization.json` is the most precise source. It wins over
+ * the kind-level default and keeps a Flutter or mini program token from claiming
+ * a browser target.
+ * @param moduleRoot - module repository root
+ * @param appDir - application root relative to the module (`.` for the root)
+ * @returns the declared target, or `''` when none is declared
+ */
+export function declaredSurfaceRuntimeTarget(moduleRoot, appDir) {
+  const relative = trim(appDir);
+  if (!relative || relative === '.') {
+    return '';
+  }
+  try {
+    const file = path.join(moduleRoot, 'etc', 'client-env.materialization.json');
+    const declaration = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/u, ''));
+    const surfaces = Array.isArray(declaration?.surfaces) ? declaration.surfaces : [];
+    const normalize = (value) => trim(value).replace(/^\.\//u, '').replace(/\\/gu, '/');
+    const wanted = normalize(relative);
+    const match = surfaces.find((surface) => normalize(surface?.root) === wanted);
+    return trim(match?.runtimeTarget).toLowerCase();
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -632,13 +663,15 @@ export async function registerModule(options = {}, deps = {}) {
     defaultPermissionScope: options.defaultPermissionScope,
     deployAppKind: options.deployAppKind,
     fixAppTypes: options.fixAppTypes === true,
+    repairAppKind: options.repairAppKind === true,
     settings,
   });
 
   if (authMode === 'user' && options.tokenOut && !options.dryRun) {
     const rootId = path.basename(moduleRoot);
-    const anchor = (report.entries ?? []).find((entry) => entry.id === rootId && entry.deployApplicationId)?.deployApplicationId
-      || (report.entries ?? []).find((entry) => entry.deployApplicationId)?.deployApplicationId;
+    const anchorEntry = (report.entries ?? []).find((entry) => entry.id === rootId && entry.deployApplicationId)
+      || (report.entries ?? []).find((entry) => entry.deployApplicationId);
+    const anchor = anchorEntry?.deployApplicationId;
     if (!anchor) {
       throw new RegistrationConfigurationError('token output requested but the registration returned no anchor');
     }
@@ -652,6 +685,19 @@ export async function registerModule(options = {}, deps = {}) {
     } catch {
       // The anchor and owner are enough for the default scope.
     }
+    // The claim describes the artifact the token belongs to. The surface's own
+    // declaration is authoritative; the kind only supplies an unambiguous
+    // default, and a Flutter/native target must be named explicitly.
+    const runtimeTarget = trim(options.runtimeTarget).toLowerCase()
+      || declaredSurfaceRuntimeTarget(moduleRoot, anchorEntry?.appDir ?? '.')
+      || defaultRuntimeTargetForDeployKind(anchorEntry?.deployAppKind);
+    if (!runtimeTarget) {
+      throw new RegistrationConfigurationError(
+        `--token-out needs the public application token's runtime target for `
+        + `${trim(anchorEntry?.deployAppKind) || 'this application'}; declare runtimeTarget on the `
+        + 'surface in etc/client-env.materialization.json or pass --runtime-target <target>',
+      );
+    }
     const token = createApplicationAccessToken({
       appId: anchor,
       tenantId: oem.tenantId || userSession.identity.tenantId || '100001',
@@ -660,7 +706,7 @@ export async function registerModule(options = {}, deps = {}) {
       userId: ownerUserId,
       environment,
       deploymentProfile: options.deploymentProfile || 'standalone',
-      runtimeTarget: options.runtimeTarget || 'browser',
+      runtimeTarget,
       permissionScope,
     });
     fs.mkdirSync(path.dirname(options.tokenOut), { recursive: true });
@@ -801,6 +847,7 @@ export function parseArgs(argv) {
     maxAttempts: 5,
     retryDelayMs: 500,
     concurrency: 2,
+    runtimeTarget: '',
     help: false,
   };
   const valueOf = (index, name) => {
@@ -851,6 +898,9 @@ export function parseArgs(argv) {
         break;
       case '--fix-app-types':
         options.fixAppTypes = true;
+        break;
+      case '--repair-app-kind':
+        options.repairAppKind = true;
         break;
       case '--default-permission-scope':
         options.defaultPermissionScope = valueOf(index, arg).split(',').map((entry) => entry.trim()).filter(Boolean);
@@ -949,6 +999,10 @@ export function parseArgs(argv) {
         options.deviceId = valueOf(index, arg);
         index += 1;
         break;
+      case '--runtime-target':
+        options.runtimeTarget = valueOf(index, arg);
+        index += 1;
+        break;
       case '--materialize-user':
         options.materializeUser = true;
         break;
@@ -1012,6 +1066,9 @@ Identity:
                            and publish.platforms (a root without one provable surface fails)
   --fix-app-types          Write a derived app.appType back when the declared value contradicts
                            the proven surface (e.g. APP_HTML on a Flutter root)
+  --repair-app-kind        Correct a draft deploy application registered under the wrong kind
+                           (apps.update; refused once it has platform targets or releases) and
+                           re-provision its IAM applicationType
   --default-permission-scope <csv>
                            Fallback scope for a manifest without accessTokenPermissionScope
   --audit                  Print the module inventory classification and exit
@@ -1025,6 +1082,9 @@ Identity:
   --slug-suffix <suffix>   Deploy slug suffix (default for USER: -u<ownerUserId>)
   --domain-label-suffix <s> First-label suffix for the primary domain (USER default: -u<ownerUserId>)
   --device-id <id>         Session device id (default: sdkwork-module-registration)
+  --runtime-target <t>     runtime_target claim of the --token-out public token. Defaults to the
+                           surface declaration, then an unambiguous kind default; a Flutter or
+                           native target must be named explicitly.
 
 OEM / cluster:
   --api-domain <host>      One gateway origin for Deploy + IAM

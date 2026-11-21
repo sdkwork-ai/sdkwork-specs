@@ -303,6 +303,34 @@ export function createDeployApplicationClient(options) {
     },
 
     /**
+     * Update one application with a guarded patch.
+     *
+     * `appKind` is the deploy contract's draft kind-correction path: the API
+     * refuses it once the application has platform targets or releases, so the
+     * registrar can repair a draft registered under the wrong endpoint without
+     * bypassing the immutability rule for a released surface.
+     * @param uuid - application uuid (the route's `{appId}`)
+     * @param body - `UpdateAppRequest` body
+     * @param headerOptions - optional deterministic `Idempotency-Key`
+     * @returns the updated application item with its decimal anchor
+     */
+    async updateApp(uuid, body, { idempotencyKey } = {}) {
+      const value = trim(uuid);
+      if (!value) {
+        throw new DeployApiError('deploy application uuid is required to update an app', {
+          kind: 'invalid-settings',
+        });
+      }
+      const pathAndQuery = `${DEPLOY_APPS_PATH}/${encodeURIComponent(value)}`;
+      const { payload } = await request('PATCH', pathAndQuery, {
+        body,
+        ...(trim(idempotencyKey) ? { idempotencyKey: trim(idempotencyKey) } : {}),
+      });
+      const data = unwrapDeployEnvelope(payload, pathAndQuery);
+      return assertDeployApplicationItem(data.item ?? data, pathAndQuery);
+    },
+
+    /**
      * Create one application with a caller-supplied idempotency key.
      *
      * The returned row is validated here, so the caller can use

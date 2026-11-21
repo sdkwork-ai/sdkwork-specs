@@ -14,6 +14,7 @@ import {
   buildDeployAppCreateBody,
   buildInstallationProvisionBody,
   defaultDeploymentProfile,
+  defaultRuntimeTargetForDeployKind,
   deployAppCreateIdempotencyKey,
   deriveProvisioningIdempotencyKey,
   describeSurfaceNameMismatch,
@@ -371,6 +372,22 @@ test('the anchor must be the decimal deploy application id', () => {
       `${JSON.stringify(invalid)} must be refused`,
     );
   }
+});
+
+test('a deploy kind maps onto a public token runtime target only when unambiguous', () => {
+  assert.equal(defaultRuntimeTargetForDeployKind('H5_WEB'), 'browser');
+  assert.equal(defaultRuntimeTargetForDeployKind('PC_WEB'), 'browser');
+  assert.equal(defaultRuntimeTargetForDeployKind('STATIC_WEB'), 'browser');
+  assert.equal(defaultRuntimeTargetForDeployKind('WECHAT_MINIPROGRAM'), 'mini-program');
+  assert.equal(defaultRuntimeTargetForDeployKind('DOUYIN_MINIPROGRAM'), 'mini-program');
+  assert.equal(defaultRuntimeTargetForDeployKind('HARMONYOS_APP'), 'harmony-native');
+  assert.equal(defaultRuntimeTargetForDeployKind('DESKTOP_APP'), 'desktop');
+  assert.equal(defaultRuntimeTargetForDeployKind('API_SERVICE'), 'server');
+  // A Flutter store build and a native iOS/Android root must name their target.
+  assert.equal(defaultRuntimeTargetForDeployKind('FLUTTER_APP'), '');
+  assert.equal(defaultRuntimeTargetForDeployKind('IOS_APP'), '');
+  assert.equal(defaultRuntimeTargetForDeployKind('ANDROID_APP'), '');
+  assert.equal(defaultRuntimeTargetForDeployKind(''), '');
 });
 
 test('the apps.create body is deterministic and requires a resolved kind', () => {

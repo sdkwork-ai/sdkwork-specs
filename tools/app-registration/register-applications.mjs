@@ -72,6 +72,10 @@ Selection:
   --fix-app-types            Write a derived app.appType back into agent.app.config.json when the
                              declared value contradicts the proven surface (e.g. APP_HTML on a
                              Flutter root). Without it the contradiction fails the item.
+  --repair-app-kind          Correct a draft deploy application found under the wrong appKind via
+                             apps.update (the API refuses once it has platform targets or
+                             releases), then re-provision its IAM applicationType. Without it a
+                             mismatched row fails closed with the corrective action.
 
 Execution:
   --dry-run                  Print the plan; no request, no file write
@@ -151,6 +155,7 @@ export function parseArgs(argv) {
     includeServersOnly: false,
     deployAppKind: '',
     fixAppTypes: false,
+    repairAppKind: false,
     help: false,
   };
   const valueOf = (index, name) => {
@@ -227,6 +232,9 @@ export function parseArgs(argv) {
         break;
       case '--fix-app-types':
         options.fixAppTypes = true;
+        break;
+      case '--repair-app-kind':
+        options.repairAppKind = true;
         break;
       case '--anchor-map':
         options.anchorMapPath = path.resolve(valueOf(index, arg));

@@ -108,11 +108,11 @@ export function parseWorkspaceArgs(argv) {
       '--operator-password', '--app-id', '--iam-transport', '--oem-config',
       '--default-app-type', '--default-permission-scope', '--slug-suffix',
       '--domain-label-suffix', '--ownership', '--owner-user-id', '--device-id',
-      '--deploy-app-kind',
+      '--deploy-app-kind', '--runtime-target',
     ].includes(arg)) {
       index = forwardWithValue(index, arg);
     } else if (arg === '--include-servers-only' || arg === '--no-write-anchor' || arg === '--no-materialize'
-      || arg === '--fix-app-types') {
+      || arg === '--fix-app-types' || arg === '--repair-app-kind') {
       options.forward.push(arg);
     } else {
       throw new Error(`unsupported option: ${arg}`);
@@ -137,7 +137,7 @@ Forwarded to register-module:
   --operator-username/--operator-password, --tenant-id, --organization-id,
   --iam-transport, --ownership, --include-servers-only, --no-write-anchor,
   --no-materialize, --default-app-type, --default-permission-scope,
-  --deploy-app-kind, --fix-app-types
+  --deploy-app-kind, --fix-app-types, --repair-app-kind
 
 Output:
   --print-audiences       Print GATEWAY_IAM_ALLOWED_AUDIENCES=<anchors> for the

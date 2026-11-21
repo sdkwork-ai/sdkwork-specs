@@ -507,6 +507,7 @@ export function planRegistrationItem(entry, allEntries, environment, options = {
   plan.deployKindSource = deployKindOverride
     ? '--deploy-app-kind override'
     : trim(entry.deployAppKindSource);
+  plan.repairAppKind = options.repairAppKind === true;
   plan.surfaceNotes = Array.isArray(entry.surfaceNotes) ? [...entry.surfaceNotes] : [];
   if (trim(entry.surfaceNameWarning)) {
     plan.surfaceNotes.push(entry.surfaceNameWarning);
@@ -805,15 +806,37 @@ async function ensureDeployApplication(context, plan) {
   const { deployClient, options } = context;
   const recorded = plan.recordedAnchor;
   // Adopting an existing row is only valid when it still carries the kind the
-  // manifest surface resolves to. `app_kind` is immutable, so a row registered by
-  // an older, mis-detecting run cannot be silently reused: the item fails with the
-  // corrective action instead of wiring a token to the wrong surface.
-  const adopt = (item, created, attempts, lookup) => {
-    const defect = verifyDeployAppKind(readDeployAppItem(item), plan.deployKind, plan.label);
-    if (defect) {
+  // manifest surface resolves to. `app_kind` is immutable for a released
+  // endpoint, so a row registered by an older, mis-detecting run cannot be
+  // silently reused: without an explicit repair the item fails with the
+  // corrective action instead of wiring a token to the wrong surface. With
+  // `--repair-app-kind` the guarded draft correction is applied through
+  // `apps.update` (the API still refuses it once targets or releases exist).
+  const adopt = async (item, created, attempts, lookup) => {
+    const parsed = readDeployAppItem(item);
+    const defect = verifyDeployAppKind(parsed, plan.deployKind, plan.label);
+    if (!defect) {
+      return { item, created, attempts, lookup };
+    }
+    if (plan.repairAppKind !== true) {
       throw new RegistrationConfigurationError(defect, { slug: plan.slug, lookup });
     }
-    return { item, created, attempts, lookup };
+    const repaired = await withRetries(
+      () => deployClient.updateApp(parsed.uuid, { appKind: plan.deployKind }),
+      context.retryPolicy,
+    );
+    const repairedItem = readDeployAppItem(repaired.value);
+    const remaining = verifyDeployAppKind(repairedItem, plan.deployKind, plan.label);
+    if (remaining) {
+      throw new RegistrationConfigurationError(remaining, { slug: plan.slug, lookup });
+    }
+    return {
+      item: repaired.value,
+      created,
+      attempts: attempts + repaired.attempts,
+      lookup: `${lookup}+kind-repair`,
+      kindRepair: { from: parsed.appKind, to: repairedItem.appKind },
+    };
   };
   // A recorded anchor that is also a uuid can be read directly; the app API
   // addresses applications by uuid, so this is the only exact re-read.
@@ -1132,6 +1155,7 @@ async function registerOne(context, plan) {
       created: deployOutcome.created,
       lookup: deployOutcome.lookup,
       idempotencyKey: plan.deployCreateIdempotencyKey,
+      ...(deployOutcome.kindRepair ? { kindRepair: deployOutcome.kindRepair } : {}),
     };
     const resolved = resolveAnchor(context, plan, deployItem);
     result.deployApplicationId = resolved.anchor;
@@ -1537,6 +1561,7 @@ export async function registerApplications(options = {}, dependencies = {}) {
     primaryDomainPattern: trim(options.primaryDomainPattern),
     deployAppKind: trim(options.deployAppKind).toUpperCase(),
     fixAppTypes: options.fixAppTypes === true,
+    repairAppKind: options.repairAppKind === true,
     concurrency,
     maxAttempts,
     retryDelayMs,
@@ -1583,6 +1608,7 @@ export async function registerApplications(options = {}, dependencies = {}) {
         anchorGroup,
         deployAppKind: options.deployAppKind,
         fixAppTypes: options.fixAppTypes === true,
+        repairAppKind: options.repairAppKind === true,
         dryRun: options.dryRun === true,
         workspaceRoot,
       },
