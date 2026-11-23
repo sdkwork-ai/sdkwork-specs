@@ -230,6 +230,13 @@ Rules:
   and unique window codes. A `standard` rate `MUST NOT` carry a schedule.
 - The schedule's window set `MUST` be disjoint from other `time_window` rates of the same model, meter,
   and price book. Overlapping windows make the applicable rate ambiguous.
+- A schedule `MAY` declare `holidayDates` (unique ISO dates). On a declared holiday only a
+  `holidayOnly` window `MUST` be selectable, and that window `MUST` span the whole local day
+  (`startTime` `00:00:00`, `endTime` `23:59:59`, `endDayOffset` 0); its `daysOfWeek` stays required
+  but is not consulted for the match. Workday windows and holiday windows `MUST` be mutually
+  exclusive: `holidayOnly` windows never match a non-holiday date, and `holidayDates` `MUST NOT`
+  overlap `includeDates` or `excludeDates`. Holiday window codes still carry the tier prefix
+  (`off_peak_holiday`).
 
 **Rationale.** `time_window` selection consults the schedule and returns the matching window code; it
 never reads request dimensions for the window decision. A `tier_code` condition on such a rate is
