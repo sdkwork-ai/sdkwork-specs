@@ -206,6 +206,7 @@ Rules:
 - App API session creation returns `authToken`, `accessToken`, optional `refreshToken`, session metadata, user summary, and AppContext.
 - Refresh token handling `MUST` be server-controlled, revocable, rotated where possible, and unavailable to normal business operation handlers.
 - Passwords, verification codes, recovery secrets, private tokens, API key raw values, and MFA secrets `MUST` be write-only and never appear in response schemas.
+- Exception: a gateway API key `MAY` be disclosed by one dedicated, owner-scoped, explicitly invoked reveal action when the key is already stored for later gateway use. That action `MUST` write an audit record for every disclosure, `MUST` be rate-limited, `MUST NOT` appear in list, detail, or update schemas, and the client `MUST NOT` persist the returned value outside the copy operation.
 - MFA, OAuth, SSO, passkeys, and device authorization extend sessions; they are not separate unrelated domains.
 - Third-party OAuth consumption and SDKWork OAuth provider behavior `MUST` follow `IAM_OAUTH_SPEC.md`.
 
@@ -374,6 +375,7 @@ Rules:
 - API key mode `MUST` resolve an API key record before protected business logic runs.
 - The API key record `MUST` supply `api_key_id`, `tenant_id`, `organization_id` (`0` for tenant-level), `user_id` or service-account subject, `app_id`, environment/deployment constraints, server-resolved data and permission scope, status, expiry, and revocation state.
 - Raw API key values `MUST` be stored as an approved memory-hard password hash (or a governed equivalent), never in plaintext. Logs and audit records may use only the key id, safe key prefix, and last-used metadata.
+- Exception: a gateway API key `MAY` retain a reversible secret beside its verification hash when the product must disclose it on demand. That secret `MUST` use an approved AEAD key ring bound to the key's tenant, organization, and id, `MUST NOT` be logged, and its disclosure `MUST` follow the audited reveal exception in §5.
 - `ApiKeyParser` and `ApiKeyLookupService` or equivalent interfaces are required extension points. They allow different products to keep API keys in different IAM tables, tenant-local tables, encrypted secret stores, caches, or remote IAM services.
 - API key lookup `MUST` validate tenant binding, organization binding, app audience, permission scope, expiry, revocation, and allowed source before returning `AppRequestPrincipal`.
 - API key lookup `MUST` also validate the owning tenant's lifecycle status and fail closed with `40303` when the tenant is not active.
