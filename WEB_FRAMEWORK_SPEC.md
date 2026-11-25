@@ -514,6 +514,12 @@ Business repository after framework integration:
   including bodies above the observation budget and streamed/chunked bodies.
   `sdkwork_web_core::body_contract::may_buffer_whole` is the shared decision
   helper; an observation stage that cannot replay a body must not read it.
+  Verify authored Rust sources with `tools/check-body-read-contract.mjs
+  --workspace <sdkwork-space-root>` (unit-tested by
+  `check-body-read-contract.test.mjs`): the checker reports every
+  `from_parts(parts, Body::empty())`, `unwrap_or_else(Body::empty)` and
+  read-then-empty shape that is not an explicitly reasoned allowlist entry, and
+  reports an allowlist entry that no longer matches a real site.
 - Handler static scan: no raw credential, tenant, organization, user, permission, or request-id header parsing in route crates or controllers.
 - Locale static scan: no handler/controller-local parsing of `Accept-Language`, locale query parameters, cookies, or user-agent language values.
 - Locale context test: public and protected routes receive `WebRequestContext.locale`; unsupported requested locales resolve through the configured fallback chain.
