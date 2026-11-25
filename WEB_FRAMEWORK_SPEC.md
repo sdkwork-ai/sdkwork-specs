@@ -356,6 +356,44 @@ Forbidden:
 - Runtime OpenAPI assembled from a route inventory different from the executable router and bound `HttpRouteManifest`.
 - Runtime-composed route manifests backed by leaked allocations, process-global mutable registries, or source parsing. The framework contract must own or reference-count combined route inventories directly.
 
+### 11.1 Non-Destructive Body Observation
+
+An HTTP body — a request body or a streamed response body — is polled to
+completion at most once. A stage that observes one (request logging, audit,
+tracing, metrics, context building, problem enrichment, localization,
+idempotency capture, cache fill, error observation) `MUST` leave the message
+complete for every later reader:
+
+- **Replay.** Decide with `sdkwork_web_core::body_contract::may_buffer_whole`
+  before the first poll, buffer the body once, and rebuild the message from the
+  same bytes: `Request::from_parts(parts, Body::from(bytes))` /
+  `Response::from_parts(parts, Body::from(bytes))`.
+- **Pass through.** When the body is not provably within the observation budget
+  (oversized, or streamed with no declared length), do not poll it at all;
+  observation is skipped and the body is left untouched.
+- Observation-only stages `SHOULD` tee the stream: forward every frame unchanged
+  and retain a bounded copy for the record.
+
+Forbidden:
+
+- Rebuilding a message from an optional capture and substituting an empty body
+  (`captured.map(Body::from).unwrap_or_else(Body::empty)`). When the capture is
+  skipped or fails, the payload (or the response) silently disappears while the
+  headers still advertise the original `content-length`; the dependent service
+  then reports a malformed request and blames the caller.
+- Answering a body-read failure by erasing the content. After the decision to
+  buffer, a failure is a transport fault and `MUST` surface as an explicit
+  4xx/5xx Problem, never as an empty body.
+- Treating an observation budget (how much a record retains) as an acceptance
+  limit (how large a body the endpoint accepts). They are independent knobs.
+
+Anti-pattern (forbidden):
+
+```rust,ignore
+let captured: Option<Bytes> = body.collect().await.ok().map(|c| c.to_bytes());
+let rebuilt = Request::from_parts(parts, captured.map(Body::from).unwrap_or_else(Body::empty));
+```
+
 ## 12. Secure Defaults
 
 The framework enforces secure defaults without per-route business configuration:
@@ -471,6 +509,11 @@ Business repository after framework integration:
 - Component runtime check: `check-component-port-bindings.mjs` passes when same-origin dependency API surfaces or runtime entrypoints are declared.
 - Contract label check: route manifests, materialized OpenAPI, and derived SDK inputs use canonical `x-sdkwork-api-surface` values such as `open-api`, `app-api`, `backend-api`, and `internal-api`, not camelCase runtime enum labels.
 - Pipeline order contract test: standard chain stages are not bypassed.
+- Body-read contract test (§11.1): every stage that reads a request or response
+  body proves the identical bytes still reach the next reader or the client,
+  including bodies above the observation budget and streamed/chunked bodies.
+  `sdkwork_web_core::body_contract::may_buffer_whole` is the shared decision
+  helper; an observation stage that cannot replay a body must not read it.
 - Handler static scan: no raw credential, tenant, organization, user, permission, or request-id header parsing in route crates or controllers.
 - Locale static scan: no handler/controller-local parsing of `Accept-Language`, locale query parameters, cookies, or user-agent language values.
 - Locale context test: public and protected routes receive `WebRequestContext.locale`; unsupported requested locales resolve through the configured fallback chain.
