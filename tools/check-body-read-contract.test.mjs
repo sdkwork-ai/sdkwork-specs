@@ -75,6 +75,42 @@ test('flags an empty body emitted right after a body read', () => {
   );
 });
 
+test('flags a body stream loop that swallows a frame error', () => {
+  const repo = fixtureRepo({
+    'src/stream.rs': [
+      'async fn forward(mut body: Incoming) {',
+      '    while let Some(frame) = body.frame().await {',
+      '        let Ok(frame) = frame else {',
+      '            break;',
+      '        };',
+      '        emit(frame);',
+      '    }',
+      '}',
+      '',
+    ].join('\n'),
+  });
+  const findings = scanRepo(repo);
+  assert.ok(
+    findings.some((finding) => finding.rule === 'stream-frame-drop'),
+    'expected a stream-frame-drop finding',
+  );
+});
+
+test('does not mistake JSON chunk parsing for a dropped body frame', () => {
+  const repo = fixtureRepo({
+    'src/chat.rs': [
+      'fn parse(data: &str) {',
+      '    let Ok(chunk) = serde_json::from_str::<Value>(data) else {',
+      '        return;',
+      '    };',
+      '    emit(chunk);',
+      '}',
+      '',
+    ].join('\n'),
+  });
+  assert.deepEqual(scanRepo(repo), []);
+});
+
 test('ignores comments and inline test modules', () => {
   const repo = fixtureRepo({
     'src/clean.rs': [

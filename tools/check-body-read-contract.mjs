@@ -64,6 +64,15 @@ const RULES = [
     hint: 'a read that failed (or was skipped) must surface explicitly, not as an empty body',
     afterReadWindow: 6,
   },
+  {
+    // A body stream loop that swallows a frame error ends the body as if it were
+    // complete: the client receives a truncated payload with a success status.
+    // Narrow on purpose - only `let Ok(frame) = frame` style frame binds, so JSON
+    // parsing of a streamed chunk is not mistaken for a dropped body frame.
+    id: 'stream-frame-drop',
+    pattern: /(?:let|if let)\s+Ok\(\s*(?:frame|part)\s*\)\s*=\s*(?:frame|part)\b/u,
+    hint: 'a frame error must surface (or be recorded), never end the body silently',
+  },
 ];
 
 const READ_PATTERN = /(?:axum::body::)?to_bytes\(|BodyExt::collect|\.collect\(\)\s*\.await|into_data_stream\(\)/u;
@@ -93,6 +102,13 @@ const ALLOWED_SITES = [
     rule: 'empty-rebuild',
     contains: 'Response::from_parts(parts, Body::empty())',
     reason: '101 Switching Protocols carries no body; the tunnel owns the stream',
+  },
+  {
+    repo: 'sdkwork-cloudrouter',
+    file: 'crates/sdkwork-cloudrouter-edge-runtime/src/provider_passthrough_transport.rs',
+    rule: 'stream-frame-drop',
+    contains: 'let Ok(frame) = frame else {',
+    reason: 'error-path credential scrub: a non-success body is withheld whole when it overflows, so the partial buffer never reaches the client as a success payload',
   },
 ];
 
