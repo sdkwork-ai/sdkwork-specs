@@ -116,3 +116,9 @@ test('an allowlist entry without a matching site is reported as stale', () => {
   assert.equal(stale.length, ALLOWED_SITES.length);
   assert.ok(stale.every((entry) => entry.stale === true));
 });
+
+test('a single-repository run does not report another repository as stale', () => {
+  const { remaining, stale } = applyAllowlist([], new Set(['sdkwork-api-cloud-gateway']));
+  assert.deepEqual(remaining, []);
+  assert.deepEqual(stale, []);
+});

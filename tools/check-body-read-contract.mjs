@@ -211,7 +211,12 @@ function allowlistKey(entry) {
   return `${entry.repo}|${entry.file}|${entry.rule}|${entry.contains}`;
 }
 
-function applyAllowlist(findings) {
+/**
+ * Applies the allowlist. `scannedRepos`, when provided, scopes the stale check to
+ * the repositories actually scanned, so a single-repository run does not report
+ * another repository's legitimate entries as stale.
+ */
+function applyAllowlist(findings, scannedRepos = null) {
   const used = new Set();
   const remaining = [];
   for (const finding of findings) {
@@ -227,7 +232,10 @@ function applyAllowlist(findings) {
     }
     remaining.push(finding);
   }
-  const stale = ALLOWED_SITES
+  const scoped = scannedRepos
+    ? ALLOWED_SITES.filter((entry) => scannedRepos.has(entry.repo))
+    : ALLOWED_SITES;
+  const stale = scoped
     .filter((entry) => !used.has(allowlistKey(entry)))
     .map((entry) => ({ ...entry, stale: true }));
   return { remaining, stale };
@@ -270,7 +278,16 @@ function main() {
   const findings = values.workspace
     ? scanWorkspace(path.resolve(values.workspace))
     : scanRepo(path.resolve(values.root ?? SPECS_ROOT));
-  const { remaining, stale } = applyAllowlist(findings);
+  const scannedRepos = new Set(findings.map((finding) => finding.repo));
+  if (values.workspace) {
+    // A repository that contributes no findings must still own its stale check.
+    for (const entry of fs.readdirSync(path.resolve(values.workspace), { withFileTypes: true })) {
+      if (entry.isDirectory() && entry.name.startsWith('sdkwork-')) {
+        scannedRepos.add(entry.name);
+      }
+    }
+  }
+  const { remaining, stale } = applyAllowlist(findings, scannedRepos);
 
   if (values.json) {
     console.log(JSON.stringify({ violations: remaining, staleAllowlist: stale }, null, 2));
