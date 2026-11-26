@@ -37,6 +37,9 @@ export const FOUNDATION_PNPM_PACKAGES = [
   '../sdkwork-ui/sdkwork-ui-pc-react',
   '../sdkwork-sdk-commons/sdkwork-sdk-common-typescript',
   '../sdkwork-utils/packages/sdkwork-utils-typescript',
+  // The Cloud Router admin host mounts the account centre screens; without this
+  // entry the host cannot resolve @sdkwork/account-pc-admin-accounts.
+  '../sdkwork-account/apps/sdkwork-account-pc/packages/sdkwork-account-pc-admin-accounts',
 ];
 
 export function specsRoot() {
