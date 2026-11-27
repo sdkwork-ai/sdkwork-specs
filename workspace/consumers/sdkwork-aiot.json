@@ -7,6 +7,7 @@
       "../sdkwork-agents/sdks/sdkwork-agents-app-sdk/sdkwork-agents-app-sdk-typescript",
       "../sdkwork-voice/sdks/sdkwork-voice-app-sdk/sdkwork-voice-app-sdk-typescript",
       "../sdkwork-ui/sdkwork-ui-pc-react",
+      "../sdkwork-ui/sdkwork-ui-mobile-react",
       "../sdkwork-utils/packages/sdkwork-utils-typescript",
       "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-contracts",
       "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-runtime",
