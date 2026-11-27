@@ -547,6 +547,40 @@ environment value, or applies `set_api_key` without declaring `identity:service`
 `identity:service <justification>`. Known migration debt is tracked in that checker with a per-site
 removal plan and reported as warnings, never as a silent pass.
 
+#### 5.2.2 Every Backend Call To An SDKWork Surface Resolves Through The Registry
+
+§5.2 defines the resolution order; this section defines which call sites it governs and what
+therefore counts as a violation. The two are separately checkable, and a call site can satisfy one
+while failing the other: resolving through the registry but carrying no caller identity (§5.2.1), or
+carrying the caller identity while never consulting the registry at all.
+
+A call site is **in scope** when a Rust module in an application's `crates/` tree constructs an
+outbound HTTP client **and** that client targets a path owned by another SDKWork surface. Ownership
+is decided by the path, not by the package name: any path beginning `/app/v3/api/`,
+`/backend/v3/api/`, `/internal/v3/api/`, `/open/v3/api/`, or `/v1/` on an SDKWork service origin.
+
+- Constructing an HTTP client means any of `reqwest::Client::new()`, `Client::builder()`,
+  `SdkworkConfig::new(..)`, or a generated `*Client::new_with_base_url(..)`. A raw `reqwest` client
+  is audited exactly like a generated SDK client: the obligation attaches to the **call**, not to
+  the transport a generator happened to produce.
+- An in-scope call site `MUST` resolve its base URL through the shared component in
+  `sdkwork_utils_rust::service_base_url`, so it participates in registry resolution, provenance
+  labelling, and target demotion. It `MUST NOT` take the origin from a dedicated
+  `SDKWORK_<...>_URL` / `*_BASE_URL` / `*_ORIGIN` environment value **as its only** source.
+- An environment-authored origin MAY remain as the degradation tier (step 3 of §5.2), but it `MUST`
+  be passed to the shared component as the authored value rather than used to build URLs directly.
+- **Third-party endpoints are out of scope.** A vendor API (a model provider, an OAuth provider, a
+  DNS provider, a payment gateway, a webhook receiver) is not an SDKWork surface and legitimately
+  uses a configured absolute URL. It `MUST` still obey §5.2's prohibition on loopback derivation
+  and `SECURITY_SPEC.md`, but it is not a registry obligation.
+- A webhook or callback target *sent to* a partner is a destination value, not a base URL this
+  process dials; it is out of scope unless this module also calls it.
+
+Verification: `node <sdkwork-specs>/tools/check-http-registry-resolution.mjs --workspace .` `MUST`
+report zero unbaselined violations of both §5.2.1 and this section, and its detector `MUST` cover
+every constructor listed above rather than only generated-SDK entrypoints. A repository adding an
+in-scope call site `MUST` fail that check rather than pass by omission.
+
 ### 5.3 Appbase Backend IAM Runtime Rule
 
 Appbase app SDK integration and appbase backend IAM integration are separate runtime obligations.

@@ -32,7 +32,18 @@ if (!existsSync(workspaceRoot)) {
 // removal plan in the same change.
 const BASELINED = new Set([]);
 
-const CONSTRUCTOR = /(?:SdkworkConfig::new\(|new_with_base_url\()/u;
+// APP_SDK_INTEGRATION_SPEC.md §5.2.2: the obligation attaches to the CALL, not to
+// the transport a generator happened to produce. A raw `reqwest` client that
+// dials an SDKWork surface is exactly as in-scope as a generated SDK client.
+const CONSTRUCTOR =
+  /(?:SdkworkConfig::new\(|new_with_base_url\(|reqwest::Client::new\(|Client::builder\(\))/u;
+
+// §5.2.2 ownership test: paths owned by another SDKWork surface. Matched against
+// the source text, so a path constant, a format! template, and a path embedded
+// inside a longer format string all count.
+const SDKWORK_SURFACE_PATH =
+  /\/(?:app|backend|internal|open)\/v3\/api\/|\/app\/v3\/api|\/backend\/v3\/api\/|\/internal\/v3\/api\//u;
+
 const REGISTRY_MARKERS = [
   'service_base_url',
   'registry_base_url_or',
@@ -84,6 +95,42 @@ function relative(file) {
   return path.relative(workspaceRoot, file).split(path.sep).join('/');
 }
 
+// §5.2.2: does this module dial a path owned by another SDKWork surface?
+//
+// Ownership is decided by the path, not the crate name. A vendor API, a
+// provider webhook, or a partner callback is out of scope; an `/app|backend|
+// internal|open/v3/api/` path is in scope wherever it appears.
+function isSdkworkSurfaceCallSite(content) {
+  // Doc comments and line comments mention paths without calling them
+  // (`/// (POST /backend/v3/api/usage/ingest)`). Strip them before matching so a
+  // comment can never manufacture a violation.
+  const code = content
+    .split(/\r?\n/u)
+    .filter((line) => {
+      const trimmed = line.trimStart();
+      return !trimmed.startsWith('//') && !trimmed.startsWith('*');
+    })
+    .join('\n');
+  if (!SDKWORK_SURFACE_PATH.test(code)) return false;
+  // A module that only REGISTERS these routes is serving the surface, not
+  // calling it. `.route(` spans lines, so match it with a DOTALL pattern.
+  const withoutRoutes = code
+    .replace(/\.route\s*\((?:[^()]|\([^()]*\))*\)/gsu, '')
+    .replace(/^\s*"[^"]*"\s*,?\s*$/gmu, '');
+  if (!SDKWORK_SURFACE_PATH.test(withoutRoutes)) return false;
+  // §5.2.2: a webhook/callback/partner endpoint is a destination value, not a
+  // base URL this process resolves. A module whose only client is a webhook
+  // sender is out of scope.
+  const isWebhookOnly =
+    /webhook|callback/iu.test(code) &&
+    !/base_url|_URL_ENV|BASE_URL_ENV/u.test(code);
+  if (isWebhookOnly) return false;
+  // An outbound call names a method (or builds a URL) that reaches a handler.
+  return /\.(?:post|get|put|patch|delete|send|request)\s*\(|Client::builder\(\)|reqwest::Client::new\(\)|format!\s*\(/iu.test(
+    withoutRoutes,
+  );
+}
+
 const cratesRoot = path.join(workspaceRoot, 'crates');
 const files = [];
 if (existsSync(cratesRoot)) {
@@ -120,6 +167,11 @@ for (const file of files) {
     registryCandidates.push({ name, content });
     continue;
   }
+  // §5.2.2 scope: a client that never touches an SDKWork surface path is a
+  // third-party/vendor hop and carries no registry obligation. Distinguishing
+  // the two here is what keeps the check credible: flagging every configured
+  // vendor URL would train readers to baseline the whole rule away.
+  if (!isSdkworkSurfaceCallSite(content)) continue;
   if (BASELINED.has(name)) {
     baselined.push(name);
   } else {
@@ -168,6 +220,36 @@ const REGISTRY_CALL =
 // surface and what the migration must do; the entry is removed in the change
 // that fixes the site. Never add an entry without a date and a removal plan.
 const IDENTITY_BASELINE = new Map([
+  // Reviewed 2026-11-27. These three hops are now registry-resolved (§5.2.2) but
+  // still authenticate with a deployment-wide process token for a user-scoped
+  // operation. Fixing them requires threading the caller pair through the port
+  // contracts (MailDriveAttachmentPort, CommerceHttpBackend, the order account
+  // adapter) and their composition roots — a cross-repo identity redesign, not a
+  // mechanical edit. Tracked so the gap is visible instead of passing silently.
+  [
+    'sdkwork-mail/crates/sdkwork-mail-service-host/src/drive_attachment_http_adapter.rs',
+    {
+      destination: 'sdkwork-drive app-api',
+      action:
+        'add the caller dual tokens to MailDriveAttachmentPort::validate_attachments and thread CallerCredentials; remove SDKWORK_AUTH_TOKEN / SDKWORK_ACCESS_TOKEN reads',
+    },
+  ],
+  [
+    'sdkwork-order/crates/sdkwork-order-integration-account/src/http_adapter.rs',
+    {
+      destination: 'sdkwork-account backend-api',
+      action:
+        'carry the requesting user pair into the account ledger adapter; remove the SDKWORK_ACCESS_TOKEN process read and the *_ALLOW_INSECURE escape',
+    },
+  ],
+  [
+    'sdkwork-community/crates/sdkwork-community-service/src/integration/commerce_http.rs',
+    {
+      destination: 'sdkwork-membership / sdkwork-order backend-api',
+      action:
+        'replace the *_BACKEND_ACCESS_TOKEN deployment credentials with the caller pair from the community request context',
+    },
+  ],
 ]);
 
 // Every file that resolves a target through the registry owes an identity
@@ -354,7 +436,12 @@ if (identityBaselined.length > 0) {
     `[warn] ${identityBaselined.length} registry-resolved call site(s) still owe caller-identity propagation (tracked, removal plan in this file):`,
   );
   for (const name of identityBaselined) {
-    console.warn(`  - ${name}: ${IDENTITY_BASELINE.get(name)}`);
+    const entry = IDENTITY_BASELINE.get(name);
+    const detail =
+      typeof entry === 'string'
+        ? entry
+        : `dest=${entry.destination}; fix=${entry.action}`;
+    console.warn(`  - ${name}\n      ${detail}`);
   }
 }
 
